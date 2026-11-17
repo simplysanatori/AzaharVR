@@ -312,6 +312,8 @@ enum class MenuSetting {
     ScaleX, ///< AzaharFrame kiu, fov100: `value` percent, -100 to 100 (vr_immersive_scale_x)
     ScaleY, ///< vr_immersive_scale_y
     ScaleMode, ///< AzaharFrame fovscale: `value` 0 Stretch, 1 Field of View (vr_immersive_scale_mode)
+    HudAcross, ///< AzaharFrame hudmove: `value` percent, -20 to 40 (vr_immersive_hud_across)
+    HudUpDown, ///< vr_immersive_hud_up_down
     WorldScale,   ///< AzaharFrame natural: `value` hundredths of a percent (vr_immersive_world_scale)
     FollowScreen, ///< AzaharFrame natural: `value` 0 or 1 (vr_immersive_follow_screen)
     /// AzaharFrame projdef, fixa: `value` 0 or 1 (vr_motion_clarity_immersive: the Immersive

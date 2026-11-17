@@ -12,6 +12,7 @@
 #include "frame_xr/menu/ds_drawing.h"
 #include "frame_xr/menu/md3_fonts.h"
 #include "frame_xr/immersive_layout.h" // AzaharFrame natural: World Scale's stops
+#include "video_core/vr_hud_move.h"   // AzaharFrame hudmove: Move HUD In's range
 
 namespace FrameXr::Menu {
 
@@ -80,7 +81,8 @@ std::string SliderText(Id id, float value) {
     if (id == Id::Depth3d) {
         return Format("%.0f%%", value);
     }
-    if (id == Id::ScaleX || id == Id::ScaleY) { // AzaharFrame kiu: "+10%", "0%", "-10%"
+    if (id == Id::ScaleX || id == Id::ScaleY || id == Id::HudAcross ||
+        id == Id::HudUpDown) { // AzaharFrame kiu: "+10%", "0%", "-10%" (hudmove: Move HUD In)
         return Format(value > 0.5f ? "+%.0f%%" : "%.0f%%", value);
     }
     if (id == Id::WorldScale) { // AzaharFrame natural: the stop's percent, "100%" too
@@ -253,6 +255,17 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
         }
         // AzaharFrame fovaxis: Fill View, once (a button; the values stay ordinary)
         rows.push_back(full(row(Id::FillView, RowKind::Button)));
+        // AzaharFrame hudmove: Move HUD In, -20 to +40 % around 0 (Experimental chip, never
+        // locked: outside the Full modes it does nothing, and its tooltip says so).
+        for (const auto& [id, value] :
+             {std::pair{Id::HudAcross, m.hud_across}, std::pair{Id::HudUpDown, m.hud_up_down}}) {
+            Row r = row(id, RowKind::Slider);
+            const SliderRange hr = SliderFor(id);
+            const float v = std::clamp(static_cast<float>(value), hr.min, hr.max);
+            r.t = (v - hr.min) / (hr.max - hr.min);
+            r.value = SliderText(id, v);
+            rows.push_back(r);
+        }
         // AzaharFrame natural: World Scale, a slider over its stops (10% to 400%, the default
         // 100%), and Follow Screen Size.
         Row world = full(row(Id::WorldScale, RowKind::Slider));
@@ -307,6 +320,8 @@ SettingsSection SectionOf(Id id) {
     case Id::ScaleY:
     case Id::ScaleMode: // AzaharFrame fovscale
     case Id::FillView:  // AzaharFrame fovaxis
+    case Id::HudAcross: // AzaharFrame hudmove
+    case Id::HudUpDown:
     case Id::WorldScale:
     case Id::FollowScreen: // AzaharFrame natural
     case Id::MotionClarity: // AzaharFrame flash
@@ -330,6 +345,8 @@ bool PerGameSetting(Id id) {
     case Id::ScaleX:
     case Id::ScaleY:
     case Id::ScaleMode: // AzaharFrame fovscale
+    case Id::HudAcross: // AzaharFrame hudmove
+    case Id::HudUpDown:
     case Id::WorldScale:
     case Id::FollowScreen: // AzaharFrame natural
     case Id::MotionClarity: // AzaharFrame flash
@@ -741,6 +758,10 @@ std::string LabelFor(Id id) {
         return ::FrameXr::Immersive::Names::kHorizontalScale;
     case Id::ScaleY:
         return ::FrameXr::Immersive::Names::kVerticalScale;
+    case Id::HudAcross: // AzaharFrame hudmove
+        return ::FrameXr::Immersive::Names::kMoveHudInHorizontal;
+    case Id::HudUpDown:
+        return ::FrameXr::Immersive::Names::kMoveHudInVertical;
     case Id::ScaleMode: // AzaharFrame fovscale
         return ::FrameXr::Immersive::Names::kScaleMode;
     case Id::WorldScale:
@@ -1034,6 +1055,10 @@ std::string ExplainFor(Id id) {
         return ::FrameXr::Immersive::Names::kHorizontalScaleTip;
     case Id::ScaleY:
         return ::FrameXr::Immersive::Names::kVerticalScaleTip;
+    case Id::HudAcross: // AzaharFrame hudmove
+        return ::FrameXr::Immersive::Names::kMoveHudInHorizontalTip;
+    case Id::HudUpDown:
+        return ::FrameXr::Immersive::Names::kMoveHudInVerticalTip;
     case Id::ScaleMode: // AzaharFrame fovscale
         return ::FrameXr::Immersive::Names::kScaleModeTip;
     case Id::WorldScale:
@@ -1113,6 +1138,10 @@ SliderRange SliderFor(Id id) {
     if (id == Id::ScaleX || id == Id::ScaleY) { // AzaharFrame kiu, fov100: -100 to +100 %
         constexpr float kMax = static_cast<float>(Immersive::Layout::kMaxScalePercent);
         return {-kMax, kMax, static_cast<float>(Immersive::Layout::kScaleStepPercent)};
+    }
+    if (id == Id::HudAcross || id == Id::HudUpDown) { // AzaharFrame hudmove: -20 to +40 %
+        return {static_cast<float>(VideoCore::HudMove::kMinPercent),
+                static_cast<float>(VideoCore::HudMove::kMaxPercent), 1.0f};
     }
     if (id == Id::WorldScale) { // AzaharFrame natural: Layout::kWorldScaleStops' indexes
         return {0.0f, static_cast<float>(Immersive::Layout::kWorldScaleStops.size() - 1), 1.0f};
@@ -2009,7 +2038,8 @@ constexpr float kScopeEditGap = 40.0f;
 // style of Angel's Aim's Alpha chip and the Mods list's version chips.
 constexpr float kRowChipH = 32.0f, kRowChipPad = 12.0f, kRowChipGap = 12.0f;
 const char* RowChip(Id id) {
-    return id == Id::MotionClarity || id == Id::MotionClarityNormal || id == Id::ScreenAsPanel
+    return id == Id::MotionClarity || id == Id::MotionClarityNormal || id == Id::ScreenAsPanel ||
+                   id == Id::HudAcross || id == Id::HudUpDown // AzaharFrame hudmove
                ? Immersive::Names::kExperimental
                : nullptr;
 }

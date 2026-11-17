@@ -89,6 +89,10 @@ private:
     QLabel* scale_y_warp;
     QWidget* scale_mode_row; ///< AzaharFrame fovscale: Scale Mode, Stretch or Field of View
     QComboBox* scale_mode_combo;
+    QWidget* hud_x_row; ///< AzaharFrame hudmove: Move HUD In: Horizontal, -20 % to +40 %
+    QComboBox* hud_x_combo;
+    QWidget* hud_y_row; ///< Move HUD In: Vertical
+    QComboBox* hud_y_combo;
     QWidget* depth_row;     ///< AzaharFrame natural: World Scale (vr_immersive_world_scale)
     QComboBox* world_scope; ///< per application only: global / this application
     QSlider* world_slider;  ///< Names::kWorldScaleStops' indexes

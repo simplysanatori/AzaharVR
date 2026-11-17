@@ -138,6 +138,7 @@
 #include "ui_main.h"
 #include "video_core/gpu.h"
 #include "video_core/renderer_base.h"
+#include "video_core/vr_hud_move.h" // AzaharFrame hudmove
 
 #ifdef __APPLE__
 #include "common/apple_authorization.h"
@@ -5502,6 +5503,13 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         break;
     case S::ScaleY:
         set(v.vr_immersive_scale_y, static_cast<s32>(std::clamp(r.value, -kScaleMax, kScaleMax)));
+        break;
+    case S::HudAcross: // AzaharFrame hudmove: Move HUD In, percent
+        set(v.vr_immersive_hud_across, static_cast<s32>(VideoCore::HudMove::ClampPercent(r.value)));
+        break;
+    case S::HudUpDown:
+        set(v.vr_immersive_hud_up_down,
+            static_cast<s32>(VideoCore::HudMove::ClampPercent(r.value)));
         break;
     case S::ScaleMode: // AzaharFrame fovscale: Stretch, Field of View
         set(v.vr_immersive_scale_mode, r.value == 0 ? 0u : 1u);

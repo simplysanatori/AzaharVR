@@ -282,6 +282,10 @@ enum class Id : int {
     ProjectileOpacity, ///< a slider, 20 to 100 (percent), with Projectiles on
     // AzaharFrame kiuweap2
     MuzzleFlashSize, ///< a slider, 50 to 300 (percent), with Muzzle Flash on
+    // AzaharFrame hudmove: Move HUD In, sliders of -20 to +40 % (vr_immersive_hud_across,
+    // _up_down), per game, with the Experimental chip, never locked
+    HudAcross,
+    HudUpDown,
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -432,6 +436,8 @@ struct MenuModel {
     int scale_x = 0; ///< AzaharFrame kiu, fov100: percent, -100 to 100
     int scale_y = 0;
     int scale_mode = 1; ///< AzaharFrame fovscale: 0 Stretch, 1 Field of View
+    int hud_across = 0;  ///< AzaharFrame hudmove: Move HUD In, percent, -20 to 40
+    int hud_up_down = 0;
     /// AzaharFrame fovaxis: the scale rows' "May Warp" note (Layout::ScalesMayWarp)
     bool scale_x_warp = false;
     bool scale_y_warp = false;

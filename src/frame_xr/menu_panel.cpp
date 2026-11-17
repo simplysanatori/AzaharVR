@@ -17,6 +17,7 @@
 #include "common/settings.h"
 #include "frame_xr/dynamic_resolution.h" // AzaharFrame menuux
 #include "video_core/vr_cache_save.h"        // AzaharFrame flash3
+#include "video_core/vr_hud_move.h"          // AzaharFrame hudmove
 #include "frame_xr/immersive.h"          // AzaharFrame fovonce: MeasureCameraAgain
 #include "frame_xr/immersive_layout.h"   // AzaharFrame kiu: Horizontal and Vertical Scale
 #include "frame_xr/immersive_names.h"    // AzaharFrame projdef: Motion Clarity's toast
@@ -258,6 +259,10 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::ScaleY;
     case Id::ScaleMode: // AzaharFrame fovscale
         return MenuSetting::ScaleMode;
+    case Id::HudAcross: // AzaharFrame hudmove
+        return MenuSetting::HudAcross;
+    case Id::HudUpDown:
+        return MenuSetting::HudUpDown;
     case Id::WorldScale:
         return MenuSetting::WorldScale;
     case Id::FollowScreen: // AzaharFrame natural
@@ -1196,6 +1201,8 @@ void MenuPanel::BuildModel(const Host& host) {
     m.scale_x = FrameXr::Immersive::Layout::ScalePercent(v.vr_immersive_scale_x.GetValue());
     m.scale_y = FrameXr::Immersive::Layout::ScalePercent(v.vr_immersive_scale_y.GetValue());
     m.scale_mode = v.vr_immersive_scale_mode.GetValue() == 0 ? 0 : 1; // AzaharFrame fovscale
+    m.hud_across = VideoCore::HudMove::ClampPercent(v.vr_immersive_hud_across.GetValue()); // hudmove
+    m.hud_up_down = VideoCore::HudMove::ClampPercent(v.vr_immersive_hud_up_down.GetValue());
     {
         // AzaharFrame fovaxis: past the caps against warping: "May Warp" on the scale's row.
         const auto warp = Immersive::Layout::ScalesMayWarp(
@@ -1578,6 +1585,13 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = FrameXr::Immersive::Layout::ScalePercent(value);
         Apply(v.vr_immersive_scale_y, static_cast<s32>(r.value), per_game);
         r.setting = MenuSetting::ScaleY;
+        break;
+    case Id::HudAcross: // AzaharFrame hudmove: percent from the slider, live
+    case Id::HudUpDown:
+        r.value = VideoCore::HudMove::ClampPercent(value);
+        Apply(id == Id::HudAcross ? v.vr_immersive_hud_across : v.vr_immersive_hud_up_down,
+              static_cast<s32>(r.value), per_game);
+        r.setting = id == Id::HudAcross ? MenuSetting::HudAcross : MenuSetting::HudUpDown;
         break;
     case Id::ScaleMode: // AzaharFrame fovscale: live; Stretch, Field of View
         r.value = u == 0 ? 0 : 1;

@@ -42,6 +42,12 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::ScaleY:
         f(v.vr_immersive_scale_y);
         return true;
+    case Id::HudAcross: // AzaharFrame hudmove
+        f(v.vr_immersive_hud_across);
+        return true;
+    case Id::HudUpDown:
+        f(v.vr_immersive_hud_up_down);
+        return true;
     case Id::ScaleMode: // AzaharFrame fovscale
         f(v.vr_immersive_scale_mode);
         return true;
