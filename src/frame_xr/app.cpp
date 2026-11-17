@@ -689,7 +689,7 @@ void Runtime::FrameLoop() {
     // AZAHARFRAME_XR_FLASH_BACKING for an A/B of the backing, all live (test_switches.h).
     MotionClarity::Scheduler clarity;
     MotionClarity::Log clarity_log;
-    bool clarity_rate_logged = false; // AzaharFrame bfidr: held for the display's rate, said
+    MotionClarity::RateGate clarity_rate; // AzaharFrame bfidr: only at 120 Hz, said once
     std::optional<bool> clarity_override;
     bool flash_backing = true;
     const auto read_clarity_switches = [&] {
@@ -1189,10 +1189,10 @@ void Runtime::FrameLoop() {
                     !MotionClarity::HeldForSwap(shown.full_mode, draw.swapped) && !proj_mode;
                 // AzaharFrame bfidr: only at a whole number of refreshes a picture (120 Hz):
                 // elsewhere shown without flashing, and said once.
-                const bool even = MotionClarity::EvenRate(fs.predictedDisplayPeriod);
-                const bool wanted = asked && even;
-                if (asked && !even && !clarity_rate_logged) {
-                    clarity_rate_logged = true;
+                const MotionClarity::RateGate::Out rate =
+                    clarity_rate.Next(asked, fs.predictedDisplayPeriod);
+                const bool wanted = rate.on;
+                if (rate.say == MotionClarity::RateGate::Say::Held) {
                     LOG_INFO(Frontend,
                              "xr: Black Frame Insertion not in effect: the display runs at {:.0f} "
                              "Hz, {:.2f} refreshes a 60 fps picture; it flashes only at a whole "
@@ -1201,8 +1201,7 @@ void Runtime::FrameLoop() {
                                  ? 1e9 / static_cast<double>(fs.predictedDisplayPeriod)
                                  : 0.0,
                              MotionClarity::RefreshesPerPicture(fs.predictedDisplayPeriod));
-                } else if (even && clarity_rate_logged) {
-                    clarity_rate_logged = false;
+                } else if (rate.say == MotionClarity::RateGate::Say::Again) {
                     LOG_INFO(Frontend, "xr: Black Frame Insertion: the display's rate allows it "
                                        "again");
                 }

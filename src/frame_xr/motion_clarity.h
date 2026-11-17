@@ -50,7 +50,7 @@
 //     Dimming only: never a boost, so nothing clips.
 //
 // AZAHARFRAME_XR_SINGLE_FLASH keeps working as an override: 1 on (in every mode, as the test
-// switch always was), 0 off, unset the setting. Pure (unit-tested: src/tests/frame_xr/
+// switch always was; bfidr: at 120 Hz only, RateGate, like the setting), 0 off, unset the setting. Pure (unit-tested: src/tests/frame_xr/
 // motion_clarity.cpp).
 
 #pragma once
@@ -66,7 +66,7 @@
 
 namespace FrameXr::MotionClarity {
 
-/// AZAHARFRAME_XR_SINGLE_FLASH (live): "1" on in every mode, "0" off; anything else, or unset:
+/// AZAHARFRAME_XR_SINGLE_FLASH (live): "1" on in every mode (at 120 Hz: RateGate), "0" off; anything else, or unset:
 /// none (the setting holds).
 inline std::optional<bool> OverrideFrom(const std::optional<std::string>& v) {
     if (v && *v == "1") {
@@ -259,6 +259,34 @@ inline bool EvenRate(int64_t period_ns) {
     const double whole = std::round(per);
     return whole >= 2.0 && std::abs(per - whole) <= kEvenTolerance;
 }
+
+/// AzaharFrame bfidr: the frame loop's gate (app.cpp, each frame): `asked` is the setting of the
+/// mode on view (InEffect, the override included, and not held), `period_ns` the runtime's
+/// predicted display period. On only at an EvenRate; `say` is the line to log this frame: Held
+/// once when it is asked for at an uneven rate, Again once when the rate allows it back.
+class RateGate {
+public:
+    enum class Say { None, Held, Again };
+    struct Out {
+        bool on = false;
+        Say say = Say::None;
+    };
+    Out Next(bool asked, int64_t period_ns) {
+        const bool even = EvenRate(period_ns);
+        Out out{asked && even, Say::None};
+        if (asked && !even && !held_said_) {
+            held_said_ = true;
+            out.say = Say::Held;
+        } else if (even && held_said_) {
+            held_said_ = false;
+            out.say = Say::Again;
+        }
+        return out;
+    }
+
+private:
+    bool held_said_ = false;
+};
 
 class Scheduler {
 public:

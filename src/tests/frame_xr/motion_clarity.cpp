@@ -16,6 +16,7 @@
 #include <vector>
 #include <catch2/catch_test_macros.hpp>
 #include "common/settings.h"
+#include "common/xr_pacer.h"
 #include "frame_xr/motion_clarity.h"
 
 namespace {
@@ -818,11 +819,41 @@ TEST_CASE("Motion Clarity: only at a whole number of refreshes a picture", "[fra
     CHECK(std::abs(MC::RefreshesPerPicture(period(90.0)) - 1.5) < 1e-6);
     CHECK(std::abs(MC::RefreshesPerPicture(period(144.0)) - 2.4) < 1e-6);
 
-    // Through the scheduler, as the frame loop drives it (on = the setting and EvenRate): at 72,
-    // 90 and 144 Hz every refresh shows the picture, as without it.
+    // The pacer's own 120 Hz test (pacing's "not 120 Hz") agrees at the headset's rates.
+    for (const double hz : {72.0, 80.0, 90.0, 100.0, 119.0, 119.9, 120.0, 121.0, 144.0}) {
+        INFO(hz << " Hz");
+        CHECK(MC::EvenRate(period(hz)) == Common::XrPacer::EvenCadencePeriod(period(hz)));
+    }
+
+    // The frame loop's gate: asked for at 90 Hz, off and said once; at 120 Hz on again and said
+    // once; not asked for, nothing said.
+    {
+        MC::RateGate g;
+        auto o = g.Next(true, period(90.0));
+        CHECK(!o.on);
+        CHECK(o.say == MC::RateGate::Say::Held);
+        o = g.Next(true, period(90.0));
+        CHECK(!o.on);
+        CHECK(o.say == MC::RateGate::Say::None);
+        o = g.Next(true, period(120.0));
+        CHECK(o.on);
+        CHECK(o.say == MC::RateGate::Say::Again);
+        o = g.Next(true, period(120.0));
+        CHECK(o.on);
+        CHECK(o.say == MC::RateGate::Say::None);
+        o = g.Next(false, period(144.0));
+        CHECK(!o.on);
+        CHECK(o.say == MC::RateGate::Say::None);
+        CHECK(!g.Next(true, period(72.0)).on);
+        CHECK(g.Next(true, 0).on); // not known: as before
+    }
+
+    // Through the gate and the scheduler, as the frame loop drives them: at 72, 90 and 144 Hz
+    // every refresh shows the picture, as without it.
     for (const double hz : {72.0, 90.0, 144.0}) {
         INFO(hz << " Hz");
         MC::Scheduler s;
+        MC::RateGate gate;
         uint64_t pic = 0;
         const int64_t p = period(hz);
         std::string out;
@@ -831,7 +862,7 @@ TEST_CASE("Motion Clarity: only at a whole number of refreshes a picture", "[fra
             if (static_cast<int64_t>(i) * p * 60 / 1'000'000'000 >= static_cast<int64_t>(pic)) {
                 pic++;
             }
-            const MC::Decision d = s.Next({MC::EvenRate(p), true, pic, i * p, p});
+            const MC::Decision d = s.Next({gate.Next(true, p).on, true, pic, i * p, p});
             out += d.show ? 'P' : 'B';
             CHECK(d.why == MC::Why::Off);
         }
@@ -839,6 +870,7 @@ TEST_CASE("Motion Clarity: only at a whole number of refreshes a picture", "[fra
     }
     // 120 Hz exactly as before: learning on the beat, then lit, backing.
     MC::Scheduler s;
+    MC::RateGate gate;
     uint64_t pic = 0;
     const int64_t p = period(120.0);
     std::string out;
@@ -846,7 +878,7 @@ TEST_CASE("Motion Clarity: only at a whole number of refreshes a picture", "[fra
         if (i % 2 == 0) {
             pic++;
         }
-        out += s.Next({MC::EvenRate(p), true, pic, i * p, p}).show ? 'P' : 'B';
+        out += s.Next({gate.Next(true, p).on, true, pic, i * p, p}).show ? 'P' : 'B';
     }
     std::string expected;
     for (int i = 0; i < 20; i++) {
