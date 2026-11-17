@@ -408,6 +408,95 @@ Aiming at Direct Aim when the mod is installed (`ControlsPreset::gyro_aim_with_m
   which would stop the mod's aim. The controller keeps its beam; pointed at the bottom screen its
   trigger touches there as usual.
 
+### Right Stick turning (test build; AzaharFrame kiuturn)
+
+Angel's Aim 6DoF, Phase 1, behind test switches only (no setting, no menu row, no text in the
+app). All four are live. Code: `frame_xr/kiu_turn.cpp` (emulation thread), its pure part
+`frame_xr/input/kiu_turn.h` (unit tests in `tests/frame_xr/kiu_turn.cpp`), and
+`InputBridge::Process` (XR thread).
+
+- `AZAHARFRAME_KIU_RIGHT_STICK_TURN=1`: Right Stick mode. In a Kid Icarus: Uprising **land
+  battle** only (the guards below), with the game in VR and the menu closed: the right stick's x
+  (after the mapper's dead zone and the other gamepads) turns the camera; the game gets a centred
+  C-Stick (both axes, after C-Stick at Edge's push); Direct Aim no longer pauses for the stick
+  (`CStickTakesAim` is not asked); the Turn Zone is skipped (zone 0); the stick's y does nothing.
+  "Land battle" here is the playing flag plus the land aim's vtable (`Camera::land`), as of a
+  VBlank in the last 200 ms. Air battles, menus, other games: as without the switch. Off: as
+  1.2.0.
+- `AZAHARFRAME_KIU_SNAP_TURN=30|45|60|90`: Snap Turn by that angle; `0`, unset or anything else:
+  smooth. PrimedFrame's rules (`Snap::Tracker`): a flick past 0.72 on the stick's x snaps, the
+  stick must come back under 0.32 before the next one counts, two snaps are at least 8 game
+  frames (8/60 s of the emulated clock) apart, and a flick made while turning is not possible (a
+  guard fails: air battle, menu, cutscene, the game holding the aim) is used up and dropped.
+- `AZAHARFRAME_KIU_TURN_DPS=<degrees a second>` (1 to 720, default 90): smooth turning's rate at
+  full tilt and Horizontal Turn Speed 1.0x. The turn each VBlank is stick x × Horizontal Turn
+  Speed (`vr_light_gun_turn_speed`) × this × the emulated time since the last VBlank (at most
+  0.1 s).
+- `AZAHARFRAME_KIU_CAM_TRACE=1`: the camera's probe log (`xr: Kid Icarus turn: ...`), at most 20
+  lines a second: at each VBlank with something to say, the game time, `vblank land|-`, the guard
+  that failed, the camera, its mode (+0x350), +0x31A, yaw, pitch, D38 and D3C as read before the
+  write, +0x7D8, the verdict on the last write (`applied` with the yaw change and its ratio,
+  `lost`, `foreign`, `dropped`) or what was written, the turn owed, the reticle's pixel and
+  +0x84, and the stick; at a pad update, when the yaw or D38 changed since the last look (where
+  the game's update falls). Every 10 s: written, applied (radians, how many at ×1.25), lost,
+  foreign and dropped writes, and the lost rate ((lost + foreign) / verdicts). With the mode off
+  it only reads.
+
+**Where.** Right Stick turning's hook (`Common::FrameEmuPoll::SetTurn`) is installed the first
+time the XR thread publishes the stick with either switch on. It runs on the emulation thread
+at each VBlank (`video_core/gpu.cpp`, right after Direct Aim's write) and at each HID pad update
+(`hid.cpp`, trace only), the same two points as Direct Aim. Direct Aim's own route
+(`kiu_probe.cpp`, the mod's reticle pointer) is unchanged.
+
+**Region and code check.** EUR only (title 0004000000030200). Before the first read, nine code
+words are compared (V; EUR original code.bin md5 b107c9b1 and the C-Stick & Gyro mod v172's EUR
+builds b01e1f4a / 6a062f17 / b95ca36b alike): 0x704178 E2840B03, 0x70417C E2800F4E, 0x704180
+EEB01A48, 0x704184 EC900A02 (the turn input's load), 0x703894 E2840B03, 0x703898 E5C49308,
+0x70389C ED808A4F, 0x7038A0 ED808A4E (its clear), 0x703D4C E5804000 (the camera's store into
+0xD3A18C). USA and JPN differ at these addresses (V). Another region or a mismatch: the feature
+stays off and logs why once.
+
+**Finding the camera (EUR, original code; the mod not needed).** Each pointer is checked mapped
+before it is read; the first guard that fails stops it (`FindCamera`, `Guard`):
+
+| # | Check | Address | V/I |
+|---|---|---|---|
+| 1 | playing: u8 == 1 | 0xE17514 | V |
+| 2 | root = [0xE14504], [root + 8] mapped; aim = [root + 8] − 0x10 | 0xE14504 | V |
+| 3 | aim vtable 0xCF1C34 (land; 0xCF1BE0 is the air aim, which has no camera link) | aim + 0 | V |
+| 4 | aim + 0x81 == 1 (ground box), aim + 0xD5 == 0 (the game does not place the reticle) | | I |
+| 5 | owner = [aim + 0x8C], non-zero and mapped | | V |
+| 6 | cam = [owner + 0x2C], non-zero, 4-aligned, [cam] == 0xCEEA74 (battle camera) | | V |
+| 7 | [0xD3A18C] == cam (the camera of the last camera update) | 0xD3A18C | V |
+| 8 | s8 cam + 0x350 is 1 (Practice Range) or 2 (ground): the input applies directly | | V |
+
+Then cam + 0x31A (u8), yaw +0x2AC, pitch +0x2B0, D38 +0xD38 and D3C +0xD3C are read and must
+be finite. Land (for the centred C-Stick) is checks 1 to 3.
+
+**The write (route B).** The camera's update (0x703D00, EUR O) adds cam + 0xD38 (radians) to
+the yaw (wrapped to (−π, π]) at 0x704178–0x70419C, and the camera wrapper clears D38/D3C at
+0x703894 at the end of every update (V). A right turn is a negative yaw input. At each VBlank
+(`Ledger`):
+- with any guard failing, the turn owed is dropped (set to 0, never kept for later);
+- the turn asked since the last VBlank is added to the turn owed, capped at one snap angle (45°
+  in smooth);
+- the last write is judged: **applied** when D38 reads 0 and the wrapped yaw change since the
+  write matches it within 2e-4 rad + 2 %, at most half of it (×1.25 accepted too while cam + 0x31A == 0, for the
+  mod's scale at 0xF54000; the written value is what is paid); it is then subtracted from the
+  turn owed. D38 still holding the written bits with the yaw unchanged: not taken yet, the new
+  total is written over it. D38 still holding them with the yaw changed by it: taken, not yet
+  cleared (the VBlank fell inside the game's update), so nothing is written until the next
+  VBlank. D38 0 and the yaw unchanged: **lost**. Any other yaw change, or another value in D38:
+  **foreign** (the game's own: the clamp, an eased look-at), not counted as ours;
+- then the TOTAL owed is written into cam + 0xD38 (never added to it), unless D38 holds a value
+  that is not ours (the game's own input in flight) or the total is under 1e-4 rad (the game
+  ignores under 2.9e-5).
+- D3C (pitch) is never written. +0x7D8 (the last yaw rate) is logged only.
+
+Still to measure in the headset: the trace's lost rate, and whether the ×1.25 ever shows for a
+direct write. A rewrite that lands after the game loaded the value before it is matched against
+that earlier value too (it is the one that turned).
+
 ## Pointing at the screens
 
 The pointer is the controller's aim ray (the pose's -Z axis). The hand that pulled its trigger last

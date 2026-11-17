@@ -7,6 +7,7 @@
 #include "frame_xr/input/devices.h" // AzaharFrame pads
 #include "frame_xr/input/input_bridge.h"
 #include "frame_xr/kiu_probe.h" // AzaharFrame kiugyro
+#include "frame_xr/kiu_turn.h"  // AzaharFrame kiuturn
 #include "input_common/frame_xr.h"
 #include "input_common/main.h"
 
@@ -32,6 +33,20 @@ const MapperOutput& InputBridge::Process(const InputFrame& frame, const PanelGeo
         hub.SetFaceButtonsByPosition(by_position);
         pads = hub.Merge(gamepads ? *gamepads : frame, InputCommon::FrameXr::GetProfileRoutes(),
                          last_.controls, gamepads != nullptr);
+    }
+    // AzaharFrame kiuturn: Right Stick turning (test switch AZAHARFRAME_KIU_RIGHT_STICK_TURN, in
+    // VR only): the right stick's x goes to the land camera's turn (kiu_turn.h); while a land
+    // battle runs the game gets a centred C-Stick, Direct Aim does not pause for the stick and
+    // the Turn Zone is skipped. Off, or anywhere else, nothing changes.
+    bool kiu_turn_land = false;
+    if (gyro_aim && Kiu::Turn::Wanted()) {
+        Kiu::Turn::Publish(last_.controls.GetStick(AnalogControl::StickR).x,
+                           ClampTurnSpeed(Settings::values.vr_light_gun_turn_speed.GetValue()));
+        kiu_turn_land = Kiu::Turn::LandActive();
+        kiu_turn_on_ = true;
+    } else if (kiu_turn_on_) {
+        Kiu::Turn::Stop();
+        kiu_turn_on_ = false;
     }
     {
         // 0 = off, 1 = right controller, 2 = left controller, 3 = headset. AzaharFrame
@@ -66,7 +81,7 @@ const MapperOutput& InputBridge::Process(const InputFrame& frame, const PanelGeo
             lg.enabled = true;
             lg.target = gyro_aim->target; // AzaharFrame kiuaim2: the beam's own hit
             lg.zone_fraction =
-                gyro_aim->checking
+                gyro_aim->checking || kiu_turn_land // AzaharFrame kiuturn
                     ? 0.0f
                     : static_cast<float>(std::min<u32>(
                           Settings::values.vr_light_gun_turn_zone.GetValue(), kTurnZoneMaxPercent)) /
@@ -79,7 +94,8 @@ const MapperOutput& InputBridge::Process(const InputFrame& frame, const PanelGeo
             lg.clutch = gyro_aim->clutch;
             // AzaharFrame kiufix2: the C-Stick (the right stick, past its dead zone, with the
             // other gamepads') steers while it is pushed; Direct Aim pauses meanwhile.
-            lg.stick = CStickTakesAim(last_.controls.GetStick(AnalogControl::StickR));
+            lg.stick = !kiu_turn_land && // AzaharFrame kiuturn: the stick turns instead
+                       CStickTakesAim(last_.controls.GetStick(AnalogControl::StickR));
             Kiu::Publish(lg);
             light_gun_on_ = true;
         } else if (light_gun_on_) {
@@ -126,6 +142,9 @@ const MapperOutput& InputBridge::Process(const InputFrame& frame, const PanelGeo
         last_.controls.SetStick(AnalogControl::StickR,
                                 AddStick(last_.controls.GetStick(AnalogControl::StickR), edge_stick_));
     }
+    if (kiu_turn_land) {
+        last_.controls.SetStick(AnalogControl::StickR, {}); // AzaharFrame kiuturn: centred C-Stick
+    }
     // AzaharFrame kiugyro: while Gyro Aim is on, a trigger that is ZL/ZR (not a touch) also
     // presses the Left Bumper's control, L in the default profile: Kid Icarus: Uprising fires
     // with L, so point and pull fires with either hand. The mod passes ZL/ZR on as well (it
@@ -169,6 +188,10 @@ void InputBridge::Release() {
     if (light_gun_on_) {
         Kiu::Stop();
         light_gun_on_ = false;
+    }
+    if (kiu_turn_on_) { // AzaharFrame kiuturn
+        Kiu::Turn::Stop();
+        kiu_turn_on_ = false;
     }
     InputCommon::FrameXr::GetMotion().Reset();
     last_ = MapperOutput{};

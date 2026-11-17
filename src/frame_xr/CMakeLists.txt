@@ -83,6 +83,9 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     kiu_scan.h
     kiu_weapon.cpp # AzaharFrame kiuguns
     kiu_weapon.h
+    kiu_turn.cpp # AzaharFrame kiuturn
+    kiu_turn.h
+    input/kiu_turn.h
     input/screen_rig.cpp
     input/screen_rig.h
     input/screen_view.cpp

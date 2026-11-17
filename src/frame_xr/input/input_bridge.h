@@ -78,6 +78,7 @@ private:
     MotionTracker motion_;
     GyroAimTracker gyro_aim_; ///< AzaharFrame kiugyro
     bool light_gun_on_ = false;
+    bool kiu_turn_on_ = false; ///< AzaharFrame kiuturn: Right Stick turning's stick published
     bool gyro_fire_ = false;
     TouchpadTouch touchpad_;
     TouchpadCursor touchpad_cursor_;

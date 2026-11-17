@@ -601,6 +601,8 @@ void GPU::VBlankCallback(std::uintptr_t user_data, s64 cycles_late) {
     // AzaharFrame kiuaim2: Direct Aim writes the game's reticle here too, where a game's frame
     // usually starts (it waits for this VBlank), with the freshest aim (common/frame_emu_poll.h).
     Common::FrameEmuPoll::RunAim(static_cast<int64_t>(impl->timing.GetTicks()));
+    // AzaharFrame kiuturn: then Right Stick turning writes the land camera's turn (kiu_turn.h).
+    Common::FrameEmuPoll::RunTurn(static_cast<int64_t>(impl->timing.GetTicks()), true);
 
     // Present renderered frame.
     impl->renderer->SwapBuffers();

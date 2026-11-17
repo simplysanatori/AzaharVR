@@ -9,6 +9,7 @@
 // AzaharFrame kiuaim2: a second hook, Direct Aim's (frame_xr/kiu_probe.h), run at each pad update
 // too and at each VBlank (video_core/gpu.cpp), where it writes the game's reticle between the
 // game's frames.
+// AzaharFrame kiuturn: a third, Right Stick turning's (frame_xr/kiu_turn.h), at the same two places.
 
 #pragma once
 
@@ -44,12 +45,33 @@ inline void RunAim(int64_t ticks) {
     }
 }
 
-/// The pad update: Direct Aim's hook, then the reads.
+/// AzaharFrame kiuturn: Right Stick turning's hook (frame_xr/kiu_turn.h): at each VBlank after
+/// Direct Aim's (`vblank` true: it writes the camera's turn) and at each pad update (false: its
+/// trace only). Set only while its test switches are on.
+using TurnHook = void (*)(int64_t ticks, bool vblank);
+
+inline std::atomic<TurnHook>& TurnSlot() {
+    static std::atomic<TurnHook> hook{nullptr};
+    return hook;
+}
+
+inline void SetTurn(TurnHook hook) {
+    TurnSlot().store(hook, std::memory_order_release);
+}
+
+inline void RunTurn(int64_t ticks, bool vblank) {
+    if (const TurnHook hook = TurnSlot().load(std::memory_order_acquire)) {
+        hook(ticks, vblank);
+    }
+}
+
+/// The pad update: Direct Aim's hook, then the reads (AzaharFrame kiuturn: then the turn's trace).
 inline void Run(int64_t ticks) {
     RunAim(ticks);
     if (const Hook hook = Slot().load(std::memory_order_acquire)) {
         hook(ticks);
     }
+    RunTurn(ticks, false);
 }
 
 } // namespace Common::FrameEmuPoll
