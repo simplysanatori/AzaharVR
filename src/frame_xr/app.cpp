@@ -17,6 +17,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -446,19 +447,23 @@ std::map<int, PerfLine::TaskTimes> ReadTasks() {
 
 void Runtime::PerfRead(std::optional<PerfLine::Window> window) {
     const bool gpu_on = Common::StallTelemetry::Get().gpu_busy_on.load();
-    std::thread([window, gpu_on] {
-        std::map<int, PerfLine::TaskTimes> tasks = ReadTasks();
-        const auto now = std::chrono::steady_clock::now();
-        std::scoped_lock lock{g_perf_mutex};
-        if (window && g_perf_at != std::chrono::steady_clock::time_point{}) {
-            const double secs = std::chrono::duration<double>(now - g_perf_at).count();
-            const PerfLine::CpuShares cpu =
-                PerfLine::Shares(g_perf_tasks, tasks, secs, sysconf(_SC_CLK_TCK));
-            LOG_INFO(Frontend, "xr: {}", PerfLine::Format(*window, gpu_on, cpu));
-        }
-        g_perf_tasks = std::move(tasks);
-        g_perf_at = now;
-    }).detach();
+    try {
+        std::thread([window, gpu_on] {
+            std::map<int, PerfLine::TaskTimes> tasks = ReadTasks();
+            const auto now = std::chrono::steady_clock::now();
+            std::scoped_lock lock{g_perf_mutex};
+            if (window && g_perf_at != std::chrono::steady_clock::time_point{}) {
+                const double secs = std::chrono::duration<double>(now - g_perf_at).count();
+                const PerfLine::CpuShares cpu =
+                    PerfLine::Shares(g_perf_tasks, tasks, secs, sysconf(_SC_CLK_TCK));
+                LOG_INFO(Frontend, "xr: {}", PerfLine::Format(*window, gpu_on, cpu));
+            }
+            g_perf_tasks = std::move(tasks);
+            g_perf_at = now;
+        }).detach();
+    } catch (const std::system_error&) {
+        // No thread now: no line this time (never on the frame loop).
+    }
 }
 
 void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
