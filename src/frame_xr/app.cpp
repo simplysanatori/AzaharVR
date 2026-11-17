@@ -446,7 +446,10 @@ std::map<int, PerfLine::TaskTimes> ReadTasks() {
 } // namespace
 
 void Runtime::PerfRead(std::optional<PerfLine::Window> window) {
-    const bool gpu_on = Common::StallTelemetry::Get().gpu_busy_on.load();
+    // On while a timer runs, or when the window holds its numbers (a renderer made again before
+    // the old one went: the old one's destructor said off).
+    const bool gpu_on = Common::StallTelemetry::Get().gpu_busy_on.load() ||
+                        (window && window->emu_buffers > 0);
     try {
         std::thread([window, gpu_on] {
             std::map<int, PerfLine::TaskTimes> tasks = ReadTasks();
