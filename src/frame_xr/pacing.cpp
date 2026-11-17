@@ -9,6 +9,7 @@
 #include <utility>
 #include <fmt/format.h>
 #include "common/file_util.h"
+#include "common/frame_test_switches.h" // AzaharFrame cheaprender
 #include "common/logging/log.h"
 #include "frame_xr/pacing.h"
 
@@ -31,6 +32,13 @@ bool SwitchOn(const char* name) {
 
 constexpr const char* kOffFile = "xr_pace_off";
 
+// AzaharFrame cheaprender: live (frame_xr/test_switches.h), on with "1".
+constexpr const char* kRealignSwitch = "AZAHARFRAME_XR_PACE_REALIGN";
+bool RealignOn() {
+    const auto v = Common::FrameTestSwitches::Value(kRealignSwitch);
+    return v && !v->empty() && (*v)[0] == '1';
+}
+
 } // namespace
 
 void Pacing::Configure(bool set_release_) {
@@ -41,14 +49,21 @@ void Pacing::Configure(bool set_release_) {
     pictures_switch = SwitchOn("AZAHARFRAME_XR_PACE_PICTURES"); // pacing2 (0: by release)
     const bool lock = SwitchOn("AZAHARFRAME_XR_PACE_LOCK");
     P::Get().lock_switch.store(lock);
+    {
+        std::scoped_lock guard{mutex};
+        realign_switch = RealignOn();
+        realigner.Reset();
+    }
     LOG_INFO(Frontend,
-             "xr: pacing at 120 Hz: gate {} ({}), lock {} (AZAHARFRAME_XR_PACE_GATE, "
-             "AZAHARFRAME_XR_PACE_PICTURES, AZAHARFRAME_XR_PACE_LOCK; a user/{} file turns the "
-             "gate and the lock off while it exists)",
+             "xr: pacing at 120 Hz: gate {} ({}{}), lock {} (AZAHARFRAME_XR_PACE_GATE, "
+             "AZAHARFRAME_XR_PACE_PICTURES, AZAHARFRAME_XR_PACE_LOCK, {}; a user/{} file turns "
+             "the gate and the lock off while it exists)",
              !gate_switch   ? "off"
              : !set_release ? "off (needs AZAHARFRAME_XR_SET_RELEASE)"
                             : "on",
-             pictures_switch ? "by game picture" : "by release", lock ? "on" : "off", kOffFile);
+             pictures_switch ? "by game picture" : "by release",
+             RealignOn() ? ", realigned after a late picture" : "", lock ? "on" : "off",
+             kRealignSwitch, kOffFile);
 }
 
 void Pacing::NoteLatchTime() {
@@ -92,9 +107,9 @@ uint64_t Pacing::PictureOf(uint64_t serial) const {
 }
 
 uint32_t Pacing::Needed(uint64_t released, uint64_t released_picture, bool is_new,
-                        uint32_t cadence_now) const {
+                        uint32_t cadence_now, bool realign) const {
     if (pictures_switch) {
-        return gate.PictureNeeded(released_picture, is_new, cadence_now);
+        return gate.PictureNeeded(released_picture, is_new, cadence_now, realign);
     }
     // By release (AZAHARFRAME_XR_PACE_PICTURES=0, the gate before pacing2): every release waits
     // for two ended frames of the one before.
@@ -126,11 +141,18 @@ void Pacing::WaitSlot(uint64_t released, uint64_t game_swaps) {
     const uint64_t released_picture = PictureOf(released);
     const uint32_t c = cadence.Cadence();
     cadence_sum += c;
-    NotePhase(released, released_picture, is_new, c, now);
+    // AzaharFrame cheaprender: a new picture held 2 or more frames for the kRuns-th time in a row
+    // goes after max(2, cadence) frames of the one on view (xr_pacer.h Realign; switch off: never).
+    bool realign = false;
+    if (is_new && pictures_switch && GateActive(now)) {
+        realign = realigner.Note(realign_switch, Needed(released, released_picture, true, c), c);
+        realigns += realign ? 1 : 0;
+    }
+    NotePhase(released, released_picture, is_new, c, now, realign);
     if (!GateActive(now)) {
         return;
     }
-    const uint32_t needed = Needed(released, released_picture, is_new, c);
+    const uint32_t needed = Needed(released, released_picture, is_new, c, realign);
     if (needed == 0) {
         return;
     }
@@ -143,7 +165,8 @@ void Pacing::WaitSlot(uint64_t released, uint64_t game_swaps) {
     const uint32_t count_before = gate.picture_count;
     const bool on_view = gate.shown_picture == released_picture;
     const bool open = cv.wait_until(lock, deadline, [&] {
-        return Needed(released, released_picture, is_new, c) == 0 || !GateActive(NowNs());
+        return Needed(released, released_picture, is_new, c, realign) == 0 ||
+               !GateActive(NowNs());
     });
     const double ms =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start)
@@ -159,13 +182,13 @@ void Pacing::WaitSlot(uint64_t released, uint64_t game_swaps) {
     gate_wait_max_ms = std::max(gate_wait_max_ms, ms);
     if (!open) {
         gate_timeouts++;
-    } else if (Needed(released, released_picture, is_new, c) == 0) {
+    } else if (Needed(released, released_picture, is_new, c, realign) == 0) {
         holds_prevented++;
     }
 }
 
 void Pacing::NotePhase(uint64_t released, uint64_t released_picture, bool is_new,
-                       uint32_t cadence_now, int64_t ready) {
+                       uint32_t cadence_now, int64_t ready, bool realign) {
     if (!shown || period_ns <= 0 || last_latch_ns == 0 || ready - last_latch_ns >= 3 * period_ns) {
         return; // no frame loop showing the game at a steady rate
     }
@@ -187,7 +210,8 @@ void Pacing::NotePhase(uint64_t released, uint64_t released_picture, bool is_new
     // picture before goes up at the next latch (not on view yet) and may make way after 2 x
     // cadence.
     const bool gated = GateActive(ready);
-    const uint32_t needed = gated ? Needed(released, released_picture, true, cadence_now) : 0;
+    const uint32_t needed =
+        gated ? Needed(released, released_picture, true, cadence_now, realign) : 0;
     const double error_us = P::SampleErrorUs(since_us, needed, period_us);
     auto& s = P::Get();
     s.phase_error_ns.store(static_cast<int64_t>(error_us * 1000.0), std::memory_order_relaxed);
@@ -210,6 +234,7 @@ void Pacing::Second(double seconds) {
                  off_file ? "found" : "gone", off_file ? "off" : "back on");
     }
     s.file_off.store(off_file);
+    const bool realign_now = RealignOn(); // AzaharFrame cheaprender (live)
 
     std::vector<float> phases;
     uint32_t runs[4];
@@ -219,11 +244,21 @@ void Pacing::Second(double seconds) {
     uint32_t waits, timeouts, prevented;
     double wait_max;
     bool gate_on, was_shown;
+    uint32_t realigned = 0;
+    bool realign_on = false;
     double mean, concentration;
     int64_t period;
     {
         std::scoped_lock lock{mutex};
         file_off = off_file;
+        if (realign_now != realign_switch) {
+            LOG_INFO(Frontend, "xr: pacing: {}={}: the gate {} after a late picture",
+                     kRealignSwitch, realign_now ? 1 : 0,
+                     realign_now ? "realigns" : "no longer realigns");
+            realign_switch = realign_now;
+            realigner.Reset();
+        }
+        realigned = std::exchange(realigns, 0);
         phases.swap(to_latch_ms);
         gate.TakeRuns(runs);
         gate.TakePictureRuns(picture_runs);
@@ -241,6 +276,7 @@ void Pacing::Second(double seconds) {
         concentration = filter.Concentration();
         was_shown = shown;
         period = period_ns;
+        realign_on = realign_switch;
     }
     const uint32_t lock_frames = s.lock_frames.exchange(0);
     const int64_t corr_sum = s.correction_sum_us.exchange(0);
@@ -279,14 +315,16 @@ void Pacing::Second(double seconds) {
              "frames {}/{}/{}/{}/{}/{}; releases on view 1/2/3/4+ frames {}/{}/{}/{}; gate waits "
              "{} (max {:.1f} ms, timeouts {}), 1-frame holds prevented {}; speed x{:.5f}, "
              "correction {:+.0f} us avg (max {}) over {} frames; limiter could not sleep {} "
-             "frames; audio backlog drops {} ({} frames)",
+             "frames; audio backlog drops {} ({} frames){}",
              seconds, mode, period > 0 ? 1e9 / period : 0.0, phase,
              lock_off == P::Off::None ? s.phase_mean_ns.load() / 1e6 : mean, concentration, news,
              again, cadence_avg, picture_runs[0], picture_runs[1], picture_runs[2],
              picture_runs[3], picture_runs[4], picture_runs[5], runs[0], runs[1], runs[2], runs[3],
              waits, wait_max, timeouts, prevented, s.audio_ratio.load(),
              lock_frames ? static_cast<double>(corr_sum) / lock_frames : 0.0, corr_max,
-             lock_frames, no_sleep, drops, dropped);
+             lock_frames, no_sleep, drops, dropped,
+             // AzaharFrame cheaprender: only while AZAHARFRAME_XR_PACE_REALIGN is on
+             realign_on ? fmt::format("; realigned {} times", realigned) : std::string{});
 }
 
 } // namespace FrameXr

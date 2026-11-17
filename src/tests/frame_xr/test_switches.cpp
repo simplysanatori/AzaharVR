@@ -319,4 +319,5 @@ TEST_CASE("Test switches: lookups are cached until the file is read again",
     CHECK(live.Value("AZAHARFRAME_IMMERSIVE_TAG_OFFSET") == std::optional<std::string>("+1"));
     CHECK_FALSE(other.Value("AZAHARFRAME_IMMERSIVE_HOLD").has_value());
     FakeEnv().clear();
+    CHECK(TS::ApplyFor("AZAHARFRAME_XR_PACE_REALIGN") == TS::Apply::Live); // pacing.cpp
 }
