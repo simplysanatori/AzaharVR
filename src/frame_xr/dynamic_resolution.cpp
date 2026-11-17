@@ -537,6 +537,7 @@ uint64_t g_measured_title = 0; ///< AzaharFrame fixd: the game g_controller has 
 bool g_have_saved = false;
 bool g_was_on = false;
 CeilingHold g_ceiling; ///< AzaharFrame bfidr: the screen's ceiling (while it flashes)
+bool g_bfi_logged = false; ///< AzaharFrame bfidr: Black Frame Insertion's rules last logged on
 
 void Publish(int drop) {
     VideoCore::DynamicResolution::g_drop.store(static_cast<u32>(std::max(0, drop)),
@@ -589,6 +590,7 @@ void ResetLocked(const char* why) {
     LogBack(g_controller.Drop(), why); // AzaharFrame flash3
     g_controller.Reset();
     g_ceiling = {}; // AzaharFrame bfidr
+    g_bfi_logged = false;
     g_have_saved = false;
     Publish(0);
 }
@@ -690,6 +692,19 @@ void NoteSecond(const Second& s) {
     if (g_pending_start && base > 0) {
         g_pending_start = false;
         StartLocked(static_cast<int>(base), max_drop, g_pending_why);
+    }
+    if (s.bfi != g_bfi_logged && max_drop > 0) { // AzaharFrame bfidr
+        g_bfi_logged = s.bfi;
+        if (s.bfi) {
+            LOG_INFO(Frontend,
+                     "xr: Dynamic Resolution: Black Frame Insertion's rules on (down after {} "
+                     "seconds with late pictures or compositor misses, up under {:.1f} ms "
+                     "predicted, no factor over what the screen can show)",
+                     BfiRules::kDownAfter,
+                     Controller::kUpBudget * BfiRules::kUpLine * s.period_ms);
+        } else {
+            LOG_INFO(Frontend, "xr: Dynamic Resolution: Black Frame Insertion's rules off");
+        }
     }
     const int before = g_controller.Drop();
     Second judged = s;

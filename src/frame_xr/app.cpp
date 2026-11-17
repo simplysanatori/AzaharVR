@@ -473,8 +473,17 @@ void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
     Vis::NoteXrSecond({seconds, frames, late[0], wait_max_ms}); // AzaharFrame vrvis: stats panel
     // AzaharFrame menuux: Dynamic Resolution judges the second (the headset's frames).
     const auto gpu = VideoCore::DynamicResolution::TakeGpuSecond();
-    DynamicResolution::NoteSecond({seconds, frames, display_period_ns / 1e6, emu_frames,
-                                   gpu.frames, gpu.avg_ms, screens_live.load()});
+    DynamicResolution::Second dr_second{seconds,     frames,     display_period_ns / 1e6,
+                                        emu_frames,  gpu.frames, gpu.avg_ms,
+                                        screens_live.load()};
+    // AzaharFrame bfidr: and Black Frame Insertion's symptoms, while it flashed most of the second.
+    dr_second.bfi = frames > 0 && bfi_second.flashing * 2 >= frames;
+    dr_second.late_releases = std::max(late[0], late[1]);
+    dr_second.late_lit = bfi_second.late_lit;
+    dr_second.end_frame_max_ms = bfi_second.end_max_ms;
+    dr_second.screen_factor = bfi_second.screen_factor;
+    bfi_second = {};
+    DynamicResolution::NoteSecond(dr_second);
     stats.window_us_sum.exchange(0);
     take(stats.window_us_max);
     // AzaharFrame ui2: and what Dynamic Resolution judged it by, every second (the logs of report
@@ -1002,6 +1011,47 @@ void Runtime::FrameLoop() {
             place = WithSecondSlot(place); // AzaharFrame layout: as GetScreenPlacement
             // Immersive mode (immersive.cpp) may move the top screen and hide the bottom one.
             const Immersive::ScreenLayers shown = Immersive::Screens(local_space, view_space, place);
+            // AzaharFrame bfidr: what the head-driven top screen can show (Dynamic Resolution's
+            // ceiling with Black Frame Insertion): its size over its distance from the left eye,
+            // against the eye's field of view and recommended image.
+            if (shown.full_mode && shown.head_driven && shown.show_top) {
+                if (eye_px_w == 0) {
+                    uint32_t n = 0;
+                    XrViewConfigurationView v[2]{{XR_TYPE_VIEW_CONFIGURATION_VIEW},
+                                                 {XR_TYPE_VIEW_CONFIGURATION_VIEW}};
+                    if (XR_SUCCEEDED(xr.xrEnumerateViewConfigurationViews(
+                            instance, system, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 2, &n,
+                            v)) &&
+                        n >= 1) {
+                        eye_px_w = v[0].recommendedImageRectWidth;
+                        eye_px_h = v[0].recommendedImageRectHeight;
+                        LOG_INFO(Frontend, "xr: the runtime's eye image is {}x{} (for Dynamic "
+                                           "Resolution's screen ceiling)",
+                                 eye_px_w, eye_px_h);
+                    } else {
+                        eye_px_w = 1; // not known: asked once (ScreenFactor then says 0)
+                        eye_px_h = 0;
+                    }
+                }
+                const ViewPose vp = LatestViewPose();
+                const XrVector3f at = shown.top_pose[0].position;
+                const XrVector3f eye =
+                    shown.top_space == view_space ? XrVector3f{0, 0, 0} : vp.eye[0].position;
+                const float dist = std::sqrt((at.x - eye.x) * (at.x - eye.x) +
+                                             (at.y - eye.y) * (at.y - eye.y) +
+                                             (at.z - eye.z) * (at.z - eye.z));
+                const XrFovf& fov = vp.fov[0];
+                bfi_second.screen_factor =
+                    vp.views_valid && dist > 0.01f
+                        ? DynamicResolution::ScreenFactor(
+                              {shown.top_size[0].width / dist, shown.top_size[0].height / dist,
+                               std::tan(fov.angleRight) - std::tan(fov.angleLeft),
+                               std::tan(fov.angleUp) - std::tan(fov.angleDown), eye_px_w,
+                               eye_px_h})
+                        : 0;
+            } else {
+                bfi_second.screen_factor = 0;
+            }
             // AzaharFrame flash: Motion Clarity (motion_clarity.h; it began as the test switch
             // AZAHARFRAME_XR_SINGLE_FLASH): each game picture of the top screen on one display
             // refresh only, in the Full modes while the game is played, at its full rate. Judged
@@ -1079,6 +1129,15 @@ void Runtime::FrameLoop() {
                 top_layers = MotionClarity::TopLayersFor(rf.on, flash_backing,
                                                          hud.BackingImage(backing), !d.show);
                 hide_top = top_layers.omit || top_layers.collapse;
+                // AzaharFrame bfidr: for Dynamic Resolution's rules: flashing in a Full mode (not
+                // held for a slow game), and a late picture lit again (as clarity_log counts it).
+                if (rf.on && shown.full_mode && d.why != MotionClarity::Why::Slow &&
+                    d.why != MotionClarity::Why::Off) {
+                    bfi_second.flashing++;
+                    if (!hide_top && d.show && d.why == MotionClarity::Why::Late) {
+                        bfi_second.late_lit++;
+                    }
+                }
                 // fixa: Match Bottom Screen Brightness: the bottom screen's dim while the top one
                 // flashes (not while it is held for a slow game, or without its backing).
                 bottom_dim = MotionClarity::BottomDim(
@@ -1567,6 +1626,7 @@ void Runtime::FrameLoop() {
         r = queue_lock.With([&] { return xr.xrEndFrame(session, &ei); });
         phases.end_lock_ms = QueueLock::LastWaitUs() / 1000.0;
         phases.end_ms = Ms(Clock::now() - mark) - phases.end_lock_ms;
+        bfi_second.end_max_ms = std::max(bfi_second.end_max_ms, phases.end_ms); // AzaharFrame bfidr
         if (XR_FAILED(r)) {
             stats.end_frame_errors++;
             static int logged = 0;
