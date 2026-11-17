@@ -33,7 +33,8 @@
 #include <vector>
 #include <sys/stat.h>
 
-extern char** environ;
+// C linkage, as unistd.h declares it (a C++-linkage redeclaration conflicts with it).
+extern "C" char** environ;
 
 namespace Common::FrameTestSwitches {
 
