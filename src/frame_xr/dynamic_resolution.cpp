@@ -34,6 +34,82 @@ bool Controller::Bad(const Second& s) {
            s.gpu_ms >= kBadBudget * s.period_ms;
 }
 
+// AzaharFrame bfidr: the symptoms' window.
+void SymptomWindow::Add(const Second& s) {
+    Entry& e = entries[next];
+    e.late = s.late_releases;
+    e.lit = s.late_lit;
+    e.slow = s.period_ms > 0.0 && s.end_frame_max_ms > BfiRules::kEndFramePeriods * s.period_ms;
+    next = (next + 1) % BfiRules::kWindow;
+    n = std::min(n + 1, BfiRules::kWindow);
+}
+
+uint32_t SymptomWindow::LateReleases() const {
+    uint32_t sum = 0;
+    for (int i = 0; i < n; i++) {
+        sum += entries[i].late;
+    }
+    return sum;
+}
+
+uint32_t SymptomWindow::LateLit() const {
+    uint32_t sum = 0;
+    for (int i = 0; i < n; i++) {
+        sum += entries[i].lit;
+    }
+    return sum;
+}
+
+int SymptomWindow::SlowSeconds() const {
+    int sum = 0;
+    for (int i = 0; i < n; i++) {
+        sum += entries[i].slow ? 1 : 0;
+    }
+    return sum;
+}
+
+bool SymptomWindow::Symptoms() const {
+    // Over the whole window, however many seconds are in it: a burst of one second (a Load's
+    // stall, the pacing's relock) is no trend.
+    const double most = BfiRules::kLatePerSecond * BfiRules::kWindow;
+    return LateReleases() > most || LateLit() > most || SlowSeconds() >= BfiRules::kSlowSeconds;
+}
+
+bool SymptomWindow::Clean(const Second& s) {
+    return s.late_releases <= 1 && s.late_lit <= 1 &&
+           !(s.period_ms > 0.0 && s.end_frame_max_ms > BfiRules::kEndFramePeriods * s.period_ms);
+}
+
+int ScreenFactor(const ScreenCover& c) { // AzaharFrame bfidr
+    if (!(c.tan_w > 0.0 && c.tan_h > 0.0 && c.eye_tan_w > 0.0 && c.eye_tan_h > 0.0) ||
+        c.eye_px_w == 0 || c.eye_px_h == 0) {
+        return 0;
+    }
+    // The display pixels the screen covers on each axis, over the picture's at 1x.
+    const double across = c.eye_px_w * (c.tan_w / c.eye_tan_w) / kTopWidth;
+    const double up = c.eye_px_h * (c.tan_h / c.eye_tan_h) / kTopHeight;
+    const double most = kScreenOversample * std::max(across, up);
+    return std::max(1, static_cast<int>(std::floor(most + 1e-9)));
+}
+
+int CeilingHold::Next(int factor) { // AzaharFrame bfidr
+    factor = std::max(0, factor);
+    if (factor == now) {
+        candidate = factor;
+        seen = 0;
+        return now;
+    }
+    if (factor != candidate) {
+        candidate = factor;
+        seen = 0;
+    }
+    if (++seen >= kCeilingSeconds) {
+        now = candidate;
+        seen = 0;
+    }
+    return now;
+}
+
 double Controller::PixelRatio(int factor) { // AzaharFrame flash3
     const double f = std::max(1, factor);
     return ((f + 1.0) / f) * ((f + 1.0) / f);
@@ -102,8 +178,26 @@ std::string Controller::RatioWhy(int factor) const { // AzaharFrame fixd
 bool Controller::Good(const Second& s, int factor) const {
     // AzaharFrame flash3: the next factor's cost, from this one's pixels to the next one's,
     // well under the bad line, so the step up holds. AzaharFrame fixd: or by the measured ratio.
-    return s.period_ms > 0.0 && s.gpu_frames >= kMinGpuFrames &&
-           PredictUp(s.gpu_ms, factor) < kUpBudget * kBadBudget * s.period_ms;
+    if (s.period_ms <= 0.0 || s.gpu_frames < kMinGpuFrames) {
+        return false;
+    }
+    if (s.bfi) {
+        // AzaharFrame bfidr: under the stricter line, in a second without symptoms.
+        return SymptomWindow::Clean(s) && !window.Symptoms() &&
+               PredictUp(s.gpu_ms, factor) < kUpBudget * BfiRules::kUpLine * s.period_ms;
+    }
+    return PredictUp(s.gpu_ms, factor) < kUpBudget * kBadBudget * s.period_ms;
+}
+
+namespace {
+bool FastForward(const Second& s) { // AzaharFrame bfidr
+    return s.emu_frames > BfiRules::kGameRateMax * std::max(s.seconds, 0.0);
+}
+} // namespace
+
+bool Controller::SymptomBad(const Second& s) const { // AzaharFrame bfidr
+    return s.bfi && !FastForward(s) && s.period_ms > 0.0 && s.gpu_frames >= kMinGpuFrames &&
+           s.gpu_ms >= BfiRules::kBusyShare * s.period_ms && window.Symptoms();
 }
 
 bool Controller::Blocked(int level) const { // AzaharFrame fixd
@@ -115,6 +209,11 @@ bool Controller::Blocked(int level) const { // AzaharFrame fixd
 void Controller::StepDone(bool down, int from_factor, double from_cost) {
     last_step = down ? 1 : -1;
     held = 0;
+    if (down) { // AzaharFrame bfidr: the window is the factor stepped from
+        step_window = window;
+    }
+    window.Clear();
+    symptom_bad = 0;
     run_sum = 0.0;
     run_n = 0;
     measure_from = from_cost > 0.0 ? from_factor : 0;
@@ -171,8 +270,9 @@ void Controller::Measure(const Second& s, int factor) {
 }
 
 
-int Controller::Judge(const Second& s, int max_drop) {
+int Controller::Judge(const Second& s, int max_drop, int min_drop) {
     last_step = 0; // AzaharFrame fixd
+    last_symptoms = false; // AzaharFrame bfidr
     now += std::max(0.0, s.seconds);
     max_drop = std::clamp(max_drop, 0, kMaxSteps - 1);
     drop = std::min(drop, max_drop);
@@ -180,13 +280,27 @@ int Controller::Judge(const Second& s, int max_drop) {
         Reset(); // no game: the next one starts from the setting (or its remembered level)
         return drop;
     }
+    // AzaharFrame bfidr: the screen's ceiling. A move of the factor drawn is the step's own
+    // hitch (not judged), and the seconds before are another factor's: nothing measured, the
+    // streaks and the symptoms start again.
+    const int shown_before = Drop();
+    min_drop_ = std::clamp(min_drop, 0, max_drop);
+    if (Drop() != shown_before) {
+        held = 0;
+        measure_from = 0;
+        bad = good = symptom_bad = 0;
+        window.Clear();
+        settle = kSettle;
+    }
     if (s.emu_frames == 0 || s.seconds <= 0.0 || s.period_ms <= 0.0) {
         bad = good = 0; // paused or the menu: nothing to judge, the streaks start again
-        return drop;
+        symptom_bad = 0; // AzaharFrame bfidr
+        window.Clear();
+        return Drop();
     }
     if (settle > 0) {
         settle--;
-        return drop;
+        return Drop();
     }
     held++; // AzaharFrame fixd
     const bool holding = hold > 0; // AzaharFrame ui2
@@ -194,13 +308,20 @@ int Controller::Judge(const Second& s, int max_drop) {
         hold--;
     }
     // AzaharFrame flash3: the factor drawn now (without one, the steps down to 1x).
-    const int factor = s.factor > 0 ? s.factor : max_drop + 1 - drop;
+    const int factor = s.factor > 0 ? s.factor : max_drop + 1 - Drop();
     Measure(s, factor); // AzaharFrame fixd
     if (s.gpu_frames >= kMinGpuFrames && factor >= 1 && factor <= kMaxSteps) { // AzaharFrame fixd
         costs[factor][cost_n[factor] % kCostKeep] = static_cast<float>(s.gpu_ms);
         cost_n[factor]++;
     }
-    if (Bad(s)) {
+    // AzaharFrame bfidr: with Black Frame Insertion its symptoms count too (BfiRules).
+    if (!s.bfi) {
+        window.Clear();
+    } else if (!FastForward(s)) {
+        window.Add(s);
+    }
+    const bool symptoms = SymptomBad(s);
+    if (Bad(s) || symptoms) {
         if (bad == 0) { // AzaharFrame fixd: a new run, its cost from here
             run_sum = 0.0;
             run_n = 0;
@@ -208,8 +329,10 @@ int Controller::Judge(const Second& s, int max_drop) {
         run_sum += s.gpu_ms;
         run_n++;
         good = 0;
-        if (++bad >= kDownAfter && drop < max_drop) {
-            const int level = drop; // the level it leaves
+        symptom_bad = symptoms ? symptom_bad + 1 : 0; // AzaharFrame bfidr
+        const bool by_symptoms = symptom_bad >= BfiRules::kDownAfter;
+        if ((++bad >= kDownAfter || by_symptoms) && Drop() < max_drop) {
+            const int level = Drop(); // the level it leaves (bfidr: with the ceiling)
             if (now - last_up <= kFailWindow) {
                 // The step up to this level could not be held: wait before trying it again,
                 // longer each time (AzaharFrame fixd), and after kFailsForGame not again in this
@@ -222,15 +345,17 @@ int Controller::Judge(const Second& s, int max_drop) {
                 last_up = -1e9;
             }
             const double cost = run_sum / run_n;
-            drop++;
+            drop = level + 1;
             bad = 0;
             settle = kSettle;
             hold = kHoldAfterDown; // AzaharFrame ui2
             StepDone(true, factor, cost);
+            last_symptoms = by_symptoms; // AzaharFrame bfidr
         }
     } else {
         // AzaharFrame flash3: any second that is not bad ends a bad run (only a good one did).
         bad = 0;
+        symptom_bad = 0; // AzaharFrame bfidr
         if (Good(s, factor) && !holding) {
             if (good == 0) { // AzaharFrame fixd: a new run
                 run_sum = 0.0;
@@ -238,7 +363,8 @@ int Controller::Judge(const Second& s, int max_drop) {
             }
             run_sum += s.gpu_ms;
             run_n++;
-            if (++good >= kUpAfter && drop > 0 && now >= blocked_until[drop - 1]) {
+            // AzaharFrame bfidr: not over the screen's ceiling.
+            if (++good >= kUpAfter && drop > min_drop_ && now >= blocked_until[drop - 1]) {
                 const double cost = run_sum / run_n;
                 drop--;
                 good = 0;
@@ -250,7 +376,7 @@ int Controller::Judge(const Second& s, int max_drop) {
             good = 0; // neither (or good while it holds): the good seconds must come in a row
         }
     }
-    return drop;
+    return Drop();
 }
 
 void Controller::Reset() {
@@ -277,6 +403,8 @@ void Controller::Start(int steps, bool same_game) { // AzaharFrame fixd
 
 void Controller::Resume() { // AzaharFrame ui2
     bad = good = 0;
+    symptom_bad = 0; // AzaharFrame bfidr
+    window.Clear();
     settle = drop > 0 ? kSettle : 0; // the step back down is a hitch of its own
     hold = drop > 0 ? kHoldAfterDown : 0;
     measure_from = 0; // AzaharFrame fixd: the seconds before are not this scene's
@@ -408,6 +536,7 @@ Controller g_saved;
 uint64_t g_measured_title = 0; ///< AzaharFrame fixd: the game g_controller has measured
 bool g_have_saved = false;
 bool g_was_on = false;
+CeilingHold g_ceiling; ///< AzaharFrame bfidr: the screen's ceiling (while it flashes)
 
 void Publish(int drop) {
     VideoCore::DynamicResolution::g_drop.store(static_cast<u32>(std::max(0, drop)),
@@ -459,6 +588,7 @@ void TurnOn() {
 void ResetLocked(const char* why) {
     LogBack(g_controller.Drop(), why); // AzaharFrame flash3
     g_controller.Reset();
+    g_ceiling = {}; // AzaharFrame bfidr
     g_have_saved = false;
     Publish(0);
 }
@@ -553,6 +683,7 @@ void NoteSecond(const Second& s) {
     if (!s.live) {
         g_pending_start = true;
         g_pending_why = kScreensOff;
+        g_ceiling = {}; // AzaharFrame bfidr
         StartLocked(static_cast<int>(base), max_drop, kScreensOff);
         return;
     }
@@ -566,20 +697,41 @@ void NoteSecond(const Second& s) {
     // AzaharFrame fixd: the prediction and the ratio it used, before the step (for the log)
     const double predicted = g_controller.PredictUp(s.gpu_ms, judged.factor);
     const std::string ratio_why = g_controller.RatioWhy(judged.factor);
-    const int drop = g_controller.Judge(judged, max_drop);
+    // AzaharFrame bfidr: while Black Frame Insertion flashes, no factor over what the screen can
+    // show (ScreenFactor, held CeilingHold::kCeilingSeconds); never under the floor (the setting).
+    const int ceiling = g_ceiling.Next(s.bfi ? s.screen_factor : 0);
+    int min_drop = 0;
+    if (ceiling > 0 && base > 0) {
+        const int top = std::max(FloorFactor(static_cast<int>(base), setting),
+                                 std::min(static_cast<int>(base), ceiling));
+        min_drop = std::clamp(static_cast<int>(base) - top, 0, max_drop);
+    }
+    const int drop = g_controller.Judge(judged, max_drop, min_drop);
     const auto at = [base](int d) { return base > static_cast<u32>(d) ? static_cast<int>(base) - d : 1; };
     if (drop != before) {
         Publish(drop);
         // AzaharFrame flash3: why (a step up gives the cost it predicted for the new factor).
         // AzaharFrame fixd: a change that is no step is the ceiling or the floor moving.
         std::string why;
-        if (g_controller.LastStep() > 0) {
+        if (g_controller.LastStep() > 0 && g_controller.LastStepSymptoms()) {
+            // AzaharFrame bfidr: what the window held
+            const SymptomWindow& w = g_controller.StepWindow();
+            why = fmt::format("{} bad seconds in a row with Black Frame Insertion: {} late "
+                              "releases, {} late pictures lit again, {} seconds with an "
+                              "xrEndFrame over {:.1f} ms in the last {} s",
+                              BfiRules::kDownAfter, w.LateReleases(), w.LateLit(), w.SlowSeconds(),
+                              BfiRules::kEndFramePeriods * s.period_ms, w.Size());
+        } else if (g_controller.LastStep() > 0) {
             why = fmt::format("{} bad seconds in a row", Controller::kDownAfter);
         } else if (g_controller.LastStep() < 0) {
             why = fmt::format("{} good seconds in a row, predicted {:.1f} ms at the new factor ({})",
                               Controller::kUpAfter, predicted, ratio_why);
+        } else if (g_controller.Ceilinged()) { // AzaharFrame bfidr
+            why = fmt::format("the screen shows no more than {}x with Black Frame Insertion",
+                              ceiling);
         } else {
-            why = "the ceiling or the floor moved (Internal Resolution or the immersive mode)";
+            why = "the ceiling or the floor moved (Internal Resolution, the immersive mode or the "
+                  "screen's size)";
         }
         LOG_INFO(Frontend,
                  "xr: Dynamic Resolution: {}x (was {}x; {}; {} display frames in {:.1f} s at "
@@ -591,8 +743,10 @@ void NoteSecond(const Second& s) {
     // could not be held), or one it held kRememberAfter judged seconds (a step up that held).
     const uint64_t title = Title();
     const bool stepped_down = g_controller.LastStep() > 0;
-    if (title != 0 && max_drop > 0 && (stepped_down || g_controller.Held() >= kRememberAfter)) {
-        const int factor = at(drop);
+    // AzaharFrame bfidr: not a level the screen's ceiling holds (the seconds did not decide it).
+    if (title != 0 && max_drop > 0 &&
+        (stepped_down || (g_controller.Held() >= kRememberAfter && !g_controller.Ceilinged()))) {
+        const int factor = at(g_controller.OwnDrop());
         if (RememberedLocked(title) != factor) {
             Remember(title, factor);
             if (stepped_down) {
