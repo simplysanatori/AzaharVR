@@ -154,6 +154,10 @@ struct Vertex {
     std::array<float, 4> colour{1.0f, 1.0f, 1.0f, 1.0f};
     std::array<u8, 4> bones{};
     bool has_bones = false;
+    /// AzaharFrame kiuarm: a smooth vertex's bone weights (attribute 8, as scaled; the same
+    /// order as `bones`). None given: its first bone takes it all.
+    std::array<float, 4> weights{1.0f, 0.0f, 0.0f, 0.0f};
+    bool has_weights = false;
 };
 
 struct SubMesh {

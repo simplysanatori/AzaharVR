@@ -2136,6 +2136,422 @@ bool ConvertFlash(int id, std::span<const u8> source_zrc, int source, bool neutr
     return true;
 }
 
+// ---- AzaharFrame kiuarm: Pit's arm ----
+
+namespace {
+
+/// The arm's surface: matte, for skin and cloth (the weapons' kRoughness is their metal).
+constexpr u8 kArmRoughness = 220;
+
+struct ArmCorner {
+    Vec3 position{}, normal{};
+    std::array<float, 2> uv{};
+};
+
+/// Whether `bone` is `root` or under it.
+bool UnderBone(const FrameCgfx::Model& m, s32 bone, s32 root) {
+    for (int guard = 0; bone >= 0 && guard < 256; guard++) {
+        if (bone == root) {
+            return true;
+        }
+        if (static_cast<std::size_t>(bone) >= m.bones.size()) {
+            return false;
+        }
+        bone = m.bones[static_cast<std::size_t>(bone)].parent;
+    }
+    return false;
+}
+
+Vec3 Sub3(const Vec3& a, const Vec3& b) {
+    return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
+}
+float Dot3(const Vec3& a, const Vec3& b) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+Vec3 Cross3(const Vec3& a, const Vec3& b) {
+    return {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
+}
+Vec3 Unit3(const Vec3& a, const Vec3& fallback) {
+    const float l = std::sqrt(Dot3(a, a));
+    return l > 1e-6f ? Vec3{a[0] / l, a[1] / l, a[2] / l} : fallback;
+}
+
+/// A corner on the edge a-b where the plane cuts it, the same whichever way round the edge is
+/// given (the two triangles that share it get one point, so the cut has no cracks).
+ArmCorner CutEdge(const ArmCorner& a, float sa, const ArmCorner& b, float sb) {
+    const bool swap = std::lexicographical_compare(b.position.begin(), b.position.end(),
+                                                   a.position.begin(), a.position.end());
+    const ArmCorner& p = swap ? b : a;
+    const ArmCorner& q = swap ? a : b;
+    const float sp = swap ? sb : sa, sq = swap ? sa : sb;
+    const float t = sp / (sp - sq);
+    ArmCorner c;
+    for (int k = 0; k < 3; k++) {
+        const std::size_t i = static_cast<std::size_t>(k);
+        c.position[i] = p.position[i] + t * (q.position[i] - p.position[i]);
+        c.normal[i] = p.normal[i] + t * (q.normal[i] - p.normal[i]);
+    }
+    c.normal = Unit3(c.normal, p.normal);
+    for (std::size_t i = 0; i < 2; i++) {
+        c.uv[i] = p.uv[i] + t * (q.uv[i] - p.uv[i]);
+    }
+    return c;
+}
+
+/// Adds a triangle (corners in the bind pose) to a component, in the hand's space, wound to
+/// agree with its normals (every part is drawn from both sides).
+void PutArmTriangle(std::vector<float>& verts, std::vector<u32>& idx, const FrameCgfx::Mat34& to_hand,
+                    const std::array<ArmCorner, 3>& t) {
+    const u32 base = static_cast<u32>(verts.size() / 12);
+    std::array<Vec3, 3> p{}, n{};
+    for (std::size_t k = 0; k < 3; k++) {
+        p[k] = FrameCgfx::Point(to_hand, t[k].position);
+        n[k] = Unit3(FrameCgfx::Direction(to_hand, t[k].normal), {0.0f, 1.0f, 0.0f});
+        verts.insert(verts.end(), {p[k][0], p[k][1], p[k][2], n[k][0], n[k][1], n[k][2], 1.0f, 0.0f,
+                                   0.0f, 1.0f, t[k].uv[0], t[k].uv[1]});
+    }
+    const Vec3 face = Cross3(Sub3(p[1], p[0]), Sub3(p[2], p[0]));
+    const float agree = Dot3(face, n[0]) + Dot3(face, n[1]) + Dot3(face, n[2]);
+    if (agree < 0.0f) {
+        idx.insert(idx.end(), {base, base + 2, base + 1});
+    } else {
+        idx.insert(idx.end(), {base, base + 1, base + 2});
+    }
+}
+
+} // namespace
+
+bool BuildArm(const FrameCgfx::Model& m, ArmMesh& out, std::string& error) {
+    const s32 shoulder = m.BoneIndex("LShoulderN");
+    const s32 elbow_bone = m.BoneIndex("LArmN");
+    const s32 hand = m.BoneIndex("LHandN");
+    if (elbow_bone < 0 || hand < 0) {
+        error = "no left arm in the skeleton";
+        return false;
+    }
+    const s32 chain = shoulder >= 0 ? shoulder : elbow_bone;
+    const auto origin = [&](s32 b) {
+        const auto& t = m.bones[static_cast<std::size_t>(b)].bind;
+        return Vec3{t[3], t[7], t[11]};
+    };
+    const Vec3 elbow = origin(elbow_bone), wrist = origin(hand);
+    const Vec3 along = Sub3(wrist, elbow);
+    if (Dot3(along, along) < 1e-6f) {
+        error = "the forearm has no length";
+        return false;
+    }
+    const Vec3 axis = Unit3(along, {1.0f, 0.0f, 0.0f});
+    const float plane = Dot3(axis, elbow);
+    const FrameCgfx::Mat34 to_hand =
+        FrameCgfx::Inverse34(m.bones[static_cast<std::size_t>(hand)].bind);
+    ArmMesh a;
+    a.elbow = FrameCgfx::Point(to_hand, elbow);
+    a.fist = {0.9f, 0.076f, 0.0f}; // the files' marker when a skeleton lacks it
+    if (const s32 fm = m.BoneIndex("LHandFistM"); fm >= 0) {
+        a.fist = FrameCgfx::Point(to_hand, origin(fm));
+    }
+
+    struct Segment {
+        ArmCorner a, b;
+    };
+    std::vector<Segment> cut;
+    std::size_t kept = 0;
+    bool texture_seen = false;
+    for (const FrameCgfx::Mesh& mesh : m.meshes) {
+        if (mesh.material < 0 || static_cast<std::size_t>(mesh.material) >= m.materials.size() ||
+            mesh.shape < 0 || static_cast<std::size_t>(mesh.shape) >= m.shapes.size()) {
+            continue;
+        }
+        const FrameCgfx::Material& mat = m.materials[static_cast<std::size_t>(mesh.material)];
+        if (mat.name != "Body" || !m.MeshShown(mesh)) {
+            continue;
+        }
+        // The `pit` atlas's mapper and the coordinator its UVs come from.
+        FrameCgfx::TexCoord coord;
+        for (std::size_t i = 0; i < mat.mappers.size(); i++) {
+            if (mat.mappers[i].texture == kArmTexture) {
+                if (!mat.coords.empty()) {
+                    coord = mat.coords[std::min(i, mat.coords.size() - 1)];
+                }
+                if (!texture_seen) {
+                    a.wrap_u = mat.mappers[i].wrap_u;
+                    a.wrap_v = mat.mappers[i].wrap_v;
+                    texture_seen = true;
+                }
+                break;
+            }
+        }
+        const FrameCgfx::Shape& shape = m.shapes[static_cast<std::size_t>(mesh.shape)];
+        for (const FrameCgfx::SubMesh& sub : shape.submeshes) {
+            // A corner: its place, and how much of it hangs on the arm and on the hand.
+            const auto corner = [&](const FrameCgfx::Vertex& v, ArmCorner& c, float& on_arm,
+                                    float& on_hand) {
+                c.position = FrameCgfx::BindPosition(m, sub, v, &c.normal);
+                c.normal = Unit3(c.normal, {0.0f, 1.0f, 0.0f});
+                const auto& uv = coord.source == 1 ? v.uv1 : v.uv0;
+                c.uv = {uv[0] * coord.scale_u + coord.translate_u,
+                        1.0f - (uv[1] * coord.scale_v + coord.translate_v)};
+                float total = 0.0f;
+                on_arm = on_hand = 0.0f;
+                const auto add = [&](s32 bone, float w) {
+                    if (!(w > 0.0f)) {
+                        return;
+                    }
+                    total += w;
+                    on_arm += UnderBone(m, bone, chain) ? w : 0.0f;
+                    on_hand += UnderBone(m, bone, hand) ? w : 0.0f;
+                };
+                if (sub.skinning == 2) {
+                    for (std::size_t k = 0; k < 4; k++) {
+                        if (!v.has_bones && k > 0) {
+                            break;
+                        }
+                        const std::size_t local = v.has_bones ? v.bones[k] : 0;
+                        const float w = v.has_weights ? v.weights[k] : (k == 0 ? 1.0f : 0.0f);
+                        if (local < sub.bones.size()) {
+                            add(sub.bones[local], w);
+                        }
+                    }
+                } else {
+                    add(VertexBone(sub, v), 1.0f);
+                }
+                if (total > 0.0f) {
+                    on_arm /= total;
+                    on_hand /= total;
+                }
+            };
+            for (std::size_t t = 0; t + 2 < sub.indices.size(); t += 3) {
+                std::array<ArmCorner, 3> c{};
+                bool arm = true, on_hand = true;
+                std::array<float, 3> side{};
+                for (std::size_t k = 0; k < 3; k++) {
+                    const u32 vi = sub.indices[t + k];
+                    if (vi >= shape.vertices.size()) {
+                        arm = false;
+                        break;
+                    }
+                    float wa = 0.0f, wh = 0.0f;
+                    corner(shape.vertices[vi], c[k], wa, wh);
+                    arm = arm && wa >= 0.5f;
+                    on_hand = on_hand && wh >= 0.5f;
+                    side[k] = Dot3(axis, c[k].position) - plane;
+                }
+                if (!arm) {
+                    continue;
+                }
+                auto& verts = on_hand ? a.hand_vertices : a.forearm_vertices;
+                auto& idx = on_hand ? a.hand_indices : a.forearm_indices;
+                kept++;
+                if (side[0] >= 0.0f && side[1] >= 0.0f && side[2] >= 0.0f) {
+                    PutArmTriangle(verts, idx, to_hand, c);
+                    continue;
+                }
+                if (side[0] < 0.0f && side[1] < 0.0f && side[2] < 0.0f) {
+                    continue; // the upper arm
+                }
+                // Cut: the part on the hand's side of the plane (one or two triangles), and the
+                // cut's segment for the cap.
+                std::vector<ArmCorner> poly;
+                std::vector<ArmCorner> ends;
+                for (std::size_t k = 0; k < 3; k++) {
+                    const std::size_t j = (k + 1) % 3;
+                    if (side[k] >= 0.0f) {
+                        poly.push_back(c[k]);
+                    }
+                    if ((side[k] >= 0.0f) != (side[j] >= 0.0f)) {
+                        ends.push_back(CutEdge(c[k], side[k], c[j], side[j]));
+                        poly.push_back(ends.back());
+                    }
+                }
+                for (std::size_t k = 1; k + 1 < poly.size(); k++) {
+                    PutArmTriangle(verts, idx, to_hand, {poly[0], poly[k], poly[k + 1]});
+                }
+                if (ends.size() == 2) {
+                    cut.push_back({ends[0], ends[1]});
+                }
+            }
+        }
+    }
+    if (kept == 0 || (a.hand_indices.empty() && a.forearm_indices.empty())) {
+        error = "nothing of the material Body hangs on the left arm";
+        return false;
+    }
+
+    // The cap: the cut's segments joined into loops at their shared ends, each fanned about its
+    // centre, facing out of the stump (toward the shoulder), in one texel of the cut (its UV
+    // nearest the loop's mean: skin, not a seam's average).
+    const auto key = [](const Vec3& p) {
+        return std::array<s64, 3>{std::llround(p[0] * 1e4), std::llround(p[1] * 1e4),
+                                  std::llround(p[2] * 1e4)};
+    };
+    std::map<std::array<s64, 3>, std::vector<std::size_t>> at;
+    for (std::size_t i = 0; i < cut.size(); i++) {
+        at[key(cut[i].a.position)].push_back(i);
+        at[key(cut[i].b.position)].push_back(i);
+    }
+    for (const auto& [k, segs] : at) {
+        a.open_ends += segs.size() == 2 ? 0 : 1;
+    }
+    std::vector<bool> used(cut.size(), false);
+    const Vec3 out_normal{-axis[0], -axis[1], -axis[2]};
+    for (std::size_t start = 0; start < cut.size(); start++) {
+        if (used[start]) {
+            continue;
+        }
+        std::vector<ArmCorner> loop{cut[start].a, cut[start].b};
+        used[start] = true;
+        bool closed = false;
+        for (std::size_t guard = 0; guard < cut.size(); guard++) {
+            const auto& next = at[key(loop.back().position)];
+            std::size_t found = cut.size();
+            for (const std::size_t s : next) {
+                if (!used[s]) {
+                    found = s;
+                    break;
+                }
+            }
+            if (found == cut.size()) {
+                break;
+            }
+            used[found] = true;
+            const bool forward = key(cut[found].a.position) == key(loop.back().position);
+            const ArmCorner& far = forward ? cut[found].b : cut[found].a;
+            if (key(far.position) == key(loop.front().position)) {
+                closed = true;
+                break;
+            }
+            loop.push_back(far);
+        }
+        if (loop.size() < 3) {
+            continue;
+        }
+        a.cut_loops += closed ? 1 : 0;
+        Vec3 centre{};
+        std::array<float, 2> mean_uv{};
+        for (const ArmCorner& c : loop) {
+            for (std::size_t k = 0; k < 3; k++) {
+                centre[k] += c.position[k] / static_cast<float>(loop.size());
+            }
+            mean_uv[0] += c.uv[0] / static_cast<float>(loop.size());
+            mean_uv[1] += c.uv[1] / static_cast<float>(loop.size());
+        }
+        std::array<float, 2> uv = loop[0].uv;
+        float best = 1e30f;
+        for (const ArmCorner& c : loop) {
+            const float d = (c.uv[0] - mean_uv[0]) * (c.uv[0] - mean_uv[0]) +
+                            (c.uv[1] - mean_uv[1]) * (c.uv[1] - mean_uv[1]);
+            if (d < best) {
+                best = d;
+                uv = c.uv;
+            }
+        }
+        const ArmCorner mid{centre, out_normal, uv};
+        for (std::size_t i = 0; i < loop.size(); i++) {
+            if (!closed && i + 1 == loop.size()) {
+                break;
+            }
+            ArmCorner p{loop[i].position, out_normal, uv};
+            ArmCorner q{loop[(i + 1) % loop.size()].position, out_normal, uv};
+            PutArmTriangle(a.forearm_vertices, a.forearm_indices, to_hand, {mid, p, q});
+        }
+    }
+    error.clear();
+    out = std::move(a);
+    return true;
+}
+
+std::vector<u8> WriteArmModel(const ArmMesh& arm, const FrameCgfx::Texture* tex) {
+    struct Comp {
+        const char* name;
+        const std::vector<float>* verts;
+        const std::vector<u32>* idx;
+    };
+    const std::array<Comp, 2> comps{{{"hand", &arm.hand_vertices, &arm.hand_indices},
+                                     {"forearm", &arm.forearm_vertices, &arm.forearm_indices}}};
+    std::vector<float> verts;
+    std::vector<u32> idx;
+    std::vector<std::pair<u32, u32>> ranges; // first, count
+    for (const Comp& c : comps) {
+        const u32 base = static_cast<u32>(verts.size() / 12);
+        ranges.emplace_back(static_cast<u32>(idx.size()), static_cast<u32>(c.idx->size()));
+        verts.insert(verts.end(), c.verts->begin(), c.verts->end());
+        for (const u32 i : *c.idx) {
+            idx.push_back(base + i);
+        }
+    }
+    const bool textured = tex && tex->width && tex->height &&
+                          tex->rgba.size() >= std::size_t{tex->width} * tex->height * 4;
+    const u32 tw = textured ? tex->width : 8, th = textured ? tex->height : 8;
+    Bytes b;
+    b.insert(b.end(), {'M', 'X', 'F', 'M'});
+    Put32(b, kModelVersion);
+    Put32(b, static_cast<u32>(verts.size() / 12));
+    Put32(b, static_cast<u32>(idx.size()));
+    Put32(b, static_cast<u32>(comps.size()));
+    Put32(b, tw);
+    Put32(b, th);
+    Put32(b, kFlagWeaponSpace | (arm.wrap_u & 7) << 8 | (arm.wrap_v & 7) << 12 | kFlagFlatSurface);
+    for (std::size_t i = 0; i < comps.size(); i++) {
+        Bytes rec(kComponentBytes, 0);
+        std::memcpy(rec.data(), comps[i].name, std::strlen(comps[i].name));
+        std::memcpy(rec.data() + kNameBytes, "Body", 4);
+        const auto put_at = [&](std::size_t at, u32 v) {
+            for (int k = 0; k < 4; k++) {
+                rec[at + static_cast<std::size_t>(k)] = static_cast<u8>(v >> (8 * k));
+            }
+        };
+        put_at(2 * kNameBytes, ranges[i].first);
+        put_at(2 * kNameBytes + 4, ranges[i].second);
+        b.insert(b.end(), rec.begin(), rec.end());
+    }
+    for (const float f : verts) {
+        PutF(b, f);
+    }
+    for (const u32 i : idx) {
+        Put32(b, i);
+    }
+    // The game's texture at its own size (alpha 255: no ambient occlusion).
+    const std::size_t px = std::size_t{tw} * th;
+    for (std::size_t i = 0; i < px; i++) {
+        if (textured) {
+            b.insert(b.end(), {tex->rgba[i * 4], tex->rgba[i * 4 + 1], tex->rgba[i * 4 + 2], 255});
+        } else {
+            b.insert(b.end(), {200, 160, 130, 255});
+        }
+    }
+    b.insert(b.end(), {128, 128, 255, kArmRoughness});
+    return b;
+}
+
+bool ConvertArm(std::span<const u8> zrc, const FrameCgfx::Texture* texture, ArmInfo& info,
+                std::vector<u8>& file, std::string& error) {
+    Bytes bcres;
+    if (!FrameCgfx::DarcMember(zrc, "character/fmdl.arc!fmdl/00.bcres", bcres, error)) {
+        error = "the model: " + error;
+        return false;
+    }
+    FrameCgfx::File cgfx;
+    if (!FrameCgfx::ReadCgfx(bcres, cgfx, error)) {
+        return false;
+    }
+    if (cgfx.models.empty()) {
+        error = "no model";
+        return false;
+    }
+    ArmMesh arm;
+    if (!BuildArm(cgfx.models[0], arm, error)) {
+        return false;
+    }
+    file = WriteArmModel(arm, texture);
+    info.known = true;
+    info.file = kArmFile;
+    info.triangles =
+        static_cast<u32>((arm.hand_indices.size() + arm.forearm_indices.size()) / 3);
+    info.fist = arm.fist;
+    info.elbow = arm.elbow;
+    return true;
+}
+
 // ---- The manifest ----
 
 // The manifest: plain lines (no JSON library: the binary stays small).
@@ -2166,6 +2582,13 @@ bool WriteManifest(const std::string& path, const Manifest& m, std::string& erro
                       "own files on this machine. Not to be shared.\n";
     out += fmt::format("kiu-weapons {}\ntitle {}\nregion {}\n", m.version, Hex(m.title_id),
                        m.region.empty() ? "-" : m.region);
+    // AzaharFrame kiuarm: Pit's arm, once tried (a line of its own: builds before it skip it).
+    if (m.arm.known) {
+        out += fmt::format("arm {} {} {} {} {} {} {} {} {} {}\n",
+                           m.arm.file.empty() ? "-" : m.arm.file, Hex(m.arm.source_hash),
+                           m.arm.source, m.arm.triangles, m.arm.fist[0], m.arm.fist[1],
+                           m.arm.fist[2], m.arm.elbow[0], m.arm.elbow[1], m.arm.elbow[2]);
+    }
     const auto anchor = [](const std::string& a) { return a.empty() ? std::string{"-"} : a; };
     for (const Weapon& w : m.weapons) {
         out += fmt::format("weapon {} {} {} {} {} ", w.id, w.wpnid.empty() ? "-" : w.wpnid,
@@ -2301,6 +2724,26 @@ bool ReadManifest(const std::string& path, Manifest& out, std::string& error) {
             hex(m.title_id);
         } else if (key == "region") {
             in >> m.region;
+        } else if (key == "arm") {
+            // AzaharFrame kiuarm: a bad one is dropped (the arm is made again when asked for).
+            ArmInfo a;
+            in >> a.file;
+            const bool ok = static_cast<bool>(in) && hex(a.source_hash);
+            in >> a.source >> a.triangles >> a.fist[0] >> a.fist[1] >> a.fist[2] >> a.elbow[0] >>
+                a.elbow[1] >> a.elbow[2];
+            const auto finite = [](const std::array<float, 3>& v) {
+                return std::all_of(v.begin(), v.end(),
+                                   [](float f) { return std::isfinite(f) && std::abs(f) < 1e4f; });
+            };
+            if (ok && in && a.file.find('/') == std::string::npos &&
+                a.file.find("..") == std::string::npos && a.source >= -1 &&
+                a.source < kWeapons && finite(a.fist) && finite(a.elbow)) {
+                if (a.file == "-") {
+                    a.file.clear();
+                }
+                a.known = true;
+                m.arm = std::move(a);
+            }
         } else if (key == "weapon") {
             Weapon w;
             int has_muzzle = 0;
@@ -2606,6 +3049,82 @@ public:
         return true;
     }
 
+    /// AzaharFrame kiuarm: Pit's arm current in the folder (kept or made): true when there is
+    /// one. From the first weapon file, of the classes whose left hand is the fist, that has it,
+    /// and the game's own `pit` texture; made again when either file changes.
+    bool EnsureArm(RunResult& res) {
+        const auto* tf = index.Find(manifest.region + "/" + kArmTextureArchive);
+        Bytes arc, bcres;
+        std::vector<FrameCgfx::Texture> textures;
+        std::string why;
+        if (!tf || !index.Read(*tf, arc, u64{32} << 20)) {
+            why = std::string{kArmTextureArchive} + " cannot be read";
+        } else if (!FrameCgfx::DarcMember(arc, kArmTextureMember, bcres, why) ||
+                   !FrameCgfx::ReadTextures(bcres, {kArmTexture}, textures, why)) {
+            why = std::string{kArmTextureMember} + ": " + why;
+        } else if (textures.empty() || textures[0].name != kArmTexture) {
+            why = std::string{"no texture "} + kArmTexture;
+        }
+        const u64 texture_hash = Common::ComputeHash64(arc.data(), arc.size());
+        const auto mark_none = [&](const std::string& reason) {
+            LOG_WARNING(Frontend, "xr: Pit's arm: {} (the controller is drawn)", reason);
+            if (!(manifest.arm.known && manifest.arm.file.empty() &&
+                  manifest.arm.source_hash == texture_hash)) {
+                if (!manifest.arm.file.empty()) {
+                    FileUtil::Delete(dir + manifest.arm.file);
+                }
+                manifest.arm = {};
+                manifest.arm.known = true;
+                manifest.arm.source_hash = texture_hash;
+                dirty = true;
+            }
+            res.failed++;
+            return false;
+        };
+        if (!why.empty()) {
+            return mark_none(why);
+        }
+        for (int id = 0; id < kWeapons; id++) {
+            if (ClassOf(id) == kClaws || ClassOf(id) == kBow) {
+                continue; // their left hands are not the fist
+            }
+            const auto* f = index.Find(manifest.region + "/player/" + ZrcName(id));
+            Bytes zrc;
+            if (!f || !index.Read(*f, zrc, u64{8} << 20)) {
+                continue;
+            }
+            const std::array<u64, 2> both{Common::ComputeHash64(zrc.data(), zrc.size()),
+                                          texture_hash};
+            const u64 hash = Common::ComputeHash64(both.data(), sizeof(both));
+            const ArmInfo& old = manifest.arm;
+            if (old.known && old.source == id && old.source_hash == hash && !old.file.empty() &&
+                FileUtil::Exists(dir + old.file)) {
+                res.kept++;
+                return true;
+            }
+            ArmInfo info;
+            std::vector<u8> file;
+            if (!ConvertArm(zrc, &textures[0], info, file, why)) {
+                LOG_INFO(Frontend, "xr: Pit's arm: {} ({}): {}", ZrcName(id), id, why);
+                continue;
+            }
+            if (!WriteFileAtomic(dir + info.file, file.data(), file.size())) {
+                return mark_none(info.file + " cannot be written");
+            }
+            info.source = id;
+            info.source_hash = hash;
+            LOG_INFO(Frontend,
+                     "xr: Pit's arm: made from {} ({} triangles, the game's {} {}x{})",
+                     ZrcName(id), info.triangles, kArmTexture, textures[0].width,
+                     textures[0].height);
+            manifest.arm = std::move(info);
+            res.made++;
+            dirty = true;
+            return true;
+        }
+        return mark_none("no weapon file holds Pit's left arm");
+    }
+
     /// AzaharFrame kiuflash: a weapon's flashes as made: made by a build that makes them, the
     /// texture pack's files for them unchanged, the files there.
     bool FlashCurrent(const FlashInfo& f) const {
@@ -2713,7 +3232,7 @@ private:
 
 RunResult ConvertGame(std::shared_ptr<FileSys::RomFSReader> romfs, u64 title_id,
                       const std::string& dir, const std::atomic<bool>* cancel,
-                      const TexturePack* pack) {
+                      const TexturePack* pack, bool arm) {
     RunResult res;
     GameConverter game;
     if (!game.Open(std::move(romfs), title_id, dir, pack, res)) {
@@ -2727,16 +3246,20 @@ RunResult ConvertGame(std::shared_ptr<FileSys::RomFSReader> romfs, u64 title_id,
         }
         good += game.Ensure(id, res) ? 1 : 0;
     }
+    if (arm && !(cancel && cancel->load())) { // AzaharFrame kiuarm
+        game.EnsureArm(res);
+    }
     res.ok = game.Save(res) && res.error.empty() && good > 0;
     return res;
 }
 
 int RunCli(const std::vector<std::string>& args) {
     if (args.empty() || args[0] == "--help") {
-        std::fprintf(stderr, "usage: azahar --frame-weapon-models GAME [OUTDIR]\n"
+        std::fprintf(stderr, "usage: azahar --frame-weapon-models GAME [OUTDIR] [--textures] "
+                             "[--arm]\n"
                              "Makes Kid Icarus: Uprising's weapon models from the game's own "
                              "files (OUTDIR: the user folder's frame-models/games/<title id>/"
-                             "kiu-weapons/).\n");
+                             "kiu-weapons/; --arm: Pit's arm too).\n");
         return 2;
     }
     auto loader = Loader::GetLoader(args[0]);
@@ -2753,6 +3276,7 @@ int RunCli(const std::vector<std::string>& args) {
     }
     std::vector<std::string> rest(args.begin() + 1, args.end());
     const bool textures = std::erase(rest, std::string{"--textures"}) > 0;
+    const bool arm = std::erase(rest, std::string{"--arm"}) > 0; // AzaharFrame kiuarm
     std::string dir = !rest.empty() ? rest[0] : WeaponDir(title);
     TexturePack pack;
     if (textures) {
@@ -2764,7 +3288,7 @@ int RunCli(const std::vector<std::string>& args) {
         dir += '/';
     }
     const auto t0 = std::chrono::steady_clock::now();
-    const RunResult r = ConvertGame(romfs, title, dir, nullptr, &pack);
+    const RunResult r = ConvertGame(romfs, title, dir, nullptr, &pack, arm);
     const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     std::printf("frame-weapon-models: title %016llX, region %s: %d made (%d textures from the "
                 "pack), %d kept, %d failed in %.1f s%s%s\n",
@@ -2788,9 +3312,12 @@ struct Booted {
     std::atomic<bool> cancel{false};
     std::atomic<int> state{static_cast<int>(State::None)};
     std::atomic<u32> generation{0};
-    std::vector<int> queue;                ///< under mutex
+    std::vector<int> queue;                ///< under mutex (kArmJob: Pit's arm)
     std::array<State, kWeapons> weapons{}; ///< under mutex
+    State arm = State::None;               ///< AzaharFrame kiuarm, under mutex
 };
+
+constexpr int kArmJob = -1; ///< AzaharFrame kiuarm: the queue's entry for Pit's arm
 
 Booted& TheBooted() {
     static Booted b;
@@ -2834,6 +3361,21 @@ void StartLocked(Booted& b) {
             }
             const auto t0 = std::chrono::steady_clock::now();
             RunResult one;
+            if (id == kArmJob) { // AzaharFrame kiuarm
+                const bool made = game.EnsureArm(one);
+                const bool ok = game.Save(one) && made;
+                LOG_INFO(Frontend, "xr: Pit's arm: {} in {:.0f} ms",
+                         !ok ? "none" : one.made ? "made" : "current",
+                         std::chrono::duration<double, std::milli>(
+                             std::chrono::steady_clock::now() - t0)
+                             .count());
+                {
+                    std::scoped_lock lock{b.mutex};
+                    b.arm = ok ? State::Ready : State::Failed;
+                }
+                b.generation++;
+                continue;
+            }
             const bool ok = game.Ensure(id, one) && game.Save(one);
             const double ms =
                 std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0)
@@ -2864,6 +3406,7 @@ void OnGameBoot(u64 title_id, std::shared_ptr<FileSys::RomFSReader> romfs, bool 
     b.state = static_cast<int>(State::None);
     b.queue.clear();
     b.weapons.fill(State::None);
+    b.arm = State::None; // AzaharFrame kiuarm
     if (start) {
         StartLocked(b);
     }
@@ -2882,6 +3425,7 @@ void OnGameStop() {
         b.state = static_cast<int>(State::None);
         b.queue.clear();
         b.weapons.fill(State::None);
+        b.arm = State::None; // AzaharFrame kiuarm
     }
     b.wake.notify_all();
     if (worker.joinable()) {
@@ -2910,6 +3454,26 @@ void Request(int id) {
         b.queue.push_back(id);
     }
     b.wake.notify_all();
+}
+
+void RequestArm() { // AzaharFrame kiuarm
+    Booted& b = TheBooted();
+    {
+        std::scoped_lock lock{b.mutex};
+        StartLocked(b);
+        if (!b.started || b.arm != State::None) {
+            return; // asked for already this boot
+        }
+        b.arm = State::Working;
+        b.queue.push_back(kArmJob);
+    }
+    b.wake.notify_all();
+}
+
+State ArmState() { // AzaharFrame kiuarm
+    Booted& b = TheBooted();
+    std::scoped_lock lock{b.mutex};
+    return b.arm;
 }
 
 State CurrentState() {
