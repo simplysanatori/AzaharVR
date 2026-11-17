@@ -801,3 +801,56 @@ TEST_CASE("Motion Clarity: a real 30 a second game is still held", "[frame_xr][f
     CHECK(w.s.Fast());
     CHECK(w.log.Steps() == 0);
 }
+
+// AzaharFrame bfidr (the owner: Black Frame Insertion only at 120 Hz): it flashes only at a whole
+// number of refreshes a 60 fps picture, 2 or more; at 72, 90 and 144 Hz the picture is shown
+// without flashing (the frame loop turns it off there), and 120 Hz is as before.
+TEST_CASE("Motion Clarity: only at a whole number of refreshes a picture", "[frame_xr][bfidr]") {
+    const auto period = [](double hz) { return static_cast<int64_t>(1e9 / hz + 0.5); };
+    CHECK(MC::EvenRate(period(120.0)));
+    CHECK(MC::EvenRate(period(240.0)));
+    CHECK_FALSE(MC::EvenRate(period(72.0)));
+    CHECK_FALSE(MC::EvenRate(period(90.0)));
+    CHECK_FALSE(MC::EvenRate(period(144.0)));
+    CHECK_FALSE(MC::EvenRate(period(60.0))); // 1 a picture: nothing to put a black frame in
+    CHECK(MC::EvenRate(period(119.9)));      // the runtime's measured period
+    CHECK(MC::EvenRate(0));                  // not known: as before
+    CHECK(std::abs(MC::RefreshesPerPicture(period(90.0)) - 1.5) < 1e-6);
+    CHECK(std::abs(MC::RefreshesPerPicture(period(144.0)) - 2.4) < 1e-6);
+
+    // Through the scheduler, as the frame loop drives it (on = the setting and EvenRate): at 72,
+    // 90 and 144 Hz every refresh shows the picture, as without it.
+    for (const double hz : {72.0, 90.0, 144.0}) {
+        INFO(hz << " Hz");
+        MC::Scheduler s;
+        uint64_t pic = 0;
+        const int64_t p = period(hz);
+        std::string out;
+        for (int i = 0; i < 200; i++) {
+            // 60 pictures a second at this rate: a new one when the game's clock passes the next
+            if (static_cast<int64_t>(i) * p * 60 / 1'000'000'000 >= static_cast<int64_t>(pic)) {
+                pic++;
+            }
+            const MC::Decision d = s.Next({MC::EvenRate(p), true, pic, i * p, p});
+            out += d.show ? 'P' : 'B';
+            CHECK(d.why == MC::Why::Off);
+        }
+        CHECK(out.find('B') == std::string::npos);
+    }
+    // 120 Hz exactly as before: learning on the beat, then lit, backing.
+    MC::Scheduler s;
+    uint64_t pic = 0;
+    const int64_t p = period(120.0);
+    std::string out;
+    for (int i = 0; i < 40; i++) {
+        if (i % 2 == 0) {
+            pic++;
+        }
+        out += s.Next({MC::EvenRate(p), true, pic, i * p, p}).show ? 'P' : 'B';
+    }
+    std::string expected;
+    for (int i = 0; i < 20; i++) {
+        expected += "PB";
+    }
+    CHECK(out == expected);
+}

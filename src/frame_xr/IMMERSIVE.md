@@ -928,6 +928,15 @@ seconds in a row with Black Frame Insertion: N late releases, ...)`, `... the sc
 than 5x with Black Frame Insertion`), and `xr: Dynamic Resolution: Black Frame Insertion's rules
 on|off` when they start and stop.
 
+AzaharFrame bfidr: Black Frame Insertion only at 120 Hz (the owner, 2026-11-17). It flashes only
+where a 60 fps picture is on view a whole number of refreshes, 2 or more, within 0.05
+(`MotionClarity::EvenRate`): 2 at 120 Hz, 4 at 240 Hz. At 72, 90 or 144 Hz (1.2, 1.5, 2.4) the
+scheduler's full-rate rule would engage with pictures lit at uneven spacing, so the frame loop
+leaves it out of effect there (no backing, no dimmed bottom screen, the picture shown as with the
+setting off) and says so once: `xr: Black Frame Insertion not in effect: the display runs at 90 Hz,
+1.50 refreshes a 60 fps picture; ...`, and `... the display's rate allows it again` when it does.
+At 120 Hz nothing changes.
+
 `xr: perf ...`, every 10 s while a game is live in VR (`frame_xr/perf_line.h`): the emulator's GPU
 work per game frame (`GpuBusyTimer`, only with `AZAHARFRAME_GPU_BUSY=1`, else "not measured"), the
 XR pass per draw, the late releases and late lit pictures, the longest xrEndFrame, the factor drawn

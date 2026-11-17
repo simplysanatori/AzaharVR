@@ -243,6 +243,23 @@ inline constexpr int64_t kGapKeepNs = 500'000'000;
 /// second, a game's full rate.
 inline constexpr double kDefaultRate = 60.0;
 
+/// AzaharFrame bfidr (the owner, 2026-11-17: Black Frame Insertion only at 120 Hz): it flashes
+/// only where a full-rate picture (kDefaultRate a second) is on view a whole number of refreshes,
+/// 2 or more, within kEvenTolerance: 2 at 120 Hz (the 3DS's 59.8 pictures: 2.006), 4 at 240 Hz.
+/// At 72 Hz (1.2), 90 Hz (1.5) or 144 Hz (2.4) the scheduler's full-rate rule (kFastEnter) would
+/// engage too, with pictures lit at uneven spacing: there the picture is shown without flashing
+/// (as with the setting off), and the frame loop logs why once. A period not known (0) is taken as
+/// before (the beat's 2).
+inline constexpr double kEvenTolerance = 0.05;
+inline double RefreshesPerPicture(int64_t period_ns) {
+    return period_ns > 0 ? 1e9 / kDefaultRate / static_cast<double>(period_ns) : 2.0;
+}
+inline bool EvenRate(int64_t period_ns) {
+    const double per = RefreshesPerPicture(period_ns);
+    const double whole = std::round(per);
+    return whole >= 2.0 && std::abs(per - whole) <= kEvenTolerance;
+}
+
 class Scheduler {
 public:
     explicit Scheduler(Slow slow = Slow::Hold) : slow_(slow) {}

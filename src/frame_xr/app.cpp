@@ -689,6 +689,7 @@ void Runtime::FrameLoop() {
     // AZAHARFRAME_XR_FLASH_BACKING for an A/B of the backing, all live (test_switches.h).
     MotionClarity::Scheduler clarity;
     MotionClarity::Log clarity_log;
+    bool clarity_rate_logged = false; // AzaharFrame bfidr: held for the display's rate, said
     std::optional<bool> clarity_override;
     bool flash_backing = true;
     const auto read_clarity_switches = [&] {
@@ -1181,11 +1182,30 @@ void Runtime::FrameLoop() {
                 // Full modes, the Graphics section's in the Off and Wide modes); in the Off and
                 // Wide modes held while the top screen is swapped out of the Primary slot
                 // (HeldForSwap: only the top screen flashes, and only as the Primary one).
-                const bool wanted =
+                const bool asked =
                     MotionClarity::InEffect(Settings::values.vr_motion_clarity_immersive.GetValue(),
                                             Settings::values.vr_motion_clarity_normal.GetValue(),
                                             clarity_override, shown.full_mode) &&
                     !MotionClarity::HeldForSwap(shown.full_mode, draw.swapped) && !proj_mode;
+                // AzaharFrame bfidr: only at a whole number of refreshes a picture (120 Hz):
+                // elsewhere shown without flashing, and said once.
+                const bool even = MotionClarity::EvenRate(fs.predictedDisplayPeriod);
+                const bool wanted = asked && even;
+                if (asked && !even && !clarity_rate_logged) {
+                    clarity_rate_logged = true;
+                    LOG_INFO(Frontend,
+                             "xr: Black Frame Insertion not in effect: the display runs at {:.0f} "
+                             "Hz, {:.2f} refreshes a 60 fps picture; it flashes only at a whole "
+                             "number of 2 or more (120 Hz)",
+                             fs.predictedDisplayPeriod > 0
+                                 ? 1e9 / static_cast<double>(fs.predictedDisplayPeriod)
+                                 : 0.0,
+                             MotionClarity::RefreshesPerPicture(fs.predictedDisplayPeriod));
+                } else if (even && clarity_rate_logged) {
+                    clarity_rate_logged = false;
+                    LOG_INFO(Frontend, "xr: Black Frame Insertion: the display's rate allows it "
+                                       "again");
+                }
                 // fixa: the backing only while its layers fit under the runtime's limit (the
                 // last frame's other layers); held while they don't (BackingRoom).
                 const bool top_shown = draw.swapped ? draw.top_visible : shown.show_top;
