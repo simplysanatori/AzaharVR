@@ -20,6 +20,7 @@
 #include "frame_xr/menu/tab_menu.h"
 #include "frame_xr/per_game.h"
 #include "frame_xr/per_game_keys.h"
+#include "frame_xr/presets.h"
 
 namespace {
 
@@ -27,7 +28,9 @@ using FrameXr::Menu::Id;
 
 template <typename T>
 QVariant ToVariant(const T& value) {
-    if constexpr (std::is_same_v<T, bool>) {
+    if constexpr (std::is_same_v<T, std::string>) {
+        return QString::fromStdString(value);
+    } else if constexpr (std::is_same_v<T, bool>) {
         return value;
     } else if constexpr (std::is_enum_v<T>) {
         return QVariant::fromValue(static_cast<qint64>(value));
@@ -42,7 +45,9 @@ QVariant ToVariant(const T& value) {
 
 template <typename T>
 T FromVariant(const QVariant& v) {
-    if constexpr (std::is_same_v<T, bool>) {
+    if constexpr (std::is_same_v<T, std::string>) {
+        return v.toString().toStdString();
+    } else if constexpr (std::is_same_v<T, bool>) {
         return v.toBool();
     } else if constexpr (std::is_enum_v<T>) {
         return static_cast<T>(v.toLongLong());
@@ -92,7 +97,9 @@ template <typename T, bool R>
 bool SetOtherGameValue(Settings::SwitchableSetting<T, R>& s) {
     const T global = s.GetValue(true);
     std::vector<T> tries;
-    if constexpr (std::is_same_v<T, bool>) {
+    if constexpr (std::is_same_v<T, std::string>) {
+        tries = {T("1,0"), T("2,1")};
+    } else if constexpr (std::is_same_v<T, bool>) {
         tries = {!global};
     } else if constexpr (std::is_enum_v<T>) {
         using U = std::underlying_type_t<T>;
@@ -216,6 +223,88 @@ TEST_CASE("Per-Game: without the keep the read puts the file's value back (the s
     ini.beginGroup(QStringLiteral("VR"));
     ReadGame(ini, s); // no keep: the file says "use the global value"
     CHECK(s.UsingGlobal());
+}
+
+// Mario Kart 7 in mode 3 went flat after a change made in the in-game menu: the preset's View
+// Matrix Register (90) and Eye Indicator (87,2), set at boot and in no file, went back to Auto
+// when the menu's save read the game's file, and mode 3 had no camera register to patch.
+TEST_CASE("Per-Game: a preset's mode 3 registers survive a change made in the menu",
+          "[frame_xr][fixa]") {
+    AllGlobal reset;
+    auto& v = Settings::values;
+    auto& offset = v.vr_si_mode_register_offset;
+    auto& eye = v.vr_immersive_eye_indicator;
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("0004000000030800.ini"));
+    // Boot: the game's file has nothing of its own, then the preset fills its values.
+    {
+        QSettings ini(path, QSettings::IniFormat);
+        ini.beginGroup(QStringLiteral("VR"));
+        offset.SetGlobal(true);
+        eye.SetGlobal(true);
+        WriteAll(ini);
+        WriteGame(ini, offset);
+        WriteGame(ini, eye);
+        ReadAll(ini);
+    }
+    REQUIRE(offset.UsingGlobal());
+    REQUIRE(offset.GetValue() == -1);
+    REQUIRE(eye.GetValue().empty());
+    FrameXr::ApplyPresetSettings(*FrameXr::FindImmersivePreset(0x0004000000030800ull));
+    REQUIRE(offset.GetValue() == 90);
+    REQUIRE(eye.GetValue() == "87,2");
+    // Without the keep (1.2.1) the read of the file took both away.
+    {
+        QSettings ini(path, QSettings::IniFormat);
+        ini.beginGroup(QStringLiteral("VR"));
+        const auto kept_offset = offset.GetValue();
+        const auto kept_eye = eye.GetValue();
+        ReadGame(ini, offset);
+        ReadGame(ini, eye);
+        CHECK(offset.GetValue() == -1);
+        CHECK(eye.GetValue().empty());
+        offset.SetGlobal(false);
+        offset.SetValue(kept_offset);
+        eye.SetGlobal(false);
+        eye.SetValue(kept_eye);
+    }
+    // The menu: Horizontal Scale for this game, then FrameMenuRequest's read and save.
+    v.vr_immersive_scale_x.SetGlobal(false);
+    v.vr_immersive_scale_x.SetValue(45);
+    {
+        QSettings ini(path, QSettings::IniFormat);
+        ini.beginGroup(QStringLiteral("VR"));
+        {
+            FrameXr::PerGame::KeepMenuKeys keep;
+            // QtConfig reads every key of the file, the two registers whatever the list holds.
+            ReadAll(ini);
+            ReadGame(ini, offset);
+            ReadGame(ini, eye);
+        }
+        CHECK(offset.GetValue() == 90);
+        CHECK(eye.GetValue() == "87,2");
+        CHECK(v.vr_immersive_scale_x.GetValue() == 45);
+        WriteAll(ini);
+        WriteGame(ini, offset);
+        WriteGame(ini, eye);
+    }
+    // The game's file has them now: the next boot reads them from it (before the preset).
+    FrameXr::PerGame::ForEachMenuKey([](auto& s) { s.SetGlobal(true); });
+    offset.SetGlobal(true);
+    eye.SetGlobal(true);
+    {
+        QSettings ini(path, QSettings::IniFormat);
+        ini.beginGroup(QStringLiteral("VR"));
+        ReadAll(ini);
+        ReadGame(ini, offset);
+        ReadGame(ini, eye);
+    }
+    CHECK(!offset.UsingGlobal());
+    CHECK(offset.GetValue() == 90);
+    CHECK(eye.GetValue() == "87,2");
+    offset.SetGlobal(true);
+    eye.SetGlobal(true);
 }
 
 TEST_CASE("Per-Game: KeepMenuKeys puts the values back once, at Restore or at the end",

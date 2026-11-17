@@ -389,7 +389,8 @@ if (ENABLE_FRAME_XR AND ENABLE_TESTS AND NOT WIN32)
                                   ../frame_xr/input/geometry.cpp
                                   # AzaharFrame fixa: the in-game menu's per-game keys kept
                                   ../tests/frame_xr/per_game_keep.cpp
-                                  ../frame_xr/per_game.cpp ../frame_xr/per_game_keys.h)
+                                  ../frame_xr/per_game.cpp ../frame_xr/per_game_keys.h
+                                  ../frame_xr/presets.cpp) # a preset's registers kept
     target_link_libraries(frame_qt_tests PRIVATE citra_common catch2 Qt6::Widgets)
     target_link_libraries(frame_qt_tests PRIVATE frame_xr_menu) # AzaharFrame fixa: PerGameSetting
     if (TARGET Qt6::GuiPrivate)

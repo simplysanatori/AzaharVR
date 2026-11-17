@@ -24,7 +24,7 @@ namespace FrameXr::PerGame {
 /// Calls `f` with every setting the in-game menu may write to a game's own file: the per-game
 /// rows' (Menu::PerGameSetting, per_game.cpp WithSetting; both 3D Depth keys and the Render
 /// Margin keys) and the ones written beside them (World Scale's saved state, the measured game
-/// FOV, the Controls preset's marker).
+/// FOV, the Controls preset's marker), and the two registers a preset sets for mode 3.
 template <typename F>
 void ForEachMenuKey(F&& f) {
     auto& v = Settings::values;
@@ -97,6 +97,11 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_light_gun_projectile_opacity);
     f(v.vr_light_gun_muzzle_flash_size); // AzaharFrame kiuweap2
     f(v.vr_controls_preset_done);
+    // Mode 3's two registers, which a game's preset sets at boot (presets.cpp) and no row
+    // writes: the read put them back to Auto, so the first change made in the menu took Mario
+    // Kart 7's camera register away and its picture went flat until the game was restarted.
+    f(v.vr_si_mode_register_offset);
+    f(v.vr_immersive_eye_indicator);
 }
 
 /// Every setting of ForEachMenuKey as it is now (whether it follows the global value, and the
