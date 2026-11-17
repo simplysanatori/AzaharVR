@@ -39,11 +39,13 @@ GpuBusyTimer::GpuBusyTimer(const Instance& instance) {
     }
     ns_per_tick = period;
     mask = bits >= 64 ? ~u64{0} : (u64{1} << bits) - 1;
+    Common::StallTelemetry::Get().gpu_busy_on.store(true); // AzaharFrame bfidr: the perf line
 }
 
 GpuBusyTimer::~GpuBusyTimer() {
     if (pool) {
         device.destroyQueryPool(pool);
+        Common::StallTelemetry::Get().gpu_busy_on.store(false); // AzaharFrame bfidr
     }
 }
 

@@ -86,6 +86,9 @@ struct StallTelemetry {
     std::atomic<std::uint64_t> gpu_busy_buffers{0};
     std::atomic<std::uint64_t> xr_pass_gpu_ns{0};
     std::atomic<std::uint64_t> xr_pass_gpu_n{0};
+    // AzaharFrame bfidr: the renderer's GPU busy timer runs (AZAHARFRAME_GPU_BUSY=1 and the queue
+    // has timestamps), for the XR thread's perf line ("not measured" without it).
+    std::atomic<bool> gpu_busy_on{false};
 
     static StallTelemetry& Get() {
         static StallTelemetry instance;

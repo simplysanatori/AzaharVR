@@ -13,9 +13,16 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <fstream> // AzaharFrame bfidr: the perf line
+#include <map>
+#include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
+
+#include <dirent.h> // AzaharFrame bfidr: the perf line
+#include <unistd.h>
 
 #include <fmt/format.h>
 #include "common/logging/log.h"
@@ -33,6 +40,7 @@
 #include "frame_xr/layer_slots.h"     // AzaharFrame flash
 #include "frame_xr/retired_swapchains.h" // AzaharFrame projdef
 #include "frame_xr/motion_clarity.h"   // AzaharFrame flash
+#include "frame_xr/perf_line.h"        // AzaharFrame bfidr
 #include "frame_xr/session.h"
 #include "frame_xr/test_switches.h" // AzaharFrame integ9: the switch file, live
 #include "frame_xr/toast_depth.h"   // AzaharFrame integ9: ScreenUse
@@ -405,6 +413,54 @@ void Runtime::NoteLoopPeriod(const LoopPhases& phases, LoopPhases& worst, XrDura
     }
 }
 
+namespace {
+
+// AzaharFrame bfidr: the perf line's CPU per thread (perf_line.h), read off the frame loop: a
+// short thread reads /proc/self/task/*/stat, works the shares out against the last read and
+// writes the line.
+std::mutex g_perf_mutex;
+std::map<int, PerfLine::TaskTimes> g_perf_tasks;
+std::chrono::steady_clock::time_point g_perf_at{};
+
+std::map<int, PerfLine::TaskTimes> ReadTasks() {
+    std::map<int, PerfLine::TaskTimes> out;
+    if (DIR* d = opendir("/proc/self/task")) {
+        while (dirent* e = readdir(d)) {
+            const int tid = std::atoi(e->d_name);
+            if (tid <= 0) {
+                continue;
+            }
+            std::ifstream f(fmt::format("/proc/self/task/{}/stat", tid));
+            std::string line;
+            std::getline(f, line);
+            if (auto t = PerfLine::ParseTaskStat(line)) {
+                out[tid] = std::move(*t);
+            }
+        }
+        closedir(d);
+    }
+    return out;
+}
+
+} // namespace
+
+void Runtime::PerfRead(std::optional<PerfLine::Window> window) {
+    const bool gpu_on = Common::StallTelemetry::Get().gpu_busy_on.load();
+    std::thread([window, gpu_on] {
+        std::map<int, PerfLine::TaskTimes> tasks = ReadTasks();
+        const auto now = std::chrono::steady_clock::now();
+        std::scoped_lock lock{g_perf_mutex};
+        if (window && g_perf_at != std::chrono::steady_clock::time_point{}) {
+            const double secs = std::chrono::duration<double>(now - g_perf_at).count();
+            const PerfLine::CpuShares cpu =
+                PerfLine::Shares(g_perf_tasks, tasks, secs, sysconf(_SC_CLK_TCK));
+            LOG_INFO(Frontend, "xr: {}", PerfLine::Format(*window, gpu_on, cpu));
+        }
+        g_perf_tasks = std::move(tasks);
+        g_perf_at = now;
+    }).detach();
+}
+
 void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
                          const LoopPhases& worst) {
     const auto take = [](std::atomic<uint32_t>& a) { return a.exchange(0); };
@@ -452,11 +508,11 @@ void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
     // AzaharFrame projdef: the GPU's real busy time a refresh (timestamps): the renderer's command
     // buffers (the game, vk_gpu_busy.h) and the XR thread's controller and projection pass, against
     // the refresh period (SteamVR's own work is not in it).
+    const uint64_t emu_ns = telemetry.gpu_busy_ns.exchange(0);
+    const uint64_t emu_n = telemetry.gpu_busy_buffers.exchange(0);
+    const uint64_t pass_ns = telemetry.xr_pass_gpu_ns.exchange(0);
+    const uint64_t pass_n = telemetry.xr_pass_gpu_n.exchange(0);
     const std::string busy = [&] {
-        const uint64_t emu_ns = telemetry.gpu_busy_ns.exchange(0);
-        const uint64_t emu_n = telemetry.gpu_busy_buffers.exchange(0);
-        const uint64_t pass_ns = telemetry.xr_pass_gpu_ns.exchange(0);
-        const uint64_t pass_n = telemetry.xr_pass_gpu_n.exchange(0);
         if (frames == 0 || (emu_n == 0 && pass_n == 0)) {
             return std::string{};
         }
@@ -482,8 +538,45 @@ void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
     dr_second.late_lit = bfi_second.late_lit;
     dr_second.end_frame_max_ms = bfi_second.end_max_ms;
     dr_second.screen_factor = bfi_second.screen_factor;
+    // AzaharFrame bfidr: the perf line's window, from the values taken above.
+    const bool flashed = dr_second.bfi;
+    const uint32_t late_lit = bfi_second.late_lit;
     bfi_second = {};
     DynamicResolution::NoteSecond(dr_second);
+    if (screens_live.load()) {
+        PerfLine::Window& w = perf_window;
+        w.seconds += seconds;
+        w.display_frames += frames;
+        w.game_frames += emu_frames;
+        w.emu_gpu_ns += emu_ns;
+        w.emu_buffers += emu_n;
+        w.pass_gpu_ns += pass_ns;
+        w.pass_draws += pass_n;
+        w.late_releases += dr_second.late_releases;
+        w.late_lit += late_lit;
+        w.end_frame_max_ms = std::max(w.end_frame_max_ms, dr_second.end_frame_max_ms);
+        w.bfi_seconds += flashed ? 1 : 0;
+        const uint32_t base = VideoCore::DynamicResolution::g_base.load(std::memory_order_relaxed);
+        const int drop = DynamicResolution::Drop();
+        w.factor = base > 0 ? std::max(1, static_cast<int>(base) - drop) : 0;
+        w.screen_factor = dr_second.screen_factor;
+        const int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   Clock::now().time_since_epoch())
+                                   .count();
+        // The first second only reads the threads' times (the start of the CPU shares); a line
+        // every ChangeGate::kSummaryMs after.
+        const auto say = perf_gate.Update(now_ms, false);
+        if (say == Common::FrameLog::ChangeGate::Say::First) {
+            PerfRead(std::nullopt);
+            w = {};
+        } else if (say == Common::FrameLog::ChangeGate::Say::Summary) {
+            PerfRead(w);
+            w = {};
+        }
+    } else {
+        perf_gate.Reset(); // no game on view: the next line starts afresh
+        perf_window = {};
+    }
     stats.window_us_sum.exchange(0);
     take(stats.window_us_max);
     // AzaharFrame ui2: and what Dynamic Resolution judged it by, every second (the logs of report
