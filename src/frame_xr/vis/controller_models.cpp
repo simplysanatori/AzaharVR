@@ -529,6 +529,7 @@ struct ControllerModels::Gpu {
         /// too, its sprite cards).
         bool bullet = false;
         FrameWeapons::UvMotion uv; ///< AzaharFrame kiumodels: how its texture moves
+        bool arm = false; ///< AzaharFrame kiuarm: Pit's arm (core kArmFile), drawn on its own
     };
     struct Weapon {
         int id = -1;
@@ -547,6 +548,11 @@ struct ControllerModels::Gpu {
         float flash_push_fist = 0.0f; ///< AzaharFrame kiuinteg: FlashPush from the fist's front
         float barrel_push = 0.0f; ///< AzaharFrame fixc: BarrelPush, a cannon's (the class's fit)
         int pack_textures = 0;
+        /// AzaharFrame kiuarm: Pit's arm, read with the weapon while a switch wants it: its part
+        /// (-1: none), what the manifest says of it, and whether it was looked for once made.
+        int arm_part = -1;
+        FrameWeapons::ArmInfo arm;
+        bool arm_looked = false;
     };
     std::unique_ptr<Weapon> weapon_live, weapon_uploading;
     std::vector<std::unique_ptr<Weapon>> weapon_retired;
@@ -592,6 +598,10 @@ struct ControllerModels::WeaponLoad { // AzaharFrame kiuguns
     float flash_push_fist = 0.0f; ///< AzaharFrame kiuinteg: from the fist's front (AimSource::Fist)
     float barrel_push = 0.0f; ///< AzaharFrame fixc: BarrelPush along a cannon's barrel (metres)
     int pack_textures = 0; ///< colour images taken from the texture pack
+    /// AzaharFrame kiuarm: Pit's arm's file (the last of `files`; SIZE_MAX for none).
+    std::size_t arm_file = SIZE_MAX;
+    FrameWeapons::ArmInfo arm;
+    bool arm_looked = false;
 };
 
 ControllerModels::ControllerModels() = default;
@@ -1051,6 +1061,7 @@ void ControllerModels::Frame(Runtime& rt, const ViewPose& views, const std::arra
         }
         UpdateWeapon(weapon);
         FitWeapon(views, hands);
+        FitArms(views, hands); // AzaharFrame kiuarm
         // AzaharFrame kiuflash: a new shot flies from the muzzle (as fitted now) to its target.
         const int64_t now = std::chrono::duration_cast<std::chrono::nanoseconds>(
                                 std::chrono::steady_clock::now().time_since_epoch())
@@ -2321,7 +2332,7 @@ void RecordWeapon(vk::CommandBuffer& c, GpuT& g, const WeaponT& w, const Mat& vi
                            : fit.side == FitSide::Left ? "L"
                                                        : "C";
         for (const auto& part : w.parts) {
-            if (part.glow != glow_pass || part.flash || part.bullet) {
+            if (part.glow != glow_pass || part.flash || part.bullet || part.arm) {
                 continue;
             }
             // AzaharFrame kiumodels: a glow moves (its texture slides, it flickers, a palm's
@@ -2358,6 +2369,48 @@ void RecordWeapon(vk::CommandBuffer& c, GpuT& g, const WeaponT& w, const Mat& vi
     }
     }
     c.bindPipeline(vk::PipelineBindPoint::eGraphics, g.pipeline); // for what is drawn next
+}
+
+// AzaharFrame kiuarm: Pit's arm at the aim pose times its fit (weapon_fit.h FitOffArm,
+// FitHoldingArm), lit and solid: the hand, then the forearm (turned about the wrist when asked).
+template <typename GpuT, typename PartT, typename HandT>
+void RecordArm(vk::CommandBuffer& c, GpuT& g, const PartT& part, const Mat& view_proj,
+               const XrVector3f& eye_pos, const Mat& head, const HandT& hand, const FitPart& fit,
+               const FitMat* forearm_turn) {
+    const XrPosef aim = ToXr(hand.aim);
+    Mat fit_m{};
+    std::copy(fit.transform.begin(), fit.transform.end(), fit_m.begin());
+    const Mat base = Multiply(FromPose(aim.orientation, aim.position), fit_m);
+    c.bindPipeline(vk::PipelineBindPoint::eGraphics, g.pipeline);
+    c.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g.pipeline_layout, 0, part.set, {});
+    c.bindVertexBuffers(0, part.vertices, vk::DeviceSize{0});
+    c.bindIndexBuffer(part.indices, 0, vk::IndexType::eUint32);
+    for (const ModelComponent& comp : part.components) {
+        if (comp.index_count == 0) {
+            continue;
+        }
+        Mat model = base;
+        if (forearm_turn && comp.name == "forearm") {
+            Mat turn{};
+            std::copy(forearm_turn->begin(), forearm_turn->end(), turn.begin());
+            model = Multiply(turn, base);
+        }
+        const Mat to_model = InverseAffine(model);
+        PushConstants pc{};
+        const auto eye = Apply(to_model, eye_pos.x, eye_pos.y, eye_pos.z, 1.0f);
+        pc.eye = {eye[0], eye[1], eye[2], 0.0f}; // no cut
+        const auto back = Apply(head, 0.0f, 0.0f, 1.0f, 0.0f);
+        const auto key = Apply(to_model, back[0] * 0.6f, 1.0f + back[1] * 0.6f, back[2] * 0.6f, 0.0f);
+        pc.key = {key[0], key[1], key[2], 0.0f};
+        const auto up = Apply(to_model, 0.0f, 1.0f, 0.0f, 0.0f);
+        pc.up = {up[0], up[1], up[2], 0.0f};
+        pc.params = {0.0f, 1.0f, std::clamp(hand.fade, 0.0f, 1.0f), fit.mirrored ? 1.0f : 0.0f};
+        pc.mvp = Multiply(view_proj, model);
+        c.pushConstants(g.pipeline_layout,
+                        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0,
+                        sizeof(pc), &pc);
+        c.drawIndexed(comp.index_count, 1, comp.first_index, 0, 0);
+    }
 }
 
 // AzaharFrame kiuflash: the muzzle flash's cards of its kind (muzzle_flash.h), added to what is
@@ -2636,6 +2689,9 @@ void ControllerModels::FitWeapon(const ViewPose& views, const std::array<Hand, 2
             tune.scale *= size_factor;
             std::vector<FitSide> sides;
             for (const auto& part : g.weapon_live->parts) {
+                if (part.arm) {
+                    continue; // AzaharFrame kiuarm: drawn on its own
+                }
                 for (const auto& comp : part.components) {
                     const FitSide side = comp.name == "R"   ? FitSide::Right
                                          : comp.name == "L" ? FitSide::Left
@@ -2729,6 +2785,108 @@ void ControllerModels::FitWeapon(const ViewPose& views, const std::array<Hand, 2
     }
 }
 
+// AzaharFrame kiuarm: Pit's arm on the hands this frame (weapon_fit.h): the off hand's while
+// AZAHARFRAME_KIU_ARM=1, the weapon hand's while AZAHARFRAME_KIU_ARM_WEAPON=1, both once the
+// weapon in hand is drawn with its arm read; the forearm turned toward the estimated elbow unless
+// AZAHARFRAME_KIU_ARM_ELBOW=0.
+void ControllerModels::FitArms(const ViewPose& views, const std::array<Hand, 2>& hands) {
+    std::array<ArmDraw, 2> draws{};
+    const Gpu::Weapon* live = gpu ? gpu->weapon_live.get() : nullptr;
+    int weapon_hand = -1;
+    for (int h = 0; h < 2; h++) {
+        const Hand& hand = hands[static_cast<std::size_t>(h)];
+        if (hand.shown && hand.weapon >= 0 && live && live->id == hand.weapon) {
+            weapon_hand = h;
+        }
+    }
+    const bool have_arm = live && live->arm_part >= 0 && weapon_hand >= 0;
+    const bool off_on =
+        have_arm && Common::FrameTestSwitches::Value(kArmSwitch).value_or("0") == "1";
+    const bool hold_on =
+        have_arm && Common::FrameTestSwitches::Value(kArmWeaponSwitch).value_or("0") == "1";
+    const auto arm_value = Common::FrameTestSwitches::Value(kArmFitSwitch);
+    const FitOverride arm_tune = ParseFitOverride(arm_value);
+    const bool elbow = Common::FrameTestSwitches::Value(kArmElbowSwitch).value_or("1") != "0";
+    for (int h = 0; h < 2; h++) {
+        const Hand& hand = hands[static_cast<std::size_t>(h)];
+        const bool left = h == Input::HandIndex(Input::Hand::Left);
+        ArmDraw& d = draws[static_cast<std::size_t>(h)];
+        if (!hand.shown) {
+            continue;
+        }
+        if (h != weapon_hand && off_on && hand.weapon < 0) {
+            d.fit = FitOffArm(live->arm.fist, left, arm_tune);
+            d.on = true;
+        } else if (h == weapon_hand && hold_on) {
+            const FrameWeapons::Weapon& info = live->info;
+            const FitOverride weapon_tune = ParseFitOverride(
+                Common::FrameTestSwitches::Value(FitSwitchName(info.cls)));
+            const auto fw = FitInputs(
+                info, HoldPickFor(info.cls, Common::FrameTestSwitches::Value(kHoldSwitch)));
+            if (const auto fit = FitHoldingArm(fw, left, weapon_tune, arm_tune)) {
+                d.fit = *fit;
+                d.on = true;
+                d.holds = true;
+            }
+        }
+    }
+    const int64_t now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch())
+                            .count();
+    for (int h = 0; h < 2; h++) {
+        ArmDraw& d = draws[static_cast<std::size_t>(h)];
+        auto& dir = arm_dir[static_cast<std::size_t>(h)];
+        auto& time_ns = arm_time_ns[static_cast<std::size_t>(h)];
+        if (!d.on || !elbow || !views.valid) {
+            dir = {};
+            time_ns = 0;
+            continue;
+        }
+        // The wrist (arm space's origin) where the fit puts it, the forearm turned from where it
+        // points (toward the elbow, arm space's `elbow`) to the estimated elbow, smoothed.
+        const Hand& hand = hands[static_cast<std::size_t>(h)];
+        const XrPosef aim = ToXr(hand.aim);
+        Mat fit_m{};
+        std::copy(d.fit.transform.begin(), d.fit.transform.end(), fit_m.begin());
+        const Mat world = Multiply(FromPose(aim.orientation, aim.position), fit_m);
+        const auto wrist = Apply(world, 0.0f, 0.0f, 0.0f, 1.0f);
+        const auto& e = live->arm.elbow;
+        const auto far = Apply(world, e[0], e[1], e[2], 1.0f);
+        const std::array<float, 3> w3{wrist[0], wrist[1], wrist[2]};
+        const std::array<float, 3> along{far[0] - w3[0], far[1] - w3[1], far[2] - w3[2]};
+        const Mat head = FromPose(views.head.orientation, views.head.position);
+        const auto fwd = Apply(head, 0.0f, 0.0f, -1.0f, 0.0f);
+        const auto est = EstimateElbow(
+            {views.head.position.x, views.head.position.y, views.head.position.z},
+            {fwd[0], fwd[1], fwd[2]}, h == Input::HandIndex(Input::Hand::Left), w3);
+        const std::array<float, 3> target{est[0] - w3[0], est[1] - w3[1], est[2] - w3[2]};
+        const float dt = time_ns ? static_cast<float>(now - time_ns) * 1e-9f : -1.0f;
+        time_ns = now;
+        dir = SmoothDirection(dir, target, dt);
+        d.turn = RotationBetween(w3, along, dir);
+        d.turned = true;
+    }
+    arm_draws = draws;
+    const std::string logged =
+        fmt::format("{} {} {} {} {}", draws[0].on ? (draws[0].holds ? "holds" : "arm") : "-",
+                    draws[1].on ? (draws[1].holds ? "holds" : "arm") : "-",
+                    arm_value.value_or("default"), elbow ? "elbow" : "straight",
+                    live ? live->id : -1);
+    if (logged != arm_logged && (draws[0].on || draws[1].on || !arm_logged.empty())) {
+        arm_logged = logged;
+        LOG_INFO(Frontend,
+                 "xr: Pit's arm: left hand {}, right hand {} (scale {:.3f} m per unit, fit {}, "
+                 "forearm {})",
+                 draws[0].on ? (draws[0].holds ? "holds the weapon" : "in place of the controller")
+                             : "none",
+                 draws[1].on ? (draws[1].holds ? "holds the weapon" : "in place of the controller")
+                             : "none",
+                 kArmScale * arm_tune.scale,
+                 arm_value ? std::string{kArmFitSwitch} + "=" + *arm_value : std::string{"default"},
+                 elbow ? "turned toward the elbow" : "straight");
+    }
+}
+
 // AzaharFrame ctrlfront: each shown hand's model inside a sphere (LOCAL), the shown ones first.
 std::array<ModelSphere, 2> ControllerModels::Spheres(const std::array<Hand, 2>& hands) const {
     const Files& f = *files;
@@ -2737,7 +2895,8 @@ std::array<ModelSphere, 2> ControllerModels::Spheres(const std::array<Hand, 2>& 
     for (std::size_t h = 0; h < hands.size(); h++) {
         const Hand& hand = hands[h];
         if (hand.shown) {
-            spheres[n++] = hand.weapon >= 0
+            // AzaharFrame kiuarm: an arm reaches back to the elbow, as a weapon's forearm does.
+            spheres[n++] = hand.weapon >= 0 || arm_draws[h].on
                                ? ModelSphere{hand.aim.position, kWeaponSphere}
                                : ModelSphere{Input::Transform(hand.aim, f.sphere[h].centre),
                                              f.sphere[h].radius};
@@ -2952,6 +3111,18 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
             const Hand& hand = hands[static_cast<std::size_t>(h)];
             if (!hand.shown) {
                 continue;
+            }
+            // AzaharFrame kiuarm: Pit's arm: in place of the controller, or under the weapon (a
+            // see-through weapon shows it through).
+            const ArmDraw& arm = arm_draws[static_cast<std::size_t>(h)];
+            if (arm.on && g.weapon_live && g.weapon_live->arm_part >= 0) {
+                RecordArm(c, g,
+                          g.weapon_live->parts[static_cast<std::size_t>(g.weapon_live->arm_part)],
+                          view_proj, views.eye[e].position, head, hand, arm.fit,
+                          arm.turned ? &arm.turn : nullptr);
+                if (!weapon_drawn(hand)) {
+                    continue;
+                }
             }
             // AzaharFrame kiuguns: the weapon in hand in place of the controller, once it is on
             // the GPU.
@@ -3171,10 +3342,25 @@ void ControllerModels::UpdateWeapon(int id) {
         weapon_load.reset();
         weapon_load_state = 0;
     }
+    // AzaharFrame kiuarm: Pit's arm while a switch wants it: asked for (made once a boot), and
+    // read with the weapon; a weapon read before the arm was made is read again once it is.
+    const bool want_arm =
+        id >= 0 &&
+        (Common::FrameTestSwitches::Value(kArmSwitch).value_or("0") == "1" ||
+         Common::FrameTestSwitches::Value(kArmWeaponSwitch).value_or("0") == "1");
+    FrameWeapons::State arm_state = FrameWeapons::State::None;
+    if (want_arm) {
+        FrameWeapons::RequestArm();
+        arm_state = FrameWeapons::ArmState();
+    }
+    const bool arm_made =
+        arm_state == FrameWeapons::State::Ready || arm_state == FrameWeapons::State::Failed;
+    const bool arm_reread = want_arm && arm_state == FrameWeapons::State::Ready && g.weapon_live &&
+                            g.weapon_live->id == id && !g.weapon_live->arm_looked;
     // A read to start: a weapon wanted that is not the one there, once its files are made (only
     // the weapons asked for are: core/frame_weapon_models.h Request(id)).
     if (id < 0 || weapon_load_state != 0 || g.weapon_uploading ||
-        (g.weapon_live && g.weapon_live->id == id) || id == g.weapon_failed_id) {
+        (g.weapon_live && g.weapon_live->id == id && !arm_reread) || id == g.weapon_failed_id) {
         return;
     }
     const FrameWeapons::State made = FrameWeapons::WeaponState(id);
@@ -3198,7 +3384,7 @@ void ControllerModels::UpdateWeapon(int id) {
     weapon_load->generation = generation;
     weapon_load_state = 1;
     const std::string dir = FrameWeapons::WeaponDir(FrameWeapons::CurrentTitle());
-    weapon_loader = std::thread([this, dir] {
+    weapon_loader = std::thread([this, dir, want_arm, arm_made] {
         WeaponLoad& l = *weapon_load;
         FrameWeapons::Manifest manifest;
         std::string error;
@@ -3339,6 +3525,24 @@ void ControllerModels::UpdateWeapon(int id) {
                 }
                 l.files.push_back(std::move(file));
             }
+            // AzaharFrame kiuarm: Pit's arm, while a switch wants it (one that cannot be read:
+            // the controller is drawn).
+            if (want_arm && l.error.empty()) {
+                l.arm_looked = arm_made;
+                if (manifest.arm.known && !manifest.arm.file.empty()) {
+                    ModelFile file;
+                    std::string why;
+                    if (LoadModelFile(dir + manifest.arm.file, file, why, kModelFlagWeaponSpace) &&
+                        file.components.size() == 2) {
+                        l.arm = manifest.arm;
+                        l.arm_file = l.files.size();
+                        l.files.push_back(std::move(file));
+                    } else {
+                        LOG_WARNING(Frontend, "xr: Pit's arm: {}: {} (the controller is drawn)",
+                                    manifest.arm.file, why.empty() ? "not an arm" : why);
+                    }
+                }
+            }
             l.ok = l.error.empty() && l.part_files > 0;
         } else {
             l.error = "not among the weapons made";
@@ -3358,6 +3562,8 @@ void ControllerModels::UploadWeapon() {
     w->flash_push = l.flash_push; // AzaharFrame kiuflash
     w->flash_push_fist = l.flash_push_fist; // AzaharFrame kiuinteg
     w->barrel_push = l.barrel_push;         // AzaharFrame fixc
+    w->arm = l.arm;                         // AzaharFrame kiuarm
+    w->arm_looked = l.arm_looked;
     vk::DeviceSize total = 0;
     for (const ModelFile& m : l.files) {
         total += m.vertices.size() * 4 + m.indices.size() * 4 + m.colour.size() + m.surface.size();
@@ -3455,7 +3661,10 @@ void ControllerModels::UploadWeapon() {
         }
         const uint64_t bytes = m.vertices.size() * 4 + m.indices.size() * 4 +
                                (m.colour.size() + m.surface.size()) * 4 / 3; // with the mips
-        if (i >= l.part_files) { // AzaharFrame kiuflash: a flash's cards, or a bullet
+        if (i == l.arm_file) { // AzaharFrame kiuarm: Pit's arm
+            part.arm = true;
+            w->arm_part = static_cast<int>(i);
+        } else if (i >= l.part_files) { // AzaharFrame kiuflash: a flash's cards, or a bullet
             part.flash = (m.flags & kModelFlagFlash) != 0;
             part.bullet = i >= l.flash_end;
             for (const ModelComponent& comp : m.components) {

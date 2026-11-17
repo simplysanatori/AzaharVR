@@ -202,6 +202,21 @@ private:
     FitMat palm_turn{};               ///< that turn about the wrist (LOCAL space)
     std::array<float, 3> palm_dir{};  ///< the smoothed forearm direction (LOCAL)
     int64_t palm_time_ns = 0;
+    /// AzaharFrame kiuarm: Pit's arm this frame, per hand (weapon_fit.h FitOffArm,
+    /// FitHoldingArm): its fit (arm space to aim space), and its forearm turned about the wrist
+    /// toward the player's estimated elbow (LOCAL space; `turned`).
+    struct ArmDraw {
+        bool on = false;
+        bool holds = false; ///< the weapon hand's (drawn under the weapon)
+        FitPart fit;
+        bool turned = false;
+        FitMat turn{};
+    };
+    std::array<ArmDraw, 2> arm_draws{};
+    std::array<std::array<float, 3>, 2> arm_dir{}; ///< the smoothed forearm directions (LOCAL)
+    std::array<int64_t, 2> arm_time_ns{};
+    std::string arm_logged;
+    void FitArms(const ViewPose& views, const std::array<Hand, 2>& hands);
     int muzzle_hand = -1;
     std::optional<std::array<float, 3>> muzzle;
     std::optional<std::array<float, 3>> axis; ///< AzaharFrame kiuinteg: FitAxis, with muzzle

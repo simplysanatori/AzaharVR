@@ -591,6 +591,47 @@ std::vector<FitPart> FitWeaponToHand(const FitWeapon& w, bool left_hand,
     return out;
 }
 
+bool ArmHoldsWeapon(int cls) { // AzaharFrame kiuarm
+    return cls == 0 || cls == 1 || cls == 3 || cls == 5; // blade, staff, bow, club
+}
+
+namespace {
+
+/// AzaharFrame kiuarm: Pit's left hand's space made a right hand's (his right is -x).
+constexpr FitMat kLeftToRight{-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+
+} // namespace
+
+FitPart FitOffArm(const std::array<float, 3>& fist, bool left_hand, const FitOverride& tune) {
+    // As the claws' worn fit: a left-handed tune is the right one mirrored (Compose mirrors x).
+    const M3 turn = Mul(RotY(tune.yaw), Mul(RotX(tune.pitch), RotZ(-tune.roll)));
+    const V3 at{kHandleCentre[0] + tune.offset_cm[0] * 0.01f,
+                kHandleCentre[1] + tune.offset_cm[1] * 0.01f,
+                kHandleCentre[2] + tune.offset_cm[2] * 0.01f};
+    const V3 right_fist{-fist[0], fist[1], fist[2]};
+    const FitMat m = Compose(at, Mul(turn, HoldHandFrame(HoldMap::Point)), kArmScale * tune.scale,
+                             right_fist, left_hand);
+    return {FitSide::Centre, Mul4(m, kLeftToRight), !left_hand};
+}
+
+std::optional<FitPart> FitHoldingArm(const FitWeapon& w, bool left_hand,
+                                     const FitOverride& weapon_tune, const FitOverride& arm_tune) {
+    const HoldMap map = HoldMapFor(w.cls);
+    if (!ArmHoldsWeapon(w.cls) || !w.hold || map == HoldMap::None) {
+        return std::nullopt;
+    }
+    // The hold's hand and fist as FitWeaponToHand places them (its hold branch).
+    V3 fist{};
+    HoldMatrix(*w.hold, fist);
+    const M3 turn = Mul(RotY(weapon_tune.yaw), Mul(RotX(weapon_tune.pitch), RotZ(-weapon_tune.roll)));
+    const V3 off = Scale(weapon_tune.offset_cm, 0.01f);
+    const V3 c = HoldFistAt(map);
+    const V3 at{c[0] + off[0], c[1] + off[1], c[2] + off[2]};
+    const FitMat m = Compose(at, Mul(turn, HoldHandFrame(map)), kArmScale * arm_tune.scale, fist,
+                             left_hand);
+    return FitPart{FitSide::Centre, Mul4(m, kLeftToRight), !left_hand};
+}
+
 std::optional<std::array<float, 3>> FitMuzzle(const FitWeapon& w, bool left_hand,
                                               const std::vector<FitSide>& sides,
                                               const FitOverride& tune) {

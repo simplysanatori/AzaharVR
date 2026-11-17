@@ -216,6 +216,49 @@ FitMat RotationBetween(const std::array<float, 3>& pivot, const std::array<float
 /// The class's default scale (metres per game unit).
 float FitClassScale(int cls);
 
+// ---- AzaharFrame kiuarm: Pit's arm on the player's hands ----
+//
+// Pit's left forearm and fist (core/frame_weapon_models.h kArmFile: in his left hand bone's space,
+// the wrist at the origin, the forearm toward -x, the fist toward +x, the back of the hand +y,
+// the thumb +z) drawn on a player's hand at one scale (kArmScale: about 27 cm from the fist to
+// the elbow), whatever the weapon's class or Weapon Size. On the right hand it is mirrored (his
+// left made a right). Test switches, live (test-switches.txt):
+//   AZAHARFRAME_KIU_ARM=1: the hand without the weapon is the arm, not the controller (FitOffArm);
+//   AZAHARFRAME_KIU_ARM_WEAPON=1: the weapon hand holds the weapon with it (FitHoldingArm) for
+//     the classes whose weapon has a grip his fist closes round (ArmHoldsWeapon);
+//   AZAHARFRAME_KIU_ARM_FIT=dx,dy,dz,yaw,pitch,roll,scale: the off hand's tune (as
+//     AZAHARFRAME_KIU_FIT_<CLASS>; the weapon hand takes its weapon's tune), its scale a factor
+//     on kArmScale for both;
+//   AZAHARFRAME_KIU_ARM_ELBOW=0: the forearm straight from the hand, not turned about the wrist
+//     toward the player's estimated elbow (EstimateElbow, as a palm's elbow mode).
+inline constexpr float kArmScale = 0.075f;
+inline constexpr const char* kArmSwitch = "AZAHARFRAME_KIU_ARM";
+inline constexpr const char* kArmWeaponSwitch = "AZAHARFRAME_KIU_ARM_WEAPON";
+inline constexpr const char* kArmFitSwitch = "AZAHARFRAME_KIU_ARM_FIT";
+inline constexpr const char* kArmElbowSwitch = "AZAHARFRAME_KIU_ARM_ELBOW";
+
+/// The classes whose weapon Pit's fist closes round, so the arm can hold it: blades and clubs
+/// (GripN), staffs (SnipeM), bows (the bow's grip in his left fist). Claws, palms and arms cover
+/// or replace the hand, cannons replace the forearm and hand, orbitars float: their weapon hand
+/// stays as it is drawn now.
+bool ArmHoldsWeapon(int cls);
+
+/// The off hand: arm space to aim space. Pit's fist's centre (`fist`, arm space) on the
+/// controller's handle (kHandleCentre, mirrored for the left hand), his hand as the Point hold
+/// turns it (his fingers along the ray, the thumb up, the back of the hand outward), so the
+/// forearm runs back along the ray; the tune turns about the fist and offsets it (a left-handed
+/// tune is the right one mirrored, as the claws'). `mirrored`: true on the right hand.
+FitPart FitOffArm(const std::array<float, 3>& fist, bool left_hand, const FitOverride& tune = {});
+
+/// The weapon hand: arm space to aim space, his hand where the weapon's hold puts it
+/// (FitWeaponToHand's hold branch: the hold's fist on the handle, the hand frame of its HoldMap,
+/// the weapon's own tune), at the arm's scale (kArmScale times `arm_tune.scale`, not the weapon's),
+/// so the weapon's grip runs through his fist. None when the class's weapon is not held in the
+/// fist (ArmHoldsWeapon) or the weapon has no hold.
+std::optional<FitPart> FitHoldingArm(const FitWeapon& w, bool left_hand,
+                                     const FitOverride& weapon_tune = {},
+                                     const FitOverride& arm_tune = {});
+
 /// AzaharFrame kiufix: Weapon Size (vr_light_gun_weapon_size, per game): Game Size, the class's
 /// fit as the game has it next to Pit's hand (as before); Hand Size, a weapon longer than its
 /// class's hand-held length (kHandSizeCapM: 35 to 45 cm) brought down to it, smaller ones left
