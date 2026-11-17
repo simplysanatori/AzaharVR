@@ -883,6 +883,43 @@ push constant's unused `layer` field in thousandths (`XrScreenSink::ScreenDim`),
 from the next game picture. The method is logged at each session's start (`xr: Match Bottom Screen
 Brightness dims by ...`) and the dim when it changes.
 
+AzaharFrame bfidr: Dynamic Resolution that protects Black Frame Insertion (the 1.2.x plan's Phase 1,
+handoff report 76 item 4). Under GPU load the Full modes' pictures (Internal Resolution plus two
+steps) arrive late, and a late picture lit again doubles. With Dynamic Resolution on
+(`vr_dynamic_resolution`; nothing of this runs with it off, and nothing turns it on) and the top
+screen flashing in a Full mode for most of a second (`DynamicResolution::Second::bfi`, counted in
+the layer block: not held for a slow game, never in the projection layer), the second is also bad
+on its symptoms (`BfiRules`, `SymptomWindow`): over the last 10 judged seconds more than 10 late
+releases of the top screen, or more than 10 late pictures lit again (Motion Clarity's "lit for:
+late"), or 2 seconds with an xrEndFrame over 1.44 display periods (12 ms at 120 Hz); and only while
+GPU behind is at least 0.6 of the period (5.0 ms at 120 Hz) and the game runs at most at the 3DS's
+rate, so a stalled emulation thread, a boot or fast forward never lowers it. Three such seconds in
+a row step down one step; the GPU's own line (0.9 of the period) keeps fixd's five. A step up needs
+the predicted cost (fixd's `Ratio`) under 0.75 of a stricter line, 0.84 of the period (5.25 ms at
+120 Hz), in a second with at most one late release, one late lit picture and no compositor miss.
+The floor stays the Internal Resolution setting, so only the two immersive steps come off. Replayed
+over report 76's per-second lines it steps in each bad MK7 window within 3 to 5 s and in both OoT
+Render Margin 1.4 windows, and not in OoT's steady 137 s at 1.0, the boot, or KIU flat.
+
+Also while it flashes, a ceiling from what the screen can show (`ScreenFactor`): no factor whose
+picture (400 x 240 times the factor) has more than 1.25 times the display pixels the head-driven
+top screen covers on both axes, from its live size over its distance from the left eye against the
+eye's field of view and the runtime's recommended eye image (asked once, `xr: the runtime's eye
+image is ...`). A new ceiling holds after 3 s in a row (`CeilingHold`), is never under the floor,
+is no step, no failed step up and no level remembered for the game, and when it lifts the level
+the seconds decided comes back. The step lines say why (`xr: Dynamic Resolution: 5x (was 6x; 3 bad
+seconds in a row with Black Frame Insertion: N late releases, ...)`, `... the screen shows no more
+than 5x with Black Frame Insertion`), and `xr: Dynamic Resolution: Black Frame Insertion's rules
+on|off` when they start and stop.
+
+`xr: perf ...`, every 10 s while a game is live in VR (`frame_xr/perf_line.h`): the emulator's GPU
+work per game frame (`GpuBusyTimer`, only with `AZAHARFRAME_GPU_BUSY=1`, else "not measured"), the
+XR pass per draw, the late releases and late lit pictures, the longest xrEndFrame, the factor drawn
+and the screen's ceiling, and CPU as a share of one core per thread group from
+`/proc/self/task/*/stat` (emulation `EmuThread`, video `VulkanWorker`, present, `FrameXR`, handoff
+`XrRelease`, audio: the sink library's threads, named as they are on the system) with the three
+busiest others by name. The /proc read and the line run on a short thread of their own.
+
 Two more switches with it, for every mode (docs/TECHNICAL_NOTES.md): both eyes' top images in one
 swapchain (`AZAHARFRAME_XR_PACKED`) and one game frame's screens released together
 (`AZAHARFRAME_XR_SET_RELEASE`), so the two eyes never come from different game frames.
