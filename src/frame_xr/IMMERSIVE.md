@@ -897,15 +897,22 @@ rate, so a stalled emulation thread, a boot or fast forward never lowers it. Thr
 a row step down one step; the GPU's own line (0.9 of the period) keeps fixd's five. A step up needs
 the predicted cost (fixd's `Ratio`) under 0.75 of a stricter line, 0.84 of the period (5.25 ms at
 120 Hz), in a second with at most one late release, one late lit picture and no compositor miss.
-The floor stays the Internal Resolution setting, so only the two immersive steps come off. Replayed
-over report 76's per-second lines it steps in each bad MK7 window within 3 to 5 s and in both OoT
-Render Margin 1.4 windows, and not in OoT's steady 137 s at 1.0, the boot, or KIU flat.
+The symptoms do not count for the first 10 judged seconds after a game's start or a Load (the
+rasterizer cache filling again: 4 to 23 late releases a second for 6 to 7 s at 4x drawn, report
+79). The floor stays the Internal Resolution setting, so only the two immersive steps come off.
+Replayed over the per-second lines of reports 76, 79 and 70: the symptoms step in each bad MK7
+window at 6x drawn within 3 to 5 s and in both OoT Render Margin 1.4 windows, and never at 5x, 4x
+or 3x drawn, a boot, a Load, fast forward, report 79's 504 s at 4x drawn, or KIU flat. OoT's
+steady 137 s at 6x with Render Margin 1.0 has no symptom step, but the GPU's own line steps it
+once (at its 81st second), as it does without Black Frame Insertion.
 
-Also while it flashes, a ceiling from what the screen can show (`ScreenFactor`): no factor whose
+Also while it flashes, a ceiling from what the screen can show (`ScreenCoverage`, averaged over
+the second): no factor whose
 picture (400 x 240 times the factor) has more than 1.25 times the display pixels the head-driven
 top screen covers on both axes, from its live size over its distance from the left eye against the
 eye's field of view and the runtime's recommended eye image (asked once, `xr: the runtime's eye
-image is ...`). A new ceiling holds after 3 s in a row (`CeilingHold`), is never under the floor,
+image is ...`). A new ceiling holds after 3 s in a row (`CeilingHold`; a higher one only 0.2 past
+its whole factor, as the held quad's size moves with the head), is never under the floor,
 is no step, no failed step up and no level remembered for the game, and when it lifts the level
 the seconds decided comes back. The step lines say why (`xr: Dynamic Resolution: 5x (was 6x; 3 bad
 seconds in a row with Black Frame Insertion: N late releases, ...)`, `... the screen shows no more

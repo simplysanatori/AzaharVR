@@ -1110,13 +1110,33 @@ TEST_CASE("Dynamic Resolution: the screen's ceiling", "[frame_xr][bfidr]") {
     CHECK(h.Next(4) == 0);
     CHECK(h.Next(4) == 0);
     CHECK(h.Next(4) == 4);
-    CHECK(h.Next(5) == 4);
-    CHECK(h.Next(6) == 4);
-    CHECK(h.Next(6) == 4);
-    CHECK(h.Next(6) == 6);
-    CHECK(h.Next(0) == 6);
-    CHECK(h.Next(0) == 6);
+    CHECK(h.Next(5.3) == 4);
+    CHECK(h.Next(6.3) == 4);
+    CHECK(h.Next(6.3) == 4);
+    CHECK(h.Next(6.3) == 6);
+    // Higher only kCeilingMargin past a whole factor; lower at once (after the hold).
+    CHECK(h.Next(7.1) == 6);
+    CHECK(h.Next(7.1) == 6);
+    CHECK(h.Next(7.1) == 6);
+    CHECK(h.Next(5.9) == 6);
+    CHECK(h.Next(5.9) == 6);
+    CHECK(h.Next(5.9) == 5);
+    CHECK(h.Next(0) == 5);
+    CHECK(h.Next(0) == 5);
     CHECK(h.Next(0) == 0);
+    // A value that wanders across a whole factor with the head (3.9 to 4.15): one change, not
+    // one every few seconds.
+    CeilingHold noisy;
+    int changes = 0, was = 0;
+    for (int t = 0; t < 600; t++) {
+        const double v = 4.025 + 0.125 * std::sin(t * 0.7) + 0.05 * ((t * 7) % 3 - 1);
+        const int now = noisy.Next(v);
+        changes += now != was ? 1 : 0;
+        was = now;
+    }
+    CHECK(changes <= 3);
+    CHECK(ScreenCoverage({1.6, 0.96, 2.4, 2.4, 1728, 1728}) > 3.59);
+    CHECK(ScreenCoverage({}) == 0.0);
 
     // The controller: the ceiling's moves are no step, and its level comes back when it lifts.
     Controller k;
@@ -1188,4 +1208,33 @@ TEST_CASE("Dynamic Resolution: the screen's ceiling through the frame loop's sid
     setting.SetValue(was);
     factor.SetValue(was_factor);
     V::g_base = 0;
+}
+
+// AzaharFrame bfidr: report 79's Quick Load at t=105 (4x drawn, Black Frame Insertion steady
+// before and after): the screens off, then 6-7 s of late releases with the GPU at 6.8-8.0 ms while
+// the rasterizer cache fills again. Its symptoms do not count for BfiRules::kAfterStart seconds.
+TEST_CASE("Dynamic Resolution: with Black Frame Insertion, a Load's own burst",
+          "[frame_xr][bfidr]") {
+    struct Row {
+        double gpu;
+        uint32_t late;
+    };
+    const Row after_load[] = {{7.2, 4}, {7.4, 5}, {6.8, 2}, {8.0, 0}, {7.8, 7},
+                              {7.9, 2}, {7.7, 1}, {6.6, 0}, {6.2, 0}, {6.0, 0}};
+    Controller c;
+    c.Start(0, true); // the screens back after the Load
+    for (const Row& r : after_load) {
+        c.Judge(Bfi(r.gpu, r.late), 2);
+    }
+    CHECK(c.Drop() == 0);
+    // After the hold the same symptoms count again.
+    for (const Row& r : after_load) {
+        c.Judge(Bfi(r.gpu, r.late), 2);
+    }
+    CHECK(c.Drop() == 1);
+    CHECK(c.LastStepSymptoms() == false); // LastStep is the last Judge's: none now
+    // A fresh start holds the symptoms, not the GPU's line.
+    Controller line;
+    line.Start(0);
+    CHECK(Run(line, Bfi(8.0), Controller::kDownAfter, 2) == 1);
 }

@@ -542,7 +542,8 @@ void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
     dr_second.late_releases = std::max(late[0], late[1]);
     dr_second.late_lit = bfi_second.late_lit;
     dr_second.end_frame_max_ms = bfi_second.end_max_ms;
-    dr_second.screen_factor = bfi_second.screen_factor;
+    dr_second.screen_factor =
+        bfi_second.screen_n ? bfi_second.screen_sum / bfi_second.screen_n : 0.0;
     // AzaharFrame bfidr: the perf line's window, from the values taken above.
     const bool flashed = dr_second.bfi;
     const uint32_t late_lit = bfi_second.late_lit;
@@ -564,7 +565,7 @@ void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
         const uint32_t base = VideoCore::DynamicResolution::g_base.load(std::memory_order_relaxed);
         const int drop = DynamicResolution::Drop();
         w.factor = base > 0 ? std::max(1, static_cast<int>(base) - drop) : 0;
-        w.screen_factor = dr_second.screen_factor;
+        w.screen_factor = static_cast<int>(dr_second.screen_factor);
         const int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                    Clock::now().time_since_epoch())
                                    .count();
@@ -1111,7 +1112,7 @@ void Runtime::FrameLoop() {
             const Immersive::ScreenLayers shown = Immersive::Screens(local_space, view_space, place);
             // AzaharFrame bfidr: what the head-driven top screen can show (Dynamic Resolution's
             // ceiling with Black Frame Insertion): its size over its distance from the left eye,
-            // against the eye's field of view and recommended image.
+            // against the eye's field of view and recommended image, averaged over the second.
             if (shown.full_mode && shown.head_driven && shown.show_top) {
                 if (eye_px_w == 0) {
                     uint32_t n = 0;
@@ -1139,16 +1140,18 @@ void Runtime::FrameLoop() {
                                              (at.y - eye.y) * (at.y - eye.y) +
                                              (at.z - eye.z) * (at.z - eye.z));
                 const XrFovf& fov = vp.fov[0];
-                bfi_second.screen_factor =
+                const double cover =
                     vp.views_valid && dist > 0.01f
-                        ? DynamicResolution::ScreenFactor(
+                        ? DynamicResolution::ScreenCoverage(
                               {shown.top_size[0].width / dist, shown.top_size[0].height / dist,
                                std::tan(fov.angleRight) - std::tan(fov.angleLeft),
                                std::tan(fov.angleUp) - std::tan(fov.angleDown), eye_px_w,
                                eye_px_h})
-                        : 0;
-            } else {
-                bfi_second.screen_factor = 0;
+                        : 0.0;
+                if (cover > 0.0) { // the second's average (the held quad moves with the head)
+                    bfi_second.screen_sum += cover;
+                    bfi_second.screen_n++;
+                }
             }
             // AzaharFrame flash: Motion Clarity (motion_clarity.h; it began as the test switch
             // AZAHARFRAME_XR_SINGLE_FLASH): each game picture of the top screen on one display

@@ -80,20 +80,27 @@ bool SymptomWindow::Clean(const Second& s) {
            !(s.period_ms > 0.0 && s.end_frame_max_ms > BfiRules::kEndFramePeriods * s.period_ms);
 }
 
-int ScreenFactor(const ScreenCover& c) { // AzaharFrame bfidr
+double ScreenCoverage(const ScreenCover& c) { // AzaharFrame bfidr
     if (!(c.tan_w > 0.0 && c.tan_h > 0.0 && c.eye_tan_w > 0.0 && c.eye_tan_h > 0.0) ||
         c.eye_px_w == 0 || c.eye_px_h == 0) {
-        return 0;
+        return 0.0;
     }
     // The display pixels the screen covers on each axis, over the picture's at 1x.
     const double across = c.eye_px_w * (c.tan_w / c.eye_tan_w) / kTopWidth;
     const double up = c.eye_px_h * (c.tan_h / c.eye_tan_h) / kTopHeight;
-    const double most = kScreenOversample * std::max(across, up);
-    return std::max(1, static_cast<int>(std::floor(most + 1e-9)));
+    return kScreenOversample * std::max(across, up);
 }
 
-int CeilingHold::Next(int factor) { // AzaharFrame bfidr
-    factor = std::max(0, factor);
+int ScreenFactor(const ScreenCover& c) { // AzaharFrame bfidr
+    const double most = ScreenCoverage(c);
+    return most > 0.0 ? std::max(1, static_cast<int>(std::floor(most + 1e-9))) : 0;
+}
+
+int CeilingHold::Next(double exact) { // AzaharFrame bfidr
+    int factor = exact > 0.0 ? std::max(1, static_cast<int>(std::floor(exact + 1e-9))) : 0;
+    if (now > 0 && factor > now && exact < factor + kCeilingMargin) {
+        factor = now; // only just over a whole factor: not yet a higher one
+    }
     if (factor == now) {
         candidate = factor;
         seen = 0;
@@ -315,7 +322,10 @@ int Controller::Judge(const Second& s, int max_drop, int min_drop) {
         cost_n[factor]++;
     }
     // AzaharFrame bfidr: with Black Frame Insertion its symptoms count too (BfiRules).
-    if (!s.bfi) {
+    if (symptom_hold > 0) { // AzaharFrame bfidr: a start's or a Load's own burst
+        symptom_hold--;
+        window.Clear();
+    } else if (!s.bfi) {
         window.Clear();
     } else if (!FastForward(s)) {
         window.Add(s);
@@ -399,6 +409,7 @@ void Controller::Start(int steps, bool same_game) { // AzaharFrame fixd
         settle = kSettle;
         hold = kHoldAfterDown;
     }
+    symptom_hold = BfiRules::kAfterStart; // AzaharFrame bfidr
 }
 
 void Controller::Resume() { // AzaharFrame ui2

@@ -296,7 +296,8 @@ public:
     struct BfiSecond {
         uint32_t flashing = 0, late_lit = 0;
         double end_max_ms = 0.0;
-        int screen_factor = 0;
+        double screen_sum = 0.0; ///< ScreenCoverage over the second's frames
+        uint32_t screen_n = 0;
     } bfi_second;
     /// AzaharFrame bfidr: the runtime's recommended eye image (0: not asked yet).
     uint32_t eye_px_w = 0, eye_px_h = 0;

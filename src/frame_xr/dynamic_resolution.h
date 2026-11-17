@@ -68,8 +68,9 @@
 // screen's quads in the Full modes breaks under GPU load, a late picture lit again doubles):
 //   - while it flashes (Second::bfi), a second is also bad on its symptoms (BfiRules,
 //     SymptomWindow): late releases or late pictures lit again, more than about one a second
-//     over the last 10 s, or the compositor missing refreshes, while the GPU is busy; 3 such
-//     seconds in a row step down (BfiRules::kDownAfter; the GPU's line alone keeps kDownAfter);
+//     over the last 10 s, or the compositor missing refreshes, while the GPU is busy (not in the
+//     first 10 judged seconds after a start or a Load); 3 such seconds in a row step down
+//     (BfiRules::kDownAfter; the GPU's line alone keeps kDownAfter);
 //   - a step up only on a predicted cost under kUpBudget of a stricter line (BfiRules::kUpLine,
 //     7.0 ms at 120 Hz), in a second without symptoms;
 //   - the floor is still the Internal Resolution setting (only the immersive modes' two steps come
@@ -113,8 +114,9 @@ struct Second {
     uint32_t late_releases = 0;
     uint32_t late_lit = 0;
     double end_frame_max_ms = 0.0;
-    /// AzaharFrame bfidr: the most the top screen can show (ScreenFactor; 0: not known).
-    int screen_factor = 0;
+    /// AzaharFrame bfidr: the most the top screen can show, unrounded (ScreenCoverage, the
+    /// second's average; 0: not known).
+    double screen_factor = 0.0;
 };
 
 /// AzaharFrame bfidr: while Black Frame Insertion flashes in a Full mode, a picture late is lit
@@ -131,13 +133,15 @@ struct Second {
 ///     120 Hz; a GPU with room reads its fixed part, 3.5-4.5 ms in reports 72 and 76): symptoms of
 ///     a stalled emulation thread (report 76's boot: 9-10 late releases a second at 2-3 ms) never
 ///     lower the resolution; nor fast forward's (kGameRateMax).
-/// Replayed over report 76's per-second lines: a step in each bad MK7 window
-/// within 3-5 s and in both OoT Render Margin 1.4 windows, none in OoT's steady 137 s at 1.0,
-/// at the boot, nor in KIU flat; one in MK7's 38-s "clean" window at 10.4 ms (past the knee).
-/// A step down after kDownAfter such seconds in a row (the GPU's line alone keeps fixd's
-/// Controller::kDownAfter: OoT at 6x with Render Margin 1.0, steady, reads 7.3 ms with a third of
-/// its seconds over the line). A step up only on a predicted cost under Controller::kUpBudget of
-/// kUpLine (0.75 x 7.0 ms at 120 Hz) in a second without symptoms.
+/// A step down after kDownAfter such seconds in a row; the GPU's line alone keeps fixd's
+/// Controller::kDownAfter. Replayed over the per-second lines of reports 76, 79 and 70 with both
+/// rules: the symptoms step in each bad MK7 window at 6x drawn within 3-5 s and in both OoT
+/// Render Margin 1.4 windows, never at 5x, 4x or 3x drawn, at a boot, a Load (kAfterStart),
+/// fast forward, in report 79's 504 s at 4x drawn, nor in KIU flat. OoT's steady 137 s at 6x
+/// with Render Margin 1.0 (7.3 ms, a third of its seconds over the line) has no symptom step,
+/// but the GPU's line steps it once, at its 81st second, as without Black Frame Insertion. A
+/// step up only on a predicted cost under Controller::kUpBudget of kUpLine (0.75 x 7.0 ms at
+/// 120 Hz) in a second without symptoms.
 struct BfiRules {
     static constexpr int kDownAfter = 3;
     static constexpr int kWindow = 10;
@@ -149,6 +153,11 @@ struct BfiRules {
     /// late by design (report 76: 100-116 late releases a second at t=365-371), not judged by the
     /// symptoms.
     static constexpr double kGameRateMax = 66.0;
+    /// Judged seconds after a game's start or a Load (its screens back) whose symptoms do not
+    /// count: the rasterizer cache fills again and the pacing relocks (report 79: 4-23 late
+    /// releases a second for 6-7 s after each Quick Load at 4x drawn, the GPU at 6.6-8.0 ms;
+    /// report 70: the same at 5x). The GPU's line still counts.
+    static constexpr int kAfterStart = 10;
     /// The stricter line step ups are judged against, a share of the period (7.0 ms at 120 Hz;
     /// report 76: MK7's 5x drawn at 6.05 ms and 4x at 5.1 ms held the rhythm, 6x at 10.6 did not;
     /// OoT degraded at 7.8 ms). Not a line for a step down alone: GPU behind is the time from a
@@ -199,16 +208,22 @@ struct ScreenCover {
     double eye_tan_w = 0.0, eye_tan_h = 0.0;
     uint32_t eye_px_w = 0, eye_px_h = 0;
 };
+/// The factor unrounded (0: not known), and the whole one (at least 1x; 0: not known).
+double ScreenCoverage(const ScreenCover& c);
 int ScreenFactor(const ScreenCover& c);
 
 /// AzaharFrame bfidr: the screen's ceiling, with a hold: a new value is taken after
 /// kCeilingSeconds seconds in a row (a grip resize passes through many sizes: one step, not one
-/// per size).
+/// per size), and a higher one only kCeilingMargin past its whole factor (the held quad's size
+/// and the eye's distance move with the head: a value near a whole factor would flip the
+/// swapchain back and forth).
 class CeilingHold {
 public:
     static constexpr int kCeilingSeconds = 3;
-    /// Once a second, the factor the screen can show now (0: none, no ceiling): the one in force.
-    int Next(int factor);
+    static constexpr double kCeilingMargin = 0.2;
+    /// Once a second, the factor the screen can show now, unrounded (0: none, no ceiling): the
+    /// one in force.
+    int Next(double factor);
     int Now() const {
         return now;
     }
@@ -298,6 +313,7 @@ public:
     void Reset();
     /// AzaharFrame fixd: from the factor itself again, then `steps` under it (the level
     /// remembered for the game); the seconds after are not judged and good ones wait a hold.
+    /// AzaharFrame bfidr: nor, for BfiRules::kAfterStart judged seconds, the symptoms.
     /// `same_game`: a Load or a Restart in the game it has measured: what it measured (the
     /// costs per factor, the ratios) is kept.
     void Start(int steps, bool same_game = false);
@@ -362,6 +378,7 @@ private:
     int min_drop_ = 0; ///< AzaharFrame bfidr: the screen's ceiling (Judge)
     int bad = 0;
     int symptom_bad = 0; ///< AzaharFrame bfidr: SymptomBad seconds in a row
+    int symptom_hold = 0; ///< AzaharFrame bfidr: BfiRules::kAfterStart left
     bool last_symptoms = false;
     SymptomWindow window; ///< AzaharFrame bfidr
     SymptomWindow step_window; ///< AzaharFrame bfidr: StepWindow
