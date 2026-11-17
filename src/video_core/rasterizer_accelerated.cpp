@@ -2,7 +2,9 @@
 // Licensed under GPLv3 or any later version
 // Refer to the LICENSE.txt file included.
 
+#include <algorithm>
 #include <cstring>
+#include <iterator>
 #include "common/alignment.h"
 #include "common/settings.h"
 #include "common/math_util.h"
@@ -453,6 +455,16 @@ void RasterizerAccelerated::ApplyVRDataToPicaVSUniforms(Pica::Shader::Generator:
                     0, 0, 1, 0,
                     0, 0, 0, 1
             };
+            // AzaharFrame mk7flat: the search's scores and count are the process's, its result
+            // this rasterizer's, and every boot, Restart and savestate of another build makes a
+            // new rasterizer: once a search had run its course, the next one never searched and
+            // mode 3 had no register (no head pose, no 3D) until the app was started again.
+            if (!vr_heuristic.search_started) {
+                vr_heuristic.search_started = true;
+                counter = 0;
+                std::fill(std::begin(regscores), std::end(regscores), regscore{});
+                std::fill(std::begin(regscores2), std::end(regscores2), regscore{});
+            }
 
             if (++counter > start)
             {

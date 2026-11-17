@@ -101,6 +101,7 @@ protected:
         int32_t view_matrixregister = -1;
         int32_t eye_indicator_register = -1;
         int32_t eye_indicator_reg_index = -1;
+        bool search_started = false; ///< the register search below began with this rasterizer
     } vr_heuristic;
 
 public:
