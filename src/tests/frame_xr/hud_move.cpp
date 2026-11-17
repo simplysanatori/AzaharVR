@@ -199,6 +199,46 @@ TEST_CASE("FrameXr hudmove: the scales reach the emulation thread", "[frame_xr][
     REQUIRE(out.hud.IsIdentity());
 }
 
+namespace {
+struct FakeRasterizer final : VideoCore::RasterizerInterface {
+    void AddTriangle(const Pica::OutputVertex&, const Pica::OutputVertex&,
+                     const Pica::OutputVertex&) override {}
+    void DrawTriangles() override {}
+    void FlushAll() override {}
+    void FlushRegion(PAddr, u32) override {}
+    void InvalidateRegion(PAddr, u32) override {}
+    void FlushAndInvalidateRegion(PAddr, u32) override {}
+    void ClearAll(bool) override {}
+    void SetVRHudMove(float across_, float up_down_) override {
+        across = across_;
+        up_down = up_down_;
+        calls++;
+    }
+    float across = 0.0f, up_down = 0.0f;
+    int calls = 0;
+};
+} // namespace
+
+// The emulation thread's hand-off at a game frame's end gives the rasterizer what was published.
+TEST_CASE("FrameXr hudmove: the rasterizer gets the scales at the latch", "[frame_xr][hudmove]") {
+    using namespace VideoCore::Immersive;
+    VRData d;
+    d.mode = 3;
+    d.hud = ForFrame(true, 3, 10, 0, 0.0f);
+    Publish(d);
+    FakeRasterizer r;
+    LatchFrame(&r);
+    REQUIRE(r.calls == 1);
+    REQUIRE(r.across == Approx(0.9f));
+    REQUIRE(r.up_down == 1.0f);
+    // Paused or out of the Full modes: the XR thread publishes 1, and the rasterizer gets it.
+    Publish(VRData{});
+    LatchFrame(&r);
+    REQUIRE(r.calls == 2);
+    REQUIRE(r.across == 1.0f);
+    REQUIRE(r.up_down == 1.0f);
+}
+
 TEST_CASE("FrameXr hudmove: the settings", "[frame_xr][hudmove]") {
     // Off by default, per game, the range of vr_hud_move.h.
     auto& across = Settings::values.vr_immersive_hud_across;
