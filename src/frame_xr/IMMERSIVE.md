@@ -924,15 +924,21 @@ image is ...`). A new ceiling holds after 3 s in a row (`CeilingHold`; a higher 
 its whole factor, as the held quad's size moves with the head), is never under the floor,
 is no step, no failed step up and no level remembered for the game, and when it lifts the level
 the seconds decided comes back. The step lines say why (`xr: Dynamic Resolution: 5x (was 6x; 3 bad
-seconds in a row with Black Frame Insertion: N late releases, ...)`, `... the screen shows no more
-than 5x with Black Frame Insertion`), and `xr: Dynamic Resolution: Black Frame Insertion's rules
-on|off` when they start and stop.
+seconds in a row with Black Frame Insertion (GPU behind at 7.0 ms or more, or with it over 5.0 ms:
+N late releases, N late pictures lit again, N seconds with a compositor miss in the last N s))`,
+`... the screen shows no more than 5x with Black Frame Insertion`), and `xr: Dynamic Resolution:
+Black Frame Insertion's rules on|off` when they start and stop. A step down taken for it is the
+game's level like any other (remembered at once, one level with Black Frame Insertion on or off):
+with the up rule's stricter cost a game stepped down there mostly stays at the lower factor, also
+with it off later, until a new Internal Resolution starts from the setting again. At 90 Hz it
+never flashes (below), so these rules never run there.
 
 AzaharFrame bfidr: Black Frame Insertion only at 120 Hz (the owner, 2026-11-17). It flashes only
 where a 60 fps picture is on view a whole number of refreshes, 2 or more, within 0.05
-(`MotionClarity::EvenRate`): 2 at 120 Hz, 4 at 240 Hz. At 72, 90 or 144 Hz (1.2, 1.5, 2.4) the
+(`MotionClarity::EvenRate`, the frame loop's `RateGate`; at the headset's rates the same as the
+pacer's `EvenCadencePeriod`): 2 at 120 Hz, 4 at 240 Hz. At 72, 90 or 144 Hz (1.2, 1.5, 2.4) the
 scheduler's full-rate rule would engage with pictures lit at uneven spacing, so the frame loop
-leaves it out of effect there (no backing, no dimmed bottom screen, the picture shown as with the
+leaves it out of effect there, the test switch `AZAHARFRAME_XR_SINGLE_FLASH=1` included (no backing, no dimmed bottom screen, the picture shown as with the
 setting off) and says so once: `xr: Black Frame Insertion not in effect: the display runs at 90 Hz,
 1.50 refreshes a 60 fps picture; ...`, and `... the display's rate allows it again` when it does.
 At 120 Hz nothing changes.

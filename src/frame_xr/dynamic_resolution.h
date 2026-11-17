@@ -148,7 +148,7 @@ struct Second {
 /// Controller::kUpBudget of kLine (0.75 x 7.0 ms at 120 Hz) in a second without symptoms.
 /// Replayed over the per-second lines of reports 76, 79, 70 and 85 (handoff tools of report 84,
 /// replay_all.py): a step in every window the owner or the reports called bad (MK7 and OoT at 6x
-/// and up within 3-11 s, OoT at 5x drawn in report 85's heavy rooms at t=395), none at a boot or
+/// and up within 3-11 s, OoT at 5x drawn in report 85's heavy rooms, t=376-441), none at a boot or
 /// a Load, in report 79's 504 s of MK7 at 4x drawn, in KIU flat, nor at 4x drawn in report 85.
 /// OoT at 6x drawn with Render Margin 1.0 (report 76, 7.3 ms) now steps (report 85 saw doubling
 /// at that load).

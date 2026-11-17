@@ -1017,8 +1017,9 @@ TEST_CASE("Dynamic Resolution: with Black Frame Insertion, report 76's seconds",
         uint32_t late;
         double end;
     };
-    // OoT at 6x drawn, Render Margin 1.0 (steady, 6 % uneven seconds), back from the menu at
-    // t=542: the pacing's relock, then nothing: no step.
+    // OoT at 6x drawn, Render Margin 1.0 (6 % uneven seconds), back from the menu at t=542: the
+    // pacing's relock, then one second over the stricter line: no step in these eight (earlier,
+    // at t=517, three in a row over 7.0 ms do step: report 84's replay).
     const Row oot[] = {{6.9, 6, 0.1}, {6.9, 3, 0.2}, {6.2, 0, 0.2}, {7.5, 0, 0.3}, {6.6, 0, 0.3},
                        {6.8, 0, 0.2}, {6.3, 0, 0.1}, {6.5, 0, 0.2}};
     Controller steady;
@@ -1027,8 +1028,8 @@ TEST_CASE("Dynamic Resolution: with Black Frame Insertion, report 76's seconds",
     }
     CHECK(steady.Drop() == 0);
     // MK7 at 6x drawn from t=22.8 (the bad window: 5.3 late releases a second, compositor
-    // misses): the symptoms from the first second, a step at the third (the GPU's line alone:
-    // the fifth).
+    // misses): a step at the third (the stricter line alone steps there too; fixd's line alone
+    // at the fifth).
     const Row mk7[] = {{7.9, 19, 14.7}, {11.2, 21, 0.2}, {11.6, 13, 15.9},
                        {13.0, 48, 0.1}, {10.6, 2, 0.2},  {10.9, 50, 12.6}};
     Controller bad;
@@ -1301,4 +1302,57 @@ TEST_CASE("Dynamic Resolution: with Black Frame Insertion, a Load's own burst",
     Controller line;
     line.Start(0);
     CHECK(Run(line, Bfi(8.0), Controller::kDownAfter, 2) == 1);
+}
+
+// AzaharFrame bfidr: a step taken for Black Frame Insertion is the game's level (remembered at
+// once, as every step down), and it stays with Black Frame Insertion off: fixd's up rule decides
+// there, and the next start begins at it. One level for both (an owner question in report 84).
+TEST_CASE("Dynamic Resolution: a step for Black Frame Insertion is the game's level",
+          "[frame_xr][bfidr]") {
+    namespace V = VideoCore::DynamicResolution;
+    auto& setting = Settings::values.vr_dynamic_resolution;
+    auto& factor = Settings::values.resolution_factor;
+    const bool was = setting.GetValue();
+    const auto was_factor = factor.GetValue();
+    setting.SetValue(true);
+    factor.SetValue(4);
+    std::map<uint64_t, int> disk;
+    const uint64_t title = 0x0004000000030800ULL;
+    LevelStore store;
+    store.load = [&] { return std::vector<std::pair<uint64_t, int>>(disk.begin(), disk.end()); };
+    store.save = [&](std::vector<std::pair<uint64_t, int>> levels) {
+        disk = std::map<uint64_t, int>(levels.begin(), levels.end());
+    };
+    store.title = [&] { return title; };
+    SetLevelStore(store);
+    V::Apply(6); // a Full mode over 4x
+    Install();
+    const auto run = [](const Second& s, int n) {
+        for (int i = 0; i < n; i++) {
+            NoteSecond(s);
+        }
+    };
+    // 7.2 ms with it flashing: under fixd's line (7.5 ms), over the stricter one (7.0 ms). Held
+    // after the start, then three seconds.
+    run(Bfi(7.2), BfiRules::kAfterStart + BfiRules::kDownAfter);
+    CHECK(Drop() == 1);
+    CHECK(disk[title] == 5);
+    // Black Frame Insertion off, the same load: fixd's rules, no step either way.
+    Second off = Bfi(7.2);
+    off.bfi = false;
+    run(off, kRememberAfter + 1);
+    CHECK(Drop() == 1);
+    CHECK(disk[title] == 5);
+    Uninstall();
+    // The next start of the game, Black Frame Insertion on or off: 5x.
+    SetLevelStore(store);
+    Install();
+    run(off, 1);
+    CHECK(Drop() == 1);
+    Uninstall();
+
+    SetLevelStore({});
+    setting.SetValue(was);
+    factor.SetValue(was_factor);
+    V::g_base = 0;
 }
