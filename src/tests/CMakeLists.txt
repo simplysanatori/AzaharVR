@@ -80,6 +80,7 @@ add_executable(tests
     frame_xr/toast_depth.cpp # AzaharFrame kiu2
     frame_xr/test_switches.cpp # AzaharFrame integ9
     frame_xr/image_lag.cpp # AzaharFrame imglag
+    frame_xr/kiu_range.cpp # AzaharFrame kiurange
     frame_xr/motion_clarity.cpp # AzaharFrame flash
     frame_xr/screen_handover.cpp # AzaharFrame flash3
     frame_xr/layer_slots.cpp # AzaharFrame flash

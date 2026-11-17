@@ -13,6 +13,7 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     immersive_layout.cpp
     immersive_layout.h
     ipd_smoother.h # AzaharFrame ipd
+    kiu_range.h # AzaharFrame kiurange
     hud.cpp # AzaharFrame vrqol
     hud.h # AzaharFrame vrqol
     presets.cpp # AzaharFrame vrqol
