@@ -32,6 +32,7 @@
 #include "common/frame_vr_depth.h" // AzaharFrame stereo
 #include "common/settings.h"
 #include "video_core/rasterizer_interface.h"
+#include "video_core/vr_hud_move.h"    // AzaharFrame hudmove
 #include "video_core/vr_view_matrix.h" // AzaharFrame depth
 #include "video_core/xr_content_pose.h" // AzaharFrame doubling
 
@@ -52,6 +53,8 @@ struct VRData {
     /// AzaharFrame ipd: the headset's IPD in metres (frame_xr/ipd_smoother.h), CitraVR's 0.065
     /// until it is known: mode 3 puts the game's eyes vr_game_pos_scaler x this apart.
     float ipd = 0.065f;
+    /// AzaharFrame hudmove: Move HUD In's scales for 2D inside the view (1: none).
+    HudMove::Scales hud{};
 };
 
 /// AzaharFrame ipd: the IPD the rasterizer uses: `ipd_m` when it is one, else `fallback_m`.
@@ -92,6 +95,8 @@ public:
         }
         pose_time.store(data.pose.time, std::memory_order_relaxed);
         ipd.store(data.ipd, std::memory_order_relaxed);
+        hud_across.store(data.hud.across, std::memory_order_relaxed); // AzaharFrame hudmove
+        hud_up_down.store(data.hud.up_down, std::memory_order_relaxed);
         seq.store(s + 2, std::memory_order_release);
     }
 
@@ -124,6 +129,8 @@ public:
             }
             d.pose.time = pose_time.load(std::memory_order_relaxed);
             d.ipd = ipd.load(std::memory_order_relaxed);
+            d.hud.across = hud_across.load(std::memory_order_relaxed); // AzaharFrame hudmove
+            d.hud.up_down = hud_up_down.load(std::memory_order_relaxed);
             std::atomic_thread_fence(std::memory_order_acquire);
             if (seq.load(std::memory_order_relaxed) == s0) {
                 out = d;
@@ -147,6 +154,8 @@ private:
     std::array<std::atomic<float>, 3> pose_p{};
     std::atomic<int64_t> pose_time{0};
     std::atomic<float> ipd{0.065f};
+    std::atomic<float> hud_across{1.0f};  ///< AzaharFrame hudmove
+    std::atomic<float> hud_up_down{1.0f};
 };
 
 inline Mailbox g_mailbox;
@@ -905,6 +914,7 @@ inline void ApplyPending(RasterizerInterface* rasterizer) {
     rasterizer->SetVRData(d.mode, d.factor, d.uoffset, d.game_pos_scaler, d.inv_view.data());
     rasterizer->SetVRFactorY(d.factor_y);
     rasterizer->SetVRIpd(d.ipd);
+    rasterizer->SetVRHudMove(d.hud.across, d.hud.up_down); // AzaharFrame hudmove
     g_content.Applied(d.pose);
 }
 

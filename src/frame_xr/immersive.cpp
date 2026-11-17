@@ -1554,6 +1554,23 @@ void OnFrame(const FrameInfo& info) {
         data.mode = static_cast<s32>(mode);
         data.factor = mode < 2 ? kWideFactor : g.solved.factor;
         data.factor_y = mode < 2 ? kWideFactor : g.solved.factor_y;
+        // AzaharFrame hudmove: Move HUD In, the Full modes only, eased off with mode 2's menu
+        // rule (video_core/vr_hud_move.h); logged when the setting changes.
+        {
+            const int across = Settings::values.vr_immersive_hud_across.GetValue();
+            const int up_down = Settings::values.vr_immersive_hud_up_down.GetValue();
+            data.hud = VideoCore::HudMove::ForFrame(true, mode, across, up_down,
+                                                    g.menu_exact.Weight());
+            static int logged[2] = {0, 0};
+            if (across != logged[0] || up_down != logged[1]) {
+                logged[0] = across;
+                logged[1] = up_down;
+                LOG_INFO(Frontend, "xr: immersive: {} {:+d}%, {} {:+d}% (2D scales {:.2f} / {:.2f})",
+                         Names::kMoveHudInHorizontal, across, Names::kMoveHudInVertical, up_down,
+                         VideoCore::HudMove::ScaleForPercent(across),
+                         VideoCore::HudMove::ScaleForPercent(up_down));
+            }
+        }
         data.uoffset = -1;
         if (g.view.valid) {
             XrQuaternionf q = Normalized(Mul(Conj(g.ref.orientation), g.view.head.orientation));

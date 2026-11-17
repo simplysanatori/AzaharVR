@@ -400,6 +400,26 @@ Four per-game settings change this (**VR** group, logged as
   (proposed, not made: a tap of the right stick click while both grips hold the screen, which
   does nothing now).
 
+**Move HUD In** (AzaharFrame hudmove, experimental; `vr_immersive_hud_across` and
+`vr_immersive_hud_up_down`, per game and global, -20 to +40 %, 0 = off by default, read every
+frame; `video_core/vr_hud_move.h`). In the Full modes the game draws past its own frame and the
+screen is large, so a HUD at the frame's edges sits at the edges of the view (Mario Kart 7's,
+slightly out of it). The vertex shader already tells 2D from the world (`VrFactor`: w = 1 is 2D,
+and a 2D vertex on or past an edge keeps its place, so full-screen passes stay whole); 2D inside
+the view is now also scaled about the middle by `1 - percent / 100` per axis (clip y across, clip
+x up and down: the top screen is drawn turned). +10 % across moves an element at the side of a
+400 pixel picture 20 pixels in; negative values move it out. No register of any game is read, so
+a HUD that is not drawn with w = 1 does not move (nothing goes wrong, nothing changes). The
+scales go with the rest of the immersive data (`VRData::hud`, `SetVRHudMove`) and are 1
+whenever immersive mode is not engaged in mode 2 or 3 (Off, Wide, paused for the Secondary
+screen or the in-game menu); mode 2's menu rule eases them back to 1 with the factor, so a
+game's own full-screen menu keeps its icons on its backdrop. At 0 the shader divides by exactly
+1, so the picture is bit for bit the same. The cost: an element shrinks by the same scale (more
+across than up and down narrows it), a 2D element that touches an edge stretches (its edge
+vertex stays), 2D markers the game places over the world (names over karts) move with the HUD,
+and 2D drawn into the game's own off-screen pictures moves too. Logged as `xr: immersive: Move
+HUD In: Horizontal +10%, Move HUD In: Vertical +0% (2D scales 0.90 / 1.00)` when it changes.
+
 Saved sizes are relative to that default. The file's `world` lines are written by this build;
 `screen` and `view` lines (1.2.0 test builds) and `head` lines (1.0, 1.1) had sizes against other
 defaults:

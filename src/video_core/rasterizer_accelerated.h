@@ -7,6 +7,7 @@
 #include "video_core/rasterizer_interface.h"
 #include "video_core/shader/generator/pica_fs_config.h"
 #include "video_core/shader/generator/shader_uniforms.h"
+#include "video_core/vr_hud_move.h" // AzaharFrame hudmove
 
 namespace Memory {
 class MemorySystem;
@@ -37,6 +38,16 @@ protected:
     void SetVRData(const int32_t  &vrImmersiveMode, const float& immersiveModeFactor, int uoffset, const float& gamePosScaler, const float inv_view[16]) override;
     void SetVRFactorY(float factor_y) override; // AzaharFrame immersive
     void SetVRIpd(float ipd_m) override;         // AzaharFrame ipd
+    /// AzaharFrame hudmove: Move HUD In's scales into the vertex uniforms (VrFactor); one that
+    /// is not usable is taken as 1 (vr_hud_move.h UsableScale).
+    void SetVRHudMove(float across, float up_down) override {
+        const float a = HudMove::UsableScale(across), u = HudMove::UsableScale(up_down);
+        if (vs_data.vr_hud_across != a || vs_data.vr_hud_up_down != u) {
+            vs_data.vr_hud_across = a;
+            vs_data.vr_hud_up_down = u;
+            vs_data_dirty = true;
+        }
+    }
 
 protected:
     /// Structure that the hardware rendered vertices are composed of

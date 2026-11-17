@@ -45,6 +45,7 @@ add_executable(tests
     ../frame_xr/immersive_layout.cpp # AzaharFrame
     frame_xr/immersive_layout.cpp # AzaharFrame
     frame_xr/immersive_scale.cpp # AzaharFrame kiu
+    frame_xr/hud_move.cpp # AzaharFrame hudmove
     frame_xr/ipd.cpp # AzaharFrame ipd
     frame_xr/stereo.cpp # AzaharFrame stereo
     frame_xr/log_gate.cpp # AzaharFrame integ8
