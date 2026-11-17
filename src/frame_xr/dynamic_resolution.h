@@ -66,13 +66,15 @@
 //
 // AzaharFrame bfidr (report 76 item 4, the 1.2.x plan's Phase 1: Black Frame Insertion on the top
 // screen's quads in the Full modes breaks under GPU load, a late picture lit again doubles):
-//   - while it flashes (Second::bfi), a second is also bad on its symptoms (BfiRules,
-//     SymptomWindow): late releases or late pictures lit again, more than about one a second
-//     over the last 10 s, or the compositor missing refreshes, while the GPU is busy (not in the
-//     first 10 judged seconds after a start or a Load); 3 such seconds in a row step down
-//     (BfiRules::kDownAfter; the GPU's line alone keeps kDownAfter);
-//   - a step up only on a predicted cost under kUpBudget of a stricter line (BfiRules::kUpLine,
-//     7.0 ms at 120 Hz), in a second without symptoms;
+//   - while it flashes (Second::bfi), a second is also bad on a stricter line (BfiRules::kLine,
+//     7.0 ms at 120 Hz) or on its symptoms (BfiRules, SymptomWindow): late releases or late
+//     pictures lit again, more than about one a second over the last 10 s, or the compositor
+//     missing refreshes (xrEndFrame over 12 ms, under 118 display frames a second), while the
+//     GPU is busy; not in the first 10 judged seconds after a start, a Load or a new Internal
+//     Resolution, nor 3 after a pause; 3 such seconds in a row step down (BfiRules::kDownAfter;
+//     fixd's line keeps kDownAfter);
+//   - a step up only on a predicted cost under kUpBudget of the stricter line, in a second
+//     without symptoms;
 //   - the floor is still the Internal Resolution setting (only the immersive modes' two steps come
 //     off), and nothing of it runs with Dynamic Resolution off: it is the setting's rule;
 //   - the screen's ceiling (ScreenFactor, CeilingHold): no factor whose picture has more than
@@ -120,49 +122,51 @@ struct Second {
 };
 
 /// AzaharFrame bfidr: while Black Frame Insertion flashes in a Full mode, a picture late is lit
-/// again and doubles, and the compositor missing a refresh shows as a bright or dark blip (report
-/// 76: MK7 at 6x drawn, 2.8 late releases a second, 16 % uneven seconds, 7 seconds with an
-/// xrEndFrame over 12 ms in 77 s; at 4x drawn, report 79: 0.10 a second, 0 such seconds). So the
-/// symptoms count as well as the GPU's time (SymptomWindow), over the last kWindow judged seconds:
-///   - more than kLatePerSecond late releases a second, or late lit refreshes, counted over the
-///     whole window (a fixed kWindow seconds, however many are in: the pacing's relock after the
-///     VR menu, 4-6 late in one second, and a boot's burst are no trend);
-///   - kSlowSeconds or more seconds with an xrEndFrame over kEndFramePeriods display periods
-///     (12 ms at 120 Hz);
-///   - and only while the GPU is busy: GPU behind at kBusyShare of the period or more (5.0 ms at
-///     120 Hz; a GPU with room reads its fixed part, 3.5-4.5 ms in reports 72 and 76): symptoms of
-///     a stalled emulation thread (report 76's boot: 9-10 late releases a second at 2-3 ms) never
-///     lower the resolution; nor fast forward's (kGameRateMax).
-/// A step down after kDownAfter such seconds in a row; the GPU's line alone keeps fixd's
-/// Controller::kDownAfter. Replayed over the per-second lines of reports 76, 79 and 70 with both
-/// rules: the symptoms step in each bad MK7 window at 6x drawn within 3-5 s and in both OoT
-/// Render Margin 1.4 windows, never at 5x, 4x or 3x drawn, at a boot, a Load (kAfterStart),
-/// fast forward, in report 79's 504 s at 4x drawn, nor in KIU flat. OoT's steady 137 s at 6x
-/// with Render Margin 1.0 (7.3 ms, a third of its seconds over the line) has no symptom step,
-/// but the GPU's line steps it once, at its 81st second, as without Black Frame Insertion. A
-/// step up only on a predicted cost under Controller::kUpBudget of kUpLine (0.75 x 7.0 ms at
-/// 120 Hz) in a second without symptoms.
+/// again and doubles, and the compositor missing a refresh shows as a bright or dark blip. The
+/// owner's headset session (report 85, OoT mode 2 on quads: the flashing's rhythm perfect
+/// throughout) put the doubling and flicker on GPU overload: at 6x drawn 8-12 ms GPU behind, 8-34
+/// late releases a second and xrEndFrame 12-16 ms; at 8x drawn 67-101 display frames a second;
+/// at 5x drawn good until heavy rooms, where GPU behind reads 6.6-8.6 ms with no late releases at
+/// all; at 4x drawn (4.8 ms) still close to doubling in heavy rooms, with nothing in the log to
+/// tell. So a second is bad for Black Frame Insertion (Controller::SymptomBad):
+///   - GPU behind at kLine of the period or more (7.0 ms at 120 Hz); or
+///   - the GPU busy (kBusyShare of the period, 5.0 ms at 120 Hz; a GPU with room reads its fixed
+///     part, 3.5-4.5 ms in reports 72 and 76) and, over the last kWindow judged seconds
+///     (SymptomWindow), more than kLatePerSecond late releases a second or late pictures lit
+///     again, counted over the whole window (a fixed kWindow seconds however many are in: the
+///     pacing's relock after the VR menu, 4-6 late in one second, is no trend), or kSlowSeconds
+///     seconds with a compositor miss: an xrEndFrame over kEndFramePeriods display periods (12 ms
+///     at 120 Hz), or fewer display frames than kFramesShare of the rate (118 at 120 Hz);
+///   - never in fast forward (kGameRateMax), nor in the first kAfterStart judged seconds after a
+///     game's start, a Load or a new Internal Resolution, nor kAfterPause after a pause (the
+///     rasterizer cache filling again, the pacing relocking; report 79: 4-23 late releases a
+///     second and GPU behind 7-8 ms for 6-7 s after each Quick Load at 4x drawn, with the
+///     flashing steady around them); a stalled emulation thread (report 76's boot: 9-10 late a
+///     second at 2-3 ms) is under the busy line.
+/// kDownAfter such seconds in a row step down; fixd's own line (Controller::kBadBudget, never
+/// held) still steps after Controller::kDownAfter. A step up only on a predicted cost under
+/// Controller::kUpBudget of kLine (0.75 x 7.0 ms at 120 Hz) in a second without symptoms.
+/// Replayed over the per-second lines of reports 76, 79, 70 and 85 (handoff tools of report 84,
+/// replay_all.py): a step in every window the owner or the reports called bad (MK7 and OoT at 6x
+/// and up within 3-11 s, OoT at 5x drawn in report 85's heavy rooms at t=395), none at a boot or
+/// a Load, in report 79's 504 s of MK7 at 4x drawn, in KIU flat, nor at 4x drawn in report 85.
+/// OoT at 6x drawn with Render Margin 1.0 (report 76, 7.3 ms) now steps (report 85 saw doubling
+/// at that load).
 struct BfiRules {
     static constexpr int kDownAfter = 3;
     static constexpr int kWindow = 10;
     static constexpr double kLatePerSecond = 1.0;
     static constexpr int kSlowSeconds = 2;
     static constexpr double kEndFramePeriods = 1.44;
+    static constexpr double kFramesShare = 118.0 / 120.0;
     static constexpr double kBusyShare = 0.6;
-    /// Game frames a second over this are fast forward (the 3DS draws at most 59.8 a second):
-    /// late by design (report 76: 100-116 late releases a second at t=365-371), not judged by the
-    /// symptoms.
     static constexpr double kGameRateMax = 66.0;
-    /// Judged seconds after a game's start or a Load (its screens back) whose symptoms do not
-    /// count: the rasterizer cache fills again and the pacing relocks (report 79: 4-23 late
-    /// releases a second for 6-7 s after each Quick Load at 4x drawn, the GPU at 6.6-8.0 ms;
-    /// report 70: the same at 5x). The GPU's line still counts.
     static constexpr int kAfterStart = 10;
-    /// The stricter line step ups are judged against, a share of the period (7.0 ms at 120 Hz;
-    /// report 76: MK7's 5x drawn at 6.05 ms and 4x at 5.1 ms held the rhythm, 6x at 10.6 did not;
-    /// OoT degraded at 7.8 ms). Not a line for a step down alone: GPU behind is the time from a
-    /// submit to its fence, and OoT was steady at 7.3 ms.
-    static constexpr double kUpLine = 0.84;
+    static constexpr int kAfterPause = 3;
+    /// The stricter line, a share of the period (7.0 ms at 120 Hz): a bad second by itself, and
+    /// the line step ups are judged against (report 76: "about 7.0 ms"; report 85: OoT at 5x drawn
+    /// doubled in rooms at 6.6-8.6 ms, MK7's 4x drawn held at 5.1-5.6 ms in reports 72 and 79).
+    static constexpr double kLine = 0.84;
 };
 
 /// AzaharFrame bfidr: the symptoms of the last BfiRules::kWindow judged seconds (cleared at a
@@ -178,6 +182,9 @@ public:
     bool Symptoms() const;
     /// This second had none (a step up's second).
     static bool Clean(const Second& s);
+    /// No compositor miss this second: xrEndFrame within BfiRules::kEndFramePeriods periods and
+    /// the display frames at least BfiRules::kFramesShare of the rate.
+    static bool NoMiss(const Second& s);
     uint32_t LateReleases() const;
     uint32_t LateLit() const;
     int SlowSeconds() const;
@@ -325,9 +332,15 @@ public:
     /// up from `factor`, AzaharFrame flash3); neither: neutral.
     static bool Bad(const Second& s);
     bool Good(const Second& s, int factor) const;
-    /// AzaharFrame bfidr: with Black Frame Insertion, the symptoms of the window with this second
-    /// (the GPU busy too, BfiRules::kBusyShare); false without it.
+    /// AzaharFrame bfidr: with Black Frame Insertion, the stricter line or the symptoms of the
+    /// window with this second (the GPU busy too); false without it, in fast forward, or in the
+    /// hold after a start, a Load, a reset or a pause.
     bool SymptomBad(const Second& s) const;
+    /// AzaharFrame bfidr: the symptoms wait BfiRules::kAfterStart judged seconds (a new Internal
+    /// Resolution: the rasterizer cache fills again).
+    void HoldSymptoms() {
+        symptom_hold = BfiRules::kAfterStart;
+    }
     /// AzaharFrame bfidr: what the last step down was for: the symptoms (true) or the GPU's line.
     bool LastStepSymptoms() const {
         return last_symptoms;

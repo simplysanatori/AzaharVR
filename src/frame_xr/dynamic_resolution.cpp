@@ -39,7 +39,7 @@ void SymptomWindow::Add(const Second& s) {
     Entry& e = entries[next];
     e.late = s.late_releases;
     e.lit = s.late_lit;
-    e.slow = s.period_ms > 0.0 && s.end_frame_max_ms > BfiRules::kEndFramePeriods * s.period_ms;
+    e.slow = !SymptomWindow::NoMiss(s);
     next = (next + 1) % BfiRules::kWindow;
     n = std::min(n + 1, BfiRules::kWindow);
 }
@@ -75,9 +75,18 @@ bool SymptomWindow::Symptoms() const {
     return LateReleases() > most || LateLit() > most || SlowSeconds() >= BfiRules::kSlowSeconds;
 }
 
+bool SymptomWindow::NoMiss(const Second& s) {
+    if (s.period_ms <= 0.0) {
+        return true;
+    }
+    // xrEndFrame blocked past the next refresh, or refreshes the loop never ended.
+    const double rate = 1000.0 / s.period_ms * std::max(s.seconds, 0.0);
+    return s.end_frame_max_ms <= BfiRules::kEndFramePeriods * s.period_ms &&
+           (s.display_frames == 0 || s.display_frames >= BfiRules::kFramesShare * rate);
+}
+
 bool SymptomWindow::Clean(const Second& s) {
-    return s.late_releases <= 1 && s.late_lit <= 1 &&
-           !(s.period_ms > 0.0 && s.end_frame_max_ms > BfiRules::kEndFramePeriods * s.period_ms);
+    return s.late_releases <= 1 && s.late_lit <= 1 && NoMiss(s);
 }
 
 double ScreenCoverage(const ScreenCover& c) { // AzaharFrame bfidr
@@ -191,7 +200,7 @@ bool Controller::Good(const Second& s, int factor) const {
     if (s.bfi) {
         // AzaharFrame bfidr: under the stricter line, in a second without symptoms.
         return SymptomWindow::Clean(s) && !window.Symptoms() &&
-               PredictUp(s.gpu_ms, factor) < kUpBudget * BfiRules::kUpLine * s.period_ms;
+               PredictUp(s.gpu_ms, factor) < kUpBudget * BfiRules::kLine * s.period_ms;
     }
     return PredictUp(s.gpu_ms, factor) < kUpBudget * kBadBudget * s.period_ms;
 }
@@ -203,8 +212,12 @@ bool FastForward(const Second& s) { // AzaharFrame bfidr
 } // namespace
 
 bool Controller::SymptomBad(const Second& s) const { // AzaharFrame bfidr
-    return s.bfi && !FastForward(s) && s.period_ms > 0.0 && s.gpu_frames >= kMinGpuFrames &&
-           s.gpu_ms >= BfiRules::kBusyShare * s.period_ms && window.Symptoms();
+    if (!s.bfi || symptom_hold > 0 || FastForward(s) || s.period_ms <= 0.0 ||
+        s.gpu_frames < kMinGpuFrames) {
+        return false;
+    }
+    return s.gpu_ms >= BfiRules::kLine * s.period_ms ||
+           (s.gpu_ms >= BfiRules::kBusyShare * s.period_ms && window.Symptoms());
 }
 
 bool Controller::Blocked(int level) const { // AzaharFrame fixd
@@ -301,7 +314,8 @@ int Controller::Judge(const Second& s, int max_drop, int min_drop) {
     }
     if (s.emu_frames == 0 || s.seconds <= 0.0 || s.period_ms <= 0.0) {
         bad = good = 0; // paused or the menu: nothing to judge, the streaks start again
-        symptom_bad = 0; // AzaharFrame bfidr
+        symptom_bad = 0; // AzaharFrame bfidr: and the return's relock is not judged
+        symptom_hold = std::max(symptom_hold, BfiRules::kAfterPause);
         window.Clear();
         return Drop();
     }
@@ -322,15 +336,17 @@ int Controller::Judge(const Second& s, int max_drop, int min_drop) {
         cost_n[factor]++;
     }
     // AzaharFrame bfidr: with Black Frame Insertion its symptoms count too (BfiRules).
-    if (symptom_hold > 0) { // AzaharFrame bfidr: a start's or a Load's own burst
-        symptom_hold--;
-        window.Clear();
-    } else if (!s.bfi) {
+    // AzaharFrame bfidr: a start's, a Load's or a pause's own burst is not judged by these rules
+    const bool held = symptom_hold > 0;
+    if (!s.bfi || held) {
         window.Clear();
     } else if (!FastForward(s)) {
         window.Add(s);
     }
     const bool symptoms = SymptomBad(s);
+    if (held) {
+        symptom_hold--;
+    }
     if (Bad(s) || symptoms) {
         if (bad == 0) { // AzaharFrame fixd: a new run, its cost from here
             run_sum = 0.0;
@@ -709,10 +725,11 @@ void NoteSecond(const Second& s) {
         if (s.bfi) {
             LOG_INFO(Frontend,
                      "xr: Dynamic Resolution: Black Frame Insertion's rules on (down after {} "
-                     "seconds with late pictures or compositor misses, up under {:.1f} ms "
-                     "predicted, no factor over what the screen can show)",
-                     BfiRules::kDownAfter,
-                     Controller::kUpBudget * BfiRules::kUpLine * s.period_ms);
+                     "seconds with GPU behind at {:.1f} ms or more, late pictures or compositor "
+                     "misses, up under {:.1f} ms predicted, no factor over what the screen can "
+                     "show)",
+                     BfiRules::kDownAfter, BfiRules::kLine * s.period_ms,
+                     Controller::kUpBudget * BfiRules::kLine * s.period_ms);
         } else {
             LOG_INFO(Frontend, "xr: Dynamic Resolution: Black Frame Insertion's rules off");
         }
@@ -742,11 +759,13 @@ void NoteSecond(const Second& s) {
         if (g_controller.LastStep() > 0 && g_controller.LastStepSymptoms()) {
             // AzaharFrame bfidr: what the window held
             const SymptomWindow& w = g_controller.StepWindow();
-            why = fmt::format("{} bad seconds in a row with Black Frame Insertion: {} late "
-                              "releases, {} late pictures lit again, {} seconds with an "
-                              "xrEndFrame over {:.1f} ms in the last {} s",
-                              BfiRules::kDownAfter, w.LateReleases(), w.LateLit(), w.SlowSeconds(),
-                              BfiRules::kEndFramePeriods * s.period_ms, w.Size());
+            why = fmt::format("{} bad seconds in a row with Black Frame Insertion (GPU behind "
+                              "at {:.1f} ms or more, or with it over {:.1f} ms: {} late releases, "
+                              "{} late pictures lit again, {} seconds with a compositor miss in "
+                              "the last {} s)",
+                              BfiRules::kDownAfter, BfiRules::kLine * s.period_ms,
+                              BfiRules::kBusyShare * s.period_ms, w.LateReleases(), w.LateLit(),
+                              w.SlowSeconds(), w.Size());
         } else if (g_controller.LastStep() > 0) {
             why = fmt::format("{} bad seconds in a row", Controller::kDownAfter);
         } else if (g_controller.LastStep() < 0) {
@@ -795,6 +814,7 @@ void Reset() {
     std::scoped_lock lock{g_mutex};
     g_pending_start = false; // AzaharFrame fixd: the setting's change wins over the remembered level
     ResetLocked("reset to the setting: Internal Resolution changed"); // AzaharFrame fixd: was "from the factor itself again"
+    g_controller.HoldSymptoms(); // AzaharFrame bfidr: the new factor's own burst
 }
 
 void SetEnabled(bool on) {

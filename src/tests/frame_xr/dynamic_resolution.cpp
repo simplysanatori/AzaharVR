@@ -878,6 +878,62 @@ TEST_CASE("Dynamic Resolution: Black Frame Insertion's symptoms window", "[frame
     CHECK_FALSE(SymptomWindow::Clean(Bfi(6.0, 2)));
     CHECK_FALSE(SymptomWindow::Clean(Bfi(6.0, 0, 2)));
     CHECK(SymptomWindow::Clean(Bfi(6.0, 1, 1)));
+    // Display frames under 118 of 120 (refreshes the loop never ended) are a miss too.
+    Second short_second = Bfi(6.0);
+    short_second.display_frames = 110;
+    CHECK_FALSE(SymptomWindow::NoMiss(short_second));
+    short_second.display_frames = 118;
+    CHECK(SymptomWindow::NoMiss(short_second));
+    Second short90 = Bfi(6.0, 0, 0, 1.0, k90);
+    short90.display_frames = 87; // 88.5 is the line at 90 Hz
+    CHECK_FALSE(SymptomWindow::NoMiss(short90));
+    w.Clear();
+    short_second.display_frames = 101; // report 85 at 8x drawn: 67-101 a second
+    w.Add(short_second);
+    w.Add(short_second);
+    CHECK(w.Symptoms());
+}
+
+// AzaharFrame bfidr: report 85, the owner's headset session (OoT mode 2, Black Frame Insertion on
+// quads, its rhythm perfect throughout): the owner saw doubling at 5x drawn in heavy rooms (GPU
+// behind 6.6-8.6 ms, no late releases) and at 6x; "almost" at 4x drawn, with nothing in the log.
+TEST_CASE("Dynamic Resolution: with Black Frame Insertion, report 85's seconds",
+          "[frame_xr][bfidr]") {
+    struct Row {
+        double gpu;
+        uint32_t late;
+    };
+    // 5x drawn (a 3x setting), the heavy rooms from t=377.
+    const Row heavy[] = {{8.3, 7}, {8.1, 0}, {8.2, 0}, {6.6, 0}, {8.6, 1}};
+    Controller c;
+    int at = 0;
+    for (const Row& r : heavy) {
+        at++;
+        if (c.Judge(Bfi(r.gpu, r.late), 3) == 1) {
+            break;
+        }
+    }
+    CHECK(c.Drop() == 1);
+    CHECK(at == 3);
+    // Without Black Frame Insertion the same seconds are no step (fixd: 5 over 7.5 ms in a row).
+    Controller off;
+    for (const Row& r : heavy) {
+        Second s = Bfi(r.gpu, r.late);
+        s.bfi = false;
+        off.Judge(s, 3);
+    }
+    CHECK(off.Drop() == 0);
+    // 4x drawn (a 2x setting), t=476-495: nothing to see, nothing done. The floor (the setting)
+    // is not what holds it there: with the floor at 1x it would not step either.
+    const double light[] = {5.3, 5.7, 4.7, 4.8, 4.6, 5.2, 5.6, 5.6, 5.0, 4.6,
+                            5.0, 4.7, 4.8, 5.9, 5.4, 5.4, 5.6, 4.7, 4.9, 6.0};
+    Controller l;
+    for (int round = 0; round < 10; round++) {
+        for (const double g : light) {
+            l.Judge(Bfi(g, 0), 3);
+        }
+    }
+    CHECK(l.Drop() == 0);
 }
 
 TEST_CASE("Dynamic Resolution: with Black Frame Insertion, down on the symptoms after 3 seconds",
@@ -903,11 +959,19 @@ TEST_CASE("Dynamic Resolution: with Black Frame Insertion, down on the symptoms 
     CHECK(Run(lit, Bfi(6.0, 0, 4), 5) == 1);
     Controller slow;
     CHECK(Run(slow, Bfi(6.0, 0, 0, 13.0), 4) == 1); // the 2nd second fills the window, 3 more
-    // The GPU's line alone (no symptoms) keeps fixd's 5 seconds in a row.
+    // The stricter line alone (0.84 of the period, 7.0 ms at 120 Hz): 3 seconds too.
     Controller line;
-    CHECK(Run(line, Bfi(8.0), 4) == 0);
-    CHECK(line.Judge(Bfi(8.0), 2) == 1);
-    CHECK_FALSE(line.LastStepSymptoms());
+    CHECK(Run(line, Bfi(7.2), 2) == 0);
+    CHECK(line.Judge(Bfi(7.2), 2) == 1);
+    CHECK(line.LastStepSymptoms());
+    // Without Black Frame Insertion: fixd's line (7.5 ms) and 5 seconds.
+    Second p72 = Bfi(7.2), p80 = Bfi(8.0);
+    p72.bfi = p80.bfi = false;
+    Controller plain_line;
+    CHECK(Run(plain_line, p72, 100) == 0);
+    CHECK(Run(plain_line, p80, 4) == 0);
+    CHECK(plain_line.Judge(p80, 2) == 1);
+    CHECK_FALSE(plain_line.LastStepSymptoms());
     // A second without symptoms ends the run; the window then has to show them again.
     Controller broken;
     Run(broken, Bfi(6.0, 6), 3); // 18 late in 3 s: 2 symptom seconds (the 2nd and 3rd)

@@ -889,22 +889,31 @@ steps) arrive late, and a late picture lit again doubles. With Dynamic Resolutio
 (`vr_dynamic_resolution`; nothing of this runs with it off, and nothing turns it on) and the top
 screen flashing in a Full mode for most of a second (`DynamicResolution::Second::bfi`, counted in
 the layer block: not held for a slow game, never in the projection layer), the second is also bad
-on its symptoms (`BfiRules`, `SymptomWindow`): over the last 10 judged seconds more than 10 late
-releases of the top screen, or more than 10 late pictures lit again (Motion Clarity's "lit for:
-late"), or 2 seconds with an xrEndFrame over 1.44 display periods (12 ms at 120 Hz); and only while
-GPU behind is at least 0.6 of the period (5.0 ms at 120 Hz) and the game runs at most at the 3DS's
-rate, so a stalled emulation thread, a boot or fast forward never lowers it. Three such seconds in
-a row step down one step; the GPU's own line (0.9 of the period) keeps fixd's five. A step up needs
-the predicted cost (fixd's `Ratio`) under 0.75 of a stricter line, 0.84 of the period (5.25 ms at
-120 Hz), in a second with at most one late release, one late lit picture and no compositor miss.
-The symptoms do not count for the first 10 judged seconds after a game's start or a Load (the
-rasterizer cache filling again: 4 to 23 late releases a second for 6 to 7 s at 4x drawn, report
-79). The floor stays the Internal Resolution setting, so only the two immersive steps come off.
-Replayed over the per-second lines of reports 76, 79 and 70: the symptoms step in each bad MK7
-window at 6x drawn within 3 to 5 s and in both OoT Render Margin 1.4 windows, and never at 5x, 4x
-or 3x drawn, a boot, a Load, fast forward, report 79's 504 s at 4x drawn, or KIU flat. OoT's
-steady 137 s at 6x with Render Margin 1.0 has no symptom step, but the GPU's own line steps it
-once (at its 81st second), as it does without Black Frame Insertion.
+for it (`Controller::SymptomBad`, `BfiRules`, `SymptomWindow`) when GPU behind is at 0.84 of the
+period or more (7.0 ms at 120 Hz), or when it is at least 0.6 of the period (5.0 ms) and the last
+10 judged seconds hold more than 10 late releases of the top screen, more than 10 late pictures
+lit again (Motion Clarity's "lit for: late"), or 2 seconds with a compositor miss (an xrEndFrame
+over 1.44 display periods, 12 ms at 120 Hz, or fewer than 118 of 120 display frames). Fast forward
+is never judged so, nor the first 10 judged seconds after a game's start, a Load or a new Internal
+Resolution, nor 3 after a pause (the rasterizer cache filling again and the pacing relocking: 4 to
+23 late releases a second and 7 to 8 ms for 6 to 7 s after each Quick Load at 4x drawn, report
+79). Three such seconds in a row step down one step; fixd's own line (0.9 of the period) still
+steps after five. A step up needs the predicted cost (fixd's `Ratio`) under 0.75 of the stricter
+line (5.25 ms at 120 Hz), in a second with at most one late release, one late lit picture and no
+compositor miss. The floor stays the Internal Resolution setting, so only the two immersive steps
+come off.
+
+Why the stricter line counts by itself: the owner's headset session of report 85 (OoT mode 2 on
+quads, the flashing's rhythm perfect throughout) saw doubling at 5x drawn in heavy rooms where GPU
+behind read 6.6 to 8.6 ms with no late release and no compositor miss in the log, and at 6x drawn
+and up (8 to 12 ms, 8 to 34 late releases a second, xrEndFrame 12 to 16 ms; 67 to 101 display
+frames a second at 8x). Replayed over the per-second lines of reports 76, 79, 70 and 85
+(`replay_all.py` in report 84's tools): a step in every window the owner or the reports called
+bad (MK7 and OoT at 6x drawn and up within 3 to 11 s, OoT at 5x drawn in report 85's heavy rooms),
+none at a boot or a Load, in report 79's 504 s of MK7 at 4x drawn, in KIU flat, or at 4x drawn in
+report 85. At 4x drawn (a 2x setting) the owner still saw near-doubling in heavy rooms, but GPU
+behind stayed at 3.4 to 6.0 ms with no late release and no miss: nothing this controller reads
+shows it, so it would not step there even with the floor under the setting.
 
 Also while it flashes, a ceiling from what the screen can show (`ScreenCoverage`, averaged over
 the second): no factor whose
