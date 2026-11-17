@@ -904,13 +904,14 @@ struct Values {
     // fovaxis: Field of View crops below the game's own frame (fov100 and before: a squash
     // there) and draws at most 1.6x; Stretch keeps the axes within 1.5 of each other.
     SwitchableSetting<u32, true> vr_immersive_scale_mode{1, 0, 1, "vr_immersive_scale_mode"};
-    // AzaharFrame hudmove: Move HUD In (experimental; Full modes only, per game and global, 0 =
-    // off by default, read every frame): the game's flat 2D drawing on the Primary screen (its
-    // HUD) moved this many percent of its distance from the middle toward it, across and up and
-    // down; negative moves it outward (video_core/vr_hud_move.h). Older builds ignore the keys.
-    SwitchableSetting<s32, true> vr_immersive_hud_across{0, -20, 40, "vr_immersive_hud_across"};
-    SwitchableSetting<s32, true> vr_immersive_hud_up_down{0, -20, 40,
-                                                          "vr_immersive_hud_up_down"};
+    // AzaharFrame hudmove: HUD Spacing (experimental; Full modes only, per game and global, read
+    // every frame): the game's flat 2D drawing on the Primary screen (its HUD) at this percent of
+    // its own distance from the middle, across (x) and up and down (y), 60 to 120; 100 (the
+    // default) is the game's own (video_core/vr_hud_spacing.h). Older builds ignore the keys.
+    SwitchableSetting<s32, true> vr_immersive_hud_spacing_x{100, 60, 120,
+                                                            "vr_immersive_hud_spacing_x"};
+    SwitchableSetting<s32, true> vr_immersive_hud_spacing_y{100, 60, 120,
+                                                            "vr_immersive_hud_spacing_y"};
     // AzaharFrame: how the Frame's A, B, X and Y map to the 3DS (global only): 0 = by position
     // (Frame A, at the bottom, is the 3DS B, ...), 1 = by label (A is A). Read every frame
     // (frame_xr/input/mapper.h).

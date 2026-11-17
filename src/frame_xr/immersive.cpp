@@ -1554,21 +1554,22 @@ void OnFrame(const FrameInfo& info) {
         data.mode = static_cast<s32>(mode);
         data.factor = mode < 2 ? kWideFactor : g.solved.factor;
         data.factor_y = mode < 2 ? kWideFactor : g.solved.factor_y;
-        // AzaharFrame hudmove: Move HUD In, the Full modes only, eased off with mode 2's menu
-        // rule (video_core/vr_hud_move.h); logged when the setting changes.
+        // AzaharFrame hudmove: HUD Spacing, the Full modes only, eased off with mode 2's menu
+        // rule (video_core/vr_hud_spacing.h); logged when the setting changes.
         {
-            const int across = Settings::values.vr_immersive_hud_across.GetValue();
-            const int up_down = Settings::values.vr_immersive_hud_up_down.GetValue();
-            data.hud = VideoCore::HudMove::ForFrame(true, mode, across, up_down,
-                                                    g.menu_exact.Weight());
-            static int logged[2] = {0, 0};
-            if (across != logged[0] || up_down != logged[1]) {
-                logged[0] = across;
-                logged[1] = up_down;
-                LOG_INFO(Frontend, "xr: immersive: {} {:+d}%, {} {:+d}% (2D scales {:.2f} / {:.2f})",
-                         Names::kMoveHudInHorizontal, across, Names::kMoveHudInVertical, up_down,
-                         VideoCore::HudMove::ScaleForPercent(across),
-                         VideoCore::HudMove::ScaleForPercent(up_down));
+            const int spacing_x = Settings::values.vr_immersive_hud_spacing_x.GetValue();
+            const int spacing_y = Settings::values.vr_immersive_hud_spacing_y.GetValue();
+            data.hud = VideoCore::HudSpacing::ForFrame(true, mode, spacing_x, spacing_y,
+                                                       g.menu_exact.Weight());
+            static int logged[2] = {VideoCore::HudSpacing::kDefaultSpacing,
+                                    VideoCore::HudSpacing::kDefaultSpacing};
+            if (spacing_x != logged[0] || spacing_y != logged[1]) {
+                logged[0] = spacing_x;
+                logged[1] = spacing_y;
+                LOG_INFO(Frontend, "xr: immersive: {} {}%, {} {}% (2D scales {:.2f} / {:.2f})",
+                         Names::kHudSpacingHorizontal, spacing_x, Names::kHudSpacingVertical,
+                         spacing_y, VideoCore::HudSpacing::ScaleForSpacing(spacing_x),
+                         VideoCore::HudSpacing::ScaleForSpacing(spacing_y));
             }
         }
         data.uoffset = -1;

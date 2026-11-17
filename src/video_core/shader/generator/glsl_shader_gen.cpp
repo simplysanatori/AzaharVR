@@ -45,7 +45,7 @@ R"(    mat4 freecam_matrix;
 #endif
 R"(    float vr_immersive_mode_factor; // CitraVR: appended last to keep existing offsets
     float vr_immersive_mode_factor_y; // AzaharFrame immersive: up and down (clip x)
-    float vr_hud_up_down; // AzaharFrame hudmove: Move HUD In, 2D inside the view (clip x)
+    float vr_hud_up_down; // AzaharFrame hudmove: HUD Spacing, 2D inside the view (clip x)
     float vr_hud_across;  // and across (clip y); 1 = where the game draws it
 };
 
@@ -56,7 +56,7 @@ const vec2 EPSILON_Z = vec2(0.000001f, -1.00001f);
 // pass (a depth or stencil mask, a copy of the last frame) still covers the whole picture, where
 // shrunk it cut the world off at the game's own frame (Ocarina of Time 3D) or nested copies of
 // the last frame (Majora's Mask 3D). 2D inside the view (the HUD) shrinks with the world.
-// AzaharFrame hudmove: and by Move HUD In's scales on top (video_core/vr_hud_move.h; 1 = none).
+// AzaharFrame hudmove: and by HUD Spacing's scales on top (video_core/vr_hud_spacing.h; 1 = none).
 vec2 VrFactor(vec4 pos) {
     vec2 f = vec2(vr_immersive_mode_factor_y, vr_immersive_mode_factor);
     if (abs(pos.w - 1.0) < 0.0001) {

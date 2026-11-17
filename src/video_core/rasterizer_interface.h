@@ -87,9 +87,9 @@ public:
     virtual void SetVRData(const int32_t &vrImmersiveMode, const float& immersiveModeFactor, int uoffset, const float& gamePosScaler, const float inv_view[16]) {}
     /// AzaharFrame immersive: the periphery factor up and down (SetVRData's is across).
     virtual void SetVRFactorY(float factor_y) {}
-    /// AzaharFrame hudmove: Move HUD In's scales of 2D inside the view, across and up and down
-    /// (video_core/vr_hud_move.h; 1 = none).
-    virtual void SetVRHudMove(float across, float up_down) {}
+    /// AzaharFrame hudmove: HUD Spacing's scales of 2D inside the view, across and up and down
+    /// (video_core/vr_hud_spacing.h; 1 = none).
+    virtual void SetVRHudSpacing(float across, float up_down) {}
     /// AzaharFrame ipd: the headset's IPD in metres (mode 3's eye separation).
     virtual void SetVRIpd(float ipd_m) {}
 

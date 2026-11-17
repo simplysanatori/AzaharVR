@@ -32,7 +32,7 @@
 #include "common/frame_vr_depth.h" // AzaharFrame stereo
 #include "common/settings.h"
 #include "video_core/rasterizer_interface.h"
-#include "video_core/vr_hud_move.h"    // AzaharFrame hudmove
+#include "video_core/vr_hud_spacing.h"    // AzaharFrame hudmove
 #include "video_core/vr_view_matrix.h" // AzaharFrame depth
 #include "video_core/xr_content_pose.h" // AzaharFrame doubling
 
@@ -53,8 +53,8 @@ struct VRData {
     /// AzaharFrame ipd: the headset's IPD in metres (frame_xr/ipd_smoother.h), CitraVR's 0.065
     /// until it is known: mode 3 puts the game's eyes vr_game_pos_scaler x this apart.
     float ipd = 0.065f;
-    /// AzaharFrame hudmove: Move HUD In's scales for 2D inside the view (1: none).
-    HudMove::Scales hud{};
+    /// AzaharFrame hudmove: HUD Spacing's scales for 2D inside the view (1: none).
+    HudSpacing::Scales hud{};
 };
 
 /// AzaharFrame ipd: the IPD the rasterizer uses: `ipd_m` when it is one, else `fallback_m`.
@@ -914,7 +914,7 @@ inline void ApplyPending(RasterizerInterface* rasterizer) {
     rasterizer->SetVRData(d.mode, d.factor, d.uoffset, d.game_pos_scaler, d.inv_view.data());
     rasterizer->SetVRFactorY(d.factor_y);
     rasterizer->SetVRIpd(d.ipd);
-    rasterizer->SetVRHudMove(d.hud.across, d.hud.up_down); // AzaharFrame hudmove
+    rasterizer->SetVRHudSpacing(d.hud.across, d.hud.up_down); // AzaharFrame hudmove
     g_content.Applied(d.pose);
 }
 

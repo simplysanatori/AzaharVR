@@ -12,7 +12,7 @@ add_executable(frame_xr_picker_tests
     homebrew_uninstall.cpp # AzaharFrame emhb
     angels_aim_menu.cpp # AzaharFrame kiufix
     verified_chip.cpp # AzaharFrame fixd
-    hud_move_menu.cpp # AzaharFrame hudmove
+    hud_spacing_menu.cpp # AzaharFrame hudmove
 )
 target_link_libraries(frame_xr_picker_tests PRIVATE frame_xr_picker_core frame_xr_menu catch2)
 add_test(NAME frame_xr_picker_tests COMMAND frame_xr_picker_tests)

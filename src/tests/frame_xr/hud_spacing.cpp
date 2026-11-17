@@ -2,7 +2,7 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
-// AzaharFrame hudmove: Move HUD In (video_core/vr_hud_move.h): which vertices move (the vertex
+// AzaharFrame hudmove: HUD Spacing (video_core/vr_hud_spacing.h): which vertices move (the vertex
 // shader's 2D rule), how far, when the XR thread turns it on, and the plumbing to the shader.
 
 #include <cmath>
@@ -14,14 +14,14 @@
 #include "common/settings.h"
 #include "video_core/shader/generator/glsl_shader_gen.h"
 #include "video_core/shader/generator/shader_uniforms.h"
-#include "video_core/vr_hud_move.h"
+#include "video_core/vr_hud_spacing.h"
 #include "video_core/vr_immersive.h"
 
 using Catch::Approx;
-using namespace VideoCore::HudMove;
+using namespace VideoCore::HudSpacing;
 
 namespace {
-// The vertex shader's rule before Move HUD In (immersive_scale.cpp pins the same text).
+// The vertex shader's rule before HUD Spacing (immersive_scale.cpp pins the same text).
 Clip Before(Clip p, float factor, float factor_y) {
     float fx = factor_y, fy = factor;
     if (std::abs(p.w - 1.0f) < 0.0001f) {
@@ -32,18 +32,19 @@ Clip Before(Clip p, float factor, float factor_y) {
 }
 } // namespace
 
-TEST_CASE("FrameXr hudmove: percent to scale", "[frame_xr][hudmove]") {
-    REQUIRE(ScaleForPercent(0) == 1.0f);
-    REQUIRE(ScaleForPercent(10) == Approx(0.9f));
-    REQUIRE(ScaleForPercent(-10) == Approx(1.1f));
-    // The range ends: +40 % in, 20 % out; past them clamped.
-    REQUIRE(ScaleForPercent(kMaxPercent) == Approx(0.6f));
-    REQUIRE(ScaleForPercent(kMinPercent) == Approx(1.2f));
-    REQUIRE(ScaleForPercent(1000) == ScaleForPercent(kMaxPercent));
-    REQUIRE(ScaleForPercent(-1000) == ScaleForPercent(kMinPercent));
+TEST_CASE("FrameXr hudmove: spacing to scale", "[frame_xr][hudmove]") {
+    // 100 % is the game's own: exactly 1, so the shader divides by exactly 1.
+    REQUIRE(ScaleForSpacing(kDefaultSpacing) == 1.0f);
+    REQUIRE(ScaleForSpacing(90) == Approx(0.9f));
+    REQUIRE(ScaleForSpacing(110) == Approx(1.1f));
+    // The range ends: 60 % (in), 120 % (out); past them clamped.
+    REQUIRE(ScaleForSpacing(kMinSpacing) == Approx(0.6f));
+    REQUIRE(ScaleForSpacing(kMaxSpacing) == Approx(1.2f));
+    REQUIRE(ScaleForSpacing(0) == ScaleForSpacing(kMinSpacing));
+    REQUIRE(ScaleForSpacing(1000) == ScaleForSpacing(kMaxSpacing));
     // Every value of the range is one the rasterizer takes.
-    for (int p = kMinPercent; p <= kMaxPercent; ++p) {
-        REQUIRE(UsableScale(ScaleForPercent(p)) == ScaleForPercent(p));
+    for (int p = kMinSpacing; p <= kMaxSpacing; ++p) {
+        REQUIRE(UsableScale(ScaleForSpacing(p)) == ScaleForSpacing(p));
     }
     // Anything else is no change.
     REQUIRE(UsableScale(0.0f) == 1.0f);
@@ -56,36 +57,36 @@ TEST_CASE("FrameXr hudmove: percent to scale", "[frame_xr][hudmove]") {
 TEST_CASE("FrameXr hudmove: only engaged Full modes move the HUD", "[frame_xr][hudmove]") {
     // Off, Wide, not engaged (paused for the Secondary screen or the in-game menu): nothing.
     for (unsigned mode : {0u, 1u, 4u, 9u}) {
-        REQUIRE(ForFrame(true, mode, 20, 10, 0.0f).IsIdentity());
+        REQUIRE(ForFrame(true, mode, 80, 90, 0.0f).IsIdentity());
     }
-    REQUIRE(ForFrame(false, 2, 20, 10, 0.0f).IsIdentity());
-    REQUIRE(ForFrame(false, 3, 20, 10, 0.0f).IsIdentity());
+    REQUIRE(ForFrame(false, 2, 80, 90, 0.0f).IsIdentity());
+    REQUIRE(ForFrame(false, 3, 80, 90, 0.0f).IsIdentity());
     // The Full modes: each axis its own value.
     for (unsigned mode : {2u, 3u}) {
-        const Scales s = ForFrame(true, mode, 20, 10, 0.0f);
+        const Scales s = ForFrame(true, mode, 80, 90, 0.0f);
         REQUIRE(s.across == Approx(0.8f));
         REQUIRE(s.up_down == Approx(0.9f));
     }
-    // Both 0 (the default): exactly 1, so the shader divides by exactly 1.
-    REQUIRE(ForFrame(true, 3, 0, 0, 0.0f).IsIdentity());
+    // Both 100 % (the default): exactly 1, so the shader divides by exactly 1.
+    REQUIRE(ForFrame(true, 3, 100, 100, 0.0f).IsIdentity());
     // Mode 2's menu rule eases it back: halfway at weight 0.5, none at 1.
-    const Scales half = ForFrame(true, 2, 20, -10, 0.5f);
+    const Scales half = ForFrame(true, 2, 80, 110, 0.5f);
     REQUIRE(half.across == Approx(0.9f));
     REQUIRE(half.up_down == Approx(1.05f));
-    REQUIRE(ForFrame(true, 2, 20, -10, 1.0f).IsIdentity());
+    REQUIRE(ForFrame(true, 2, 80, 110, 1.0f).IsIdentity());
     // A weight out of range or not a number is taken in range or as 0.
-    REQUIRE(ForFrame(true, 2, 20, 0, 3.0f).IsIdentity());
-    REQUIRE(ForFrame(true, 2, 20, 0, -1.0f).across == Approx(0.8f));
-    REQUIRE(ForFrame(true, 2, 20, 0, std::numeric_limits<float>::quiet_NaN()).across ==
+    REQUIRE(ForFrame(true, 2, 80, 100, 3.0f).IsIdentity());
+    REQUIRE(ForFrame(true, 2, 80, 100, -1.0f).across == Approx(0.8f));
+    REQUIRE(ForFrame(true, 2, 80, 100, std::numeric_limits<float>::quiet_NaN()).across ==
             Approx(0.8f));
 }
 
 TEST_CASE("FrameXr hudmove: which vertices move", "[frame_xr][hudmove]") {
     const Scales none{};
-    const Scales in{0.8f, 0.9f}; // 20 % across, 10 % up and down
+    const Scales in{0.8f, 0.9f}; // 80 % across, 90 % up and down
     const float factor = 1.55f, factor_y = 1.7f;
 
-    SECTION("at 0 % every vertex is exactly where it was") {
+    SECTION("at 100 % every vertex is exactly where it was") {
         for (float w : {1.0f, 1.00005f, 0.5f, 3.0f, -2.0f}) {
             for (float x : {-1.2f, -1.0f, -0.9995f, -0.5f, 0.0f, 0.3f, 0.998f, 1.0f}) {
                 for (float y : {-1.0f, -0.7f, 0.0f, 0.42f, 0.9991f, 1.3f}) {
@@ -111,7 +112,7 @@ TEST_CASE("FrameXr hudmove: which vertices move", "[frame_xr][hudmove]") {
         const Clip plain = ApplyVertex({0.6f, 0.95f, 1.0f}, 1.0f, 1.0f, in);
         REQUIRE(plain.x == Approx(0.54f));
         REQUIRE(plain.y == Approx(0.76f));
-        // Negative values move it out.
+        // Above 100 % spreads it out.
         const Clip out = ApplyVertex({0.5f, 0.5f, 1.0f}, 1.0f, 1.0f, {1.1f, 1.2f});
         REQUIRE(out.y == Approx(0.55f));
         REQUIRE(out.x == Approx(0.6f));
@@ -147,8 +148,8 @@ TEST_CASE("FrameXr hudmove: which vertices move", "[frame_xr][hudmove]") {
         REQUIRE(l.y < r.y);
         REQUIRE((l.y + r.y) / 2.0f == Approx((left + right) / 2.0f * 0.8f));
         REQUIRE(r.y - l.y == Approx((right - left) * 0.8f)); // and gets that much smaller
-        // In 3DS pixels (200 from the middle to the side): +10 % moves the edge 20 pixels in.
-        const Clip ten = ApplyVertex({0.0f, 0.998f, 1.0f}, 1.0f, 1.0f, {ScaleForPercent(10), 1.0f});
+        // In 3DS pixels (200 from the middle to the side): 90 % moves the edge 20 pixels in.
+        const Clip ten = ApplyVertex({0.0f, 0.998f, 1.0f}, 1.0f, 1.0f, {ScaleForSpacing(90), 1.0f});
         REQUIRE((0.998f - ten.y) * 200.0f == Approx(19.96f).margin(0.01f));
     }
 }
@@ -188,7 +189,7 @@ TEST_CASE("FrameXr hudmove: the scales reach the emulation thread", "[frame_xr][
     VRData d;
     REQUIRE(d.hud.IsIdentity()); // CitraVR's "off" values move nothing
     d.mode = 3;
-    d.hud = ForFrame(true, 3, 15, 5, 0.0f);
+    d.hud = ForFrame(true, 3, 85, 95, 0.0f);
     box.Publish(d);
     VRData out;
     u32 serial = 0;
@@ -209,7 +210,7 @@ struct FakeRasterizer final : VideoCore::RasterizerInterface {
     void InvalidateRegion(PAddr, u32) override {}
     void FlushAndInvalidateRegion(PAddr, u32) override {}
     void ClearAll(bool) override {}
-    void SetVRHudMove(float across_, float up_down_) override {
+    void SetVRHudSpacing(float across_, float up_down_) override {
         across = across_;
         up_down = up_down_;
         calls++;
@@ -224,7 +225,7 @@ TEST_CASE("FrameXr hudmove: the rasterizer gets the scales at the latch", "[fram
     using namespace VideoCore::Immersive;
     VRData d;
     d.mode = 3;
-    d.hud = ForFrame(true, 3, 10, 0, 0.0f);
+    d.hud = ForFrame(true, 3, 90, 100, 0.0f);
     Publish(d);
     FakeRasterizer r;
     LatchFrame(&r);
@@ -240,17 +241,17 @@ TEST_CASE("FrameXr hudmove: the rasterizer gets the scales at the latch", "[fram
 }
 
 TEST_CASE("FrameXr hudmove: the settings", "[frame_xr][hudmove]") {
-    // Off by default, per game, the range of vr_hud_move.h.
-    auto& across = Settings::values.vr_immersive_hud_across;
-    auto& up_down = Settings::values.vr_immersive_hud_up_down;
-    REQUIRE(across.GetDefault() == 0);
-    REQUIRE(up_down.GetDefault() == 0);
+    // 100 % (the game's own) by default, per game, the range of vr_hud_spacing.h.
+    auto& across = Settings::values.vr_immersive_hud_spacing_x;
+    auto& up_down = Settings::values.vr_immersive_hud_spacing_y;
+    REQUIRE(across.GetDefault() == kDefaultSpacing);
+    REQUIRE(up_down.GetDefault() == kDefaultSpacing);
     for (auto* setting : {&across, &up_down}) {
         const s32 kept = setting->GetValue();
         setting->SetValue(1000);
-        REQUIRE(setting->GetValue() == kMaxPercent);
+        REQUIRE(setting->GetValue() == kMaxSpacing);
         setting->SetValue(-1000);
-        REQUIRE(setting->GetValue() == kMinPercent);
+        REQUIRE(setting->GetValue() == kMinSpacing);
         setting->SetValue(kept);
     }
 }

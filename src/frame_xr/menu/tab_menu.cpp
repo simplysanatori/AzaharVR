@@ -12,7 +12,7 @@
 #include "frame_xr/menu/ds_drawing.h"
 #include "frame_xr/menu/md3_fonts.h"
 #include "frame_xr/immersive_layout.h" // AzaharFrame natural: World Scale's stops
-#include "video_core/vr_hud_move.h"   // AzaharFrame hudmove: Move HUD In's range
+#include "video_core/vr_hud_spacing.h"   // AzaharFrame hudmove: HUD Spacing's range
 
 namespace FrameXr::Menu {
 
@@ -81,8 +81,7 @@ std::string SliderText(Id id, float value) {
     if (id == Id::Depth3d) {
         return Format("%.0f%%", value);
     }
-    if (id == Id::ScaleX || id == Id::ScaleY || id == Id::HudAcross ||
-        id == Id::HudUpDown) { // AzaharFrame kiu: "+10%", "0%", "-10%" (hudmove: Move HUD In)
+    if (id == Id::ScaleX || id == Id::ScaleY) { // AzaharFrame kiu: "+10%", "0%", "-10%"
         return Format(value > 0.5f ? "+%.0f%%" : "%.0f%%", value);
     }
     if (id == Id::WorldScale) { // AzaharFrame natural: the stop's percent, "100%" too
@@ -99,7 +98,8 @@ std::string SliderText(Id id, float value) {
     if (id == Id::TurnZone || id == Id::RecoilCharged || id == Id::RecoilRapid ||
         id == Id::WeaponScale || id == Id::ProjectileSize || id == Id::ProjectileSpeed ||
         id == Id::WeaponOpacity || id == Id::ProjectileOpacity ||
-        id == Id::MuzzleFlashSize) { // AzaharFrame kiugyro: "10%" (kiufix: the strengths, the scale; kiuopacity: the opacities; kiuweap2: the flash's size)
+        id == Id::MuzzleFlashSize || id == Id::HudSpacingX ||
+        id == Id::HudSpacingY) { // AzaharFrame kiugyro: "10%" (kiufix: the strengths, the scale; kiuopacity: the opacities; kiuweap2: the flash's size)
         return Format("%.0f%%", value);
     }
     if (id == Id::AutosaveEvery) { // AzaharFrame autosave: the stop's minutes
@@ -255,10 +255,11 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
         }
         // AzaharFrame fovaxis: Fill View, once (a button; the values stay ordinary)
         rows.push_back(full(row(Id::FillView, RowKind::Button)));
-        // AzaharFrame hudmove: Move HUD In, -20 to +40 % around 0 (Experimental chip, never
+        // AzaharFrame hudmove: HUD Spacing, 60 to 120 %, 100 the game's own (Experimental chip, never
         // locked: outside the Full modes it does nothing, and its tooltip says so).
         for (const auto& [id, value] :
-             {std::pair{Id::HudAcross, m.hud_across}, std::pair{Id::HudUpDown, m.hud_up_down}}) {
+             {std::pair{Id::HudSpacingX, m.hud_spacing_x},
+              std::pair{Id::HudSpacingY, m.hud_spacing_y}}) {
             Row r = row(id, RowKind::Slider);
             const SliderRange hr = SliderFor(id);
             const float v = std::clamp(static_cast<float>(value), hr.min, hr.max);
@@ -320,8 +321,8 @@ SettingsSection SectionOf(Id id) {
     case Id::ScaleY:
     case Id::ScaleMode: // AzaharFrame fovscale
     case Id::FillView:  // AzaharFrame fovaxis
-    case Id::HudAcross: // AzaharFrame hudmove
-    case Id::HudUpDown:
+    case Id::HudSpacingX: // AzaharFrame hudmove
+    case Id::HudSpacingY:
     case Id::WorldScale:
     case Id::FollowScreen: // AzaharFrame natural
     case Id::MotionClarity: // AzaharFrame flash
@@ -345,8 +346,8 @@ bool PerGameSetting(Id id) {
     case Id::ScaleX:
     case Id::ScaleY:
     case Id::ScaleMode: // AzaharFrame fovscale
-    case Id::HudAcross: // AzaharFrame hudmove
-    case Id::HudUpDown:
+    case Id::HudSpacingX: // AzaharFrame hudmove
+    case Id::HudSpacingY:
     case Id::WorldScale:
     case Id::FollowScreen: // AzaharFrame natural
     case Id::MotionClarity: // AzaharFrame flash
@@ -758,10 +759,10 @@ std::string LabelFor(Id id) {
         return ::FrameXr::Immersive::Names::kHorizontalScale;
     case Id::ScaleY:
         return ::FrameXr::Immersive::Names::kVerticalScale;
-    case Id::HudAcross: // AzaharFrame hudmove
-        return ::FrameXr::Immersive::Names::kMoveHudInHorizontal;
-    case Id::HudUpDown:
-        return ::FrameXr::Immersive::Names::kMoveHudInVertical;
+    case Id::HudSpacingX: // AzaharFrame hudmove
+        return ::FrameXr::Immersive::Names::kHudSpacingHorizontal;
+    case Id::HudSpacingY:
+        return ::FrameXr::Immersive::Names::kHudSpacingVertical;
     case Id::ScaleMode: // AzaharFrame fovscale
         return ::FrameXr::Immersive::Names::kScaleMode;
     case Id::WorldScale:
@@ -1055,10 +1056,10 @@ std::string ExplainFor(Id id) {
         return ::FrameXr::Immersive::Names::kHorizontalScaleTip;
     case Id::ScaleY:
         return ::FrameXr::Immersive::Names::kVerticalScaleTip;
-    case Id::HudAcross: // AzaharFrame hudmove
-        return ::FrameXr::Immersive::Names::kMoveHudInHorizontalTip;
-    case Id::HudUpDown:
-        return ::FrameXr::Immersive::Names::kMoveHudInVerticalTip;
+    case Id::HudSpacingX: // AzaharFrame hudmove
+        return ::FrameXr::Immersive::Names::kHudSpacingHorizontalTip;
+    case Id::HudSpacingY:
+        return ::FrameXr::Immersive::Names::kHudSpacingVerticalTip;
     case Id::ScaleMode: // AzaharFrame fovscale
         return ::FrameXr::Immersive::Names::kScaleModeTip;
     case Id::WorldScale:
@@ -1139,9 +1140,9 @@ SliderRange SliderFor(Id id) {
         constexpr float kMax = static_cast<float>(Immersive::Layout::kMaxScalePercent);
         return {-kMax, kMax, static_cast<float>(Immersive::Layout::kScaleStepPercent)};
     }
-    if (id == Id::HudAcross || id == Id::HudUpDown) { // AzaharFrame hudmove: -20 to +40 %
-        return {static_cast<float>(VideoCore::HudMove::kMinPercent),
-                static_cast<float>(VideoCore::HudMove::kMaxPercent), 1.0f};
+    if (id == Id::HudSpacingX || id == Id::HudSpacingY) { // AzaharFrame hudmove: 60 to 120 %
+        return {static_cast<float>(VideoCore::HudSpacing::kMinSpacing),
+                static_cast<float>(VideoCore::HudSpacing::kMaxSpacing), 1.0f};
     }
     if (id == Id::WorldScale) { // AzaharFrame natural: Layout::kWorldScaleStops' indexes
         return {0.0f, static_cast<float>(Immersive::Layout::kWorldScaleStops.size() - 1), 1.0f};
@@ -2039,7 +2040,7 @@ constexpr float kScopeEditGap = 40.0f;
 constexpr float kRowChipH = 32.0f, kRowChipPad = 12.0f, kRowChipGap = 12.0f;
 const char* RowChip(Id id) {
     return id == Id::MotionClarity || id == Id::MotionClarityNormal || id == Id::ScreenAsPanel ||
-                   id == Id::HudAcross || id == Id::HudUpDown // AzaharFrame hudmove
+                   id == Id::HudSpacingX || id == Id::HudSpacingY // AzaharFrame hudmove
                ? Immersive::Names::kExperimental
                : nullptr;
 }

@@ -8,7 +8,7 @@
 #include "video_core/shader/generator/pica_fs_config.h"
 #include "video_core/shader/generator/shader_uniforms.h"
 #include "common/logging/log.h"     // AzaharFrame hudmove
-#include "video_core/vr_hud_move.h" // AzaharFrame hudmove
+#include "video_core/vr_hud_spacing.h" // AzaharFrame hudmove
 
 namespace Memory {
 class MemorySystem;
@@ -39,15 +39,15 @@ protected:
     void SetVRData(const int32_t  &vrImmersiveMode, const float& immersiveModeFactor, int uoffset, const float& gamePosScaler, const float inv_view[16]) override;
     void SetVRFactorY(float factor_y) override; // AzaharFrame immersive
     void SetVRIpd(float ipd_m) override;         // AzaharFrame ipd
-    /// AzaharFrame hudmove: Move HUD In's scales into the vertex uniforms (VrFactor); one that
-    /// is not usable is taken as 1 (vr_hud_move.h UsableScale). Logged when the drawing starts or
+    /// AzaharFrame hudmove: HUD Spacing's scales into the vertex uniforms (VrFactor); one that
+    /// is not usable is taken as 1 (vr_hud_spacing.h UsableScale). Logged when the drawing starts or
     /// stops using them (emulation thread), not at each step of a change.
-    void SetVRHudMove(float across, float up_down) override {
-        const float a = HudMove::UsableScale(across), u = HudMove::UsableScale(up_down);
+    void SetVRHudSpacing(float across, float up_down) override {
+        const float a = HudSpacing::UsableScale(across), u = HudSpacing::UsableScale(up_down);
         const bool was = vs_data.vr_hud_across != 1.0f || vs_data.vr_hud_up_down != 1.0f;
         const bool now = a != 1.0f || u != 1.0f;
         if (was != now) {
-            LOG_INFO(Render, "immersive: Move HUD In {} (2D scales {:.2f} across, {:.2f} up and down)",
+            LOG_INFO(Render, "immersive: HUD Spacing {} (2D scales {:.2f} across, {:.2f} up and down)",
                      now ? "drawing" : "off", a, u);
         }
         if (vs_data.vr_hud_across != a || vs_data.vr_hud_up_down != u) {

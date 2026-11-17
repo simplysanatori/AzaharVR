@@ -424,7 +424,7 @@ TEST_CASE("FrameXr fovscale: the vertex shader's factors with unequal axes",
                 greaterThanEqual(abs(pos.xy), vec2(0.999)));
     }
     return f;
-})"; // AzaharFrame hudmove: Move HUD In's scales, 1 here (hud_move.cpp tests them)
+})"; // AzaharFrame hudmove: HUD Spacing's scales, 1 here (hud_spacing.cpp tests them)
     REQUIRE(vs.find(vr_factor) != std::string::npos);
     REQUIRE(vs.find("gl_Position.xy /= VrFactor(gl_Position);") != std::string::npos);
     REQUIRE(vs.find("float vr_immersive_mode_factor_y;") != std::string::npos);

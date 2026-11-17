@@ -26,7 +26,7 @@
 #include "frame_xr/immersive_layout.h" // AzaharFrame fov100: the scales' range
 #include "frame_xr/immersive_names.h"  // AzaharFrame kiu
 #include "frame_xr/render_margin.h"    // AzaharFrame fovaxis
-#include "video_core/vr_hud_move.h"    // AzaharFrame hudmove
+#include "video_core/vr_hud_spacing.h"    // AzaharFrame hudmove
 
 namespace {
 
@@ -78,18 +78,18 @@ QComboBox* MakeScaleCombo(QWidget* parent) {
     return combo;
 }
 
-// AzaharFrame hudmove: Move HUD In (Settings::values.vr_immersive_hud_across and _up_down),
-// signed percent in 1 % steps (video_core/vr_hud_move.h); item n is kMinPercent + n.
+// AzaharFrame hudmove: HUD Spacing (Settings::values.vr_immersive_hud_spacing_x and _y), percent
+// of the game's own in 1 % steps (video_core/vr_hud_spacing.h); item n is kMinSpacing + n.
 int HudIndex(s32 percent) {
-    return VideoCore::HudMove::ClampPercent(percent) - VideoCore::HudMove::kMinPercent;
+    return VideoCore::HudSpacing::ClampSpacing(percent) - VideoCore::HudSpacing::kMinSpacing;
 }
 s32 HudOfIndex(s32 index) {
-    return VideoCore::HudMove::ClampPercent(index + VideoCore::HudMove::kMinPercent);
+    return VideoCore::HudSpacing::ClampSpacing(index + VideoCore::HudSpacing::kMinSpacing);
 }
 QComboBox* MakeHudCombo(QWidget* parent) {
     auto* combo = new QComboBox(parent);
-    for (s32 p = VideoCore::HudMove::kMinPercent; p <= VideoCore::HudMove::kMaxPercent; p++) {
-        combo->addItem(p > 0 ? QStringLiteral("+%1%").arg(p) : QStringLiteral("%1%").arg(p));
+    for (s32 p = VideoCore::HudSpacing::kMinSpacing; p <= VideoCore::HudSpacing::kMaxSpacing; p++) {
+        combo->addItem(QStringLiteral("%1%").arg(p));
     }
     return combo;
 }
@@ -365,17 +365,17 @@ ConfigureFrameVr::ConfigureFrameVr(QWidget* parent) : QGroupBox(parent) {
     layout->addWidget(scale_mode_row);
     layout->addWidget(margin_x_row); // AzaharFrame fovaxis: Render Margin, Stretch only
     layout->addWidget(margin_y_row);
-    // AzaharFrame hudmove: Move HUD In (experimental), after the screen's own rows
+    // AzaharFrame hudmove: HUD Spacing (experimental), after the screen's own rows
     hud_x_combo = MakeHudCombo(this);
     hud_x_combo->setObjectName(QStringLiteral("frame_vr_hud_x_combo"));
     hud_x_row = MakeRow(this, QStringLiteral("frame_vr_hud_x_row"),
-                        tr(Names::kMoveHudInHorizontal), tr(Names::kMoveHudInHorizontalTip),
+                        tr(Names::kHudSpacingHorizontal), tr(Names::kHudSpacingHorizontalTip),
                         {hud_x_combo});
     layout->addWidget(hud_x_row);
     hud_y_combo = MakeHudCombo(this);
     hud_y_combo->setObjectName(QStringLiteral("frame_vr_hud_y_combo"));
     hud_y_row = MakeRow(this, QStringLiteral("frame_vr_hud_y_row"),
-                        tr(Names::kMoveHudInVertical), tr(Names::kMoveHudInVerticalTip),
+                        tr(Names::kHudSpacingVertical), tr(Names::kHudSpacingVerticalTip),
                         {hud_y_combo});
     layout->addWidget(hud_y_row);
     // AzaharFrame fovaxis: the scale rows' "May Warp" and Render Margin's rows follow what the
@@ -513,8 +513,8 @@ void ConfigureFrameVr::SetupPerGameUI() {
         hint(scale_x_combo, Settings::values.vr_immersive_scale_x.UsingGlobal());
         hint(scale_y_combo, Settings::values.vr_immersive_scale_y.UsingGlobal());
         hint(scale_mode_combo, Settings::values.vr_immersive_scale_mode.UsingGlobal());
-        hint(hud_x_combo, Settings::values.vr_immersive_hud_across.UsingGlobal()); // hudmove
-        hint(hud_y_combo, Settings::values.vr_immersive_hud_up_down.UsingGlobal());
+        hint(hud_x_combo, Settings::values.vr_immersive_hud_spacing_x.UsingGlobal()); // hudmove
+        hint(hud_y_combo, Settings::values.vr_immersive_hud_spacing_y.UsingGlobal());
         hint(mode_combo, Settings::values.vr_immersive_mode.UsingGlobal());
         hint(register_spin, Settings::values.vr_si_mode_register_offset.UsingGlobal());
         hint(eye_edit, Settings::values.vr_immersive_eye_indicator.UsingGlobal());
@@ -557,9 +557,9 @@ void ConfigureFrameVr::SetupPerGameUI() {
         scale_mode_combo, scale_mode_row,
         static_cast<int>(std::min<u32>(Settings::values.vr_immersive_scale_mode.GetValue(true), 1)));
     ConfigurationShared::SetColoredComboBox( // AzaharFrame hudmove
-        hud_x_combo, hud_x_row, HudIndex(Settings::values.vr_immersive_hud_across.GetValue(true)));
+        hud_x_combo, hud_x_row, HudIndex(Settings::values.vr_immersive_hud_spacing_x.GetValue(true)));
     ConfigurationShared::SetColoredComboBox(
-        hud_y_combo, hud_y_row, HudIndex(Settings::values.vr_immersive_hud_up_down.GetValue(true)));
+        hud_y_combo, hud_y_row, HudIndex(Settings::values.vr_immersive_hud_spacing_y.GetValue(true)));
     ConfigurationShared::SetColoredComboBox(
         mode_combo, mode_row, static_cast<int>(Settings::values.vr_immersive_mode.GetValue(true)));
     ConfigurationShared::SetColoredComboBox( // AzaharFrame kiu
@@ -651,9 +651,9 @@ void ConfigureFrameVr::SetConfiguration() {
         scale_mode_combo->setCurrentIndex(static_cast<int>( // AzaharFrame fovscale
             std::min<u32>(Settings::values.vr_immersive_scale_mode.GetValue(true), 1)));
         hud_x_combo->setCurrentIndex( // AzaharFrame hudmove
-            HudIndex(Settings::values.vr_immersive_hud_across.GetValue(true)));
+            HudIndex(Settings::values.vr_immersive_hud_spacing_x.GetValue(true)));
         hud_y_combo->setCurrentIndex(
-            HudIndex(Settings::values.vr_immersive_hud_up_down.GetValue(true)));
+            HudIndex(Settings::values.vr_immersive_hud_spacing_y.GetValue(true)));
         // AzaharFrame fovaxis: what each axis has in the global scope
         margin_x_shown = static_cast<int>(
             FrameXr::Immersive::Margin::GlobalLevel(FrameXr::Immersive::Margin::Axis::Horizontal));
@@ -720,8 +720,8 @@ void ConfigureFrameVr::SetConfiguration() {
     ConfigurationShared::SetPerGameSetting(scale_mode_combo, // AzaharFrame fovscale
                                            &Settings::values.vr_immersive_scale_mode);
     for (auto [combo, row, setting] : // AzaharFrame hudmove
-         {std::tuple{hud_x_combo, hud_x_row, &Settings::values.vr_immersive_hud_across},
-          std::tuple{hud_y_combo, hud_y_row, &Settings::values.vr_immersive_hud_up_down}}) {
+         {std::tuple{hud_x_combo, hud_x_row, &Settings::values.vr_immersive_hud_spacing_x},
+          std::tuple{hud_y_combo, hud_y_row, &Settings::values.vr_immersive_hud_spacing_y}}) {
         combo->setCurrentIndex(setting->UsingGlobal()
                                    ? ConfigurationShared::USE_GLOBAL_INDEX
                                    : HudIndex(setting->GetValue()) +
@@ -890,8 +890,8 @@ void ConfigureFrameVr::ApplyConfiguration() {
     as_global(Settings::values.vr_immersive_scale_x);
     as_global(Settings::values.vr_immersive_scale_y);
     as_global(Settings::values.vr_immersive_scale_mode); // AzaharFrame fovscale
-    as_global(Settings::values.vr_immersive_hud_across); // AzaharFrame hudmove
-    as_global(Settings::values.vr_immersive_hud_up_down);
+    as_global(Settings::values.vr_immersive_hud_spacing_x); // AzaharFrame hudmove
+    as_global(Settings::values.vr_immersive_hud_spacing_y);
     as_global(Settings::values.vr_immersive_mode);
     as_global(Settings::values.vr_immersive_positional_game_scaler);
     as_global(Settings::values.vr_immersive_world_scale); // AzaharFrame natural
@@ -956,9 +956,9 @@ void ConfigureFrameVr::ApplyConfiguration() {
                                              [](s32 index) { return ScaleOfIndex(index); });
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.vr_immersive_scale_mode,
                                              scale_mode_combo); // AzaharFrame fovscale
-    ConfigurationShared::ApplyPerGameSetting(&Settings::values.vr_immersive_hud_across, // hudmove
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.vr_immersive_hud_spacing_x, // hudmove
                                              hud_x_combo, [](s32 index) { return HudOfIndex(index); });
-    ConfigurationShared::ApplyPerGameSetting(&Settings::values.vr_immersive_hud_up_down,
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.vr_immersive_hud_spacing_y,
                                              hud_y_combo, [](s32 index) { return HudOfIndex(index); });
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.vr_immersive_mode, mode_combo);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.vr_immersive_world_scale,

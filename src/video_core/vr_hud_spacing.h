@@ -2,13 +2,13 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
-// AzaharFrame hudmove: Move HUD In (experimental, per game, off by default).
+// AzaharFrame hudmove: HUD Spacing (experimental, per game, 100 % = the game's own by default).
 //
 // In the Full modes the game draws more than its own frame (Render Margin, the scales in Field
 // of View) and the screen is made large, so a HUD the game puts at its frame's edges ends up at
-// the edges of the view, or past them (Mario Kart 7). This moves the flat 2D drawing on the
-// Primary screen toward the middle by a share of its distance from the middle, separately across
-// and up and down; negative values move it outward.
+// the edges of the view, or past them (Mario Kart 7). HUD Spacing sets the flat 2D drawing on the
+// Primary screen's distance from the middle as a percentage of the game's own, separately across
+// and up and down: below 100 % it comes in, above it spreads out.
 //
 // Which draws move is the vertex shader's existing rule for 2D (glsl_shader_gen.cpp VrFactor): a
 // vertex with w = 1 is 2D (an orthographic projection; the world's perspective vertices have
@@ -29,12 +29,13 @@
 #include <algorithm>
 #include <cmath>
 
-namespace VideoCore::HudMove {
+namespace VideoCore::HudSpacing {
 
-/// The settings' range in percent of an element's distance from the middle (positive: toward
-/// the middle). +10 % across moves an element at the edge of a 400 pixel picture 20 pixels in.
-inline constexpr int kMinPercent = -20;
-inline constexpr int kMaxPercent = 40;
+/// The settings' range: an element's distance from the middle in percent of the game's own.
+/// 90 % across moves an element at the edge of a 400 pixel picture 20 pixels in.
+inline constexpr int kMinSpacing = 60;
+inline constexpr int kMaxSpacing = 120;
+inline constexpr int kDefaultSpacing = 100;
 /// The shader's 2D test (VrFactor): |w - 1| below this.
 inline constexpr float kFlatW = 0.0001f;
 /// The shader's edge test (VrFactor): a 2D vertex at or past this keeps its place.
@@ -43,13 +44,13 @@ inline constexpr float kEdge = 0.999f;
 inline constexpr float kMinScale = 0.5f;
 inline constexpr float kMaxScale = 1.5f;
 
-inline int ClampPercent(int percent) {
-    return std::clamp(percent, kMinPercent, kMaxPercent);
+inline int ClampSpacing(int spacing) {
+    return std::clamp(spacing, kMinSpacing, kMaxSpacing);
 }
 
-/// The scale of 2D positions about the middle for `percent`: 1 at 0, 0.9 at +10.
-inline float ScaleForPercent(int percent) {
-    return 1.0f - static_cast<float>(ClampPercent(percent)) / 100.0f;
+/// The scale of 2D positions about the middle for `spacing`: exactly 1 at 100, 0.9 at 90.
+inline float ScaleForSpacing(int spacing) {
+    return static_cast<float>(ClampSpacing(spacing)) / 100.0f;
 }
 
 /// A scale the rasterizer can use: finite and within kMinScale to kMaxScale, else 1.
@@ -79,17 +80,17 @@ struct Scales {
 /// game) is 1, so the game draws as it would without the setting. `menu_weight` is mode 2's menu
 /// rule (immersive_layout.h MenuExact, 0 to 1): while the game shows a screen of its own, the
 /// scales ease back to 1 with it, so the icons stay on their full-screen backdrop.
-inline Scales ForFrame(bool engaged, unsigned mode, int across_percent, int up_down_percent,
+inline Scales ForFrame(bool engaged, unsigned mode, int spacing_x, int spacing_y,
                        float menu_weight) {
     if (!engaged || (mode != 2 && mode != 3)) {
         return {};
     }
     const float w = std::isfinite(menu_weight) ? std::clamp(menu_weight, 0.0f, 1.0f) : 0.0f;
-    const auto eased = [w](int percent) {
-        const float s = ScaleForPercent(percent);
+    const auto eased = [w](int spacing) {
+        const float s = ScaleForSpacing(spacing);
         return w == 0.0f ? s : s + (1.0f - s) * w;
     };
-    return {eased(across_percent), eased(up_down_percent)};
+    return {eased(spacing_x), eased(spacing_y)};
 }
 
 /// The divisor of one clip component in the vertex shader (VrFactor with the HUD scale): the
@@ -112,4 +113,4 @@ inline Clip ApplyVertex(Clip p, float factor, float factor_y, Scales s) {
             p.y / ClipDivisor(p.y, p.w, factor, s.across), p.w};
 }
 
-} // namespace VideoCore::HudMove
+} // namespace VideoCore::HudSpacing

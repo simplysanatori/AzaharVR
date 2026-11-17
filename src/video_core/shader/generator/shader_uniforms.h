@@ -91,8 +91,8 @@ struct VSUniformData {
     // degrees (its framebuffer is 240 wide, 400 high), so clip x is the picture's up and down and
     // clip y its across: x is divided by this one, y by the one above.
     float vr_immersive_mode_factor_y = 1.0f;
-    // AzaharFrame hudmove: Move HUD In, the scales of 2D inside the view about the middle, up and
-    // down (clip x) and across (clip y); 1 = none (video_core/vr_hud_move.h).
+    // AzaharFrame hudmove: HUD Spacing, the scales of 2D inside the view about the middle, up and
+    // down (clip x) and across (clip y); 1 = none (video_core/vr_hud_spacing.h).
     float vr_hud_up_down = 1.0f;
     float vr_hud_across = 1.0f;
 };
