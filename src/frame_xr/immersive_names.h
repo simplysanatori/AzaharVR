@@ -265,9 +265,11 @@ inline std::string DepthToast(unsigned percent) {
 }
 
 // AzaharFrame kiumode: Immersive Mode's choices (Settings::values.vr_immersive_mode). Stored 0 to
-// 4; the list shows them in this order, Angel's Aim (stored 4) only while Kid Icarus: Uprising
-// runs and above Other Games (stored 3, which keeps its value for every game, preset and older
-// build). The VR menu and Azahar's window both use these.
+// 4; the list shows them in this order in every game and in Global (AzaharFrame kiurows: it was
+// Kid Icarus: Uprising's alone), Angel's Aim (stored 4) above Other Games (stored 3, which keeps
+// its value for every game, preset and older build). Outside Kid Icarus: Uprising a stored 4
+// plays as Other Games (Settings::ImmersiveRenderModeOf). The VR menu and Azahar's window both
+// use these.
 inline constexpr const char* kModeOff = "Off";
 inline constexpr const char* kModeWide = "Wide (3DoF)";
 inline constexpr const char* kModeZelda = "Full (6DoF): Ocarina of Time, Majora's Mask";
@@ -275,37 +277,32 @@ inline constexpr const char* kModeZelda = "Full (6DoF): Ocarina of Time, Majora'
 inline constexpr const char* kModeAngelsAim = "Full (6DoF): Angel's Aim";
 inline constexpr const char* kModeOtherGames = "Full (6DoF): Other Games";
 inline constexpr std::uint32_t kModeStoredAngelsAim = 4;
-/// The choices in the shown order: four, or five with `kiu`.
-inline constexpr std::array<const char*, 4> kModeChoices{kModeOff, kModeWide, kModeZelda,
-                                                         kModeOtherGames};
-inline constexpr std::array<const char*, 5> kModeChoicesKiu{kModeOff, kModeWide, kModeZelda,
-                                                            kModeAngelsAim, kModeOtherGames};
-constexpr int ModeChoiceCount(bool kiu) {
-    return kiu ? 5 : 4;
-}
-/// The shown index of a stored mode. Without `kiu` a stored 4 shows as Other Games (it is drawn
-/// as 3 there); a value past the list shows as its last choice.
-constexpr int ModeIndexOf(std::uint32_t stored, bool kiu) {
-    if (stored == kModeStoredAngelsAim) { // the fourth choice either way
+/// The choices in the shown order.
+inline constexpr std::array<const char*, 5> kModeChoices{kModeOff, kModeWide, kModeZelda,
+                                                         kModeAngelsAim, kModeOtherGames};
+inline constexpr int kModeChoiceCount = 5;
+/// The shown index of a stored mode: a value past the list shows as its last choice.
+constexpr int ModeIndexOf(std::uint32_t stored) {
+    if (stored == kModeStoredAngelsAim) { // the fourth choice
         return 3;
     }
     if (stored >= 3) { // Other Games (and any value past the list)
-        return kiu ? 4 : 3;
+        return 4;
     }
     return static_cast<int>(stored);
 }
 /// The stored mode of a shown index.
-constexpr std::uint32_t ModeValueAt(int index, bool kiu) {
-    const int i = std::clamp(index, 0, ModeChoiceCount(kiu) - 1);
-    if (kiu && i >= 3) {
+constexpr std::uint32_t ModeValueAt(int index) {
+    const int i = std::clamp(index, 0, kModeChoiceCount - 1);
+    if (i >= 3) {
         return i == 3 ? kModeStoredAngelsAim : 3u;
     }
     return static_cast<std::uint32_t>(i);
 }
-/// The stored mode of a shown index, keeping `before` when that index shows it (a stored 4 shown
-/// as Other Games where Angel's Aim is not listed stays 4 until another choice is made).
-constexpr std::uint32_t ModeValueAt(int index, bool kiu, std::uint32_t before) {
-    return ModeIndexOf(before, kiu) == index ? before : ModeValueAt(index, kiu);
+/// The stored mode of a shown index, keeping `before` when that index shows it (a stored 7 shown
+/// as Other Games stays 7 until another choice is made).
+constexpr std::uint32_t ModeValueAt(int index, std::uint32_t before) {
+    return ModeIndexOf(before) == index ? before : ModeValueAt(index);
 }
 
 } // namespace FrameXr::Immersive::Names

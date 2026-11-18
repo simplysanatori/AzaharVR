@@ -25,7 +25,7 @@ class ConfigureFrameVr : public QGroupBox {
 
 public:
     /// AzaharFrame kiumode: `title_id` the game whose Properties these are (0: the global
-    /// settings): Immersive Mode lists Angel's Aim for Kid Icarus: Uprising.
+    /// settings). AzaharFrame kiurows: not used now; every list has Angel's Aim.
     explicit ConfigureFrameVr(QWidget* parent = nullptr, u64 title_id = 0);
     ~ConfigureFrameVr() override;
 
@@ -40,9 +40,8 @@ private:
     /// from what the rows show now.
     void UpdateWarpNotes();
 
-    /// AzaharFrame kiumode: Immersive Mode lists Angel's Aim (Kid Icarus: Uprising's
-    /// Properties), and the stored mode the row was loaded with (kept while its choice stays).
-    bool mode_kiu = false;
+    /// AzaharFrame kiumode: the stored mode the Immersive Mode row was loaded with (kept while
+    /// its choice stays).
     u32 mode_loaded = 0;
     QCheckBox* hide_bottom_check;
     /// Per application: the tristate tracker (Use global / on / off).

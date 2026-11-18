@@ -127,32 +127,28 @@ TEST_CASE("Angel's Aim: Kid Icarus: Uprising's preset stays Off", "[frame_xr][ki
     }
 }
 
-TEST_CASE("Angel's Aim: the list's order, labels and stored values", "[frame_xr][kiumode]") {
-    // The owner's order: Off, Wide, Zelda, Angel's Aim (Kid Icarus only), Other Games.
+TEST_CASE("Angel's Aim: the list's order, labels and stored values", "[frame_xr][kiumode][kiurows]") {
+    // The owner's order, the same in every game and in Global (AzaharFrame kiurows): Off, Wide,
+    // Zelda, Angel's Aim, Other Games.
     CHECK(std::string(N::kModeChoices[0]) == "Off");
     CHECK(std::string(N::kModeChoices[1]) == "Wide (3DoF)");
     CHECK(std::string(N::kModeChoices[2]) == "Full (6DoF): Ocarina of Time, Majora's Mask");
-    CHECK(std::string(N::kModeChoices[3]) == "Full (6DoF): Other Games");
-    CHECK(std::string(N::kModeChoicesKiu[3]) == "Full (6DoF): Angel's Aim");
-    CHECK(std::string(N::kModeChoicesKiu[4]) == "Full (6DoF): Other Games");
-    for (int i = 0; i < 3; i++) {
-        CHECK(std::string(N::kModeChoicesKiu[i]) == N::kModeChoices[i]);
-    }
-    // Kid Icarus: index <-> stored, both ways
-    const u32 kiu_values[5] = {0, 1, 2, 4, 3};
+    CHECK(std::string(N::kModeChoices[3]) == "Full (6DoF): Angel's Aim");
+    CHECK(std::string(N::kModeChoices[4]) == "Full (6DoF): Other Games");
+    CHECK(N::kModeChoices.size() == static_cast<std::size_t>(N::kModeChoiceCount));
+    // index <-> stored, both ways
+    const u32 values[5] = {0, 1, 2, 4, 3};
     for (int i = 0; i < 5; i++) {
-        CHECK(N::ModeValueAt(i, true) == kiu_values[i]);
-        CHECK(N::ModeIndexOf(kiu_values[i], true) == i);
+        CHECK(N::ModeValueAt(i) == values[i]);
+        CHECK(N::ModeIndexOf(values[i]) == i);
     }
-    // Other games: 0 to 3 as stored; a stored 4 shows as Other Games and is kept until changed
-    for (int i = 0; i < 4; i++) {
-        CHECK(N::ModeValueAt(i, false) == static_cast<u32>(i));
-        CHECK(N::ModeIndexOf(static_cast<u32>(i), false) == i);
-    }
-    CHECK(N::ModeIndexOf(4, false) == 3);
-    CHECK(N::ModeValueAt(3, false, 4) == 4u);
-    CHECK(N::ModeValueAt(2, false, 4) == 2u);
-    CHECK(N::ModeValueAt(4, false) == 3u); // past the list: its last choice
-    CHECK(N::ModeValueAt(9, true) == 3u);
-    CHECK(N::ModeIndexOf(9, true) == 4); // CitraVR's test value shows as Other Games
+    // A stored 4 keeps its value when the row is left on its choice; another choice changes it
+    CHECK(N::ModeValueAt(3, 4) == 4u);
+    CHECK(N::ModeValueAt(2, 4) == 2u);
+    CHECK(N::ModeValueAt(4, 3) == 3u);
+    CHECK(N::ModeValueAt(9) == 3u); // past the list: its last choice
+    CHECK(N::ModeIndexOf(9) == 4);  // CitraVR's test value shows as Other Games
+    CHECK(N::ModeValueAt(4, 9) == 9u); // and is kept while that choice stays
+    // Outside Kid Icarus: Uprising a stored 4 plays as Other Games (stored value unchanged)
+    CHECK(Settings::ImmersiveRenderModeOf(4) == 3u);
 }

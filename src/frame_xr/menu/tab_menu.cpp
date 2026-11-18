@@ -215,8 +215,7 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
         }
         rows.push_back(
             row(Id::ImmersiveMode, RowKind::MenuButton, // AzaharFrame kiumode
-                Immersive::Names::ModeIndexOf(static_cast<std::uint32_t>(m.immersive_mode),
-                                              m.mods.angels_aim.shown)));
+                Immersive::Names::ModeIndexOf(static_cast<std::uint32_t>(m.immersive_mode))));
         Row fov = full(row(Id::GameFov, RowKind::Slider));
         const SliderRange fr = SliderFor(Id::GameFov);
         fov.t = (static_cast<float>(m.game_fov) - fr.min) / (fr.max - fr.min);
@@ -424,6 +423,41 @@ const std::vector<Id>& ControlsScopeRows() {
     return kRows;
 }
 
+// AzaharFrame kiurows: each by its code in controls.cpp, input_bridge.cpp and kiu_probe.cpp.
+bool KiuOnlyControlsRow(Id id) {
+    switch (id) {
+    case Id::WeaponInHand: // weapon_on needs Kiu::IsKidIcarus
+    case Id::WeaponOpacity:
+    case Id::WeaponSize:
+    case Id::WeaponScale:
+    case Id::MuzzleFlash: // flash and projectiles read Kid Icarus: Uprising's shots record
+    case Id::MuzzleFlashSize:
+    case Id::Projectiles:
+    case Id::ProjectileOpacity:
+    case Id::ProjectileSize:
+    case Id::ProjectileSpeed:
+    case Id::TurnZone: // published to kiu_probe (the game's reticle) and Kiu::Turn only
+    case Id::TurnZoneFrom:
+    case Id::TurnSpeed:
+    case Id::TurnSpeedVertical:
+    case Id::CalibrateAim: // Check Aim reads the game's reticle (Kiu::LastReading)
+    case Id::TriggerLayout: // AzaharFrame kiufire
+        return true;
+    default:
+        return false;
+    }
+}
+
+std::vector<Id> ControlsScopeRows(bool kiu) {
+    std::vector<Id> rows;
+    for (const Id id : ControlsScopeRows()) {
+        if (kiu || !KiuOnlyControlsRow(id)) {
+            rows.push_back(id);
+        }
+    }
+    return rows;
+}
+
 // AzaharFrame useglobal; reticle: any tab with the scope control
 std::vector<Id> GameValueRows(const MenuModel& model, Tab tab, SettingsSection section) {
     std::vector<Id> ids;
@@ -433,7 +467,7 @@ std::vector<Id> GameValueRows(const MenuModel& model, Tab tab, SettingsSection s
         }
     };
     if (tab == Tab::Controls) {
-        for (const Id id : ControlsScopeRows()) {
+        for (const Id id : ControlsScopeRows(model.mods.angels_aim.shown)) { // kiurows
             add(id);
         }
     } else if (tab == Tab::Settings || tab == Tab::Position) {
@@ -480,7 +514,7 @@ const std::vector<std::string>& OptionsFor(Id id) {
     // AzaharFrame kiugyro: Aiming, in the shown order (AimingValueAt gives the stored value)
     static const std::vector<std::string> kGyroAim{"Off", "Direct Aim", "Gyro Aim"};
     static const std::vector<std::string> kScale{"100%", "150%", "200%"};
-    // AzaharFrame kiumode: the names' list (OptionsFor(id, model) adds Angel's Aim)
+    // AzaharFrame kiumode: the names' list (AzaharFrame kiurows: Angel's Aim in every game's)
     static const std::vector<std::string> kMode{Immersive::Names::kModeChoices.begin(),
                                                 Immersive::Names::kModeChoices.end()};
     static const std::vector<std::string> kWider{"Off", "1.1x", "1.2x", "1.3x", "1.4x"};
@@ -577,16 +611,6 @@ const std::vector<std::string>& OptionsFor(Id id) {
     default:
         return kNone;
     }
-}
-
-const std::vector<std::string>& OptionsFor(Id id, const MenuModel& model) {
-    // AzaharFrame kiumode: Immersive Mode with Angel's Aim, while Kid Icarus: Uprising runs
-    if (id == Id::ImmersiveMode && model.mods.angels_aim.shown) {
-        static const std::vector<std::string> kModeKiu{Immersive::Names::kModeChoicesKiu.begin(),
-                                                       Immersive::Names::kModeChoicesKiu.end()};
-        return kModeKiu;
-    }
-    return OptionsFor(id);
 }
 
 std::string LabelFor(Id id) {
@@ -2092,6 +2116,8 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
     // while it is on; Laser Sight, Keep Reticle on Screen, Grip Frees Aim, Turn Zone From
     // (AzaharFrame kiuaim3), Turn Zone, Turn Speed and Check Aim with Direct
     // Aim (stored 2).
+    // AzaharFrame kiurows: the rows only Kid Icarus: Uprising has (KiuOnlyControlsRow) are added
+    // only while it is the game (model.mods.angels_aim.shown).
     std::vector<Id> aim_rows{Id::GyroAim, Id::GyroSensitivity};
     if (model.gyro_aim != 0) {
         if (model.mods.angels_aim.shown) { // AzaharFrame kiufire: Kid Icarus: Uprising only
@@ -2128,6 +2154,10 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
             aim_rows.push_back(Id::TurnSpeedVertical); // AzaharFrame fixa
             aim_rows.push_back(Id::CalibrateAim);
         }
+    }
+    if (!model.mods.angels_aim.shown) { // AzaharFrame kiurows
+        aim_rows.erase(std::remove_if(aim_rows.begin(), aim_rows.end(), KiuOnlyControlsRow),
+                       aim_rows.end());
     }
     constexpr float kDividerH = 24.0f;
     const float content_h = picture_h + 4.0f + rows_h + kDividerH +
@@ -2654,7 +2684,7 @@ void TabMenu::DrawRows(Kit& kit, const MenuModel& model, const MenuView& view, c
             break;
         }
         case RowKind::MenuButton: {
-            const auto& opts = OptionsFor(r.id, model); // AzaharFrame kiumode
+            const auto& opts = OptionsFor(r.id);
             const Rect mb{std::max(ctl.x0, ctl.x1 - 420.0f), ctl.y0, ctl.x1, ctl.y1};
             const std::size_t sel =
                 std::min(static_cast<std::size_t>(std::max(r.selected, 0)), opts.size() - 1);
@@ -2701,7 +2731,7 @@ void TabMenu::DrawRows(Kit& kit, const MenuModel& model, const MenuView& view, c
     DrawScrollbar(kit, view, list, pane.x1, content_h, max_scroll, scroll); // AzaharFrame scroll
     // An open menu goes over everything, its items before the rest in hit testing.
     if (view.open_menu != Id::None && open_anchor.W() > 0.0f) {
-        const std::vector<std::string>& opts = OptionsFor(view.open_menu, model); // kiumode
+        const std::vector<std::string>& opts = OptionsFor(view.open_menu);
         const float item = Kit::MenuItemHeight();
         const float h = item * static_cast<float>(opts.size()) + 16.0f;
         float y0 = open_anchor.y1 + 4.0f;
