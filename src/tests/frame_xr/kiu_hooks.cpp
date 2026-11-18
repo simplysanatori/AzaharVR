@@ -119,7 +119,7 @@ FakeMemory Game() {
 // Every group that can be in at once (the plain enemy keep shares its site with the timed one).
 constexpr uint32_t kAll = Bit(Group::NoCull) | Bit(Group::BulletKeep) | Bit(Group::Eye) |
                           Bit(Group::Shot) | Bit(Group::EnemyKeepTimed) | Bit(Group::GroupKeep) |
-                          Bit(Group::NoFollow) | Bit(Group::AimHold);
+                          Bit(Group::NoFollow) | Bit(Group::AimHold) | Bit(Group::AimBox);
 constexpr std::size_t kAllWords = kPatches.size() - 1;
 
 bool SiteIs(const FakeMemory& m, Group g, bool patched) {
@@ -405,6 +405,19 @@ TEST_CASE("Kid Icarus hooks: a word that differs keeps its group out", "[frame_x
         CHECK(r.different_addr == 0x6340A4);
         CHECK(m.Get32(kSiteCameraSink) == 0xE92D4070);
         CHECK(r.Of(Group::Shot) == GroupState::In);
+    }
+
+    // AzaharFrame kiufov: the C-Stick & Gyro mod's hook at one of AimHold's context words.
+    SECTION("with the mod the eased moves stay the game's, the whole-screen box goes in") {
+        m.Set32(0x6D219C, kInvented);
+        SyncResult r = Sync(m, Bit(Group::AimHold) | Bit(Group::AimBox), Mailbox{});
+        CHECK(r.Of(Group::AimHold) == GroupState::Different);
+        CHECK(r.Of(Group::AimBox) == GroupState::In);
+        CHECK(m.Get32(kSiteReticleEase) == 0x0A000002);
+        CHECK(m.Get32(kSiteReticleBox) == B(kSiteReticleBox, kReticleBoxWhole));
+        r = Sync(m, 0, Mailbox{});
+        CHECK(r.Of(Group::AimBox) == GroupState::Out);
+        CHECK(m.Get32(kSiteReticleBox) == 0x0A00001F);
     }
 
     SECTION("a site is not mapped") {

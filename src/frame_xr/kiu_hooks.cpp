@@ -21,6 +21,7 @@
 #include "frame_xr/input/kiu_room.h" // AzaharFrame kiuvr
 #include "frame_xr/kiu_first_person.h"
 #include "frame_xr/kiu_hooks.h"
+#include "frame_xr/kiu_turn.h" // AzaharFrame kiufov
 #include "frame_xr/kiu_scan.h"
 #include "frame_xr/test_switches.h"
 #include "video_core/kiu_view_tap.h" // AzaharFrame kiuvr: the view register's tap
@@ -422,6 +423,10 @@ void Hook(int64_t ticks) {
     const int fp_trace = fp_trace_text ? std::atoi(fp_trace_text->c_str()) : 0;
     const bool shots_6dof = Kiu::FirstPerson::Shots6DofOn();
     const bool want_aim_hold = Kiu::FirstPerson::AimNoModWanted();
+    // AzaharFrame kiufov: with Right Stick turning (first person turns it on too) the stick
+    // turns the land camera and the reticle never does: the land aim box is the whole screen,
+    // with the mod or without it.
+    const bool want_aim_box = want_aim_hold || Kiu::Turn::RightStickOn();
     const bool want_nocull = first_person || SwitchIs(kSwitchNoCull, "1");
     const bool want_keep = shots_6dof || SwitchIs(kSwitchBulletKeep, "1");
     const bool want_eye = first_person || SwitchIs(kSwitchEye, "1");
@@ -447,7 +452,7 @@ void Hook(int64_t ticks) {
     const int trace = trace_text ? std::atoi(trace_text->c_str()) : 0;
     const bool any = want_nocull || want_keep || want_eye || want_hide || want_shot ||
                      want_keep_timed || want_enemy_keep || want_group_keep || want_no_follow ||
-                     trace > 0 || fp_trace > 0 || want_aim_hold;
+                     trace > 0 || fp_trace > 0 || want_aim_hold || want_aim_box;
     if (fp_trace <= 0) {
         VideoCore::Immersive::g_world_view_tap.wanted.store(false, std::memory_order_relaxed);
     }
@@ -526,7 +531,8 @@ void Hook(int64_t ticks) {
                             (want_keep_timed ? KH::Bit(KH::Group::EnemyKeepTimed) : 0u) |
                             (want_group_keep ? KH::Bit(KH::Group::GroupKeep) : 0u) |
                             (want_no_follow ? KH::Bit(KH::Group::NoFollow) : 0u) |
-                            (want_aim_hold ? KH::Bit(KH::Group::AimHold) : 0u);
+                            (want_aim_hold ? KH::Bit(KH::Group::AimHold) : 0u) |
+                            (want_aim_box ? KH::Bit(KH::Group::AimBox) : 0u);
     const KH::SyncResult r = KH::Sync(mem, wanted, mailbox);
     LogChanges(s, r);
 

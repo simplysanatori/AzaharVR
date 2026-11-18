@@ -146,8 +146,13 @@ enum class Group : uint8_t {
     /// game's aim box, so it never turns the camera). Only on the game without the C-Stick &
     /// Gyro mod: its context holds three of the mod's hook sites.
     AimHold,
+    /// AzaharFrame kiufov: on land the aim box is the whole screen (the air's), so the game's
+    /// clamp never turns the camera for the reticle: with Right Stick turning (and first
+    /// person) and with AimHold. Its words are the same in the C-Stick & Gyro mod's v172 EUR
+    /// builds, so it goes in with the mod too.
+    AimBox,
 };
-inline constexpr std::size_t kGroupCount = 9;
+inline constexpr std::size_t kGroupCount = 10;
 
 constexpr uint32_t Bit(Group g) {
     return 1u << static_cast<uint32_t>(g);
@@ -175,6 +180,8 @@ inline const char* GroupName(Group g) {
         return "no follow";
     case Group::AimHold:
         return "aim hold";
+    case Group::AimBox:
+        return "aim box";
     }
     return "?";
 }
@@ -222,7 +229,8 @@ inline constexpr std::array<Patch, 12> kPatches{{
     // beq 0x6D1704 (the aim object's "ground" byte is 0: the box is the whole screen) ->
     // b 0x6D1704: the whole screen on the ground too, so the game's clamp never finds the
     // reticle past the box and never turns the camera for it.
-    {Group::AimHold, kSiteReticleBox, 0x0A00001F, B(kSiteReticleBox, kReticleBoxWhole)},
+    // (AzaharFrame kiufov: its own group, AimBox, so it goes in with the mod too.)
+    {Group::AimBox, kSiteReticleBox, 0x0A00001F, B(kSiteReticleBox, kReticleBoxWhole)},
 }};
 
 /// Words a group relies on without changing them (where it jumps to, what the stub assumes of the
@@ -288,14 +296,14 @@ inline constexpr std::array<Context, 55> kContext{{
     {Group::AimHold, 0x6D2160, 0xE5D400D5},        // ldrb r0, [r4, #0xD5]
     {Group::AimHold, 0x6D216C, 0xE5C45208},        // strb r5, [r4, #0x208] (no eased move)
     {Group::AimHold, 0x6D2170, 0xE28DD0B0},        // add sp, sp, #0xB0
-    {Group::AimHold, 0x6D167C, 0xE3510000},        // cmp r1, #0 (the "ground" byte)
-    {Group::AimHold, 0x6D1704, 0xED9F0A6D},        // vldr s0, [pc, #0x1B4] (1.0)
-    {Group::AimHold, 0x6D1708, 0xEDDF0A6D},        // vldr s1, [pc, #0x1B4] (-1.0)
-    {Group::AimHold, 0x6D170C, 0xE28400F0},        // add r0, r4, #0xF0
-    {Group::AimHold, 0x6D1710, 0xEC800A02},        // vstmia r0, {s0, s1}
-    {Group::AimHold, 0x6D1714, 0xEA00001D},        // b 0x6D1790 (the box from them)
-    {Group::AimHold, 0x6D18C0, 0x3F800000},        // 1.0
-    {Group::AimHold, 0x6D18C4, 0xBF800000},        // -1.0
+    {Group::AimBox, 0x6D167C, 0xE3510000},         // cmp r1, #0 (the "ground" byte)
+    {Group::AimBox, 0x6D1704, 0xED9F0A6D},         // vldr s0, [pc, #0x1B4] (1.0)
+    {Group::AimBox, 0x6D1708, 0xEDDF0A6D},         // vldr s1, [pc, #0x1B4] (-1.0)
+    {Group::AimBox, 0x6D170C, 0xE28400F0},         // add r0, r4, #0xF0
+    {Group::AimBox, 0x6D1710, 0xEC800A02},         // vstmia r0, {s0, s1}
+    {Group::AimBox, 0x6D1714, 0xEA00001D},         // b 0x6D1790 (the box from them)
+    {Group::AimBox, 0x6D18C0, 0x3F800000},         // 1.0
+    {Group::AimBox, 0x6D18C4, 0xBF800000},         // -1.0
     // Three places of the reticle's own code where the C-Stick & Gyro mod puts its hooks: with
     // the mod these differ, the group stays out and the mod's own route aims.
     {Group::AimHold, 0x6D219C, 0xEB05512B},        // bl 0x826650

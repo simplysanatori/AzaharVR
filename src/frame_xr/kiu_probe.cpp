@@ -24,6 +24,7 @@
 #include "frame_xr/input/kiu_turn.h" // AzaharFrame kiuvr: the game's own aim object
 #include "frame_xr/kiu_first_person.h" // AzaharFrame kiuvr
 #include "frame_xr/kiu_probe.h"
+#include "frame_xr/kiu_turn.h" // AzaharFrame kiufov
 #include "frame_xr/kiu_scan.h"
 #include "input_common/frame_xr.h"
 
@@ -81,6 +82,7 @@ struct Probe {
     uint32_t mod_counter = 0;
     uint8_t mod_flags = 0;
     uint32_t counter_resets = 0;
+    uint32_t stick_turn_skips = 0; ///< AzaharFrame kiufov: Turn Zone pushes not made (stick turning)
     // 1.2.0 RC2 (the owner: after the C-Stick the Turn Zone stopped for good; the trace showed the
     // game no longer pulling a pixel written past the box back to its edge): turning polls in a row
     // that read the reticle still past the box; at kStretchedPolls the box counts as stretched
@@ -339,8 +341,8 @@ bool ReadReticle(Probe& p, Input::ReticleReading& r, std::string& why) {
     r.game_places = memory.Read8(*process, object + kReticleGamePlaces) != 0;
     // AzaharFrame kiuvr: with the "aim hold" patches in, the land box is the whole screen (the
     // game writes 1 and -1 for its bottom and top): the reticle roams it, as in the air.
-    if (p.original && std::isfinite(bottom) && std::isfinite(top) && bottom >= 0.99f &&
-        top <= -0.99f) {
+    // AzaharFrame kiufov: the "aim box" patch does that with the mod too (Right Stick turning).
+    if (std::isfinite(bottom) && std::isfinite(top) && bottom >= 0.99f && top <= -0.99f) {
         r.ground = false;
     }
     r.valid = true;
@@ -449,11 +451,21 @@ void AimPoll(int64_t ticks) {
     }
     const int64_t now = static_cast<int64_t>(static_cast<double>(ticks) * 1'000'000'000.0 /
                                              static_cast<double>(BASE_CLOCK_RATE_ARM11));
-    const Input::DirectAim::Out out =
+    Input::DirectAim::Out out =
         p.aim.Update(now, reading, target,
                      Input::DirectAim::Turn{frame.zone_fraction, frame.zone_from, frame.turn_speed,
                                             frame.turn_speed_vertical}, // AzaharFrame fixa
                      frame.clutch || frame.stick);
+    // AzaharFrame kiufov: with Right Stick turning (first person turns it on too) the stick
+    // turns the camera and Direct Aim never does, also at a land battle's first polls (before
+    // the turn's hook has found the battle, the Turn Zone was still on: the owner's headset
+    // run, 2026-11-18, 783 s) and with the C-Stick & Gyro mod (where the game's aim box is not
+    // the whole screen until the "aim box" patch's code has run once): the reticle only moves.
+    if (Kiu::Turn::RightStickOn() && out.turning) {
+        out.turning = false;
+        out.right_dps = out.down_dps = 0.0f;
+        p.stick_turn_skips++;
+    }
     // 1.2.0 RC2 (the owner): the Turn Zone turns the game's camera itself, not through the mod's
     // gyro. The game's clamp (0x6D2C08) turns the camera by what it clamps off the reticle past
     // the aim box, so the pixel is written past the box's edge by one game frame of the push
@@ -699,7 +711,7 @@ void AimPoll(int64_t ticks) {
         const Input::ReticleBox box = Input::ReachableBox(reading);
         LOG_INFO(Frontend,
                  "xr: Light Gun: reticle {:.1f}, {:.1f} of {:.0f}x{:.0f} ({}, box {:.1f} to "
-                 "{:.1f}, {:.1f} to {:.1f}), ray {:.1f}, {:.1f}{}{}{}{}",
+                 "{:.1f}, {:.1f} to {:.1f}), ray {:.1f}, {:.1f}{}{}{}{}{}",
                  reading.x, reading.y, reading.w, reading.h, reading.ground ? "ground" : "air",
                  box.x0, box.x1, box.y0, box.y1, want.x, want.y,
                  // AzaharFrame kiuaim3: Keep Reticle on Screen's edge point, and how far past
@@ -716,6 +728,10 @@ void AimPoll(int64_t ticks) {
                  : out.easing          ? ", easing back in"
                  : out.turning         ? ", turning"
                                        : "",
+                 // AzaharFrame kiufov
+                 p.stick_turn_skips ? fmt::format(" (stick turning: {} Turn Zone pushes not made)",
+                                                  p.stick_turn_skips)
+                                    : std::string{},
                  // 1.2.0 RC2: the push and what the game's gyroscope was given
                  fmt::format("; {} push {:.1f} right {:.1f} down dps, gyro {:.1f} {:.1f} {:.1f} "
                              "(scale {:.2f}, {} polls); mod flags {:02X} stick {:08X}, {} cleared, clamp {:08X}{}; "
@@ -763,6 +779,7 @@ void AimPoll(int64_t ticks) {
             break;
         }
         p.counter_resets = 0;
+        p.stick_turn_skips = 0;
     }
 }
 
