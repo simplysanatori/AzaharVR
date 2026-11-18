@@ -276,6 +276,9 @@ struct MeshSpec {
     u32 skinning = 1;
     Tri tri;
     s32 node = -1;
+    /// AzaharFrame kiuarm: per corner, two bone indices (into `bones`) and their weights, as the
+    /// game's smooth meshes have them (u8 indices; u8 weights scaled by 0.01). Empty: none.
+    std::vector<std::array<float, 4>> skin;
 };
 
 /// One skeletal model: bones (name, parent, translation), materials (name, texture), meshes;
@@ -291,7 +294,8 @@ Bytes Cgfx(const std::vector<std::tuple<std::string, s32, std::array<float, 3>>>
            const std::vector<std::pair<std::string, std::string>>& materials,
            const std::vector<MeshSpec>& meshes,
            const std::vector<std::pair<std::string, bool>>& nodes = {},
-           const std::string& model_name = "WpnTest", const AddedLight& added = {}) {
+           const std::string& model_name = "WpnTest", const AddedLight& added = {},
+           const std::string& texture_name = "Tex") {
     Buf f;
     f.Alloc(0x14 + 8 + 16 * 8);
     f.Magic(0, "CGFX");
@@ -366,10 +370,20 @@ Bytes Cgfx(const std::vector<std::tuple<std::string, s32, std::array<float, 3>>>
     for (std::size_t i = 0; i < meshes.size(); i++) {
         const MeshSpec& ms = meshes[i];
         const std::size_t so = f.Alloc(0x40);
-        // The vertex buffer: position (3 floats), normal (3 floats), uv (2 floats).
-        const std::size_t raw = f.Alloc(3 * 32);
+        // The vertex buffer: position (3 floats), normal (3 floats), uv (2 floats); AzaharFrame
+        // kiuarm: then two bone indices and two weights (u8 each) when skinned.
+        const bool skin = ms.skin.size() == 3;
+        const std::size_t stride = skin ? 36 : 32;
+        const std::size_t raw = f.Alloc(3 * stride);
         for (int v = 0; v < 3; v++) {
-            const std::size_t at = raw + static_cast<std::size_t>(v) * 32;
+            const std::size_t at = raw + static_cast<std::size_t>(v) * stride;
+            if (skin) {
+                const auto& sk = ms.skin[static_cast<std::size_t>(v)];
+                f.W8(at + 32, static_cast<u8>(sk[0]));
+                f.W8(at + 33, static_cast<u8>(sk[1]));
+                f.W8(at + 34, static_cast<u8>(std::lround(sk[2] * 100.0f)));
+                f.W8(at + 35, static_cast<u8>(std::lround(sk[3] * 100.0f)));
+            }
             for (int k = 0; k < 3; k++) {
                 f.F(at + 4 * static_cast<std::size_t>(k), ms.tri.pos[static_cast<std::size_t>(v)][static_cast<std::size_t>(k)]);
                 f.F(at + 12 + 4 * static_cast<std::size_t>(k), ms.tri.normal[static_cast<std::size_t>(k)]);
@@ -378,21 +392,23 @@ Bytes Cgfx(const std::vector<std::tuple<std::string, s32, std::array<float, 3>>>
             f.F(at + 28, ms.tri.uv[static_cast<std::size_t>(v)][1]);
         }
         std::vector<std::size_t> attrs;
-        const u32 spec[3][4] = {{0, 3, 0}, {1, 3, 12}, {4, 2, 24}};
-        for (const auto& a : spec) {
+        const u32 spec[5][4] = {{0, 3, 0, 0x1406}, {1, 3, 12, 0x1406}, {4, 2, 24, 0x1406},
+                                {7, 2, 32, 0x1401}, {8, 2, 34, 0x1401}};
+        for (std::size_t k = 0; k < (skin ? 5u : 3u); k++) {
+            const auto& a = spec[k];
             const std::size_t ao = f.Alloc(0x34);
             f.W32(ao + 4, a[0]);
-            f.W32(ao + 0x24, 0x1406);
+            f.W32(ao + 0x24, a[3]);
             f.W32(ao + 0x28, a[1]);
-            f.F(ao + 0x2C, 1.0f);
+            f.F(ao + 0x2C, a[0] == 8 ? 0.01f : 1.0f);
             f.W32(ao + 0x30, a[2]);
             attrs.push_back(ao);
         }
         const std::size_t vb = f.Alloc(0x30);
         f.W32(vb, 0x40000002u);
-        f.W32(vb + 0x14, 3 * 32);
+        f.W32(vb + 0x14, static_cast<u32>(3 * stride));
         f.Rel(vb + 0x18, raw);
-        f.W32(vb + 0x24, 32);
+        f.W32(vb + 0x24, static_cast<u32>(stride));
         f.PtrList(vb + 0x28, attrs);
         f.PtrList(so + 0x38, {vb});
         // The submesh: its bones, its skinning, one face of one triangle (u16 indices).
@@ -476,7 +492,7 @@ Bytes Cgfx(const std::vector<std::tuple<std::string, s32, std::array<float, 3>>>
     f.Rel(tex + 0x38, image);
     // The sections: models, textures.
     const std::size_t models = f.Dict({{model_name, model}});
-    const std::size_t textures = f.Dict({{"Tex", tex}});
+    const std::size_t textures = f.Dict({{texture_name, tex}});
     f.W32(0x1C, 1);
     f.Rel(0x20, models);
     f.W32(0x24, 1);
@@ -948,7 +964,9 @@ Bytes PalmZrc(bool along_v, float side = 1.0f) {
 }
 
 /// A RomFS level 3 image: root / <region> / player / the files.
-Bytes RomFS(const std::string& region, const std::vector<std::pair<std::string, Bytes>>& files) {
+/// AzaharFrame kiuarm: `region_files` in the region's own folder (0.arc).
+Bytes RomFS(const std::string& region, const std::vector<std::pair<std::string, Bytes>>& files,
+            const std::vector<std::pair<std::string, Bytes>>& region_files = {}) {
     const auto name = [](const std::string& s) {
         Bytes b;
         for (const char c : s) {
@@ -979,6 +997,26 @@ Bytes RomFS(const std::string& region, const std::vector<std::pair<std::string, 
     dirs.W32(root + 8, reg);
     dirs.W32(reg + 8, player);
     std::size_t prev = SIZE_MAX;
+    for (const auto& [n, bytes] : region_files) { // AzaharFrame kiuarm
+        const Bytes nb = name(n);
+        const std::size_t at = metas.Alloc(32 + nb.size());
+        const std::size_t d = data.Alloc(bytes.size());
+        std::memcpy(data.b.data() + d, bytes.data(), bytes.size());
+        metas.W32(at, reg);
+        metas.W32(at + 4, 0xFFFFFFFF);
+        metas.W32(at + 8, static_cast<u32>(d));
+        metas.W32(at + 16, static_cast<u32>(bytes.size()));
+        metas.W32(at + 24, 0xFFFFFFFF);
+        metas.W32(at + 28, static_cast<u32>(n.size() * 2));
+        std::memcpy(metas.b.data() + at + 32, nb.data(), nb.size());
+        if (prev == SIZE_MAX) {
+            dirs.W32(reg + 12, static_cast<u32>(at));
+        } else {
+            metas.W32(prev + 4, static_cast<u32>(at));
+        }
+        prev = at;
+    }
+    prev = SIZE_MAX;
     for (const auto& [n, bytes] : files) {
         const Bytes nb = name(n);
         const std::size_t at = metas.Alloc(32 + nb.size());
@@ -2546,4 +2584,441 @@ TEST_CASE("Weapon models: the hold in the cache, made again once", "[kiuweap2]")
     }
     CHECK_FALSE(FrameWeapons::ReadManifest(dir + "weapons.txt", m, error));
     std::filesystem::remove_all(dir);
+}
+
+// ---- AzaharFrame kiuarm: Pit's arm ----
+
+namespace {
+
+/// A model space bone (a translation, as the game's bind pose of Pit's arm bones).
+FrameCgfx::Bone ArmBone(const char* name, s32 index, s32 parent, std::array<float, 3> t) {
+    FrameCgfx::Bone b;
+    b.name = name;
+    b.index = index;
+    b.parent = parent;
+    b.bind = {1, 0, 0, t[0], 0, 1, 0, t[1], 0, 0, 1, t[2]};
+    return b;
+}
+
+/// A synthetic Pit (no game data): his left arm as the game's is built, a hexagonal forearm tube
+/// (rings at x 1.6, 3.0, 3.6 and 5.0, radius 0.5 about y 12.3; smooth, in model space, the
+/// shoulder's weight giving way to the forearm's past the elbow at 3.2) and a fist cube on
+/// LHandFistM (rigid, in its bone's space); then what is not the arm: a wing triangle, a torso
+/// triangle, a Face triangle on the forearm, and a hidden open-hand mesh. The tube's UVs: u
+/// around it, v = x / 10.
+FrameCgfx::Model SyntheticPit() {
+    FrameCgfx::Model m;
+    m.bones = {ArmBone("TopN", 0, -1, {0, 0, 0}),          ArmBone("BustN", 1, 0, {0, 11, 0.4f}),
+               ArmBone("LShoulderN", 2, 1, {1.6f, 12.3f, 0}), ArmBone("LArmN", 3, 2, {3.2f, 12.3f, 0}),
+               ArmBone("LHandN", 4, 3, {5.4f, 12.3f, 0}),   ArmBone("LHandFistM", 5, 4, {6.3f, 12.4f, 0}),
+               ArmBone("LHandPalmM", 6, 4, {6.3f, 12.4f, 0}), ArmBone("Lwing01N", 7, 1, {0.6f, 12.4f, -0.8f})};
+    FrameCgfx::Material body;
+    body.name = "Body";
+    body.coords.resize(3);
+    body.coords[1].source = 0;
+    body.mappers[0].texture = "Pit_Ref";
+    body.mappers[1].texture = "pit";
+    body.mappers[1].wrap_u = 0; // clamp: carried to the file's flags
+    body.mappers[2].texture = "pit_Mask";
+    FrameCgfx::Material face;
+    face.name = "Face";
+    m.materials = {body, face};
+    // The tube.
+    FrameCgfx::Shape tube;
+    FrameCgfx::SubMesh sm;
+    sm.skinning = 2;
+    sm.bones = {2, 3, 4};
+    const float rings[4] = {1.6f, 3.0f, 3.6f, 5.0f};
+    // (local bone 0 shoulder, 1 forearm, 2 hand) and the shoulder's weight at each ring
+    const float shoulder_w[4] = {1.0f, 0.6f, 0.0f, 0.0f};
+    for (int r = 0; r < 4; r++) {
+        for (int k = 0; k < 6; k++) {
+            const float a = 2.0f * kPi * static_cast<float>(k) / 6.0f;
+            FrameCgfx::Vertex v;
+            v.position = {rings[r], 12.3f + 0.5f * std::cos(a), 0.5f * std::sin(a)};
+            v.normal = {0, std::cos(a), std::sin(a)};
+            v.uv0 = {static_cast<float>(k) / 6.0f, rings[r] / 10.0f};
+            v.has_bones = true;
+            v.has_weights = true;
+            if (r == 3) {
+                v.bones = {1, 2, 0, 0};
+                v.weights = {0.8f, 0.2f, 0, 0};
+            } else {
+                v.bones = {0, 1, 0, 0};
+                v.weights = {shoulder_w[r], 1.0f - shoulder_w[r], 0, 0};
+            }
+            tube.vertices.push_back(v);
+        }
+    }
+    for (u32 r = 0; r < 3; r++) {
+        for (u32 k = 0; k < 6; k++) {
+            const u32 a = r * 6 + k, b = r * 6 + (k + 1) % 6, c = a + 6, d = b + 6;
+            sm.indices.insert(sm.indices.end(), {a, c, b, b, c, d});
+        }
+    }
+    tube.submeshes.push_back(sm);
+    // The fist: a cube of side 1 about its bone (rigid on LHandFistM), as six quads.
+    FrameCgfx::Shape fist;
+    FrameCgfx::SubMesh fs;
+    fs.skinning = 1;
+    fs.bones = {5};
+    for (int axis = 0; axis < 3; axis++) {
+        for (const float sgn : {-1.0f, 1.0f}) {
+            const u32 base = static_cast<u32>(fist.vertices.size());
+            const int u = (axis + 1) % 3, w = (axis + 2) % 3;
+            for (const auto& [du, dw] : {std::pair{-1.0f, -1.0f}, {1.0f, -1.0f}, {1.0f, 1.0f}, {-1.0f, 1.0f}}) {
+                FrameCgfx::Vertex v;
+                v.position[static_cast<std::size_t>(axis)] = 0.5f * sgn;
+                v.position[static_cast<std::size_t>(u)] = 0.5f * du;
+                v.position[static_cast<std::size_t>(w)] = 0.5f * dw;
+                v.normal = {0, 0, 0};
+                v.normal[static_cast<std::size_t>(axis)] = sgn;
+                v.uv0 = {0.05f, 0.95f};
+                fist.vertices.push_back(v);
+            }
+            fs.indices.insert(fs.indices.end(), {base, base + 1, base + 2, base, base + 2, base + 3});
+        }
+    }
+    fist.submeshes.push_back(fs);
+    // Not the arm: a wing, the torso, a Face triangle on the forearm, a hidden open hand.
+    const auto one = [](s32 bone, std::array<float, 3> at) {
+        FrameCgfx::Shape s;
+        FrameCgfx::SubMesh sub;
+        sub.skinning = 1;
+        sub.bones = {bone};
+        for (int k = 0; k < 3; k++) {
+            FrameCgfx::Vertex v;
+            v.position = {at[0] + (k == 1 ? 0.5f : 0.0f), at[1] + (k == 2 ? 0.5f : 0.0f), at[2]};
+            s.vertices.push_back(v);
+        }
+        sub.indices = {0, 1, 2};
+        s.submeshes.push_back(sub);
+        return s;
+    };
+    m.shapes = {tube, fist, one(7, {4.0f, 0, 0}), one(1, {0, 0, 0}), one(3, {1.0f, 0, 0}),
+                one(6, {0, 0, 0})};
+    const auto mesh = [](s32 shape, s32 material, s32 node) {
+        FrameCgfx::Mesh me;
+        me.shape = shape;
+        me.material = material;
+        me.node = node;
+        return me;
+    };
+    m.meshes = {mesh(0, 0, -1), mesh(1, 0, 0), mesh(2, 0, -1), mesh(3, 0, -1), mesh(4, 1, -1),
+                mesh(5, 0, 1)};
+    m.node_visibility = {{"LHandFistM", true}, {"LHandPalmM", false}};
+    return m;
+}
+
+using V3f = std::array<float, 3>;
+V3f VPos(const std::vector<float>& v, u32 i) {
+    return {v[i * 12], v[i * 12 + 1], v[i * 12 + 2]};
+}
+V3f VNorm(const std::vector<float>& v, u32 i) {
+    return {v[i * 12 + 3], v[i * 12 + 4], v[i * 12 + 5]};
+}
+
+} // namespace
+
+TEST_CASE("CGFX: a smooth vertex's bone weights", "[kiuarm]") {
+    Tri t{{{{0, 0, 0}, {1, 0, 0}, {0, 1, 0}}}, {0, 0, 1}};
+    MeshSpec ms{"Body", {1, 2}, 2, t, -1};
+    ms.skin = {{0, 1, 0.7f, 0.3f}, {0, 1, 1.0f, 0.0f}, {1, 0, 0.25f, 0.75f}};
+    const Bytes bcres = Cgfx({{"TopN", -1, {0, 0, 0}}, {"LArmN", 0, {3, 12, 0}}, {"LHandN", 1, {5, 12, 0}}},
+                             {{"Body", "pit"}}, {ms});
+    FrameCgfx::File file;
+    std::string error;
+    REQUIRE(FrameCgfx::ReadCgfx(bcres, file, error));
+    const auto& vs = file.models[0].shapes[0].vertices;
+    REQUIRE(vs.size() == 3);
+    CHECK(vs[0].has_weights);
+    CHECK(vs[0].bones[1] == 1);
+    CHECK(vs[0].weights[0] == Approx(0.7f));
+    CHECK(vs[0].weights[1] == Approx(0.3f));
+    CHECK(vs[2].weights[1] == Approx(0.75f));
+    // A mesh without them: its first bone takes it all.
+    MeshSpec plain{"Body", {1}, 1, t, -1};
+    REQUIRE(FrameCgfx::ReadCgfx(Cgfx({{"TopN", -1, {0, 0, 0}}, {"LArmN", 0, {3, 12, 0}}},
+                                     {{"Body", "pit"}}, {plain}),
+                                file, error));
+    CHECK_FALSE(file.models[0].shapes[0].vertices[0].has_weights);
+    CHECK(file.models[0].shapes[0].vertices[0].weights[0] == 1.0f);
+}
+
+TEST_CASE("Pit's arm: the left forearm and fist, cut at the elbow and capped", "[kiuarm]") {
+    const FrameCgfx::Model m = SyntheticPit();
+    FrameWeapons::ArmMesh arm;
+    std::string error;
+    REQUIRE(FrameWeapons::BuildArm(m, arm, error));
+    // In LHandN's space: the fist marker and the elbow.
+    CHECK(arm.fist[0] == Approx(0.9f));
+    CHECK(arm.fist[1] == Approx(0.1f));
+    CHECK(arm.elbow[0] == Approx(-2.2f));
+    CHECK(arm.wrap_u == 0);
+    CHECK(arm.wrap_v == 2);
+    // The fist's cube alone is the hand (12 triangles, within half a unit of its bone).
+    REQUIRE(arm.hand_indices.size() == 36);
+    for (const u32 i : arm.hand_indices) {
+        const V3f p = VPos(arm.hand_vertices, i);
+        CHECK(std::abs(p[0] - 0.9f) <= 0.5001f);
+        CHECK(std::abs(p[1] - 0.1f) <= 0.5001f);
+    }
+    // The forearm: nothing past the elbow's plane (x -2.2), nothing of the wing, the torso, the
+    // Face or the hidden open hand (all near the origin of the model, far left of the wrist).
+    REQUIRE_FALSE(arm.forearm_indices.empty());
+    for (const u32 i : arm.forearm_indices) {
+        const V3f p = VPos(arm.forearm_vertices, i);
+        CHECK(p[0] >= -2.2f - 1e-4f);
+        CHECK(p[0] <= -0.4f + 1e-4f);
+        CHECK(std::abs(p[1]) <= 0.5001f);
+    }
+    CHECK(arm.cut_loops == 1);
+    CHECK(arm.open_ends == 0);
+    // Closed at the cut: every edge on the elbow's plane is shared by two triangles (the tube's
+    // and the cap's); the only open edges are the wrist's ring.
+    std::map<std::array<long, 6>, int> edges;
+    const auto q = [](const V3f& p) {
+        return std::array<long, 3>{std::lround(p[0] * 1000), std::lround(p[1] * 1000),
+                                   std::lround(p[2] * 1000)};
+    };
+    int cap = 0;
+    for (std::size_t t = 0; t < arm.forearm_indices.size(); t += 3) {
+        std::array<V3f, 3> p{};
+        for (std::size_t k = 0; k < 3; k++) {
+            p[k] = VPos(arm.forearm_vertices, arm.forearm_indices[t + k]);
+        }
+        for (std::size_t k = 0; k < 3; k++) {
+            auto a = q(p[k]), b = q(p[(k + 1) % 3]);
+            if (b < a) {
+                std::swap(a, b);
+            }
+            edges[{a[0], a[1], a[2], b[0], b[1], b[2]}]++;
+        }
+        // Every triangle wound to agree with its normals; the cap's face out of the stump (-x).
+        const V3f e1{p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]};
+        const V3f e2{p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]};
+        const V3f face{e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2],
+                       e1[0] * e2[1] - e1[1] * e2[0]};
+        const V3f n = VNorm(arm.forearm_vertices, arm.forearm_indices[t]);
+        CHECK(face[0] * n[0] + face[1] * n[1] + face[2] * n[2] >= 0.0f);
+        if (std::abs(p[0][0] + 2.2f) < 1e-3f && std::abs(p[1][0] + 2.2f) < 1e-3f &&
+            std::abs(p[2][0] + 2.2f) < 1e-3f) {
+            cap++;
+            CHECK(n[0] == Approx(-1.0f));
+            // The cap in one texel of the cut (its u one of the cut's, its v the elbow's x / 10,
+            // turned over as the file's are: 1 - 0.32).
+            const float* v0 = &arm.forearm_vertices[arm.forearm_indices[t] * 12];
+            CHECK(v0[11] == Approx(1.0f - 0.32f).margin(1e-3));
+        }
+    }
+    // The cut runs through 12 of the tube's triangles (each quad's two): a loop of 12 points.
+    CHECK(cap == 12);
+    // The tube past the cut (12), the cut quads' parts (each quad's: one triangle and one made
+    // two), the cap (12): nothing else (the wing, the torso, the Face, the hidden hand).
+    CHECK(arm.forearm_indices.size() == 3 * (12 + 18 + 12));
+    for (const auto& [e, n] : edges) {
+        if (n == 1) {
+            CHECK(e[0] == -400); // the wrist's ring (x 5.0 - 5.4)
+            CHECK(e[3] == -400);
+        } else {
+            CHECK(n == 2);
+        }
+    }
+    // A tube vertex's UV: v turned over (the ring at 3.6: 1 - 0.36).
+    bool ring = false;
+    for (std::size_t i = 0; i < arm.forearm_vertices.size() / 12; i++) {
+        if (std::abs(arm.forearm_vertices[i * 12] + 1.8f) < 1e-4f) {
+            ring = true;
+            CHECK(arm.forearm_vertices[i * 12 + 11] == Approx(1.0f - 0.36f));
+        }
+    }
+    CHECK(ring);
+    // No left arm in the skeleton: none.
+    FrameCgfx::Model no_arm = m;
+    no_arm.bones[3].name = "LArm";
+    CHECK_FALSE(FrameWeapons::BuildArm(no_arm, arm, error));
+}
+
+TEST_CASE("Pit's arm: its file, the game's texture at its own size", "[kiuarm]") {
+    FrameWeapons::ArmMesh arm;
+    std::string error;
+    REQUIRE(FrameWeapons::BuildArm(SyntheticPit(), arm, error));
+    FrameCgfx::Texture tex;
+    tex.name = "pit";
+    tex.width = 4;
+    tex.height = 2;
+    for (int i = 0; i < 8; i++) {
+        tex.rgba.insert(tex.rgba.end(), {static_cast<u8>(10 * i), 20, 30, 40});
+    }
+    const std::vector<u8> bytes = FrameWeapons::WriteArmModel(arm, &tex);
+    const std::string dir = TestDir("frame_weapon_arm_file");
+    {
+        std::ofstream(dir + "pit-arm.model", std::ios::binary)
+            .write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    }
+    FrameXr::Vis::ModelFile f;
+    REQUIRE(FrameXr::Vis::LoadModelFile(dir + "pit-arm.model", f, error,
+                                        FrameXr::Vis::kModelFlagWeaponSpace));
+    REQUIRE(f.components.size() == 2);
+    CHECK(f.components[0].name == "hand");
+    CHECK(f.components[1].name == "forearm");
+    CHECK(f.components[0].index_count == arm.hand_indices.size());
+    CHECK(f.components[1].index_count == arm.forearm_indices.size());
+    CHECK(f.components[1].first_index == arm.hand_indices.size());
+    CHECK(f.tex_width == 4);
+    CHECK(f.tex_height == 2);
+    CHECK(f.colour[4 * 3] == 30); // texel 3's red, alpha made 255
+    CHECK(f.colour[4 * 3 + 3] == 255);
+    CHECK(FrameXr::Vis::ModelWrapU(f.flags) == 0);
+    CHECK((f.flags & FrameXr::Vis::kModelFlagFlatSurface) != 0);
+    CHECK(f.surface[3] > 200); // matte, not the weapons' metal
+    std::filesystem::remove_all(dir);
+}
+
+namespace {
+
+/// A weapon file (blade 0) with Pit's left arm as one-triangle meshes (the builder's): a forearm
+/// triangle on LArmN across the elbow's plane, a fist triangle on LHandFistM, a wing triangle.
+Bytes ArmBladeZrc(float fist_y = 0.0f) {
+    const Tri wpn{{{{0, 0, 0}, {1, 0, 0}, {0, 1, 0}}}, {0, 0, 1}};
+    const Tri forearm{{{{-0.5f, 0, 0}, {1.5f, 0, 0}, {1.0f, 0.4f, 0}}}, {0, 0, 1}};
+    const Tri fist{{{{0, 0, 0}, {0.4f, fist_y, 0}, {0, 0.4f, 0}}}, {0, 0, 1}};
+    const Bytes bcres = Cgfx({{"TopN", -1, {0, 0, 0}},
+                              {"RHandN", 0, {-5.4f, 12.3f, 0}},
+                              {"GripN", 1, {-6.3f, 12.4f, 0}},
+                              {"LShoulderN", 0, {1.6f, 12.3f, 0}},
+                              {"LArmN", 3, {3.2f, 12.3f, 0}},
+                              {"LHandN", 4, {5.4f, 12.3f, 0}},
+                              {"LHandFistM", 5, {6.3f, 12.4f, 0}},
+                              {"Lwing01N", 0, {0.6f, 12.4f, -0.8f}}},
+                             {{"Wpn", "Tex"}, {"Body", "pit"}},
+                             {{"Wpn", {2}, 1, wpn, -1},
+                              {"Body", {4}, 1, forearm, -1},
+                              {"Body", {6}, 1, fist, -1},
+                              {"Body", {7}, 1, wpn, -1}});
+    const Bytes fmdl = Darc({{"fmdl/00.bcres", bcres}});
+    const Bytes js =
+        Darc({{"json/00.json", WeaponJson("WPNID_WPN_RIFLE_00", "GripN", {-4.55f, 0.1f, -9.89f})}});
+    return Lz11Store(Darc({{"character/fmdl.arc", Lz11Store(fmdl)}, {"character/json.arc", js}}));
+}
+
+/// The region's 0.arc: resident/shared.arc holding shared/00.bcres with the `pit` texture (the
+/// builder's 8x8 of one colour) and, `extra`, a byte that changes it.
+Bytes ResidentArc(u8 extra = 0) {
+    const Tri t{{{{0, 0, 0}, {1, 0, 0}, {0, 1, 0}}}, {0, 0, 1}};
+    const Bytes bcres = Cgfx({{"TopN", -1, {0, 0, 0}}}, {{"Body", "pit"}}, {{"Body", {0}, 1, t, -1}},
+                             {}, "Shared", {}, "pit");
+    const Bytes shared = Darc({{"shared/00.bcres", bcres}, {"shared/02.bin", Bytes{extra}}});
+    return Darc({{"resident/shared.arc", shared}, {"resident/00.bin", Bytes{1, 2, 3}}});
+}
+
+} // namespace
+
+TEST_CASE("Pit's arm: once a game when asked, kept, made again when a file changes", "[kiuarm]") {
+    const std::string dir = TestDir("frame_weapon_arm_cache");
+    constexpr u64 kTitle = 0x0004000000030200ull;
+    std::string error;
+    FrameWeapons::Manifest m;
+    // Not asked for: the folder is as before (no arm line, no file).
+    auto rom = std::make_shared<MemoryRomFS>(
+        RomFS("eu", {{"m000.zrc", ArmBladeZrc()}, {"m200.zrc", ClawZrc()}}, {{"0.arc", ResidentArc()}}));
+    FrameWeapons::RunResult r = FrameWeapons::ConvertGame(rom, kTitle, dir);
+    CHECK(r.made == 2);
+    REQUIRE(FrameWeapons::ReadManifest(dir + "weapons.txt", m, error));
+    CHECK_FALSE(m.arm.known);
+    CHECK_FALSE(std::filesystem::exists(dir + FrameWeapons::kArmFile));
+    // Asked for: made from the first blade's file, the game's texture in it.
+    r = FrameWeapons::ConvertGame(rom, kTitle, dir, nullptr, nullptr, true);
+    CHECK(r.made == 1);
+    CHECK(r.kept == 2);
+    REQUIRE(FrameWeapons::ReadManifest(dir + "weapons.txt", m, error));
+    REQUIRE(m.arm.known);
+    CHECK(m.arm.file == FrameWeapons::kArmFile);
+    CHECK(m.arm.source == 0);
+    CHECK(m.arm.triangles >= 2);
+    CHECK(m.arm.fist[0] == Approx(0.9f));
+    CHECK(m.arm.elbow[0] == Approx(-2.2f));
+    CHECK(m.Find(0) != nullptr); // the weapons' lines as they were
+    CHECK(m.Find(24) != nullptr);
+    FrameXr::Vis::ModelFile f;
+    REQUIRE(FrameXr::Vis::LoadModelFile(dir + FrameWeapons::kArmFile, f, error,
+                                        FrameXr::Vis::kModelFlagWeaponSpace));
+    CHECK(f.tex_width == 8);
+    CHECK(f.colour[0] == 0x10); // the builder's colour (PICA's a, b, g, r: r 0x10)
+    // Kept while nothing changes.
+    r = FrameWeapons::ConvertGame(rom, kTitle, dir, nullptr, nullptr, true);
+    CHECK(r.made == 0);
+    CHECK(r.kept == 3);
+    // The texture's file changed (a mod): made again.
+    rom = std::make_shared<MemoryRomFS>(
+        RomFS("eu", {{"m000.zrc", ArmBladeZrc()}, {"m200.zrc", ClawZrc()}}, {{"0.arc", ResidentArc(7)}}));
+    r = FrameWeapons::ConvertGame(rom, kTitle, dir, nullptr, nullptr, true);
+    CHECK(r.made == 1);
+    // The weapon file changed: made again.
+    rom = std::make_shared<MemoryRomFS>(RomFS("eu", {{"m000.zrc", ArmBladeZrc(0.1f)}, {"m200.zrc", ClawZrc()}},
+                                              {{"0.arc", ResidentArc(7)}}));
+    r = FrameWeapons::ConvertGame(rom, kTitle, dir, nullptr, nullptr, true);
+    CHECK(r.made == 2); // the blade and the arm
+    // The file gone: made again.
+    std::filesystem::remove(dir + FrameWeapons::kArmFile);
+    r = FrameWeapons::ConvertGame(rom, kTitle, dir, nullptr, nullptr, true);
+    CHECK(r.made == 1);
+    // A manifest written by a build before the arm (no arm line): made again once, the weapons
+    // kept; no version change.
+    {
+        std::ifstream in(dir + "weapons.txt");
+        std::string text, line;
+        while (std::getline(in, line)) {
+            if (line.rfind("arm ", 0) != 0) {
+                text += line + "\n";
+            }
+        }
+        in.close();
+        std::ofstream(dir + "weapons.txt") << text;
+    }
+    REQUIRE(FrameWeapons::ReadManifest(dir + "weapons.txt", m, error));
+    CHECK_FALSE(m.arm.known);
+    CHECK(m.version == FrameWeapons::kConverterVersion);
+    r = FrameWeapons::ConvertGame(rom, kTitle, dir, nullptr, nullptr, true);
+    CHECK(r.made == 1);
+    CHECK(r.kept == 2);
+    // A bad arm line is dropped (the arm is made again), the rest of the manifest kept.
+    {
+        std::ofstream(dir + "weapons.txt", std::ios::app) << "arm ../x 12 0 4 nan 0 0 0 0 0\n";
+    }
+    REQUIRE(FrameWeapons::ReadManifest(dir + "weapons.txt", m, error));
+    CHECK(m.Find(0) != nullptr);
+    // A texture pack that replaces the `pit` texture is not used for the arm (an upscale gave
+    // its knuckles ink strokes): the arm is kept with the game's texture.
+    {
+        Bytes shared;
+        std::vector<FrameCgfx::Texture> pit;
+        REQUIRE(FrameCgfx::DarcMember(ResidentArc(), FrameWeapons::kArmTextureMember, shared, error));
+        REQUIRE(FrameCgfx::ReadTextures(shared, {"pit"}, pit, error));
+        REQUIRE(pit.size() == 1);
+        FrameWeapons::TexturePack pack;
+        pack.on = true;
+        pack.files[VideoCore::CustomTexManager::NewHash(pit[0].raw)] = dir + "pit-4x.png";
+        const auto before = std::filesystem::last_write_time(dir + FrameWeapons::kArmFile);
+        r = FrameWeapons::ConvertGame(rom, kTitle, dir, nullptr, &pack, true);
+        CHECK(std::filesystem::last_write_time(dir + FrameWeapons::kArmFile) == before);
+        REQUIRE(FrameXr::Vis::LoadModelFile(dir + FrameWeapons::kArmFile, f, error,
+                                            FrameXr::Vis::kModelFlagWeaponSpace));
+        CHECK(f.tex_width == 8);
+        CHECK(f.colour[0] == 0x10);
+    }
+    // No texture file in the RomFS: no arm (the controller stays), the weapons as they were.
+    const std::string dir2 = TestDir("frame_weapon_arm_none");
+    rom = std::make_shared<MemoryRomFS>(RomFS("eu", {{"m000.zrc", ArmBladeZrc()}}));
+    const int missing = FrameWeapons::ConvertGame(rom, kTitle, TestDir("frame_weapon_arm_base")).failed;
+    std::filesystem::remove_all(std::filesystem::current_path() / "frame_weapon_arm_base");
+    r = FrameWeapons::ConvertGame(rom, kTitle, dir2, nullptr, nullptr, true);
+    CHECK(r.made == 1);
+    CHECK(r.failed == missing + 1); // the weapon files not there, and the arm
+    REQUIRE(FrameWeapons::ReadManifest(dir2 + "weapons.txt", m, error));
+    CHECK(m.arm.known);
+    CHECK(m.arm.file.empty());
+    CHECK_FALSE(std::filesystem::exists(dir2 + FrameWeapons::kArmFile));
+    std::filesystem::remove_all(dir);
+    std::filesystem::remove_all(dir2);
 }

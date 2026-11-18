@@ -846,6 +846,13 @@ struct Cgfx {
                 v.has_bones = n > 0;
                 (void)raw_index;
                 break;
+            case 8: // AzaharFrame kiuarm: the bone weights
+                v.weights = {};
+                for (u32 k = 0; k < 4 && k < n; k++) {
+                    v.weights[k] = x[k];
+                }
+                v.has_weights = n > 0;
+                break;
             default:
                 break;
             }

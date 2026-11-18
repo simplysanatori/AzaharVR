@@ -249,11 +249,68 @@ struct Weapon {
     HoldInfo hold;      ///< AzaharFrame kiuweap2
 };
 
+// ---- AzaharFrame kiuarm: Pit's arm ----
+//
+// Pit's left forearm and fist, drawn on the player's hands (frame_xr/vis/weapon_fit.h FitOffArm,
+// FitHoldingArm) as the first version of first-person arms: the game's own low-poly arm and its
+// own texture, made on the player's machine like the weapons and never shipped. Every weapon
+// file holds Pit, and his left arm is the same in all of them but the claws' and the bows' (their
+// left hands differ), so it is made once per game, from the first weapon file of the other
+// classes that has it: the meshes of the material Body the game shows by default, the
+// triangles that hang at least half on his left shoulder's bones, in the bind pose (a straight
+// wrist, the fist closed), cut by the plane square to the forearm through the elbow (LArmN), the
+// cut closed with a flat cap, put in his left hand bone's space (LHandN: the wrist at the origin,
+// the forearm toward -x, the fist toward +x). Two components: "hand" (the triangles that hang on
+// the hand's bones: the fist mesh) and "forearm" (the rest, the cap too), so the forearm can turn
+// about the wrist toward the player's elbow. Its texture is the game's `pit` atlas
+// (<region>/0.arc!resident/shared.arc!shared/00.bcres) at its own size, never a texture pack's
+// (an upscale gave the knuckles ink strokes). The file joins the weapons' folder,
+// pit-arm.model, and is made only when asked for (RequestArm: the test switches
+// AZAHARFRAME_KIU_ARM, AZAHARFRAME_KIU_ARM_WEAPON), so without them the folder is as before.
+
+constexpr const char* kArmFile = "pit-arm.model";
+
+struct ArmInfo {
+    bool known = false;   ///< tried by a build that makes it (else made when asked for)
+    std::string file;     ///< in the weapon folder; "" when the game's files have no arm
+    u64 source_hash = 0;  ///< the weapon file's and the texture file's (a mod makes it again)
+    int source = -1;      ///< the weapon id whose file it came from
+    u32 triangles = 0;
+    std::array<float, 3> fist{};  ///< the fist's centre (LHandFistM) in LHandN space
+    std::array<float, 3> elbow{}; ///< the elbow (LArmN) in LHandN space: the forearm's far end
+};
+
+/// The arm as made from a model (pure: tested with synthetic skeletons): per component its
+/// vertices (12 floats each, as MXFM: position, normal, tangent, uv; in LHandN space) and
+/// triangles (wound to agree with the normals).
+struct ArmMesh {
+    std::vector<float> hand_vertices, forearm_vertices;
+    std::vector<u32> hand_indices, forearm_indices;
+    std::array<float, 3> fist{}, elbow{};
+    u32 cut_loops = 0;    ///< closed loops of the cut, each capped
+    u32 open_ends = 0;    ///< cut ends that met no other (0 for a closed arm)
+    u32 wrap_u = 2, wrap_v = 2; ///< the `pit` mapper's
+};
+/// Pit's left arm from a weapon file's model (its material Body's meshes the game shows). False
+/// when the skeleton lacks the arm's bones or nothing hangs on them.
+bool BuildArm(const FrameCgfx::Model& m, ArmMesh& out, std::string& error);
+/// The arm's file (MXFM, weapon space flag, components "hand" and "forearm") with the texture.
+std::vector<u8> WriteArmModel(const ArmMesh& arm, const FrameCgfx::Texture* texture);
+/// Both from a weapon's .zrc and the texture (the `pit` atlas, the game's own); fills `info`
+/// but for the source and its hash.
+bool ConvertArm(std::span<const u8> zrc, const FrameCgfx::Texture* texture, ArmInfo& info,
+                std::vector<u8>& file, std::string& error);
+/// The texture's file in the RomFS (under the region folder) and its member.
+constexpr const char* kArmTextureArchive = "0.arc";
+constexpr const char* kArmTextureMember = "resident/shared.arc!shared/00.bcres";
+constexpr const char* kArmTexture = "pit";
+
 struct Manifest {
     int version = 0;
     u64 title_id = 0;
     std::string region; ///< the RomFS folder the files came from ("eu", "us", "jp")
     std::vector<Weapon> weapons;
+    ArmInfo arm; ///< AzaharFrame kiuarm
     const Weapon* Find(int id) const;
 };
 
@@ -361,12 +418,14 @@ struct RunResult {
 /// Makes every weapon missing or stale in `dir` from a game's RomFS (the command line's run; the
 /// booted game makes only the weapons asked for: Request(id)). `cancel` is polled between
 /// weapons. Logs a line per failed weapon and none per good one.
+/// AzaharFrame kiuarm: `arm`: Pit's arm too (kArmFile).
 RunResult ConvertGame(std::shared_ptr<FileSys::RomFSReader> romfs, u64 title_id,
                       const std::string& dir, const std::atomic<bool>* cancel = nullptr,
-                      const TexturePack* pack = nullptr);
+                      const TexturePack* pack = nullptr, bool arm = false);
 
-/// `azahar --frame-weapon-models GAME [OUTDIR] [--textures]`: the same for a game file (OUTDIR:
-/// the user folder's; --textures: with the game's custom texture pack). Prints a summary.
+/// `azahar --frame-weapon-models GAME [OUTDIR] [--textures] [--arm]`: the same for a game file
+/// (OUTDIR: the user folder's; --textures: with the game's custom texture pack; --arm: Pit's arm
+/// too). Prints a summary.
 int RunCli(const std::vector<std::string>& args);
 
 // ---- The booted game (the Qt thread calls these; the XR thread polls State) ----
@@ -389,6 +448,10 @@ enum class State : int { None, Working, Ready, Failed };
 State CurrentState();
 /// One weapon: None (not asked for this boot), Working, Ready (its files are current), Failed.
 State WeaponState(int id);
+/// AzaharFrame kiuarm: Any thread: asks for Pit's arm (made, or found made and current, on the
+/// worker thread, once a boot), and its state.
+void RequestArm();
+State ArmState();
 /// The booted game's title id (0 for none).
 u64 CurrentTitle();
 /// Bumped each time a run finishes, so a reader of the files reads them again.
