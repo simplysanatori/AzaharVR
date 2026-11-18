@@ -19,9 +19,10 @@
 //                                     off).
 //   AZAHARFRAME_KIU_SHOT_TEST=yaw,pitch[,dx,dy,dz]
 //                                     the player's shots turned by that many degrees from the
-//                                     game's aim (yaw about the world's up axis, pitch up) and,
-//                                     with the last three, started from the player's position
-//                                     plus that offset in his own axes.
+//                                     game's aim (yaw about the world's up axis, pitch up about
+//                                     the game camera's level side axis) and, with the last
+//                                     three, started from the player's position plus that offset
+//                                     (side, up, ahead of the game camera's level view).
 //   AZAHARFRAME_KIU_SHOT_NO_LOCK=1    with SHOT_TEST: the shots get no lock target (no homing).
 //   AZAHARFRAME_KIU_HOOK_TRACE=1|2    a status line a second (2: one a VBlank): the groups, the
 //                                     player, the scene eye.

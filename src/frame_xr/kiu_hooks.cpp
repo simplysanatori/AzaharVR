@@ -270,7 +270,12 @@ void Hook(int64_t ticks) {
     }
     KH::ShotRequest shot;
     if (want_shot && p.Ok()) {
-        shot = KH::ShotTest(p, shot_values[0] * kDegToRad, shot_values[1] * kDegToRad,
+        // Laid out on the game camera's view direction (the player's body turns as he fires).
+        KH::Vec3 eye_at, look_at, view = KH::Rotate(p.world_q, {0.0f, 0.0f, 1.0f});
+        if (KH::ReadVec3(mem, KH::kSceneEye, eye_at) && KH::ReadVec3(mem, KH::kSceneLookAt, look_at)) {
+            view = {look_at.x - eye_at.x, look_at.y - eye_at.y, look_at.z - eye_at.z};
+        }
+        shot = KH::ShotTest(view, shot_values[0] * kDegToRad, shot_values[1] * kDegToRad,
                             {shot_values[2], shot_values[3], shot_values[4]}, shot_count == 5,
                             SwitchIs(kSwitchShotNoLock, "1"));
     }

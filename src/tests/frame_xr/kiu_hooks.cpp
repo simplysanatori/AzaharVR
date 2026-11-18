@@ -723,46 +723,50 @@ TEST_CASE("Kid Icarus hooks: filling the mailbox", "[frame_xr][kiuhook]") {
     }
 
     SECTION("the test switch's shot") {
-        // Facing +z (no turn at all): yaw 90 takes the aim to +x, pitch 30 lifts it.
-        SetQuat(m, kActor + kActorWorldQuat, Quat{});
-        SetQuat(m, kActor + kActorLocalQuat, Quat{});
-        p = FindPlayer(m);
-        ShotRequest r = ShotTest(p, pi / 2, 0.0f, {}, false, false);
+        // The view along +z: yaw 90 takes the aim to +x, pitch 30 lifts it.
+        const Vec3 z{0.0f, 0.0f, 1.0f};
+        ShotRequest r = ShotTest(z, pi / 2, 0.0f, {}, false, false);
         CHECK(r.rotate);
         CHECK_FALSE(r.move);
-        Vec3 aim = Rotate(r.rotation, {0.0f, 0.0f, 1.0f});
+        Vec3 aim = Rotate(r.rotation, z);
         CHECK(aim.x == Approx(1.0f).margin(1e-5));
         CHECK(aim.z == Approx(0.0f).margin(1e-5));
-        r = ShotTest(p, 0.0f, pi / 6, {}, false, false);
-        aim = Rotate(r.rotation, {0.0f, 0.0f, 1.0f});
+        r = ShotTest(z, 0.0f, pi / 6, {}, false, false);
+        aim = Rotate(r.rotation, z);
         CHECK(aim.y == Approx(0.5f).margin(1e-5));
         CHECK(aim.z == Approx(std::cos(pi / 6)).margin(1e-5));
-        // Both: the lift happens about the player's side axis, then the turn about the world's up.
-        r = ShotTest(p, pi / 2, pi / 6, {}, false, false);
-        aim = Rotate(r.rotation, {0.0f, 0.0f, 1.0f});
+        // Both: the lift happens about the view's side axis, then the turn about the world's up.
+        r = ShotTest(z, pi / 2, pi / 6, {}, false, false);
+        aim = Rotate(r.rotation, z);
         CHECK(aim.x == Approx(std::cos(pi / 6)).margin(1e-5));
         CHECK(aim.y == Approx(0.5f).margin(1e-5));
-        // Facing -z, the lift still goes up.
-        SetQuat(m, kActor + kActorWorldQuat, local);
-        SetQuat(m, kActor + kActorLocalQuat, local);
-        p = FindPlayer(m);
-        r = ShotTest(p, 0.0f, pi / 6, {3.0f, 4.0f, 5.0f}, true, true);
-        aim = Rotate(r.rotation, Rotate(local, {0.0f, 0.0f, 1.0f}));
+        // The view along -z and tilted down (only its level part counts): the lift still goes up,
+        // and the offset is (side, up, ahead) of that view: ahead is -z, side is -z x up = +x.
+        const Vec3 back{0.0f, -0.4f, -2.0f};
+        r = ShotTest(back, 0.0f, pi / 6, {3.0f, 4.0f, 5.0f}, true, true);
+        aim = Rotate(r.rotation, {0.0f, 0.0f, -1.0f});
         CHECK(aim.y == Approx(0.5f).margin(1e-5));
         CHECK(aim.z == Approx(-std::cos(pi / 6)).margin(1e-5));
-        // The offset is in the actor's axes: facing -z, his +z is the world's -z.
         CHECK(r.move);
         CHECK(r.no_target);
-        CHECK(r.offset.x == Approx(-3.0f).margin(1e-5));
+        CHECK(r.offset.x == Approx(3.0f).margin(1e-5));
         CHECK(r.offset.y == Approx(4.0f).margin(1e-5));
         CHECK(r.offset.z == Approx(-5.0f).margin(1e-5));
-        const Mailbox mb = Fill(p, EyeRequest{}, r, 9);
+        // A view along +x: ahead is +x, side is +x x up = +z.
+        r = ShotTest({7.0f, 0.0f, 0.0f}, 0.0f, 0.0f, {3.0f, 4.0f, 5.0f}, true, false);
+        CHECK(r.offset.x == Approx(5.0f).margin(1e-5));
+        CHECK(r.offset.z == Approx(3.0f).margin(1e-5));
+        // Looking straight down: still a finite answer.
+        r = ShotTest({0.0f, -1.0f, 0.0f}, 0.3f, 0.2f, {1.0f, 2.0f, 3.0f}, true, false);
+        CHECK(Finite(r.rotation));
+        CHECK(Finite(r.offset));
+        const Mailbox mb = Fill(p, EyeRequest{}, ShotTest(back, 0.0f, pi / 6, {3.0f, 4.0f, 5.0f}, true, true), 9);
         CHECK(mb.shot_rotate);
         CHECK(mb.shot_move);
         CHECK(mb.shot_no_target);
         CHECK(mb.shot_offset.z == Approx(-5.0f).margin(1e-5));
         // No turn asked: nothing to rotate.
-        CHECK_FALSE(ShotTest(p, 0.0f, 0.0f, {}, true, false).rotate);
+        CHECK_FALSE(ShotTest(z, 0.0f, 0.0f, {}, true, false).rotate);
     }
 
     SECTION("no player: everything off") {

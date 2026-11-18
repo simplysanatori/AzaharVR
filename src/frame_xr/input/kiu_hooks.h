@@ -73,7 +73,8 @@ inline constexpr uint32_t kSiteShotSpawn = 0x5043E4;  ///< the player's shot: bl
 inline constexpr uint32_t kEyeStub = kImageBase + Stubs::kEyeStub;
 inline constexpr uint32_t kShotStub = kImageBase + Stubs::kShotStub;
 
-inline constexpr uint32_t kSceneEye = 0xE14B90; ///< the scene camera's eye, 3 floats (a log)
+inline constexpr uint32_t kSceneEye = 0xE14B90;    ///< the scene camera's eye, 3 floats
+inline constexpr uint32_t kSceneLookAt = 0xE14B9C; ///< and its look-at point
 
 // The player (KIU_HOOKS.md, "The player"): aim = [[0xE14504] + 8] - 0x10 as kiu_turn.h.
 inline constexpr uint32_t kOwnerVtable = 0xCEAC40;
@@ -454,21 +455,27 @@ inline Quat ParentRotation(const Player& p) {
     return Normalized(Mul(p.world_q, Conj(p.local_q)));
 }
 
-/// The test switch's shot: `yaw` turns the game's aim about the world's up axis (+y; by the
-/// right-hand rule, so +z turns toward +x), `pitch` lifts it about the player's level side axis
-/// (positive: up), `offset` is in the actor's own axes.
-inline ShotRequest ShotTest(const Player& p, float yaw_rad, float pitch_rad, const Vec3& offset,
+/// The test switch's shot, laid out on the game camera's view direction made level (`view`:
+/// from the scene camera's eye to its look-at; the camera does not turn when the player fires,
+/// his body does): `yaw` turns the game's aim about the world's up axis (+y; by the right-hand
+/// rule, so +z turns toward +x), `pitch` lifts it about the view's level side axis (positive:
+/// up), `offset` is (side, up, ahead) of the view, side = view x up.
+inline ShotRequest ShotTest(const Vec3& view, float yaw_rad, float pitch_rad, const Vec3& offset,
                             bool move, bool no_target) {
     ShotRequest r;
-    const Vec3 forward = Rotate(p.world_q, {0.0f, 0.0f, 1.0f});
-    // forward x up, levelled: turning about it lifts the forward direction.
-    const Vec3 side{-forward.z, 0.0f, forward.x};
-    const Quat lift = AxisAngle(side.x == 0.0f && side.z == 0.0f ? Vec3{-1.0f, 0.0f, 0.0f} : side,
-                                pitch_rad);
-    r.rotation = Normalized(Mul(AxisAngle({0.0f, 1.0f, 0.0f}, yaw_rad), lift));
+    Vec3 ahead{view.x, 0.0f, view.z};
+    const float n = std::sqrt(ahead.x * ahead.x + ahead.z * ahead.z);
+    if (n > 1e-4f && std::isfinite(n)) {
+        ahead = {ahead.x / n, 0.0f, ahead.z / n};
+    } else {
+        ahead = {0.0f, 0.0f, 1.0f}; // looking straight up or down: any level direction
+    }
+    const Vec3 side{-ahead.z, 0.0f, ahead.x}; // ahead x up: turning about it lifts `ahead`
+    r.rotation = Normalized(Mul(AxisAngle({0.0f, 1.0f, 0.0f}, yaw_rad), AxisAngle(side, pitch_rad)));
     r.rotate = yaw_rad != 0.0f || pitch_rad != 0.0f;
     r.move = move;
-    r.offset = Rotate(p.world_q, offset);
+    r.offset = {side.x * offset.x + ahead.x * offset.z, offset.y,
+                side.z * offset.x + ahead.z * offset.z};
     r.no_target = no_target;
     return r;
 }
