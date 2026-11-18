@@ -100,9 +100,9 @@ struct State {
     float hid_yaw = 0.0f;
     uint32_t hid_yaw_in = 0;
     // Since the last summary.
-    uint32_t wrote = 0, rewrote = 0, applied = 0, lost = 0, foreign = 0, dropped = 0;
+    uint32_t wrote = 0, rewrote = 0, applied = 0, mixed = 0, lost = 0, foreign = 0, dropped = 0;
     uint32_t scaled = 0; ///< applied at the mod's x1.25
-    double applied_rad = 0.0, lost_rad = 0.0;
+    double applied_rad = 0.0, mixed_rad = 0.0, lost_rad = 0.0;
     float last_written = 0.0f;
 };
 
@@ -143,26 +143,26 @@ void Summary(State& s, int64_t host_now) {
     if (s.summary_ns == 0) {
         // The trace just started: count from now, not from what ran before.
         s.summary_ns = host_now;
-        s.wrote = s.rewrote = s.applied = s.lost = s.foreign = s.dropped = s.scaled = 0;
-        s.applied_rad = s.lost_rad = 0.0;
+        s.wrote = s.rewrote = s.applied = s.mixed = s.lost = s.foreign = s.dropped = s.scaled = 0;
+        s.applied_rad = s.mixed_rad = s.lost_rad = 0.0;
         return;
     }
     if (host_now - s.summary_ns < kSummaryNs) {
         return;
     }
     s.summary_ns = host_now;
-    const uint32_t verdicts = s.applied + s.lost + s.foreign;
+    const uint32_t verdicts = s.applied + s.mixed + s.lost + s.foreign;
     if (verdicts != 0 || s.wrote != 0 || s.dropped != 0) {
         LOG_INFO(Frontend,
                  "xr: Kid Icarus turn: last 10 s: {} written ({} rewritten), {} applied ({:.3f} "
-                 "rad, {} at x1.25), {} lost, {} foreign ({:.3f} rad not taken), {} dropped by a "
-                 "guard; lost rate {:.1f}%",
-                 s.wrote, s.rewrote, s.applied, s.applied_rad, s.scaled, s.lost, s.foreign,
-                 s.lost_rad, s.dropped,
+                 "rad, {} at x1.25), {} mixed ({:.3f} rad, with the game's own turn), {} lost, {} "
+                 "foreign ({:.3f} rad not taken), {} dropped by a guard; lost rate {:.1f}%",
+                 s.wrote, s.rewrote, s.applied, s.applied_rad, s.scaled, s.mixed, s.mixed_rad,
+                 s.lost, s.foreign, s.lost_rad, s.dropped,
                  verdicts ? 100.0 * static_cast<double>(s.lost + s.foreign) / verdicts : 0.0);
     }
-    s.wrote = s.rewrote = s.applied = s.lost = s.foreign = s.dropped = s.scaled = 0;
-    s.applied_rad = s.lost_rad = 0.0;
+    s.wrote = s.rewrote = s.applied = s.mixed = s.lost = s.foreign = s.dropped = s.scaled = 0;
+    s.applied_rad = s.mixed_rad = s.lost_rad = 0.0;
 }
 
 /// The reticle's pixel and flags for the trace (the land aim only).
@@ -318,6 +318,10 @@ void Hook(int64_t ticks, bool vblank) {
         s.applied_rad += std::fabs(s.last_written);
         s.scaled += step.ratio > 1.0f ? 1 : 0;
         break;
+    case KT::Event::Mixed:
+        s.mixed++;
+        s.mixed_rad += std::fabs(s.last_written);
+        break;
     case KT::Event::Lost:
         s.lost++;
         s.lost_rad += std::fabs(s.last_written);
@@ -361,7 +365,8 @@ void Hook(int64_t ticks, bool vblank) {
                  KT::AsFloat(c.pitch_in_bits), KT::AsFloat(rate), KT::EventName(step.event),
                  step.verdict == KT::Event::Applied
                      ? fmt::format(" (yaw {:+.5f}, x{:.2f})", step.delta, step.ratio)
-                 : step.verdict == KT::Event::Lost || step.verdict == KT::Event::Foreign
+                 : step.verdict == KT::Event::Mixed || step.verdict == KT::Event::Lost ||
+                         step.verdict == KT::Event::Foreign
                      ? fmt::format(" (yaw {:+.5f})", step.delta)
                      : std::string{},
                  step.write ? fmt::format(", wrote {:+.5f}", step.value) : std::string{},

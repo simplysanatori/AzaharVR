@@ -436,11 +436,11 @@ app). All four are live. Code: `frame_xr/kiu_turn.cpp` (emulation thread), its p
   lines a second: at each VBlank with something to say, the game time, `vblank land|-`, the guard
   that failed, the camera, its mode (+0x350), +0x31A, yaw, pitch, D38 and D3C as read before the
   write, +0x7D8, the verdict on the last write (`applied` with the yaw change and its ratio,
-  `lost`, `foreign`, `dropped`) or what was written, the turn owed, the reticle's pixel and
-  +0x84, and the stick; at a pad update, when the yaw or D38 changed since the last look (where
-  the game's update falls). Every 10 s: written, applied (radians, how many at ×1.25), lost,
-  foreign and dropped writes, and the lost rate ((lost + foreign) / verdicts). With the mode off
-  it only reads.
+  `mixed`, `lost`, `foreign`, `dropped`) or what was written, the turn owed, the reticle's pixel
+  and +0x84, and the stick; at a pad update, when the yaw or D38 changed since the last look
+  (where the game's update falls). Every 10 s: written, applied (radians, how many at ×1.25),
+  mixed (radians), lost, foreign and dropped writes, and the lost rate ((lost + foreign) /
+  verdicts). With the mode off it only reads.
 
 **Where.** Right Stick turning's hook (`Common::FrameEmuPoll::SetTurn`) is installed the first
 time the XR thread publishes the stick with either switch on. It runs on the emulation thread
@@ -486,8 +486,13 @@ the yaw (wrapped to (−π, π]) at 0x704178–0x70419C, and the camera wrapper 
   turn owed. D38 still holding the written bits with the yaw unchanged: not taken yet, the new
   total is written over it. D38 still holding them with the yaw changed by it: taken, not yet
   cleared (the VBlank fell inside the game's update), so nothing is written until the next
-  VBlank. D38 0 and the yaw unchanged: **lost**. Any other yaw change, or another value in D38:
-  **foreign** (the game's own: the clamp, an eased look-at), not counted as ours;
+  VBlank. D38 0 and the yaw unchanged: **lost**. D38 0 and any other yaw change: **mixed**,
+  the game turned the camera in the same update as well (on the move the camera follows Pit
+  every update; an eased look-at): the update added D38 before clearing it, so the written value
+  is paid too (AzaharFrame kiudesk: counting it as the game's left it owed, it was written again
+  at every update, and with the Circle Pad held the camera went on turning after the stick was
+  let go). Another value in D38: **foreign** (the game's own input in flight, the clamp's), not
+  paid;
 - then the TOTAL owed is written into cam + 0xD38 (never added to it), unless D38 holds a value
   that is not ours (the game's own input in flight) or the total is under 1e-4 rad (the game
   ignores under 2.9e-5).

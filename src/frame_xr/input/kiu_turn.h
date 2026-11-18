@@ -287,7 +287,11 @@ enum class Event : uint8_t {
     Rewrote,  ///< the last write not taken yet: the new total written over it
     Applied,  ///< the last write turned the camera (D38 cleared, the yaw changed by it)
     Lost,     ///< D38 cleared, the yaw did not change: dropped (the mod's veto, a race)
-    Foreign,  ///< the yaw changed by something else, or D38 held another value
+    /// D38 cleared and the yaw changed, but not by the last write alone: the game turned too in
+    /// the same update (on the move the camera follows Pit). The update that cleared D38 added it
+    /// first, so the write is paid.
+    Mixed,
+    Foreign,  ///< D38 held a value that is not ours (the game's own input in flight): not paid
     Dropped,  ///< a guard failed: the turn owed is dropped, never kept for later
 };
 
@@ -303,6 +307,8 @@ inline const char* EventName(Event e) {
         return "applied";
     case Event::Lost:
         return "lost";
+    case Event::Mixed:
+        return "mixed";
     case Event::Foreign:
         return "foreign";
     case Event::Dropped:
@@ -337,7 +343,7 @@ class Ledger {
 public:
     struct Step {
         Event event = Event::None;  ///< the verdict on the last write, or what was written
-        Event verdict = Event::None; ///< Applied, Lost, Foreign, Dropped or None this step
+        Event verdict = Event::None; ///< Applied, Mixed, Lost, Foreign, Dropped or None this step
         bool write = false;         ///< write `value` into cam + 0xD38
         float value = 0.0f;
         float ratio = 0.0f;         ///< an applied write: the yaw change / the value written
@@ -393,12 +399,19 @@ public:
             } else {
                 pending_ = false;
                 has_previous_ = false;
-                s.event = s.verdict = d38_zero && std::fabs(delta) <= kMatchAbsRad
-                                          ? Event::Lost
-                                          : Event::Foreign;
                 s.delta = delta;
                 if (!d38_zero) {
+                    s.event = s.verdict = Event::Foreign;
                     return s; // the game's own input is in flight: not overwritten
+                }
+                if (std::fabs(delta) <= kMatchAbsRad) {
+                    s.event = s.verdict = Event::Lost;
+                } else {
+                    // The update ran (it clears D38 at its end, after adding it to the yaw) and the
+                    // game turned the camera too: ours is paid. Kept owed, it was written again at
+                    // every update and the camera went on turning after the stick was let go.
+                    owed_ = std::clamp(owed_ - written_, -cap, cap);
+                    s.event = s.verdict = Event::Mixed;
                 }
             }
         } else if (!d38_zero) {

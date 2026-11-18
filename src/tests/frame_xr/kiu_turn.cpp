@@ -268,14 +268,36 @@ TEST_CASE("Kiu turn: the writes and their verdicts", "[frame_xr][kiuturn]") {
         REQUIRE(s.event == Event::Wrote);
         REQUIRE(s.value == Approx(-0.02f));
     }
-    SECTION("a yaw change of the game's own is not counted as ours") {
+    SECTION("the game turning too in the same update: ours is paid, not written again") {
         l.Update(Look(1.0f, 0.0f), -0.1f, kCap);
         const Ledger::Step s = l.Update(Look(1.3f, 0.0f), 0.0f, kCap); // an eased look-at
-        REQUIRE(s.verdict == Event::Foreign);
-        REQUIRE(l.owed() == Approx(-0.1f));
-        REQUIRE(s.write); // written again, measured from the new yaw
-        const Ledger::Step t = l.Update(Look(1.2f, 0.0f), 0.0f, kCap);
-        REQUIRE(t.verdict == Event::Applied);
+        REQUIRE(s.verdict == Event::Mixed);
+        REQUIRE(s.delta == Approx(0.3f));
+        REQUIRE(l.owed() == Approx(0.0f).margin(1e-6));
+        REQUIRE_FALSE(s.write);
+        REQUIRE_FALSE(l.pending());
+    }
+    SECTION("on the move (the camera follows Pit every update): the turn stops with the stick") {
+        // The trace of a land battle with the Circle Pad held forward: each update took the
+        // written value (D38 read 0, +0x7D8 held it) but the yaw moved by about 0.72 of it.
+        float yaw = 1.0f;
+        const float vblank = -0.02625f; // 90 degrees a second, one VBlank
+        Ledger::Step s = l.Update(Look(yaw, 0.0f), vblank, kCap);
+        for (int update = 0; update < 30; update++) {
+            // The stick held: the next VBlank comes before the game's update (rewrite), then the
+            // update takes the total and turns by 0.72 of it, then a VBlank judges it.
+            s = l.Update(Look(yaw, s.value), vblank, kCap);
+            REQUIRE(s.event == Event::Rewrote);
+            yaw = WrapPi(yaw + 0.72f * s.value);
+            s = l.Update(Look(yaw, 0.0f), update < 15 ? vblank : 0.0f, kCap);
+            REQUIRE(s.verdict == Event::Mixed);
+            REQUIRE(std::fabs(l.owed()) <= std::fabs(vblank) + 1e-6f); // never piles up
+            if (update >= 15) {
+                REQUIRE_FALSE(s.write); // let go: nothing more is written
+                REQUIRE(l.owed() == Approx(0.0f).margin(1e-6));
+                break;
+            }
+        }
     }
     SECTION("the game's own input in D38 is never overwritten") {
         Ledger::Step s = l.Update(Look(1.0f, 0.3f), -0.1f, kCap);
@@ -330,14 +352,14 @@ TEST_CASE("Kiu turn: the writes and their verdicts", "[frame_xr][kiuturn]") {
         Ledger k;
         k.Update(Look(1.0f, 0.0f, 1), -0.2f, kCap);
         s = k.Update(Look(0.75f, 0.0f, 1), 0.0f, kCap);
-        REQUIRE(s.verdict == Event::Foreign);
+        REQUIRE(s.verdict == Event::Mixed);
     }
     SECTION("within the tolerance") {
         l.Update(Look(1.0f, 0.0f), -0.1f, kCap);
         REQUIRE(l.Update(Look(0.9015f, 0.0f), 0.0f, kCap).verdict == Event::Applied);
         Ledger k;
         k.Update(Look(1.0f, 0.0f), -0.1f, kCap);
-        REQUIRE(k.Update(Look(0.905f, 0.0f), 0.0f, kCap).verdict == Event::Foreign);
+        REQUIRE(k.Update(Look(0.905f, 0.0f), 0.0f, kCap).verdict == Event::Mixed);
     }
     SECTION("a small write the yaw did not follow is lost, not applied") {
         l.Update(Look(1.0f, 0.0f), -0.00015f, kCap);
