@@ -134,7 +134,10 @@ public:
 private:
     template <typename T, bool R>
     void Keep(Settings::SwitchableSetting<T, R>& s) {
-        restores.push_back([&s, global = s.UsingGlobal(), value = s.GetValue()] {
+        // The stored value (GetValue(false): the game's own while not using the global one), not
+        // GetValue(): a value supplied for the run (RunSuppliedSetting, Angel's Aim's registers)
+        // must never be put back as the game's own and saved.
+        restores.push_back([&s, global = s.UsingGlobal(), value = s.GetValue(false)] {
             s.SetGlobal(global);
             if (!global) {
                 s.SetValue(value);
