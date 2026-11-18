@@ -568,7 +568,21 @@ inline Player FindPlayer(const Reader& m) {
 struct EyeRequest {
     bool on = false;
     Vec3 offset{0.0f, 12.3f, 0.0f};
+    /// AzaharFrame kiufov: the offset in these axes (world) instead of the player's own: an eye
+    /// moved behind the player stays behind the camera's view when his body turns to fire.
+    bool own_axes = false;
+    Quat axes;
 };
+/// AzaharFrame kiufov: the level yaw of a view direction (world), as axes for an EyeRequest:
+/// +z along the direction's level part, +y up. Identity when the direction is (nearly) vertical.
+inline Quat LevelYawAxes(const Vec3& direction) {
+    const float h = std::sqrt(direction.x * direction.x + direction.z * direction.z);
+    if (!(h > 1e-4f) || !std::isfinite(h)) {
+        return {};
+    }
+    const float yaw = std::atan2(direction.x, direction.z);
+    return {0.0f, std::sin(yaw * 0.5f), 0.0f, std::cos(yaw * 0.5f)};
+}
 inline constexpr Vec3 kEyeOffsetDefault{0.0f, 12.3f, 0.0f};
 
 /// The player's shots. What a later lane fills from the controller; here from a test switch.
@@ -629,7 +643,8 @@ inline Mailbox Fill(const Player& p, const EyeRequest& eye, const ShotRequest& s
     }
     mb.player = p.actor;
     mb.eye_node = p.eye_node;
-    const Vec3 eye_offset = Rotate(Normalized(p.world_q), eye.offset);
+    const Vec3 eye_offset =
+        Rotate(Normalized(eye.own_axes ? eye.axes : p.world_q), eye.offset); // AzaharFrame kiufov
     if (eye.on && Finite(eye_offset)) {
         mb.eye_on = true;
         mb.eye_offset = eye_offset;

@@ -500,6 +500,16 @@ void Hook(int64_t ticks) {
         float v[3] = {};
         if (KH::ParseFloats(text->c_str(), v, 3) == 3) {
             eye.offset = {v[0], v[1], v[2]};
+            // AzaharFrame kiufov: in first person an eye moved off the player's middle (behind
+            // him) is laid out along the game camera's level view, not his body, which turns
+            // to every shot: the eye would swing around his head.
+            KH::Vec3 eye_at, look_at;
+            if (first_person && (v[0] != 0.0f || v[2] != 0.0f) &&
+                KH::ReadVec3(mem, KH::kSceneEye, eye_at) &&
+                KH::ReadVec3(mem, KH::kSceneLookAt, look_at)) {
+                eye.own_axes = true;
+                eye.axes = KH::LevelYawAxes(look_at - eye_at);
+            }
         }
     }
     KH::ShotRequest shot;

@@ -818,6 +818,21 @@ TEST_CASE("Kid Icarus hooks: filling the mailbox", "[frame_xr][kiuhook]") {
         CHECK_FALSE(Fill(p, eye, ShotRequest{}, 7).eye_on);
     }
 
+    // AzaharFrame kiufov: Behind Pit's eye, laid out along the camera's level view.
+    SECTION("an eye in the camera's axes stays behind the view whatever the body faces") {
+        EyeRequest eye;
+        eye.on = true;
+        eye.offset = {0.0f, 13.0f, -3.85f};
+        eye.own_axes = true;
+        eye.axes = LevelYawAxes({1.0f, -0.3f, 0.0f}); // the camera looks along +x, a bit down
+        const Mailbox mb = Fill(p, eye, ShotRequest{}, 8);
+        CHECK(mb.eye_offset.x == Approx(-3.85f).margin(1e-5));
+        CHECK(mb.eye_offset.y == Approx(13.0f).margin(1e-5));
+        CHECK(mb.eye_offset.z == Approx(0.0f).margin(1e-5));
+        const Quat straight_down = LevelYawAxes({0.0f, -1.0f, 0.0f});
+        CHECK(straight_down.w == 1.0f);
+    }
+
     SECTION("the shot's frame is the parent's rotation, whatever is asked") {
         const Mailbox mb = Fill(p, EyeRequest{}, ShotRequest{}, 1);
         CHECK(mb.shot_frame.x == Approx(parent.x).margin(1e-5));
