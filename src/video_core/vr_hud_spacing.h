@@ -45,9 +45,10 @@
 namespace VideoCore::HudSpacing {
 
 /// The settings' range: an element's distance from the middle in percent of the game's own.
-/// 90 % across moves an element at the edge of a 400 pixel picture 20 pixels in.
-inline constexpr int kMinSpacing = 60;
-inline constexpr int kMaxSpacing = 120;
+/// 90 % across moves an element at the edge of a 400 pixel picture 20 pixels in. The owner's range
+/// (2026-11-18): 0 to 150, for full control; 0 draws the HUD at the middle (kZeroScale).
+inline constexpr int kMinSpacing = 0;
+inline constexpr int kMaxSpacing = 150;
 inline constexpr int kDefaultSpacing = 100;
 /// The shader's 2D test (VrFactor): |w - 1| below this.
 inline constexpr float kFlatW = 0.0001f;
@@ -56,16 +57,19 @@ inline constexpr float kEdge = 0.999f;
 /// The far plane test (VrFactor, with hud_far_plane): |w - z| below this (clip units).
 inline constexpr float kFarPlane = 0.5f;
 /// What the rasterizer accepts (anything else is taken as 1, no change).
-inline constexpr float kMinScale = 0.5f;
+inline constexpr float kMinScale = 0.01f;
 inline constexpr float kMaxScale = 1.5f;
+/// The scale 0 % gives: the shader divides by the scale, so 0 itself is never sent.
+inline constexpr float kZeroScale = kMinScale;
 
 inline int ClampSpacing(int spacing) {
     return std::clamp(spacing, kMinSpacing, kMaxSpacing);
 }
 
-/// The scale of 2D positions about the middle for `spacing`: exactly 1 at 100, 0.9 at 90.
+/// The scale of 2D positions about the middle for `spacing`: exactly 1 at 100, 0.9 at 90, and
+/// kZeroScale at 0 (never 0: the shader divides by it).
 inline float ScaleForSpacing(int spacing) {
-    return static_cast<float>(ClampSpacing(spacing)) / 100.0f;
+    return std::max(static_cast<float>(ClampSpacing(spacing)) / 100.0f, kZeroScale);
 }
 
 /// A scale the rasterizer can use: finite and within kMinScale to kMaxScale, else 1.

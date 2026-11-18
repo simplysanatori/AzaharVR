@@ -38,10 +38,15 @@ TEST_CASE("FrameXr hudmove: spacing to scale", "[frame_xr][hudmove]") {
     REQUIRE(ScaleForSpacing(kDefaultSpacing) == 1.0f);
     REQUIRE(ScaleForSpacing(90) == Approx(0.9f));
     REQUIRE(ScaleForSpacing(110) == Approx(1.1f));
-    // The range ends: 60 % (in), 120 % (out); past them clamped.
-    REQUIRE(ScaleForSpacing(kMinSpacing) == Approx(0.6f));
-    REQUIRE(ScaleForSpacing(kMaxSpacing) == Approx(1.2f));
-    REQUIRE(ScaleForSpacing(0) == ScaleForSpacing(kMinSpacing));
+    // The range ends: 0 % (at the middle, never a scale of 0: the shader divides by it), 150 %
+    // (out); past them clamped.
+    REQUIRE(kMinSpacing == 0);
+    REQUIRE(kMaxSpacing == 150);
+    REQUIRE(ScaleForSpacing(kMinSpacing) == kZeroScale);
+    REQUIRE(ScaleForSpacing(kMinSpacing) > 0.0f);
+    REQUIRE(ScaleForSpacing(1) == Approx(0.01f));
+    REQUIRE(ScaleForSpacing(kMaxSpacing) == Approx(1.5f));
+    REQUIRE(ScaleForSpacing(-50) == ScaleForSpacing(kMinSpacing));
     REQUIRE(ScaleForSpacing(1000) == ScaleForSpacing(kMaxSpacing));
     // Every value of the range is one the rasterizer takes.
     for (int p = kMinSpacing; p <= kMaxSpacing; ++p) {

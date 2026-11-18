@@ -401,7 +401,7 @@ Four per-game settings change this (**VR** group, logged as
   does nothing now).
 
 **HUD Spacing** (AzaharFrame hudmove, experimental; `vr_immersive_hud_spacing_x` and
-`vr_immersive_hud_spacing_y`, per game and global, 60 to 120 %, 100 % = the game's own by default,
+`vr_immersive_hud_spacing_y`, per game and global, 0 to 150 % (0 % draws it at the middle), 100 % = the game's own by default,
 read every frame; `video_core/vr_hud_spacing.h`). In the Full modes the game draws past its own
 frame and the screen is large, so a HUD at the frame's edges sits at the edges of the view (Mario
 Kart 7's, slightly out of it). The vertex shader already tells 2D from the world (`VrFactor`: w =

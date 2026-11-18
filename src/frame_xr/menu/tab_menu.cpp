@@ -255,7 +255,7 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
         }
         // AzaharFrame fovaxis: Fill View, once (a button; the values stay ordinary)
         rows.push_back(full(row(Id::FillView, RowKind::Button)));
-        // AzaharFrame hudmove: HUD Spacing, 60 to 120 %, 100 the game's own (Experimental chip, never
+        // AzaharFrame hudmove: HUD Spacing, 0 to 150 %, 100 the game's own (Experimental chip, never
         // locked: outside the Full modes it does nothing, and its tooltip says so).
         for (const auto& [id, value] :
              {std::pair{Id::HudSpacingX, m.hud_spacing_x},
@@ -1140,7 +1140,7 @@ SliderRange SliderFor(Id id) {
         constexpr float kMax = static_cast<float>(Immersive::Layout::kMaxScalePercent);
         return {-kMax, kMax, static_cast<float>(Immersive::Layout::kScaleStepPercent)};
     }
-    if (id == Id::HudSpacingX || id == Id::HudSpacingY) { // AzaharFrame hudmove: 60 to 120 %
+    if (id == Id::HudSpacingX || id == Id::HudSpacingY) { // AzaharFrame hudmove: 0 to 150 %
         return {static_cast<float>(VideoCore::HudSpacing::kMinSpacing),
                 static_cast<float>(VideoCore::HudSpacing::kMaxSpacing), 1.0f};
     }
