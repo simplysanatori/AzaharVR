@@ -15,8 +15,9 @@ namespace FrameXr {
 
 struct ImmersivePreset {
     const char* name;
-    /// Settings::values.vr_immersive_mode (3 = Full (6DoF): Other Games; 0 = the game starts in
-    /// the normal view, and the player can still turn Immersive Mode on)
+    /// Settings::values.vr_immersive_mode (3 = Full (6DoF): Other Games; 4 = Full (6DoF): Angel's
+    /// Aim, Kid Icarus: Uprising's; 0 = the game starts in the normal view, and the player can
+    /// still turn Immersive Mode on)
     uint32_t mode;
     /// Settings::values.vr_si_mode_register_offset (the view matrix register)
     int32_t register_offset;

@@ -9,6 +9,7 @@
 #include "common/settings.h"
 #include "frame_xr/controls_presets.h" // AzaharFrame kiu
 #include "frame_xr/input/gyro_aim.h"   // AzaharFrame kiugyro
+#include "frame_xr/kiu_scan.h" // AzaharFrame kiurec
 #include "frame_xr/presets.h"
 
 // AzaharFrame
@@ -135,21 +136,23 @@ TEST_CASE("FrameXr presets: other games have none, ids are unique", "[frame_xr]"
     std::set<uint64_t> seen;
     for (std::size_t i = 0; i < count; ++i) {
         REQUIRE(seen.insert(titles[i].title_id).second);
-        // AzaharFrame immersive: 0 only for a game that starts in the normal view.
+        // AzaharFrame immersive: 0 only for a game that starts in the normal view. AzaharFrame
+        // kiurec: 4 (Angel's Aim) only for Kid Icarus: Uprising.
         REQUIRE((titles[i].preset->mode == 0 || titles[i].preset->mode == 2 ||
-                 titles[i].preset->mode == 3));
+                 titles[i].preset->mode == 3 ||
+                 (titles[i].preset->mode == 4 && FrameXr::Kiu::IsKidIcarus(titles[i].title_id))));
     }
 }
 
-// AzaharFrame immersive: Kid Icarus: Uprising starts in the normal view, in every region: its
-// preset keeps Immersive Mode Off, so the player can still turn it on.
-TEST_CASE("FrameXr presets: Kid Icarus: Uprising starts in the normal view", "[frame_xr]") {
+// AzaharFrame kiurec (the owner, 2026-11-18): Kid Icarus: Uprising starts in Full (6DoF): Angel's
+// Aim (stored 4), in every region; the registers stay none (Angel's Aim supplies its own).
+TEST_CASE("FrameXr presets: Kid Icarus: Uprising starts in Angel's Aim", "[frame_xr][kiurec]") {
     // AzaharFrame kiu: 0004000000030000 too (Japan, as the C-Stick & Gyro mod lists it).
     for (const uint64_t id : {0x0004000000030000ull, 0x0004000000030100ull, 0x0004000000030200ull,
                               0x0004000000030300ull}) {
         const auto* kiu = FindImmersivePreset(id);
         REQUIRE(kiu != nullptr);
-        REQUIRE(kiu->mode == 0);
+        REQUIRE(kiu->mode == 4);
         REQUIRE(kiu->depth_multiplier == 0);
         REQUIRE(kiu->game_fov == 0);
         REQUIRE(kiu->wider_level == -1);
@@ -301,7 +304,7 @@ TEST_CASE("FrameXr presets: the player's own values win", "[frame_xr]") {
 // AzaharFrame kiu: Kid Icarus: Uprising's graphics preset in Japan's 0004000000030000 too, only
 // as starting values: a fresh game gets them, the game's own value and a changed global one
 // stay, and Immersive Mode is never set.
-TEST_CASE("FrameXr presets: Kid Icarus: Uprising (Japan, 30000) gives starting values only",
+TEST_CASE("FrameXr presets: Kid Icarus: Uprising (Japan, 30000) gives starting values",
           "[frame_xr][kiu]") {
     auto& v = Settings::values;
     const ImmersivePreset& kiu = *FindImmersivePreset(0x0004000000030000ull);
@@ -311,8 +314,11 @@ TEST_CASE("FrameXr presets: Kid Icarus: Uprising (Japan, 30000) gives starting v
     CHECK(!v.resolution_factor.UsingGlobal()); // the game's, the global value untouched
     CHECK(v.resolution_factor.GetValue(true) == v.resolution_factor.GetDefault());
     CHECK(static_cast<int>(v.texture_filter.GetValue()) == 2);
-    CHECK(v.vr_immersive_mode.UsingGlobal());
-    CHECK(v.vr_immersive_mode.GetValue() == 0u);
+    // AzaharFrame kiurec: the mode is the game's own 4 (Angel's Aim), the global value untouched.
+    CHECK(!v.vr_immersive_mode.UsingGlobal());
+    CHECK(v.vr_immersive_mode.GetValue() == 4u);
+    CHECK(v.vr_immersive_mode.GetValue(true) == 0u);
+    CHECK(v.vr_si_mode_register_offset.UsingGlobal()); // registers: none
     // 1.2.0 RC2 (the owner): 3D Depth 100, Async Shader Compilation, Motion Clarity in the Off
     // and Wide modes with Match Bottom Screen Brightness, Show Controllers: the game's own.
     CHECK(v.factor_3d.GetValue() == 100u);
@@ -347,6 +353,57 @@ TEST_CASE("FrameXr presets: Kid Icarus: Uprising (Japan, 30000) gives starting v
     CHECK(v.vr_show_controllers.UsingGlobal());
     CHECK(!v.vr_show_controllers.GetValue());
     CHECK(v.vr_motion_clarity_match_bottom.GetValue()); // the rest still given
+    ResetPresetSettings();
+}
+
+// AzaharFrame kiurec: who gets Angel's Aim: a game with no Immersive Mode of its own, in every
+// region; never a mode the game has saved (Off included) or a global mode the player chose; and
+// no other game's mode changes.
+TEST_CASE("FrameXr presets: Kid Icarus: Uprising's Angel's Aim goes to players with no mode",
+          "[frame_xr][kiurec]") {
+    auto& v = Settings::values;
+    for (const uint64_t id : {0x0004000000030000ull, 0x0004000000030100ull, 0x0004000000030200ull,
+                              0x0004000000030300ull}) {
+        const ImmersivePreset& kiu = *FindImmersivePreset(id);
+        ResetPresetSettings(); // a fresh game: no value of its own
+        ApplyPresetSettings(kiu);
+        CHECK(v.vr_immersive_mode.GetValue() == 4u);
+        CHECK(!v.vr_immersive_mode.UsingGlobal());
+        // the saved Off of a player who chose it for this game stays Off
+        ResetPresetSettings();
+        v.vr_immersive_mode.SetGlobal(false);
+        v.vr_immersive_mode.SetValue(0);
+        ApplyPresetSettings(kiu);
+        CHECK(v.vr_immersive_mode.GetValue() == 0u);
+        CHECK(!v.vr_immersive_mode.UsingGlobal());
+        // every other saved mode stays too
+        for (const u32 saved : {1u, 2u, 3u, 4u}) {
+            ResetPresetSettings();
+            v.vr_immersive_mode.SetGlobal(false);
+            v.vr_immersive_mode.SetValue(saved);
+            ApplyPresetSettings(kiu);
+            CHECK(v.vr_immersive_mode.GetValue() == saved);
+        }
+        // a global mode the player chose (the game has none of its own) stays
+        ResetPresetSettings();
+        v.vr_immersive_mode.SetValue(1);
+        ApplyPresetSettings(kiu);
+        CHECK(v.vr_immersive_mode.UsingGlobal());
+        CHECK(v.vr_immersive_mode.GetValue() == 1u);
+    }
+    // other games: unchanged, each gets exactly its own preset's mode (Asphalt 3D 3, Zelda 2,
+    // the rest 3) and none gets 4
+    std::size_t count = 0;
+    const auto* titles = ImmersivePresetTitles(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        if (FrameXr::Kiu::IsKidIcarus(titles[i].title_id)) {
+            continue;
+        }
+        ResetPresetSettings();
+        ApplyPresetSettings(*titles[i].preset);
+        CHECK(v.vr_immersive_mode.GetValue() == titles[i].preset->mode);
+        CHECK(v.vr_immersive_mode.GetValue() != 4u);
+    }
     ResetPresetSettings();
 }
 
