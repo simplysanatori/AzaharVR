@@ -118,7 +118,8 @@ FakeMemory Game() {
 
 // Every group that can be in at once (the plain enemy keep shares its site with the timed one).
 constexpr uint32_t kAll = Bit(Group::NoCull) | Bit(Group::BulletKeep) | Bit(Group::Eye) |
-                          Bit(Group::Shot) | Bit(Group::EnemyKeepTimed) | Bit(Group::GroupKeep);
+                          Bit(Group::Shot) | Bit(Group::EnemyKeepTimed) | Bit(Group::GroupKeep) |
+                          Bit(Group::NoFollow);
 constexpr std::size_t kAllWords = kPatches.size() - 1;
 
 bool SiteIs(const FakeMemory& m, Group g, bool patched) {
@@ -480,6 +481,14 @@ TEST_CASE("Kid Icarus hooks: the enemy keeps", "[frame_xr][kiuhook]") {
     CHECK(m.Get32(kSiteGroupDespawn) == 0xE12FFF1E);
     r = Sync(m, 0, Mailbox{});
     CHECK(m.Get32(kSiteGroupDespawn) == 0xE92D4FF8);
+
+    // The camera's follow input: one call becomes a nop.
+    r = Sync(m, Bit(Group::NoFollow), Mailbox{});
+    CHECK(r.Of(Group::NoFollow) == GroupState::In);
+    CHECK(r.code_writes == 1);
+    CHECK(m.Get32(kSiteFollowInput) == 0xE1A00000);
+    r = Sync(m, 0, Mailbox{});
+    CHECK(m.Get32(kSiteFollowInput) == 0xEB031897);
 
     // The limit: only a finite, positive number of seconds; it needs no player.
     FakeMemory none;

@@ -56,6 +56,7 @@ constexpr uint32_t Beq(uint32_t from, uint32_t to) {
 }
 inline constexpr uint32_t kMovR0One = 0xE3A00001; ///< mov r0, #1
 inline constexpr uint32_t kBxLr = 0xE12FFF1E;     ///< bx lr
+inline constexpr uint32_t kNop = 0xE1A00000;      ///< mov r0, r0
 
 // ---- The game (EUR original code) ----
 
@@ -77,6 +78,7 @@ inline constexpr uint32_t kSiteCameraSink = 0x63409C; ///< the camera hand-over'
 inline constexpr uint32_t kSiteShotSpawn = 0x5043E4;  ///< the player's shot: bl 0x485638
 inline constexpr uint32_t kSitePathEnd = 0x3E8C9C;     ///< a flier's path end: beq "vanish"
 inline constexpr uint32_t kSiteGroupDespawn = 0xA430FC; ///< a land spawner group's despawn
+inline constexpr uint32_t kSiteFollowInput = 0x70401C;  ///< the land camera's follow: its input
 inline constexpr uint32_t kEyeStub = kImageBase + Stubs::kEyeStub;
 inline constexpr uint32_t kKeepStub = kImageBase + Stubs::kKeepStub;
 inline constexpr uint32_t kShotStub = kImageBase + Stubs::kShotStub;
@@ -113,6 +115,7 @@ static_assert(Bl(kSiteBulletView, 0x4EC640) == 0xEB0331C7);
 static_assert(Bl(kSitePooledBulletView, 0x4EC640) == 0xEB038233);
 static_assert(B(kSiteSceneCull, kSceneCullInside) == 0xEA000040);
 static_assert(B(kSiteObjectCull, kObjectCullVisible) == 0xEAFFFFF9);
+static_assert(Bl(kSiteFollowInput, 0x7CA280) == 0xEB031897);
 static_assert(Beq(kSitePathEnd, Stubs::kPathVanish) == 0x0A000017);
 static_assert(Beq(kSitePathEnd, Stubs::kPathRestart) == 0x0A00000E);
 static_assert(Stubs::kImage[Stubs::kLitPathRestart / 4] == Stubs::kPathRestart);
@@ -128,8 +131,9 @@ enum class Group : uint8_t {
     EnemyKeep,  ///< AZAHARFRAME_KIU_ENEMY_KEEP: passed fliers fly their path again, for good
     EnemyKeepTimed, ///< AZAHARFRAME_KIU_ENEMY_KEEP_S: the same until they are that old (a stub)
     GroupKeep,  ///< AZAHARFRAME_KIU_GROUP_KEEP: land spawner groups are not despawned
+    NoFollow,   ///< AZAHARFRAME_KIU_NO_FOLLOW: the land camera takes no turn back while running
 };
-inline constexpr std::size_t kGroupCount = 7;
+inline constexpr std::size_t kGroupCount = 8;
 
 constexpr uint32_t Bit(Group g) {
     return 1u << static_cast<uint32_t>(g);
@@ -153,6 +157,8 @@ inline const char* GroupName(Group g) {
         return "enemy keep (timed)";
     case Group::GroupKeep:
         return "group keep";
+    case Group::NoFollow:
+        return "no follow";
     }
     return "?";
 }
@@ -164,7 +170,7 @@ struct Patch {
     uint32_t original; ///< the game's word: anything else there and the group stays out
     uint32_t patched;
 };
-inline constexpr std::array<Patch, 9> kPatches{{
+inline constexpr std::array<Patch, 10> kPatches{{
     // and r0, r1, #0xFF (the top of the sphere-against-six-planes loop) -> b 0x77DC4C, the
     // function's own "wholly inside" exit (the same stack: sub sp, #0xC before, add after).
     {Group::NoCull, kSiteSceneCull, 0xE20100FF, B(kSiteSceneCull, kSceneCullInside)},
@@ -187,6 +193,11 @@ inline constexpr std::array<Patch, 9> kPatches{{
     {Group::EnemyKeepTimed, kSitePathEnd, 0x0A000017, Beq(kSitePathEnd, kKeepStub)},
     // push {r3-r11, lr} (the function's first instruction) -> bx lr: the despawn does nothing.
     {Group::GroupKeep, kSiteGroupDespawn, 0xE92D4FF8, kBxLr},
+    // bl 0x7CA280 (in the battle camera's update: what the player's movement gives the camera's
+    // eased follow, into cam+0x4AC) -> mov r0, r0. The follow itself (0x7CAFC8, called later in
+    // the same update with that block) still runs and still re-levels the pitch; it no longer
+    // takes back part of a turn made while the player runs.
+    {Group::NoFollow, kSiteFollowInput, 0xEB031897, kNop},
 }};
 
 /// Words a group relies on without changing them (where it jumps to, what the stub assumes of the
@@ -196,7 +207,7 @@ struct Context {
     uint32_t addr;
     uint32_t word;
 };
-inline constexpr std::array<Context, 33> kContext{{
+inline constexpr std::array<Context, 36> kContext{{
     {Group::NoCull, 0x77DB24, 0xE24DD00C},   // sub sp, sp, #0xC (the frame the exit undoes)
     {Group::NoCull, 0x77DC4C, 0xE1C401D8},   // ldrd r0, r1, [r4, #0x18]
     {Group::NoCull, 0x77DC50, 0xE28DD00C},   // add sp, sp, #0xC
@@ -236,6 +247,9 @@ inline constexpr std::array<Context, 33> kContext{{
     {Group::EnemyKeepTimed, 0x3E8CDC, 0xE3A05000},
     {Group::EnemyKeepTimed, 0x3E8D00, 0xE5945030}, // ldr r5, [r4, #0x30] (the vanish code)
     {Group::GroupKeep, 0xA43100, 0xE280106C},      // add r1, r0, #0x6C (the function's next word)
+    {Group::NoFollow, 0x704018, 0xE58D0050},       // str r0, [sp, #0x50] (the block, kept for later)
+    {Group::NoFollow, 0x7041BC, 0xE59D3050},       // ldr r3, [sp, #0x50] (handed to the follow)
+    {Group::NoFollow, 0x7041D0, 0xEB031B7C},       // bl 0x7CAFC8 (the follow's update)
 }};
 
 // ---- Small maths (float, as the game's) ----

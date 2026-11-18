@@ -39,6 +39,7 @@ constexpr const char* kSwitchShotNoLock = "AZAHARFRAME_KIU_SHOT_NO_LOCK";
 constexpr const char* kSwitchEnemyKeep = "AZAHARFRAME_KIU_ENEMY_KEEP";
 constexpr const char* kSwitchEnemyKeepS = "AZAHARFRAME_KIU_ENEMY_KEEP_S";
 constexpr const char* kSwitchGroupKeep = "AZAHARFRAME_KIU_GROUP_KEEP";
+constexpr const char* kSwitchNoFollow = "AZAHARFRAME_KIU_NO_FOLLOW";
 constexpr const char* kSwitchTrace = "AZAHARFRAME_KIU_HOOK_TRACE";
 
 constexpr float kDegToRad = std::numbers::pi_v<float> / 180.0f;
@@ -236,10 +237,12 @@ void Hook(int64_t ticks) {
     const bool want_keep_timed = keep_seconds > 0.0f;
     const bool want_enemy_keep = !want_keep_timed && SwitchIs(kSwitchEnemyKeep, "1");
     const bool want_group_keep = SwitchIs(kSwitchGroupKeep, "1");
+    const bool want_no_follow = SwitchIs(kSwitchNoFollow, "1");
     const auto trace_text = Switch(kSwitchTrace);
     const int trace = trace_text ? std::atoi(trace_text->c_str()) : 0;
     const bool any = want_nocull || want_keep || want_eye || want_hide || want_shot ||
-                     want_keep_timed || want_enemy_keep || want_group_keep || trace > 0;
+                     want_keep_timed || want_enemy_keep || want_group_keep || want_no_follow ||
+                     trace > 0;
 
     if (title != Input::KiuTurn::kTitleEur) {
         if (any) {
@@ -301,7 +304,8 @@ void Hook(int64_t ticks) {
                             (want_shot ? KH::Bit(KH::Group::Shot) : 0u) |
                             (want_enemy_keep ? KH::Bit(KH::Group::EnemyKeep) : 0u) |
                             (want_keep_timed ? KH::Bit(KH::Group::EnemyKeepTimed) : 0u) |
-                            (want_group_keep ? KH::Bit(KH::Group::GroupKeep) : 0u);
+                            (want_group_keep ? KH::Bit(KH::Group::GroupKeep) : 0u) |
+                            (want_no_follow ? KH::Bit(KH::Group::NoFollow) : 0u);
     const KH::SyncResult r = KH::Sync(mem, wanted, mailbox);
     LogChanges(s, r);
 

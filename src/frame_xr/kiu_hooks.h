@@ -31,6 +31,8 @@
 //                                     then it leaves as in the game; replaces ENEMY_KEEP.
 //   AZAHARFRAME_KIU_GROUP_KEEP=1      land spawner groups are not despawned as the player moves
 //                                     on.
+//   AZAHARFRAME_KIU_NO_FOLLOW=1       the land camera no longer takes back part of a turn while the
+//                                     player runs (its eased follow gets no movement input).
 //   AZAHARFRAME_KIU_HOOK_TRACE=1|2    a status line a second (2: one a VBlank): the groups, the
 //                                     player, the scene eye.
 //
