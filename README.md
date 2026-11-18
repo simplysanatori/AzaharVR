@@ -12,7 +12,7 @@ It is my unofficial fork of [Azahar](https://github.com/azahar-emu/azahar), with
 - Immersive Mode with Natural 3D, matched to your IPD
 - A redesigned VR menu with save states and autosave
 - In-app cheat, mod and texture pack downloader
-- Homebrew and mod packs, including Angel's Aim for Kid Icarus: Uprising
+- Homebrew and mod pack support, including Angel's Aim for Kid Icarus: Uprising
 - Edit the controls of any gamepad or mouse
 
 ## 3D and immersion
@@ -68,10 +68,10 @@ A **Verified** chip marks entries known to work in Azahar for Frame. A check-mar
    cd AzaharFrame
    ```
 
-2. Download `azaharframe-1.2.0-linux-arm64.tar.gz` from [Releases](https://github.com/simplysanatori/AzaharFrame/releases) and install it:
+2. Download `azaharframe-1.2.1-linux-arm64.tar.gz` from [Releases](https://github.com/simplysanatori/AzaharFrame/releases) and install it:
 
    ```sh
-   steam-frame/install.sh ~/Downloads/azaharframe-1.2.0-linux-arm64.tar.gz
+   steam-frame/install.sh ~/Downloads/azaharframe-1.2.1-linux-arm64.tar.gz
    ```
 
 3. Launch **Azahar for Frame** from your Steam library.
