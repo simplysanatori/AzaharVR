@@ -193,10 +193,11 @@ inline constexpr std::array<Patch, 10> kPatches{{
     {Group::EnemyKeepTimed, kSitePathEnd, 0x0A000017, Beq(kSitePathEnd, kKeepStub)},
     // push {r3-r11, lr} (the function's first instruction) -> bx lr: the despawn does nothing.
     {Group::GroupKeep, kSiteGroupDespawn, 0xE92D4FF8, kBxLr},
-    // bl 0x7CA280 (in the battle camera's update: what the player's movement gives the camera's
-    // eased follow, into cam+0x4AC) -> mov r0, r0. The follow itself (0x7CAFC8, called later in
-    // the same update with that block) still runs and still re-levels the pitch; it no longer
-    // takes back part of a turn made while the player runs.
+    // bl 0x7CA280 (in the battle camera's update, with the block cam+0x4AC that the eased follow
+    // 0x7CAFC8 is handed later in the same update) -> mov r0, r0. Found by replacing each call of
+    // that update in turn: without this one a turn made while the player runs is no longer partly
+    // taken back, and the follow still re-levels the pitch. What 0x7CA280 computes was not read
+    // (by its effect: the player's movement, for the follow).
     {Group::NoFollow, kSiteFollowInput, 0xEB031897, kNop},
 }};
 

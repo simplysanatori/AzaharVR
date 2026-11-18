@@ -94,7 +94,7 @@ rotation is applied on top of it); where that is in memory is not mapped yet.
 | `AZAHARFRAME_KIU_ENEMY_KEEP=1` | 0x3E8C9C | `0A000017` beq 0x3E8D00 | `0A00000E` beq 0x3E8CDC | a flier's path end: vanish → fly the path again |
 | `AZAHARFRAME_KIU_ENEMY_KEEP_S=<s>` | 0x3E8C9C | `0A000017` | beq keep_stub | the same, by the enemy's age (replaces the plain keep; they share the site) |
 | `AZAHARFRAME_KIU_GROUP_KEEP=1` | 0xA430FC | `E92D4FF8` push {r3-r11, lr} | `E12FFF1E` bx lr | a land spawner group's despawn does nothing |
-| `AZAHARFRAME_KIU_NO_FOLLOW=1` | 0x70401C | `EB031897` bl 0x7CA280 | `E1A00000` mov r0, r0 | the land camera's eased follow gets no movement input |
+| `AZAHARFRAME_KIU_NO_FOLLOW=1` | 0x70401C | `EB031897` bl 0x7CA280 | `E1A00000` mov r0, r0 | the land camera's eased follow no longer turns the camera while the player runs (what the call computes: I) |
 
 The words at these sites, their context words and the cave are the same in the C-Stick & Gyro
 mod's v172 EUR base and 21:9 builds (V by comparing the files; the 16:9 build was not at hand: I),
@@ -168,10 +168,11 @@ brought our words back.
 - **NOCULL**: V on land (Practice Range: the game camera turned 0.9 rad from the dummy, the picture
   turned back with the emulator's free camera: the dummy is drawn with the switch on, not with it
   off, four alternations; the game's own view unchanged). **Not shown in the air**: in Chapter 1
-  the Monoeyes in a picture turned 40–120° were drawn with the switch off too, and pictures with
-  it on never differed from pictures with it off by more than two runs of the same setting differ.
-- **BULLET_KEEP**: V in the air: a charged shot turned 150° lives 6 game frames (109 units) with
-  the switch off and its whole range (24 frames, 753) with it on; turned 90°: 8 frames against 22.
+  the Monoeyes in a picture turned 40° and 60° were drawn with the switch off too, and at 40–120°
+  pictures with it on never differed from pictures with it off by more than two runs of the same
+  setting differ.
+- **BULLET_KEEP**: V in the air: a charged shot turned 150° lives 8 game frames (109 units) with
+  the switch off and its whole range (24 frames, 753) with it on; turned 90°: 8 frames against 25.
   A shot in view is unchanged. The pooled rapid bullet's site: in place, not exercised (I).
 - **EYE**: V land and air (the scene's eye = the player + the offset; offsets live; no frame of
   lag). Not looked at: cutscenes, pauses, deaths (the playing flag drops and the game's camera
@@ -179,14 +180,17 @@ brought our words back.
 - **HIDE_PLAYER**: on land the model and weapon go and **the shadow stays** (V). **In the air it is
   not usable**: the picture is washed out by a bright haze (mean brightness 165–171 → 229–231, four
   of four), a small piece of the model stays, and **the player takes less damage** from the same
-  Monoeye wave (health bar 87 → 62 hidden against 87 → 55, three runs each): the hurt boxes shrink
-  with the scale. Land hits were not tested (the Practice Range's dummy does not attack).
+  Monoeye wave (health bar 87 → 62 hidden against 87 → 55, three runs each; that his hurt boxes
+  shrink with the scale is the likely reason: I). No shadow was seen in the air pictures either
+  way (nothing is under him there). Land hits were not tested (the Practice Range's dummy does
+  not attack).
 - **SHOT_TEST**: V. Land, charged: start exact, direction within 0.01°; with the lock kept the shot
   homes from its new line; a shot started in range hits (the range's own counter: 29 damage; 0 for
   the same shot turned 25° without a lock). Land, rapid: 23 bullets start at the asked point and
   keep their scatter to 0.1° each. Air, charged: direction within 0.2° of the control's turned,
-  start exact in rail space. Air, rapid: pictures only (their records were not found). Homing with
-  a lock in the air: not shown.
+  start exact in rail space; with the lock kept a shot from the moved start bends to its target
+  (130–169 units off its first line, two runs) and flies straight without it. Air, rapid: pictures
+  only (their records were not found).
 - **ENEMY_KEEP / _S**: V in the air (Chapter 1, idle player, 75 s): enemies alive at once 7 in
   control, 25 with ENEMY_KEEP (the player dies after about 47 s), 13 with `_S=12` (alive at 75 s),
   19 with `_S=25` (dies after about 52 s); new enemies keep arriving at the control's pace; no
@@ -196,18 +200,22 @@ brought our words back.
   provoked no group despawn: three Monoeyes appeared and were gone within 4 s with and without the
   switch (the player was firing), then he stood at a wall. What it does to the level's progress is
   not known (I).
-- **NO_FOLLOW**: V (Practice Range). The take-back is the battle camera's eased follow
-  (0x7CAFC8, called at 0x7041D0 with the block cam+0x4AC that 0x7CA280 fills at 0x70401C from the
-  player's movement). Control: running forward alone turns the yaw 5.5° in 4 s; a 45° turn written
+- **NO_FOLLOW**: V (Practice Range, and Chapter 1's land section for the 45° case; camera mode 1
+  in both). The turn is the battle camera's eased follow (0x7CAFC8, called at 0x7041D0 with the
+  block cam+0x4AC; 0x7CA280, called at 0x70401C with that block, was not read: by its effect it
+  gives the follow the player's movement, I). Found by replacing each of the update's calls in
+  turn. In Chapter 1's land section, running to the side, the follow ADDS to a written 45° turn
+  (67° a second later); with the switch 45.00° holds. Control: running forward alone turns the yaw 5.5° in 4 s; a 45° turn written
   while running keeps 26.6° (90°: 60.4°); a smooth turn while running gets 68 % of what was asked.
   With the switch: 0.00°, 45.00° and 90.00° kept, 100 %. Standing and running sideways or back the
   game's camera did not turn in either case, and the pitch still re-levels (the follow's own update
   still runs; replacing that call instead stops the pitch re-level too). The third-person view
-  stays usable; what it loses is that slow turn toward the running direction.
+  stays usable; what it loses is the camera's own turn while the player runs. Not checked: a
+  lock-on, camera modes 0 and 2, event cameras, and whatever else reads cam+0x4AC.
 
 ## Not done, not known
 
-- The headset: nothing here ran on it (the aarch64 build compiles and its unit tests pass).
+- The headset: nothing here ran on it (the aarch64 build compiles).
 - Other regions and game versions: no table (the title and code checks leave everything off).
 - Multiplayer: not run. The shot stub compares the owner with the local player's actor (found
   through the local aim object), so other players' shots should pass untouched (I).
