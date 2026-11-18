@@ -7,6 +7,7 @@
 #include <cmath>
 #include <functional>
 #include <initializer_list>
+#include <string_view>
 #include <utility>
 #include <vector>
 #include <QCheckBox>
@@ -24,6 +25,8 @@
 #include "common/settings.h"
 #include "frame_xr/immersive_layout.h" // AzaharFrame fov100: the scales' range
 #include "frame_xr/immersive_names.h"  // AzaharFrame kiu
+#include "frame_xr/kiu_scan.h"         // AzaharFrame kiurec: IsKidIcarus
+#include "frame_xr/menu/name_chip.h"   // AzaharFrame kiurec: kRecommendedChip
 #include "frame_xr/render_margin.h"    // AzaharFrame fovaxis
 
 namespace {
@@ -90,9 +93,10 @@ int CurveIndex(u32 deg) {
 
 } // namespace
 
-// AzaharFrame kiurows: the title id is not used now (every game's list has Angel's Aim; the
-// Aiming rows of Angel's Aim are the VR menu's, not this window's).
-ConfigureFrameVr::ConfigureFrameVr(QWidget* parent, u64 /*title_id*/) : QGroupBox(parent) {
+// AzaharFrame kiurows: every game's list has Angel's Aim; the Aiming rows of Angel's Aim are the
+// VR menu's, not this window's. AzaharFrame kiurec: the title id decides the Recommended suffix
+// on Angel's Aim, in Kid Icarus: Uprising's own Properties only.
+ConfigureFrameVr::ConfigureFrameVr(QWidget* parent, u64 title_id) : QGroupBox(parent) {
     setObjectName(QStringLiteral("frame_vr_group"));
     setTitle(tr("VR"));
     auto* layout = new QVBoxLayout(this);
@@ -242,7 +246,15 @@ ConfigureFrameVr::ConfigureFrameVr(QWidget* parent, u64 /*title_id*/) : QGroupBo
     // kiurows); the index is FrameXr::Immersive::Names::ModeIndexOf's.
     mode_combo = new QComboBox(this);
     for (const char* choice : FrameXr::Immersive::Names::kModeChoices) {
-        mode_combo->addItem(tr(choice));
+        QString text = tr(choice);
+        // AzaharFrame kiurec: Kid Icarus: Uprising's own Properties: "(Recommended)" after Angel's
+        // Aim (the lightest pattern here: a combo item has no icon; the text is the VR menu
+        // badge's kRecommendedChip). Not in other games, not in Global (title id 0).
+        if (title_id != 0 && FrameXr::Kiu::IsKidIcarus(title_id) &&
+            std::string_view(choice) == FrameXr::Immersive::Names::kModeAngelsAim) {
+            text += QStringLiteral(" (%1)").arg(tr(FrameXr::Menu::kRecommendedChip));
+        }
+        mode_combo->addItem(text);
     }
     mode_row = MakeRow(
         this, QStringLiteral("frame_vr_mode_row"), tr("Immersive Mode"),
