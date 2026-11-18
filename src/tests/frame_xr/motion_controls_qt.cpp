@@ -149,7 +149,7 @@ TEST_CASE("VR group: no row is locked while the running game has its own value",
         CHECK(fov->value() == 60);
         CHECK(!hide->isChecked());
         Shot(w, "qt-vr-global-game-values.png");
-        mode->setCurrentIndex(3);
+        mode->setCurrentIndex(4); // Other Games (3 is Angel's Aim now: AzaharFrame kiurows)
         wider->setCurrentIndex(2);
         scale->setCurrentIndex(22); // +10 %
         fov->setValue(70);
@@ -181,7 +181,7 @@ TEST_CASE("VR group: no row is locked while the running game has its own value",
         REQUIRE(mode);
         REQUIRE(scale);
         REQUIRE(fov_scope);
-        CHECK(mode->count() == 4 + ConfigurationShared::USE_GLOBAL_OFFSET);
+        CHECK(mode->count() == 5 + ConfigurationShared::USE_GLOBAL_OFFSET);
         CHECK(mode->currentIndex() == 2 + ConfigurationShared::USE_GLOBAL_OFFSET);
         CHECK(scale->count() == 41 + ConfigurationShared::USE_GLOBAL_OFFSET);
         CHECK(scale->currentIndex() == 18 + ConfigurationShared::USE_GLOBAL_OFFSET); // -10 %
@@ -645,11 +645,11 @@ TEST_CASE("VR group: Render Margin per axis and the May Warp note", "[frame_xr][
     Settings::SetConfiguringGlobal(true);
 }
 
-// AzaharFrame kiumode: Immersive Mode in Azahar's window: Angel's Aim (stored 4) above Other
-// Games in Kid Icarus: Uprising's Properties only; a stored 4 elsewhere shows as Other Games and
-// is kept unless another choice is made.
-TEST_CASE("VR group: Immersive Mode lists Angel's Aim in Kid Icarus' Properties only",
-          "[frame_xr][kiumode]") {
+// AzaharFrame kiurows: Immersive Mode in Azahar's window: Angel's Aim (stored 4) above Other
+// Games in the global settings and in every game's Properties; a stored 4 is kept unless another
+// choice is made. (The Angel's Aim controls are the VR menu's: this window has no such rows.)
+TEST_CASE("VR group: Immersive Mode lists Angel's Aim everywhere",
+          "[frame_xr][kiumode][kiurows]") {
     App();
     auto& v = Settings::values;
     Keep<u32, false> k{v.vr_immersive_mode};
@@ -682,15 +682,14 @@ TEST_CASE("VR group: Immersive Mode lists Angel's Aim in Kid Icarus' Properties 
         w.ApplyConfiguration();
     }
     CHECK(v.vr_immersive_mode.GetValue() == 4u);
-    // Another game: four choices, the stored 4 shown as Other Games and kept on OK
+    // Another game: the same five choices, the stored 4 shown as Angel's Aim and kept on OK
     {
         ConfigureFrameVr w(nullptr, kOther);
         auto* mode = In<QComboBox>(w, "frame_vr_mode_row");
         REQUIRE(mode);
-        REQUIRE(mode->count() == 4 + off);
-        for (int i = 0; i < mode->count(); i++) {
-            CHECK(!mode->itemText(i).contains(QStringLiteral("Angel")));
-        }
+        REQUIRE(mode->count() == 5 + off);
+        CHECK(mode->itemText(3 + off) == QStringLiteral("Full (6DoF): Angel's Aim"));
+        CHECK(mode->itemText(4 + off) == QStringLiteral("Full (6DoF): Other Games"));
         CHECK(mode->currentIndex() == 3 + off);
         w.ApplyConfiguration();
     }
@@ -703,12 +702,14 @@ TEST_CASE("VR group: Immersive Mode lists Angel's Aim in Kid Icarus' Properties 
         w.ApplyConfiguration();
     }
     CHECK(v.vr_immersive_mode.GetValue() == 2u);
-    // The global settings: never Angel's Aim
+    // The global settings: the same five
     Settings::SetConfiguringGlobal(true);
     {
         ConfigureFrameVr w;
         auto* mode = In<QComboBox>(w, "frame_vr_mode_row");
         REQUIRE(mode);
-        CHECK(mode->count() == 4);
+        REQUIRE(mode->count() == 5);
+        CHECK(mode->itemText(3) == QStringLiteral("Full (6DoF): Angel's Aim"));
+        CHECK(mode->itemText(4) == QStringLiteral("Full (6DoF): Other Games"));
     }
 }

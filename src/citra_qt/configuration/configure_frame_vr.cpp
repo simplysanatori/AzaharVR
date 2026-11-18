@@ -24,7 +24,6 @@
 #include "common/settings.h"
 #include "frame_xr/immersive_layout.h" // AzaharFrame fov100: the scales' range
 #include "frame_xr/immersive_names.h"  // AzaharFrame kiu
-#include "frame_xr/kiu_scan.h"         // AzaharFrame kiumode: IsKidIcarus
 #include "frame_xr/render_margin.h"    // AzaharFrame fovaxis
 
 namespace {
@@ -91,8 +90,9 @@ int CurveIndex(u32 deg) {
 
 } // namespace
 
-ConfigureFrameVr::ConfigureFrameVr(QWidget* parent, u64 title_id)
-    : QGroupBox(parent), mode_kiu(FrameXr::Kiu::IsKidIcarus(title_id)) {
+// AzaharFrame kiurows: the title id is not used now (every game's list has Angel's Aim; the
+// Aiming rows of Angel's Aim are the VR menu's, not this window's).
+ConfigureFrameVr::ConfigureFrameVr(QWidget* parent, u64 /*title_id*/) : QGroupBox(parent) {
     setObjectName(QStringLiteral("frame_vr_group"));
     setTitle(tr("VR"));
     auto* layout = new QVBoxLayout(this);
@@ -238,17 +238,11 @@ ConfigureFrameVr::ConfigureFrameVr(QWidget* parent, u64 title_id)
     layout->addWidget(shape_row);
 
     // Settings::values.vr_immersive_mode (frame_xr/immersive.h). AzaharFrame kiumode: in the
-    // names' order, Angel's Aim (stored 4) only in Kid Icarus: Uprising's Properties; the
-    // index is FrameXr::Immersive::Names::ModeIndexOf's.
+    // names' order, Angel's Aim (stored 4) in every game's list and in Global (AzaharFrame
+    // kiurows); the index is FrameXr::Immersive::Names::ModeIndexOf's.
     mode_combo = new QComboBox(this);
-    if (mode_kiu) {
-        for (const char* choice : FrameXr::Immersive::Names::kModeChoicesKiu) {
-            mode_combo->addItem(tr(choice));
-        }
-    } else {
-        for (const char* choice : FrameXr::Immersive::Names::kModeChoices) {
-            mode_combo->addItem(tr(choice));
-        }
+    for (const char* choice : FrameXr::Immersive::Names::kModeChoices) {
+        mode_combo->addItem(tr(choice));
     }
     mode_row = MakeRow(
         this, QStringLiteral("frame_vr_mode_row"), tr("Immersive Mode"),
@@ -534,8 +528,7 @@ void ConfigureFrameVr::SetupPerGameUI() {
         static_cast<int>(std::min<u32>(Settings::values.vr_immersive_scale_mode.GetValue(true), 1)));
     ConfigurationShared::SetColoredComboBox( // AzaharFrame kiumode: by the shown order
         mode_combo, mode_row,
-        FrameXr::Immersive::Names::ModeIndexOf(Settings::values.vr_immersive_mode.GetValue(true),
-                                               mode_kiu));
+        FrameXr::Immersive::Names::ModeIndexOf(Settings::values.vr_immersive_mode.GetValue(true)));
     ConfigurationShared::SetColoredComboBox( // AzaharFrame kiu
         motion_combo, motion_row,
         static_cast<int>(Settings::values.vr_motion_controls.GetValue(true)));
@@ -632,7 +625,7 @@ void ConfigureFrameVr::SetConfiguration() {
         margin_x_combo->setCurrentIndex(margin_x_shown);
         margin_y_combo->setCurrentIndex(margin_y_shown);
         mode_loaded = mode.GetValue(true); // AzaharFrame kiumode
-        mode_combo->setCurrentIndex(FrameXr::Immersive::Names::ModeIndexOf(mode_loaded, mode_kiu));
+        mode_combo->setCurrentIndex(FrameXr::Immersive::Names::ModeIndexOf(mode_loaded));
         match_camera_combo->setCurrentIndex(static_cast<int>(
             std::min<u32>(Settings::values.vr_immersive_match_camera_mode.GetValue(true), 2)));
         face_combo->setCurrentIndex(static_cast<int>(Settings::values.vr_face_buttons.GetValue()));
@@ -705,7 +698,7 @@ void ConfigureFrameVr::SetConfiguration() {
     mode_loaded = mode.GetValue(); // AzaharFrame kiumode: by the shown order
     mode_combo->setCurrentIndex(
         mode.UsingGlobal() ? ConfigurationShared::USE_GLOBAL_INDEX
-                           : FrameXr::Immersive::Names::ModeIndexOf(mode_loaded, mode_kiu) +
+                           : FrameXr::Immersive::Names::ModeIndexOf(mode_loaded) +
                                  ConfigurationShared::USE_GLOBAL_OFFSET);
     ConfigurationShared::SetHighlight(mode_row, !mode.UsingGlobal());
     ConfigurationShared::SetPerGameSetting(match_camera_combo,
@@ -922,7 +915,7 @@ void ConfigureFrameVr::ApplyConfiguration() {
                                              scale_mode_combo); // AzaharFrame fovscale
     ConfigurationShared::ApplyPerGameSetting( // AzaharFrame kiumode: the shown order
         &Settings::values.vr_immersive_mode, mode_combo, [this](s32 index) {
-            return FrameXr::Immersive::Names::ModeValueAt(index, mode_kiu, mode_loaded);
+            return FrameXr::Immersive::Names::ModeValueAt(index, mode_loaded);
         });
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.vr_immersive_world_scale,
                                              world_scope, [this](s32) { return world_value; });

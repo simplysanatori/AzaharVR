@@ -3183,6 +3183,7 @@ TEST_CASE("Tab menu: Direct Aim's lock, grip and Turn Zone basis", "[frame_xr][t
     }
     Drawn d;
     MenuModel m = Sample();
+    m.mods.angels_aim.shown = true; // AzaharFrame kiurows: Kid Icarus: Uprising's rows
     MenuView v;
     v.tab = Tab::Controls;
     const auto shown = [&d](Id id) {
@@ -3294,6 +3295,7 @@ TEST_CASE("Tab menu: Muzzle Flash under Weapon in Hand", "[frame_xr][tabmenu][ki
     CHECK(PerGameSetting(Id::MuzzleFlash));
     Drawn d;
     MenuModel m = Sample();
+    m.mods.angels_aim.shown = true; // AzaharFrame kiurows: Kid Icarus: Uprising's rows
     MenuView v;
     v.tab = Tab::Controls;
     for (const int aiming : {0, 1, 2}) {
@@ -3350,6 +3352,7 @@ TEST_CASE("Tab menu: Projectiles and their size and speed", "[frame_xr][tabmenu]
     }
     Drawn d;
     MenuModel m = Sample();
+    m.mods.angels_aim.shown = true; // AzaharFrame kiurows: Kid Icarus: Uprising's rows
     m.gyro_aim = 2;
     MenuView v;
     v.tab = Tab::Controls;
@@ -3422,6 +3425,7 @@ TEST_CASE("Tab menu: Weapon Opacity and Projectile Opacity", "[frame_xr][tabmenu
     }
     Drawn d;
     MenuModel m = Sample();
+    m.mods.angels_aim.shown = true; // AzaharFrame kiurows: Kid Icarus: Uprising's rows
     m.gyro_aim = 2;
     m.weapon_opacity = 60;
     m.projectile_opacity = 30;
@@ -3503,6 +3507,7 @@ TEST_CASE("Tab menu: Muzzle Flash Size under Muzzle Flash", "[frame_xr][tabmenu]
     CHECK(r.step == 10.0f);
     Drawn d;
     MenuModel m = Sample();
+    m.mods.angels_aim.shown = true; // AzaharFrame kiurows: Kid Icarus: Uprising's rows
     m.flash_size = 150;
     MenuView v;
     v.tab = Tab::Controls;
@@ -4516,29 +4521,17 @@ TEST_CASE("Tab menu: Render Margin with Stretch only, and Fill View",
     // Their values are the settings' (BuildModel reads them each frame); hiding writes nothing.
 }
 
-// AzaharFrame kiumode: Immersive Mode lists Angel's Aim (stored 4) above Other Games while Kid
-// Icarus: Uprising runs, and only then; the open menu's items and the row show the stored value
-// by its place in the list shown.
-TEST_CASE("Tab menu: Immersive Mode lists Angel's Aim with Kid Icarus only",
-          "[frame_xr][tabmenu][kiumode]") {
+// AzaharFrame kiurows: Immersive Mode lists Angel's Aim (stored 4) above Other Games in every
+// game and in Global (it was Kid Icarus: Uprising's alone); the open menu's items and the row
+// show the stored value by its place in the list.
+TEST_CASE("Tab menu: Immersive Mode lists Angel's Aim in every game",
+          "[frame_xr][tabmenu][kiumode][kiurows]") {
     namespace N = FrameXr::Immersive::Names;
-    MenuModel m = Sample();
-    CHECK(OptionsFor(Id::ImmersiveMode, m) == OptionsFor(Id::ImmersiveMode));
-    REQUIRE(OptionsFor(Id::ImmersiveMode).size() == 4);
-    CHECK(OptionsFor(Id::ImmersiveMode)[3] == N::kModeOtherGames);
-    for (const std::string& o : OptionsFor(Id::ImmersiveMode)) {
-        CHECK(o.find("Angel") == std::string::npos);
-    }
-    MenuModel kiu = m;
-    kiu.mods.angels_aim.shown = true;
     const std::vector<std::string> want{"Off", "Wide (3DoF)",
                                         "Full (6DoF): Ocarina of Time, Majora's Mask",
                                         "Full (6DoF): Angel's Aim", "Full (6DoF): Other Games"};
-    CHECK(OptionsFor(Id::ImmersiveMode, kiu) == want);
-    // Other rows are the same either way
-    CHECK(OptionsFor(Id::ScreenShape, kiu) == OptionsFor(Id::ScreenShape));
-
-    // The open menu: five items with Kid Icarus, four without.
+    CHECK(OptionsFor(Id::ImmersiveMode) == want);
+    // The open menu: five items in global scope, in another game and in Kid Icarus.
     Drawn d;
     MenuView v;
     v.tab = Tab::Settings;
@@ -4552,13 +4545,97 @@ TEST_CASE("Tab menu: Immersive Mode lists Angel's Aim with Kid Icarus only",
         }
         return n;
     };
+    MenuModel other = Sample();
+    other.mods.angels_aim.shown = false;
+    MenuModel kiu = other;
+    kiu.mods.angels_aim.shown = true;
+    MenuModel global = other;
+    global.scope = 0;
+    CHECK(items(global) == 5);
+    CHECK(items(other) == 5);
     CHECK(items(kiu) == 5);
-    CHECK(items(m) == 4);
-    // The row shows the stored value by its place: 4 is the fourth item with Kid Icarus and
-    // Other Games without; 3 is Other Games either way.
-    CHECK(N::ModeIndexOf(4, true) == 3);
-    CHECK(OptionsFor(Id::ImmersiveMode, kiu)[N::ModeIndexOf(4, true)] == N::kModeAngelsAim);
-    CHECK(OptionsFor(Id::ImmersiveMode, kiu)[N::ModeIndexOf(3, true)] == N::kModeOtherGames);
-    CHECK(OptionsFor(Id::ImmersiveMode, m)[N::ModeIndexOf(4, false)] == N::kModeOtherGames);
-    CHECK(OptionsFor(Id::ImmersiveMode, m)[N::ModeIndexOf(3, false)] == N::kModeOtherGames);
+    // The row shows the stored value by its place: 4 Angel's Aim, 3 Other Games.
+    CHECK(N::ModeIndexOf(4) == 3);
+    CHECK(OptionsFor(Id::ImmersiveMode)[static_cast<std::size_t>(N::ModeIndexOf(4))] ==
+          N::kModeAngelsAim);
+    CHECK(OptionsFor(Id::ImmersiveMode)[static_cast<std::size_t>(N::ModeIndexOf(3))] ==
+          N::kModeOtherGames);
+}
+
+// AzaharFrame kiurows: the Controls rows only Kid Icarus: Uprising has show while it is the game
+// and are gone in the global scope and in every other game; the generic rows are unchanged.
+TEST_CASE("Controls tab: Angel's Aim's rows show in Kid Icarus only",
+          "[frame_xr][tabmenu][kiurows]") {
+    const std::vector<Id> kiu_only{
+        Id::WeaponInHand,    Id::WeaponOpacity,    Id::WeaponSize,        Id::WeaponScale,
+        Id::MuzzleFlash,     Id::MuzzleFlashSize,  Id::Projectiles,       Id::ProjectileOpacity,
+        Id::ProjectileSize,  Id::ProjectileSpeed,  Id::TurnZone,          Id::TurnZoneFrom,
+        Id::TurnSpeed,       Id::TurnSpeedVertical, Id::CalibrateAim,     Id::TriggerLayout};
+    const std::vector<Id> generic{
+        Id::GyroAim,    Id::GyroSensitivity, Id::Recoil,         Id::RecoilCharged,
+        Id::RecoilRapid, Id::LaserSight,     Id::KeepOnScreen,   Id::GripFreesAim,
+        Id::TouchpadTouch, Id::BottomScreenReticle};
+    for (const Id id : kiu_only) {
+        CHECK(KiuOnlyControlsRow(id));
+    }
+    for (const Id id : generic) {
+        CHECK_FALSE(KiuOnlyControlsRow(id));
+    }
+    const auto drawn_ids = [](bool kiu, int scope) {
+        MenuModel m = Sample();
+        m.mods.angels_aim.shown = kiu;
+        m.scope = scope;
+        m.gyro_aim = 2; // Direct Aim: every Aiming row on
+        m.recoil = true;
+        m.weapon_in_hand = true;
+        m.muzzle_flash = true;
+        m.projectiles = true;
+        Drawn d;
+        std::vector<Id> ids;
+        // The page scrolls: draw it down in steps, the union of the rows hit.
+        for (float scroll = 0.0f; scroll <= 4000.0f; scroll += 150.0f) {
+            MenuView v;
+            v.tab = Tab::Controls;
+            v.scroll[static_cast<std::size_t>(Tab::Controls)] = scroll;
+            d.Draw(m, v);
+            for (const auto& h : d.menu.Hits()) {
+                ids.push_back(h.t.id);
+            }
+        }
+        return ids;
+    };
+    const auto has = [](const std::vector<Id>& ids, Id id) {
+        return std::find(ids.begin(), ids.end(), id) != ids.end();
+    };
+    const std::vector<Id> kiu_ids = drawn_ids(true, 1);
+    const std::vector<Id> other_ids = drawn_ids(false, 1);
+    const std::vector<Id> global_ids = drawn_ids(false, 0);
+    for (const Id id : kiu_only) {
+        INFO(LabelFor(id));
+        CHECK_FALSE(has(other_ids, id));
+        CHECK_FALSE(has(global_ids, id));
+    }
+    for (const Id id : generic) {
+        INFO(LabelFor(id));
+        CHECK(has(other_ids, id) == has(kiu_ids, id));
+        CHECK(has(global_ids, id) == has(kiu_ids, id));
+    }
+    // Per-game value counting follows: no Kid Icarus-only row in another game or in Global.
+    MenuModel m = Sample();
+    m.scope = 1;
+    for (const Id id : kiu_only) {
+        m.game_value[static_cast<std::size_t>(id)] = true;
+    }
+    m.game_value[static_cast<std::size_t>(Id::Recoil)] = true;
+    m.mods.angels_aim.shown = false;
+    CHECK(GameValueRows(m, Tab::Controls) == std::vector<Id>{Id::Recoil});
+    m.mods.angels_aim.shown = true;
+    const auto rows = GameValueRows(m, Tab::Controls);
+    for (const Id id : kiu_only) {
+        if (id != Id::CalibrateAim) { // not a per-game setting: no value of its own to count
+            CHECK(std::find(rows.begin(), rows.end(), id) != rows.end());
+        }
+    }
+    CHECK(ControlsScopeRows(false).size() + 15 == ControlsScopeRows().size()); // all but Check Aim
+    CHECK(ControlsScopeRows(true) == ControlsScopeRows());
 }

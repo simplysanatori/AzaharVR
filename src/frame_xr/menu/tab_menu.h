@@ -504,6 +504,13 @@ constexpr bool TabHasScope(Tab tab) {
 /// The Controls tab's per-game rows (in the order they show; At Edge and Reticle Speed only show
 /// while the reticle is on, but are counted and cleared all the same).
 const std::vector<Id>& ControlsScopeRows();
+/// AzaharFrame kiurows: whether a Controls row does something only in Kid Icarus: Uprising (it
+/// reads that game's memory or feeds Angel's Aim alone): shown while the game is Kid Icarus:
+/// Uprising (MenuModel::mods.angels_aim.shown), hidden in every other game and in the global
+/// scope, with its saved value untouched.
+bool KiuOnlyControlsRow(Id id);
+/// ControlsScopeRows without the Kid Icarus: Uprising rows when `kiu` is false.
+std::vector<Id> ControlsScopeRows(bool kiu);
 /// The per-game rows of a tab (the Settings tab: of `section`) the running game has its own
 /// value for, in order: what the Per-Game tooltip counts and Use Global Values for All clears.
 std::vector<Id> GameValueRows(const MenuModel& model, Tab tab,
@@ -566,10 +573,6 @@ void DrawAutosavedLabel(Kit& kit, const Rect& r);
 
 /// The option lists (Azahar for Frame's own strings).
 const std::vector<std::string>& OptionsFor(Id id);
-/// AzaharFrame kiumode: as OptionsFor, for the menu as `model` has it: Immersive Mode lists
-/// Angel's Aim while Kid Icarus: Uprising runs (model.mods.angels_aim.shown; the index is
-/// Immersive::Names::ModeIndexOf's).
-const std::vector<std::string>& OptionsFor(Id id, const MenuModel& model);
 /// The label of an item, as on the menu.
 std::string LabelFor(Id id);
 /// One short sentence about a setting (the tooltip), or "".

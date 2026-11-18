@@ -1552,9 +1552,8 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         Apply(v.vr_window_scale, static_cast<u32>(r.value), false);
         r.setting = MenuSetting::WindowScale;
         break;
-    case Id::ImmersiveMode: { // AzaharFrame kiumode: the shown index; Angel's Aim with Kid Icarus
-        const u32 stored = Immersive::Names::ModeValueAt(value, model.mods.angels_aim.shown,
-                                                         v.vr_immersive_mode.GetValue());
+    case Id::ImmersiveMode: { // AzaharFrame kiumode: the shown index; Angel's Aim in every game
+        const u32 stored = Immersive::Names::ModeValueAt(value, v.vr_immersive_mode.GetValue());
         r.value = static_cast<int>(stored);
         Apply(v.vr_immersive_mode, stored, per_game);
         r.setting = MenuSetting::ImmersiveMode;
