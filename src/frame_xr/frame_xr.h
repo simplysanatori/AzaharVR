@@ -383,6 +383,9 @@ enum class MenuSetting {
     TriggerLayout,   ///< AzaharFrame kiufire: `value` 0 Original, 1 Fire and Power
                      ///< (vr_kiu_trigger_layout)
     AngelsAimIntroShown, ///< AzaharFrame kiuweap2: `value` 1 (vr_angels_aim_intro_shown, global)
+    /// AzaharFrame bfidr: what Black Frame Insertion turned on (bfi_helpers.h): `value` bit 0
+    /// vr_bfi_set_dynamic_resolution, bit 1 vr_bfi_set_panel
+    BfiHelperMarks,
 };
 struct MenuRequest {
     MenuCommand command = MenuCommand::Continue;

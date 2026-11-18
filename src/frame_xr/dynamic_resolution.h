@@ -63,9 +63,32 @@
 //     stays the Internal Resolution setting plus the immersive modes' two steps. Each such
 //     change is logged as what it is ("back to the remembered level", "reset to the setting"),
 //     never as a step up.
+//
+// AzaharFrame bfidr (report 76 item 4, the 1.2.x plan's Phase 1: Black Frame Insertion on the top
+// screen's quads in the Full modes breaks under GPU load, a late picture lit again doubles):
+//   - while it flashes (Second::bfi), a second is also bad on a stricter line (BfiRules::kLine,
+//     7.0 ms at 120 Hz) or on its symptoms (BfiRules, SymptomWindow): late releases or late
+//     pictures lit again, more than about one a second over the last 10 s, or the compositor
+//     missing refreshes (xrEndFrame over 12 ms, under 118 display frames a second), while the
+//     GPU is busy; not in the first 10 judged seconds after a start, a Load or a new Internal
+//     Resolution, nor 3 after a pause; 3 such seconds in a row step down (BfiRules::kDownAfter;
+//     fixd's line keeps kDownAfter);
+//   - a step up only on a predicted cost under kUpBudget of the stricter line, in a second
+//     without symptoms;
+//   - the floor is still the Internal Resolution setting (only the immersive modes' two steps come
+//     off), and nothing of it runs with Dynamic Resolution off: it is the setting's rule;
+//   - the screen's ceiling (ScreenFactor, CeilingHold): no factor whose picture has more than
+//     1.25 times the display pixels the top screen covers, from its live size and distance and
+//     the eye's image; its moves are no step, and it is never under the floor. With Dynamic
+//     Resolution on it holds in every Full mode, Black Frame Insertion or not (the owner,
+//     2026-11-17); with it off the factor is the setting's, with no cap;
+//   - two remembered levels a game (the owner, 2026-11-17): one with Black Frame Insertion asked
+//     for (Second::bfi_asked), one without. A step taken for it is its own level only, so
+//     turning it off goes back to the other level (or the setting) at once.
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -88,6 +111,142 @@ struct Second {
     /// AzaharFrame flash3: the factor drawn in this second (0: not known; Judge then takes the
     /// steps up to `max_drop` as the factors down to 1x).
     int factor = 0;
+    /// AzaharFrame bfidr: Black Frame Insertion flashed the top screen in a Full mode for most of
+    /// this second (MotionClarity::InEffect, not held for a slow game nor in the projection
+    /// layer); the symptoms below then count too (BfiRules).
+    bool bfi = false;
+    /// AzaharFrame bfidr: game frames released late (drawn aside, LogSummary's "late" of the top
+    /// screen), refreshes Black Frame Insertion lit a late picture again on (MotionClarity's
+    /// "lit for: late"), and the longest xrEndFrame call (ms).
+    uint32_t late_releases = 0;
+    uint32_t late_lit = 0;
+    double end_frame_max_ms = 0.0;
+    /// AzaharFrame bfidr: the most the top screen can show, unrounded (ScreenCoverage, the
+    /// second's average; 0: not known).
+    double screen_factor = 0.0;
+    /// AzaharFrame bfidr: the setting asks for Black Frame Insertion where the game is on view
+    /// for most of this second (the mode's row, at a rate it runs at: MotionClarity::RateGate):
+    /// which of the game's two remembered levels is in use (the owner, 2026-11-17: a step taken
+    /// for it never lowers the level without it).
+    bool bfi_asked = false;
+};
+
+/// AzaharFrame bfidr: while Black Frame Insertion flashes in a Full mode, a picture late is lit
+/// again and doubles, and the compositor missing a refresh shows as a bright or dark blip. The
+/// owner's headset session (report 85, OoT mode 2 on quads: the flashing's rhythm perfect
+/// throughout) put the doubling and flicker on GPU overload: at 6x drawn 8-12 ms GPU behind, 8-34
+/// late releases a second and xrEndFrame 12-16 ms; at 8x drawn 67-101 display frames a second;
+/// at 5x drawn good until heavy rooms, where GPU behind reads 6.6-8.6 ms with no late releases at
+/// all; at 4x drawn (4.8 ms) still close to doubling in heavy rooms, with nothing in the log to
+/// tell. So a second is bad for Black Frame Insertion (Controller::SymptomBad):
+///   - GPU behind at kLine of the period or more (7.0 ms at 120 Hz); or
+///   - the GPU busy (kBusyShare of the period, 5.0 ms at 120 Hz; a GPU with room reads its fixed
+///     part, 3.5-4.5 ms in reports 72 and 76) and, over the last kWindow judged seconds
+///     (SymptomWindow), more than kLatePerSecond late releases a second or late pictures lit
+///     again, counted over the whole window (a fixed kWindow seconds however many are in: the
+///     pacing's relock after the VR menu, 4-6 late in one second, is no trend), or kSlowSeconds
+///     seconds with a compositor miss: an xrEndFrame over kEndFramePeriods display periods (12 ms
+///     at 120 Hz), or fewer display frames than kFramesShare of the rate (118 at 120 Hz);
+///   - never in fast forward (kGameRateMax), nor in the first kAfterStart judged seconds after a
+///     game's start, a Load or a new Internal Resolution, nor kAfterPause after a pause (the
+///     rasterizer cache filling again, the pacing relocking; report 79: 4-23 late releases a
+///     second and GPU behind 7-8 ms for 6-7 s after each Quick Load at 4x drawn, with the
+///     flashing steady around them); a stalled emulation thread (report 76's boot: 9-10 late a
+///     second at 2-3 ms) is under the busy line.
+/// kDownAfter such seconds in a row step down; fixd's own line (Controller::kBadBudget, never
+/// held) still steps after Controller::kDownAfter. A step up only on a predicted cost under
+/// Controller::kUpBudget of kLine (0.75 x 7.0 ms at 120 Hz) in a second without symptoms.
+/// Replayed over the per-second lines of reports 76, 79, 70 and 85 (handoff tools of report 84,
+/// replay_all.py): a step in every window the owner or the reports called bad (MK7 and OoT at 6x
+/// and up within 3-11 s, OoT at 5x drawn in report 85's heavy rooms, t=376-441), none at a boot or
+/// a Load, in report 79's 504 s of MK7 at 4x drawn, in KIU flat, nor at 4x drawn in report 85.
+/// OoT at 6x drawn with Render Margin 1.0 (report 76, 7.3 ms) now steps (report 85 saw doubling
+/// at that load).
+struct BfiRules {
+    static constexpr int kDownAfter = 3;
+    static constexpr int kWindow = 10;
+    static constexpr double kLatePerSecond = 1.0;
+    static constexpr int kSlowSeconds = 2;
+    static constexpr double kEndFramePeriods = 1.44;
+    static constexpr double kFramesShare = 118.0 / 120.0;
+    static constexpr double kBusyShare = 0.6;
+    static constexpr double kGameRateMax = 66.0;
+    static constexpr int kAfterStart = 10;
+    static constexpr int kAfterPause = 3;
+    /// The stricter line, a share of the period (7.0 ms at 120 Hz): a bad second by itself, and
+    /// the line step ups are judged against (report 76: "about 7.0 ms"; report 85: OoT at 5x drawn
+    /// doubled in rooms at 6.6-8.6 ms, MK7's 4x drawn held at 5.1-5.6 ms in reports 72 and 79).
+    static constexpr double kLine = 0.84;
+};
+
+/// AzaharFrame bfidr: the symptoms of the last BfiRules::kWindow judged seconds (cleared at a
+/// step, a pause and while Black Frame Insertion is not in effect).
+class SymptomWindow {
+public:
+    void Add(const Second& s);
+    void Clear() {
+        *this = SymptomWindow{};
+    }
+    /// The symptoms say the GPU is the limit, whatever this second's GPU time (Bad's gate is
+    /// applied by the caller).
+    bool Symptoms() const;
+    /// This second had none (a step up's second).
+    static bool Clean(const Second& s);
+    /// No compositor miss this second: xrEndFrame within BfiRules::kEndFramePeriods periods and
+    /// the display frames at least BfiRules::kFramesShare of the rate.
+    static bool NoMiss(const Second& s);
+    uint32_t LateReleases() const;
+    uint32_t LateLit() const;
+    int SlowSeconds() const;
+    int Size() const {
+        return n;
+    }
+
+private:
+    struct Entry {
+        uint32_t late = 0, lit = 0;
+        bool slow = false;
+    };
+    Entry entries[BfiRules::kWindow] = {};
+    int next = 0, n = 0;
+};
+
+/// AzaharFrame bfidr: the most a top screen can show. The factor whose picture (kTopWidth x
+/// kTopHeight times the factor, the same pixels whatever the immersive "draws" widen) has more
+/// than kScreenOversample times the display pixels the screen covers on both axes only costs GPU
+/// time. `tan_w`, `tan_h`: the screen's width and height over its distance; `eye_tan_w`,
+/// `eye_tan_h`: the eye's field of view as tan(right) - tan(left) and tan(up) - tan(down);
+/// `eye_px_w`, `eye_px_h`: the runtime's recommended eye image (its pixels at the middle of the
+/// view, where the screen is). The axis that needs the most decides; 0: not known.
+inline constexpr double kScreenOversample = 1.25;
+inline constexpr int kTopWidth = 400, kTopHeight = 240;
+struct ScreenCover {
+    double tan_w = 0.0, tan_h = 0.0;
+    double eye_tan_w = 0.0, eye_tan_h = 0.0;
+    uint32_t eye_px_w = 0, eye_px_h = 0;
+};
+/// The factor unrounded (0: not known), and the whole one (at least 1x; 0: not known).
+double ScreenCoverage(const ScreenCover& c);
+int ScreenFactor(const ScreenCover& c);
+
+/// AzaharFrame bfidr: the screen's ceiling, with a hold: a new value is taken after
+/// kCeilingSeconds seconds in a row (a grip resize passes through many sizes: one step, not one
+/// per size), and a higher one only kCeilingMargin past its whole factor (the held quad's size
+/// and the eye's distance move with the head: a value near a whole factor would flip the
+/// swapchain back and forth).
+class CeilingHold {
+public:
+    static constexpr int kCeilingSeconds = 3;
+    static constexpr double kCeilingMargin = 0.2;
+    /// Once a second, the factor the screen can show now, unrounded (0: none, no ceiling): the
+    /// one in force.
+    int Next(double factor);
+    int Now() const {
+        return now;
+    }
+
+private:
+    int now = 0, candidate = 0, seen = 0;
 };
 
 /// AzaharFrame flash3: whether Dynamic Resolution stops at the Internal Resolution setting
@@ -150,15 +309,28 @@ public:
     static constexpr int kMaxSteps = 32;
 
     /// Judges a second; `max_drop` is how far it may go (the factor less 1). Returns the steps
-    /// under the factor to draw at now.
-    int Judge(const Second& s, int max_drop);
+    /// under the factor to draw at now. AzaharFrame bfidr: `min_drop`, the steps the screen's
+    /// ceiling takes off (CeilingHold): the factor is never above it, and its moves are no step
+    /// (nor a failed step up, nor a level to remember); when it lifts, the level the seconds
+    /// decided comes back.
+    int Judge(const Second& s, int max_drop, int min_drop = 0);
     int Drop() const {
+        return std::max(drop, min_drop_);
+    }
+    /// AzaharFrame bfidr: the level the seconds decided (Drop without the screen's ceiling).
+    int OwnDrop() const {
         return drop;
+    }
+    /// AzaharFrame bfidr: the screen's ceiling decides the factor now (at or under the level the
+    /// seconds decided): held there, it is no level to remember.
+    bool Ceilinged() const {
+        return min_drop_ > 0 && min_drop_ >= drop;
     }
     /// From the factor itself again (the setting changed, a game started or stopped).
     void Reset();
     /// AzaharFrame fixd: from the factor itself again, then `steps` under it (the level
     /// remembered for the game); the seconds after are not judged and good ones wait a hold.
+    /// AzaharFrame bfidr: nor, for BfiRules::kAfterStart judged seconds, the symptoms.
     /// `same_game`: a Load or a Restart in the game it has measured: what it measured (the
     /// costs per factor, the ratios) is kept.
     void Start(int steps, bool same_game = false);
@@ -170,6 +342,26 @@ public:
     /// up from `factor`, AzaharFrame flash3); neither: neutral.
     static bool Bad(const Second& s);
     bool Good(const Second& s, int factor) const;
+    /// AzaharFrame bfidr: with Black Frame Insertion, the stricter line or the symptoms of the
+    /// window with this second (the GPU busy too); false without it, in fast forward, or in the
+    /// hold after a start, a Load, a reset or a pause.
+    bool SymptomBad(const Second& s) const;
+    /// AzaharFrame bfidr: the symptoms wait BfiRules::kAfterStart judged seconds (a new Internal
+    /// Resolution: the rasterizer cache fills again).
+    void HoldSymptoms() {
+        symptom_hold = BfiRules::kAfterStart;
+    }
+    /// AzaharFrame bfidr: what the last step down was for: the symptoms (true) or the GPU's line.
+    bool LastStepSymptoms() const {
+        return last_symptoms;
+    }
+    const SymptomWindow& Symptoms() const {
+        return window;
+    }
+    /// AzaharFrame bfidr: the window as it was at the last step down (for the log).
+    const SymptomWindow& StepWindow() const {
+        return step_window;
+    }
     /// AzaharFrame flash3: the GPU's time predicted at `factor` + 1 from the time at `factor`.
     /// AzaharFrame fixd: times Ratio.
     double PredictUp(double gpu_ms, int factor) const;
@@ -206,7 +398,13 @@ private:
     void Measure(const Second& s, int factor);
 
     int drop = 0;
+    int min_drop_ = 0; ///< AzaharFrame bfidr: the screen's ceiling (Judge)
     int bad = 0;
+    int symptom_bad = 0; ///< AzaharFrame bfidr: SymptomBad seconds in a row
+    int symptom_hold = 0; ///< AzaharFrame bfidr: BfiRules::kAfterStart left
+    bool last_symptoms = false;
+    SymptomWindow window; ///< AzaharFrame bfidr
+    SymptomWindow step_window; ///< AzaharFrame bfidr: StepWindow
     int good = 0;
     int settle = 0;
     int hold = 0; ///< AzaharFrame ui2: kHoldAfterDown left
@@ -244,25 +442,31 @@ constexpr int StartDrop(int base, int remembered, int max_drop) {
 }
 
 /// AzaharFrame fixd: the remembered levels, one line per game: "<title ID, 16 hex> <factor>".
-/// Lines this build cannot read are left out; a title ID of 0 is never kept.
+/// Lines this build cannot read are left out; a title ID of 0 is never kept. AzaharFrame bfidr:
+/// a game's level with Black Frame Insertion asked for is a line of its own, "<title ID>
+/// <factor> bfi" (builds before it skip such a line: a third word was never read).
 inline constexpr const char* kStoreFile = "dynamic-resolution.txt";
 /// AzaharFrame fixd: judged seconds at one level before it is remembered for the game (a level
 /// it steps down to is remembered at once).
 inline constexpr int kRememberAfter = 60;
-std::string FormatStore(const std::vector<std::pair<uint64_t, int>>& levels);
-std::vector<std::pair<uint64_t, int>> ParseStore(const std::string& text);
+/// AzaharFrame bfidr: a remembered level's key: the game's title ID, and whether it is the level
+/// with Black Frame Insertion asked for.
+using LevelKey = std::pair<uint64_t, bool>;
+using LevelList = std::vector<std::pair<LevelKey, int>>;
+std::string FormatStore(const LevelList& levels);
+LevelList ParseStore(const std::string& text);
 
 /// AzaharFrame fixd: where the remembered levels live (the file under the user folder by
 /// default; a test sets its own). `load` gives the whole list, `save` writes it (it may run on
 /// another thread).
 struct LevelStore {
-    std::function<std::vector<std::pair<uint64_t, int>>()> load;
-    std::function<void(std::vector<std::pair<uint64_t, int>>)> save;
+    std::function<LevelList()> load;
+    std::function<void(LevelList)> save;
     std::function<uint64_t()> title; ///< the running game's title ID (0: none)
 };
 void SetLevelStore(LevelStore store);
-/// The factor remembered for `title` (0: none).
-int RememberedFactor(uint64_t title);
+/// The factor remembered for `title` (0: none), without or (`bfi`) with Black Frame Insertion.
+int RememberedFactor(uint64_t title, bool bfi = false);
 
 /// Frame loop side: the controller for the running session, fed by Runtime::LogSummary.
 void Install();

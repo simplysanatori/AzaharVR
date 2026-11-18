@@ -190,22 +190,50 @@ inline constexpr const char* kFollowScreenWindowTip =
 inline constexpr const char* kMotionClarity = "Black Frame Insertion";
 /// AzaharFrame projdef: experimental (the owner's A/B, 1.1.1-590); its tooltip says so. fixa: each
 /// row's tooltip says where it works.
+/// AzaharFrame bfidr: each tooltip ends with the rate it needs (the owner's wording, 2026-11-17).
 inline constexpr const char* kMotionClarityTip =
     "Experimental. In the Full modes, adds a black frame after each picture for a clearer view "
-    "on head turns. Uses Primary Screen as Panel. May flicker.";
+    "on head turns. Uses Primary Screen as Panel. May flicker. Needs a 120 Hz display.";
 /// rel120: Azahar's window keeps the still true line about slower games.
 inline constexpr const char* kMotionClarityWindowTip =
     "Experimental. In the Full modes, adds a black frame after each picture for a clearer view "
     "on head turns. Uses Primary Screen as Panel. May flicker. Games that run under 60 fps show "
-    "as before.";
+    "as before. Needs a 120 Hz display.";
 /// AzaharFrame fixa: the Graphics section's row (vr_motion_clarity_normal): only the top screen
 /// flashes, while it is the Primary one.
 inline constexpr const char* kMotionClarityNormalTip =
     "Experimental. In the Off and Wide modes, adds a black frame after each picture on the "
-    "Primary screen for clearer motion. May flicker.";
+    "Primary screen for clearer motion. May flicker. Needs a 120 Hz display.";
 inline constexpr const char* kMotionClarityNormalWindowTip =
     "Experimental. In the Off and Wide modes, adds a black frame after each picture on the "
-    "Primary screen for clearer motion. May flicker. Games that run under 60 fps show as before.";
+    "Primary screen for clearer motion. May flicker. Games that run under 60 fps show as before. "
+    "Needs a 120 Hz display.";
+/// AzaharFrame bfidr: the toast when turning Black Frame Insertion on turned its helpers on
+/// (frame_xr/bfi_helpers.h); it takes the place of "May Flicker" then (one toast at a time).
+/// Putting them back when it goes off shows nothing (the rows show it). The owner's wording,
+/// 2026-11-18.
+inline std::string BfiHelpersToast(bool dynamic_resolution, bool panel, bool on) {
+    std::string what;
+    if (!on) {
+        return {};
+    }
+    if (dynamic_resolution && panel) {
+        what = "Dynamic Resolution and Primary Screen as Panel";
+    } else if (dynamic_resolution) {
+        what = "Dynamic Resolution";
+    } else if (panel) {
+        what = "Primary Screen as Panel";
+    } else {
+        return {};
+    }
+    return what + " On for Black Frame Insertion";
+}
+/// AzaharFrame bfidr: the note on both Black Frame Insertion rows (VR menu) and boxes (Azahar's
+/// window) while the display runs at a rate it does not flash at (MotionClarity::EvenRate): a
+/// note, never a lock. The owner's wording, 2026-11-17.
+inline std::string NeedsRefreshNote(int display_hz) {
+    return "Needs 120 Hz (Display at " + std::to_string(display_hz) + " Hz)";
+}
 /// AzaharFrame projdef: the chip beside Motion Clarity's label in the VR menu.
 inline constexpr const char* kExperimental = "Experimental";
 /// AzaharFrame projdef: Azahar's window (Configure) and Send Report name the two rows apart; the

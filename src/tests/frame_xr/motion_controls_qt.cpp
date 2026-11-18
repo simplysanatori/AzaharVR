@@ -14,6 +14,7 @@
 #include <QSpinBox>
 #include <QWidget>
 #include <initializer_list>
+#include <utility>
 #include <catch2/catch_test_macros.hpp>
 #include "citra_qt/configuration/configuration_shared.h"
 #include "citra_qt/configuration/configure_frame_vr.h"
@@ -358,12 +359,13 @@ TEST_CASE("VR group: Motion Clarity's two boxes", "[frame_xr][projdef][fixa]") {
         CHECK(box->toolTip() ==
               QStringLiteral("Experimental. In the Full modes, adds a black frame after each "
                              "picture for a clearer view on head turns. Uses Primary Screen as "
-                             "Panel. May flicker. Games that run under 60 fps show as before."));
+                             "Panel. May flicker. Games that run under 60 fps show as before. "
+                             "Needs a 120 Hz display."));
         CHECK(normal->text() == QStringLiteral("Black Frame Insertion in Off and Wide Modes"));
         CHECK(normal->toolTip() ==
               QStringLiteral("Experimental. In the Off and Wide modes, adds a black frame after "
                              "each picture on the Primary screen for clearer motion. May flicker. "
-                             "Games that run under 60 fps show as before."));
+                             "Games that run under 60 fps show as before. Needs a 120 Hz display."));
         // fixa: Match Bottom Screen Brightness, one box for both, never greyed.
         CHECK(match->text() == QStringLiteral("Match Bottom Screen Brightness"));
         CHECK(match->toolTip() ==
@@ -715,4 +717,82 @@ TEST_CASE("VR group: Immersive Mode lists Angel's Aim everywhere",
         CHECK(mode->itemText(3) == QString::fromUtf8(Names::kModeAngelsAim));
         CHECK(mode->itemText(4) == QStringLiteral("Full (6DoF): Other Games"));
     }
+
+// AzaharFrame bfidr: Black Frame Insertion's helpers in Azahar's window (frame_xr/bfi_helpers.h):
+// ticking its box ticks Primary Screen as Panel where it was off, and OK turns Dynamic Resolution
+// on too; unticking puts back what it turned on. The panel's box clicked by the player is theirs.
+TEST_CASE("VR group: Black Frame Insertion turns its helpers on", "[frame_xr][bfidr]") {
+    App();
+    auto& v = Settings::values;
+    Keep<bool, false> k1{v.vr_screens_in_projection};
+    Keep<bool, false> k2{v.vr_motion_clarity_immersive};
+    Keep<bool, false> k3{v.vr_dynamic_resolution};
+    Keep<bool, false> k4{v.vr_bfi_set_dynamic_resolution};
+    Keep<bool, false> k5{v.vr_bfi_set_panel};
+    Settings::SetConfiguringGlobal(true);
+    for (auto* s : {&v.vr_motion_clarity_immersive, &v.vr_dynamic_resolution,
+                    &v.vr_bfi_set_dynamic_resolution, &v.vr_bfi_set_panel}) {
+        s->SetGlobal(true);
+        s->SetValue(false);
+    }
+    v.vr_screens_in_projection.SetGlobal(true);
+    v.vr_screens_in_projection.SetValue(true);
+    const auto boxes = [](ConfigureFrameVr& w) {
+        return std::pair{
+            w.findChild<QCheckBox*>(QStringLiteral("frame_vr_motion_clarity_immersive_check")),
+            w.findChild<QCheckBox*>(QStringLiteral("frame_vr_screen_as_panel_check"))};
+    };
+    {
+        ConfigureFrameVr w;
+        auto [bfi, panel] = boxes(w);
+        REQUIRE(bfi);
+        REQUIRE(panel);
+        bfi->click();
+        CHECK(panel->isChecked()); // shows at once
+        w.ApplyConfiguration();
+    }
+    CHECK(v.vr_motion_clarity_immersive.GetValue(true));
+    CHECK(v.vr_dynamic_resolution.GetValue(true));
+    CHECK_FALSE(v.vr_screens_in_projection.GetValue(true));
+    CHECK(v.vr_bfi_set_dynamic_resolution.GetValue(true));
+    CHECK(v.vr_bfi_set_panel.GetValue(true));
+    {
+        ConfigureFrameVr w;
+        auto [bfi, panel] = boxes(w);
+        bfi->click(); // off: both back, nothing changed since
+        CHECK_FALSE(panel->isChecked());
+        w.ApplyConfiguration();
+    }
+    CHECK_FALSE(v.vr_motion_clarity_immersive.GetValue(true));
+    CHECK_FALSE(v.vr_dynamic_resolution.GetValue(true));
+    CHECK(v.vr_screens_in_projection.GetValue(true));
+    CHECK_FALSE(v.vr_bfi_set_dynamic_resolution.GetValue(true));
+    CHECK_FALSE(v.vr_bfi_set_panel.GetValue(true));
+    // On again; the player then unticks the panel themselves: it stays off, and when Black Frame
+    // Insertion goes off only Dynamic Resolution goes back.
+    {
+        ConfigureFrameVr w;
+        auto [bfi, panel] = boxes(w);
+        bfi->click();
+        panel->click();
+        CHECK_FALSE(panel->isChecked());
+        w.ApplyConfiguration();
+    }
+    CHECK(v.vr_dynamic_resolution.GetValue(true));
+    CHECK(v.vr_screens_in_projection.GetValue(true)); // the player's choice
+    CHECK_FALSE(v.vr_bfi_set_panel.GetValue(true));
+    {
+        ConfigureFrameVr w;
+        auto [bfi, panel] = boxes(w);
+        panel->click(); // the player's own panel now
+        w.ApplyConfiguration();
+    }
+    {
+        ConfigureFrameVr w;
+        auto [bfi, panel] = boxes(w);
+        bfi->click();
+        w.ApplyConfiguration();
+    }
+    CHECK_FALSE(v.vr_dynamic_resolution.GetValue(true));
+    CHECK_FALSE(v.vr_screens_in_projection.GetValue(true)); // left on: the player set it
 }

@@ -5580,6 +5580,10 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::DynamicResolution:
         set(v.vr_dynamic_resolution, r.value != 0);
         break;
+    case S::BfiHelperMarks: // AzaharFrame bfidr: what Black Frame Insertion turned on
+        set(v.vr_bfi_set_dynamic_resolution, (r.value & 1) != 0);
+        set(v.vr_bfi_set_panel, (r.value & 2) != 0);
+        break;
     case S::TextureFilter:
         set(v.texture_filter, static_cast<Settings::TextureFilter>(std::min<u32>(u, 5)));
         break;

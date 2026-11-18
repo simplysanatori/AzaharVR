@@ -16,6 +16,7 @@
 #include <vector>
 #include <catch2/catch_test_macros.hpp>
 #include "common/settings.h"
+#include "common/xr_pacer.h"
 #include "frame_xr/motion_clarity.h"
 
 namespace {
@@ -800,4 +801,126 @@ TEST_CASE("Motion Clarity: a real 30 a second game is still held", "[frame_xr][f
     }
     CHECK(w.s.Fast());
     CHECK(w.log.Steps() == 0);
+}
+
+// AzaharFrame bfidr (the owner: Black Frame Insertion only at 120 Hz): it flashes only at a whole
+// number of refreshes a 60 fps picture, 2 or more; at 72, 90 and 144 Hz the picture is shown
+// without flashing (the frame loop turns it off there), and 120 Hz is as before.
+TEST_CASE("Motion Clarity: only at a whole number of refreshes a picture", "[frame_xr][bfidr]") {
+    const auto period = [](double hz) { return static_cast<int64_t>(1e9 / hz + 0.5); };
+    CHECK(MC::EvenRate(period(120.0)));
+    CHECK(MC::EvenRate(period(240.0)));
+    CHECK_FALSE(MC::EvenRate(period(72.0)));
+    CHECK_FALSE(MC::EvenRate(period(90.0)));
+    CHECK_FALSE(MC::EvenRate(period(144.0)));
+    CHECK_FALSE(MC::EvenRate(period(60.0))); // 1 a picture: nothing to put a black frame in
+    CHECK(MC::EvenRate(period(119.9)));      // the runtime's measured period
+    CHECK(MC::EvenRate(0));                  // not known: as before
+    CHECK(std::abs(MC::RefreshesPerPicture(period(90.0)) - 1.5) < 1e-6);
+    CHECK(std::abs(MC::RefreshesPerPicture(period(144.0)) - 2.4) < 1e-6);
+
+    // The pacer's own 120 Hz test (pacing's "not 120 Hz") agrees at the headset's rates.
+    for (const double hz : {72.0, 80.0, 90.0, 100.0, 119.0, 119.9, 120.0, 121.0, 144.0}) {
+        INFO(hz << " Hz");
+        CHECK(MC::EvenRate(period(hz)) == Common::XrPacer::EvenCadencePeriod(period(hz)));
+    }
+
+    // The rows' note: the rate in whole Hz where it does not flash, else 0.
+    CHECK(MC::UnevenHz(period(90.0)) == 90);
+    CHECK(MC::UnevenHz(period(72.0)) == 72);
+    CHECK(MC::UnevenHz(period(144.0)) == 144);
+    CHECK(MC::UnevenHz(period(120.0)) == 0);
+    CHECK(MC::UnevenHz(0) == 0);
+
+    // The frame loop's gate: asked for at 90 Hz, off and said once; at 120 Hz on again (once
+    // the new rate has held kSettleFrames frames) and said once; not asked for, nothing said.
+    const int settle = MC::RateGate::kSettleFrames;
+    {
+        MC::RateGate g;
+        auto o = g.Next(true, period(90.0)); // the first rate counts at once
+        CHECK(!o.on);
+        CHECK(o.say == MC::RateGate::Say::Held);
+        o = g.Next(true, period(90.0));
+        CHECK(!o.on);
+        CHECK(o.say == MC::RateGate::Say::None);
+        for (int i = 1; i < settle; ++i) {
+            o = g.Next(true, period(120.0));
+            CHECK(!o.on);
+            CHECK(o.say == MC::RateGate::Say::None);
+        }
+        o = g.Next(true, period(120.0));
+        CHECK(o.on);
+        CHECK(o.say == MC::RateGate::Say::Again);
+        o = g.Next(true, period(120.0));
+        CHECK(o.on);
+        CHECK(o.say == MC::RateGate::Say::None);
+        o = g.Next(false, period(144.0));
+        CHECK(!o.on);
+        CHECK(o.say == MC::RateGate::Say::None);
+        for (int i = 0; i < settle; ++i) {
+            o = g.Next(true, period(72.0));
+        }
+        CHECK(!o.on); // 72 Hz held: off
+        for (int i = 0; i < settle; ++i) {
+            o = g.Next(true, 0);
+        }
+        CHECK(o.on); // not known: as before
+    }
+    // bfidr: at 120 Hz, one frame predicted at 60 Hz (as at a toggle) changes nothing and logs
+    // nothing; nor do a few in a row.
+    {
+        MC::RateGate g;
+        CHECK(g.Next(true, period(120.0)).on);
+        for (int i = 0; i < 3; ++i) {
+            const auto o = g.Next(true, period(60.0));
+            CHECK(o.on);
+            CHECK(o.say == MC::RateGate::Say::None);
+        }
+        const auto o = g.Next(true, period(120.0));
+        CHECK(o.on);
+        CHECK(o.say == MC::RateGate::Say::None);
+        // a run just short of the settle length, then 120 Hz again: still nothing
+        for (int i = 0; i < settle - 1; ++i) {
+            CHECK(g.Next(true, period(60.0)).say == MC::RateGate::Say::None);
+        }
+        CHECK(g.Next(true, period(120.0)).say == MC::RateGate::Say::None);
+    }
+
+    // Through the gate and the scheduler, as the frame loop drives them: at 72, 90 and 144 Hz
+    // every refresh shows the picture, as without it.
+    for (const double hz : {72.0, 90.0, 144.0}) {
+        INFO(hz << " Hz");
+        MC::Scheduler s;
+        MC::RateGate gate;
+        uint64_t pic = 0;
+        const int64_t p = period(hz);
+        std::string out;
+        for (int i = 0; i < 200; i++) {
+            // 60 pictures a second at this rate: a new one when the game's clock passes the next
+            if (static_cast<int64_t>(i) * p * 60 / 1'000'000'000 >= static_cast<int64_t>(pic)) {
+                pic++;
+            }
+            const MC::Decision d = s.Next({gate.Next(true, p).on, true, pic, i * p, p});
+            out += d.show ? 'P' : 'B';
+            CHECK(d.why == MC::Why::Off);
+        }
+        CHECK(out.find('B') == std::string::npos);
+    }
+    // 120 Hz exactly as before: learning on the beat, then lit, backing.
+    MC::Scheduler s;
+    MC::RateGate gate;
+    uint64_t pic = 0;
+    const int64_t p = period(120.0);
+    std::string out;
+    for (int i = 0; i < 40; i++) {
+        if (i % 2 == 0) {
+            pic++;
+        }
+        out += s.Next({gate.Next(true, p).on, true, pic, i * p, p}).show ? 'P' : 'B';
+    }
+    std::string expected;
+    for (int i = 0; i < 20; i++) {
+        expected += "PB";
+    }
+    CHECK(out == expected);
 }

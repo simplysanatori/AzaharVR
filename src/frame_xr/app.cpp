@@ -13,9 +13,18 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <cstdio>
+#include <fstream> // AzaharFrame bfidr: the perf line
+#include <map>
+#include <optional>
 #include <string>
+#include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
+
+#include <dirent.h> // AzaharFrame bfidr: the perf line
+#include <unistd.h>
 
 #include <fmt/format.h>
 #include "common/logging/log.h"
@@ -33,6 +42,7 @@
 #include "frame_xr/layer_slots.h"     // AzaharFrame flash
 #include "frame_xr/retired_swapchains.h" // AzaharFrame projdef
 #include "frame_xr/motion_clarity.h"   // AzaharFrame flash
+#include "frame_xr/perf_line.h"        // AzaharFrame bfidr
 #include "frame_xr/session.h"
 #include "frame_xr/test_switches.h" // AzaharFrame integ9: the switch file, live
 #include "frame_xr/toast_depth.h"   // AzaharFrame integ9: ScreenUse
@@ -405,6 +415,75 @@ void Runtime::NoteLoopPeriod(const LoopPhases& phases, LoopPhases& worst, XrDura
     }
 }
 
+namespace {
+
+// AzaharFrame bfidr: the perf line's CPU per thread (perf_line.h), read off the frame loop: a
+// short thread reads /proc/self/task/*/stat, works the shares out against the last read and
+// writes the line.
+std::mutex g_perf_mutex;
+std::map<int, PerfLine::TaskTimes> g_perf_tasks;
+std::chrono::steady_clock::time_point g_perf_at{};
+
+std::map<int, PerfLine::TaskTimes> ReadTasks() {
+    std::map<int, PerfLine::TaskTimes> out;
+    if (DIR* d = opendir("/proc/self/task")) {
+        while (dirent* e = readdir(d)) {
+            const int tid = std::atoi(e->d_name);
+            if (tid <= 0) {
+                continue;
+            }
+            std::ifstream f(fmt::format("/proc/self/task/{}/stat", tid));
+            std::string line;
+            std::getline(f, line);
+            if (auto t = PerfLine::ParseTaskStat(line)) {
+                out[tid] = std::move(*t);
+            }
+        }
+        closedir(d);
+    }
+    return out;
+}
+
+} // namespace
+
+void Runtime::PerfRead(std::optional<PerfLine::Window> window) {
+    // On while a timer runs, or when the window holds its numbers (a renderer made again before
+    // the old one went: the old one's destructor said off).
+    const bool gpu_on = Common::StallTelemetry::Get().gpu_busy_on.load() ||
+                        (window && window->emu_buffers > 0);
+    try {
+        std::thread([window, gpu_on] {
+            std::map<int, PerfLine::TaskTimes> tasks = ReadTasks();
+            const auto now = std::chrono::steady_clock::now();
+            std::scoped_lock lock{g_perf_mutex};
+            if (window && g_perf_at != std::chrono::steady_clock::time_point{}) {
+                const double secs = std::chrono::duration<double>(now - g_perf_at).count();
+                const PerfLine::CpuShares cpu =
+                    PerfLine::Shares(g_perf_tasks, tasks, secs, sysconf(_SC_CLK_TCK));
+                const auto slurp = [](const char* path) {
+                    std::string text;
+                    if (std::FILE* f = std::fopen(path, "r")) {
+                        char chunk[4096];
+                        std::size_t n;
+                        while ((n = std::fread(chunk, 1, sizeof(chunk), f)) > 0) {
+                            text.append(chunk, n);
+                        }
+                        std::fclose(f);
+                    }
+                    return text;
+                };
+                LOG_INFO(Frontend, "xr: {}{}", PerfLine::Format(*window, gpu_on, cpu),
+                         PerfLine::MemoryNote(slurp("/proc/self/status"),
+                                              slurp("/proc/meminfo")));
+            }
+            g_perf_tasks = std::move(tasks);
+            g_perf_at = now;
+        }).detach();
+    } catch (const std::system_error&) {
+        // No thread now: no line this time (never on the frame loop).
+    }
+}
+
 void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
                          const LoopPhases& worst) {
     const auto take = [](std::atomic<uint32_t>& a) { return a.exchange(0); };
@@ -452,11 +531,11 @@ void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
     // AzaharFrame projdef: the GPU's real busy time a refresh (timestamps): the renderer's command
     // buffers (the game, vk_gpu_busy.h) and the XR thread's controller and projection pass, against
     // the refresh period (SteamVR's own work is not in it).
+    const uint64_t emu_ns = telemetry.gpu_busy_ns.exchange(0);
+    const uint64_t emu_n = telemetry.gpu_busy_buffers.exchange(0);
+    const uint64_t pass_ns = telemetry.xr_pass_gpu_ns.exchange(0);
+    const uint64_t pass_n = telemetry.xr_pass_gpu_n.exchange(0);
     const std::string busy = [&] {
-        const uint64_t emu_ns = telemetry.gpu_busy_ns.exchange(0);
-        const uint64_t emu_n = telemetry.gpu_busy_buffers.exchange(0);
-        const uint64_t pass_ns = telemetry.xr_pass_gpu_ns.exchange(0);
-        const uint64_t pass_n = telemetry.xr_pass_gpu_n.exchange(0);
         if (frames == 0 || (emu_n == 0 && pass_n == 0)) {
             return std::string{};
         }
@@ -473,8 +552,56 @@ void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
     Vis::NoteXrSecond({seconds, frames, late[0], wait_max_ms}); // AzaharFrame vrvis: stats panel
     // AzaharFrame menuux: Dynamic Resolution judges the second (the headset's frames).
     const auto gpu = VideoCore::DynamicResolution::TakeGpuSecond();
-    DynamicResolution::NoteSecond({seconds, frames, display_period_ns / 1e6, emu_frames,
-                                   gpu.frames, gpu.avg_ms, screens_live.load()});
+    DynamicResolution::Second dr_second{seconds,     frames,     display_period_ns / 1e6,
+                                        emu_frames,  gpu.frames, gpu.avg_ms,
+                                        screens_live.load()};
+    // AzaharFrame bfidr: and Black Frame Insertion's symptoms, while it flashed most of the second.
+    dr_second.bfi = frames > 0 && bfi_second.flashing * 2 >= frames;
+    dr_second.late_releases = std::max(late[0], late[1]);
+    dr_second.late_lit = bfi_second.late_lit;
+    dr_second.end_frame_max_ms = bfi_second.end_max_ms;
+    dr_second.screen_factor =
+        bfi_second.screen_n ? bfi_second.screen_sum / bfi_second.screen_n : 0.0;
+    dr_second.bfi_asked = frames > 0 && bfi_second.asked * 2 >= frames;
+    // AzaharFrame bfidr: the perf line's window, from the values taken above.
+    const bool flashed = dr_second.bfi;
+    const uint32_t late_lit = bfi_second.late_lit;
+    bfi_second = {};
+    DynamicResolution::NoteSecond(dr_second);
+    if (screens_live.load()) {
+        PerfLine::Window& w = perf_window;
+        w.seconds += seconds;
+        w.display_frames += frames;
+        w.game_frames += emu_frames;
+        w.emu_gpu_ns += emu_ns;
+        w.emu_buffers += emu_n;
+        w.pass_gpu_ns += pass_ns;
+        w.pass_draws += pass_n;
+        w.late_releases += dr_second.late_releases;
+        w.late_lit += late_lit;
+        w.end_frame_max_ms = std::max(w.end_frame_max_ms, dr_second.end_frame_max_ms);
+        w.bfi_seconds += flashed ? 1 : 0;
+        const uint32_t base = VideoCore::DynamicResolution::g_base.load(std::memory_order_relaxed);
+        const int drop = DynamicResolution::Drop();
+        w.factor = base > 0 ? std::max(1, static_cast<int>(base) - drop) : 0;
+        w.screen_factor = static_cast<int>(dr_second.screen_factor);
+        const int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   Clock::now().time_since_epoch())
+                                   .count();
+        // The first second only reads the threads' times (the start of the CPU shares); a line
+        // every ChangeGate::kSummaryMs after.
+        const auto say = perf_gate.Update(now_ms, false);
+        if (say == Common::FrameLog::ChangeGate::Say::First) {
+            PerfRead(std::nullopt);
+            w = {};
+        } else if (say == Common::FrameLog::ChangeGate::Say::Summary) {
+            PerfRead(w);
+            w = {};
+        }
+    } else {
+        perf_gate.Reset(); // no game on view: the next line starts afresh
+        perf_window = {};
+    }
     stats.window_us_sum.exchange(0);
     take(stats.window_us_max);
     // AzaharFrame ui2: and what Dynamic Resolution judged it by, every second (the logs of report
@@ -581,6 +708,7 @@ void Runtime::FrameLoop() {
     // AZAHARFRAME_XR_FLASH_BACKING for an A/B of the backing, all live (test_switches.h).
     MotionClarity::Scheduler clarity;
     MotionClarity::Log clarity_log;
+    MotionClarity::RateGate clarity_rate; // AzaharFrame bfidr: only at 120 Hz, said once
     std::optional<bool> clarity_override;
     bool flash_backing = true;
     const auto read_clarity_switches = [&] {
@@ -825,6 +953,9 @@ void Runtime::FrameLoop() {
         last_wait = now;
         phases = {};
         display_period_ns = fs.predictedDisplayPeriod; // AzaharFrame menuux
+        // AzaharFrame bfidr: the display's rate for Black Frame Insertion's rows ("Needs 120 Hz").
+        Common::StallTelemetry::Get().display_period_ns.store(fs.predictedDisplayPeriod,
+                                                             std::memory_order_relaxed);
 
         auto mark = Clock::now();
         Watchdog::Beat("xrBeginFrame (with the queue lock)");
@@ -1002,6 +1133,49 @@ void Runtime::FrameLoop() {
             place = WithSecondSlot(place); // AzaharFrame layout: as GetScreenPlacement
             // Immersive mode (immersive.cpp) may move the top screen and hide the bottom one.
             const Immersive::ScreenLayers shown = Immersive::Screens(local_space, view_space, place);
+            // AzaharFrame bfidr: what the head-driven top screen can show (Dynamic Resolution's
+            // ceiling in the Full modes): its size over its distance from the left eye,
+            // against the eye's field of view and recommended image, averaged over the second.
+            if (shown.full_mode && shown.head_driven && shown.show_top) {
+                if (eye_px_w == 0) {
+                    uint32_t n = 0;
+                    XrViewConfigurationView v[2]{{XR_TYPE_VIEW_CONFIGURATION_VIEW},
+                                                 {XR_TYPE_VIEW_CONFIGURATION_VIEW}};
+                    if (XR_SUCCEEDED(xr.xrEnumerateViewConfigurationViews(
+                            instance, system, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 2, &n,
+                            v)) &&
+                        n >= 1) {
+                        eye_px_w = v[0].recommendedImageRectWidth;
+                        eye_px_h = v[0].recommendedImageRectHeight;
+                        LOG_INFO(Frontend, "xr: the runtime's eye image is {}x{} (for Dynamic "
+                                           "Resolution's screen ceiling)",
+                                 eye_px_w, eye_px_h);
+                    } else {
+                        eye_px_w = 1; // not known: asked once (ScreenFactor then says 0)
+                        eye_px_h = 0;
+                    }
+                }
+                const ViewPose vp = LatestViewPose();
+                const XrVector3f at = shown.top_pose[0].position;
+                const XrVector3f eye =
+                    shown.top_space == view_space ? XrVector3f{0, 0, 0} : vp.eye[0].position;
+                const float dist = std::sqrt((at.x - eye.x) * (at.x - eye.x) +
+                                             (at.y - eye.y) * (at.y - eye.y) +
+                                             (at.z - eye.z) * (at.z - eye.z));
+                const XrFovf& fov = vp.fov[0];
+                const double cover =
+                    vp.views_valid && dist > 0.01f
+                        ? DynamicResolution::ScreenCoverage(
+                              {shown.top_size[0].width / dist, shown.top_size[0].height / dist,
+                               std::tan(fov.angleRight) - std::tan(fov.angleLeft),
+                               std::tan(fov.angleUp) - std::tan(fov.angleDown), eye_px_w,
+                               eye_px_h})
+                        : 0.0;
+                if (cover > 0.0) { // the second's average (the held quad moves with the head)
+                    bfi_second.screen_sum += cover;
+                    bfi_second.screen_n++;
+                }
+            }
             // AzaharFrame flash: Motion Clarity (motion_clarity.h; it began as the test switch
             // AZAHARFRAME_XR_SINGLE_FLASH): each game picture of the top screen on one display
             // refresh only, in the Full modes while the game is played, at its full rate. Judged
@@ -1030,11 +1204,32 @@ void Runtime::FrameLoop() {
                 // Full modes, the Graphics section's in the Off and Wide modes); in the Off and
                 // Wide modes held while the top screen is swapped out of the Primary slot
                 // (HeldForSwap: only the top screen flashes, and only as the Primary one).
-                const bool wanted =
+                const bool asked =
                     MotionClarity::InEffect(Settings::values.vr_motion_clarity_immersive.GetValue(),
                                             Settings::values.vr_motion_clarity_normal.GetValue(),
                                             clarity_override, shown.full_mode) &&
                     !MotionClarity::HeldForSwap(shown.full_mode, draw.swapped) && !proj_mode;
+                // AzaharFrame bfidr: only at a whole number of refreshes a picture (120 Hz):
+                // elsewhere shown without flashing, and said once.
+                const MotionClarity::RateGate::Out rate =
+                    clarity_rate.Next(asked, fs.predictedDisplayPeriod);
+                const bool wanted = rate.on;
+                if (wanted && shown.full_mode) { // bfidr: Dynamic Resolution's level in use
+                    bfi_second.asked++;
+                }
+                if (rate.say == MotionClarity::RateGate::Say::Held) {
+                    LOG_INFO(Frontend,
+                             "xr: Black Frame Insertion not in effect: the display runs at {:.0f} "
+                             "Hz, {:.2f} refreshes a 60 fps picture; it flashes only at a whole "
+                             "number of 2 or more (120 Hz)",
+                             fs.predictedDisplayPeriod > 0
+                                 ? 1e9 / static_cast<double>(fs.predictedDisplayPeriod)
+                                 : 0.0,
+                             MotionClarity::RefreshesPerPicture(fs.predictedDisplayPeriod));
+                } else if (rate.say == MotionClarity::RateGate::Say::Again) {
+                    LOG_INFO(Frontend, "xr: Black Frame Insertion: the display's rate allows it "
+                                       "again");
+                }
                 // fixa: the backing only while its layers fit under the runtime's limit (the
                 // last frame's other layers); held while they don't (BackingRoom).
                 const bool top_shown = draw.swapped ? draw.top_visible : shown.show_top;
@@ -1079,6 +1274,15 @@ void Runtime::FrameLoop() {
                 top_layers = MotionClarity::TopLayersFor(rf.on, flash_backing,
                                                          hud.BackingImage(backing), !d.show);
                 hide_top = top_layers.omit || top_layers.collapse;
+                // AzaharFrame bfidr: for Dynamic Resolution's rules: flashing in a Full mode (not
+                // held for a slow game), and a late picture lit again (as clarity_log counts it).
+                if (rf.on && shown.full_mode && d.why != MotionClarity::Why::Slow &&
+                    d.why != MotionClarity::Why::Off) {
+                    bfi_second.flashing++;
+                    if (!hide_top && d.show && d.why == MotionClarity::Why::Late) {
+                        bfi_second.late_lit++;
+                    }
+                }
                 // fixa: Match Bottom Screen Brightness: the bottom screen's dim while the top one
                 // flashes (not while it is held for a slow game, or without its backing).
                 bottom_dim = MotionClarity::BottomDim(
@@ -1567,6 +1771,7 @@ void Runtime::FrameLoop() {
         r = queue_lock.With([&] { return xr.xrEndFrame(session, &ei); });
         phases.end_lock_ms = QueueLock::LastWaitUs() / 1000.0;
         phases.end_ms = Ms(Clock::now() - mark) - phases.end_lock_ms;
+        bfi_second.end_max_ms = std::max(bfi_second.end_max_ms, phases.end_ms); // AzaharFrame bfidr
         if (XR_FAILED(r)) {
             stats.end_frame_errors++;
             static int logged = 0;

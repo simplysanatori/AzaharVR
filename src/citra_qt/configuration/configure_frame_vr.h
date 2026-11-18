@@ -113,6 +113,9 @@ private:
     ConfigurationShared::CheckState match_bottom_state = ConfigurationShared::CheckState::Global;
     QCheckBox* panel_check; ///< AzaharFrame projdef: Primary Screen as Panel (!vr_screens_in_projection)
     ConfigurationShared::CheckState panel_state = ConfigurationShared::CheckState::Global;
+    /// AzaharFrame bfidr: the player clicked Primary Screen as Panel in this window (their choice
+    /// wins over Black Frame Insertion's helpers, frame_xr/bfi_helpers.h)
+    bool panel_clicked = false;
     QWidget* immersive_depth_row; ///< AzaharFrame natural: the Full modes' 3D Depth
     QComboBox* immersive_depth_scope; ///< per application only: global / this application
     QSpinBox* immersive_depth_spin;

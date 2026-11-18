@@ -299,6 +299,8 @@ void RestoreGlobalState(bool is_powered_on) {
     values.vr_motion_clarity_normal.SetGlobal(true);    // AzaharFrame fixa
     values.vr_motion_clarity_match_bottom.SetGlobal(true); // AzaharFrame fixa
     values.vr_screens_in_projection.SetGlobal(true);    // AzaharFrame projdef
+    values.vr_bfi_set_dynamic_resolution.SetGlobal(true); // AzaharFrame bfidr
+    values.vr_bfi_set_panel.SetGlobal(true);
     values.vr_immersive_world_set.SetGlobal(true);
     values.vr_immersive_eye_per_far.SetGlobal(true);
     values.vr_hide_bottom_screen.SetGlobal(true);

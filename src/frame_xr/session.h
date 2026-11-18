@@ -21,13 +21,16 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <thread>
 
+#include "common/frame_log_gate.h" // AzaharFrame bfidr
 #include "frame_xr/frame_xr.h"
 #include "frame_xr/hud.h" // AzaharFrame vrqol
 #include "frame_xr/instance_policy.h" // AzaharFrame flat2
 #include "frame_xr/pacing.h" // AzaharFrame pacing
+#include "frame_xr/perf_line.h" // AzaharFrame bfidr
 #include "frame_xr/vulkan_bridge.h"
 
 namespace FrameXr {
@@ -286,6 +289,22 @@ public:
     Stats stats;
     /// AzaharFrame menuux: the runtime's display period at the last xrWaitFrame (XR thread).
     XrDuration display_period_ns = 0;
+    /// AzaharFrame bfidr: this second's facts for Dynamic Resolution's Black Frame Insertion rules
+    /// (XR thread): refreshes it flashed the top screen on in a Full mode, refreshes it lit a late
+    /// picture again on, the longest xrEndFrame call, and the most the top screen can show
+    /// (DynamicResolution::ScreenFactor; 0: not known).
+    struct BfiSecond {
+        uint32_t flashing = 0, late_lit = 0;
+        double end_max_ms = 0.0;
+        double screen_sum = 0.0; ///< ScreenCoverage over the second's frames
+        uint32_t screen_n = 0;
+        uint32_t asked = 0; ///< frames the setting asked for it in a Full mode (RateGate on)
+    } bfi_second;
+    /// AzaharFrame bfidr: the runtime's recommended eye image (0: not asked yet).
+    uint32_t eye_px_w = 0, eye_px_h = 0;
+    /// AzaharFrame bfidr: the "xr: perf" line's seconds and when it is written (XR thread).
+    PerfLine::Window perf_window;
+    Common::FrameLog::ChangeGate perf_gate;
     float start_refresh_hz = 0.0f; ///< AzaharFrame integ9: the session's rate at its start
 
     // Session state (XR thread writes, others read).
@@ -327,6 +346,8 @@ private:
     void LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
                     const LoopPhases& worst);
     void NoteLoopPeriod(const LoopPhases& phases, LoopPhases& worst, XrDuration period_ns);
+    /// AzaharFrame bfidr: the threads' CPU read off the frame loop; with a window, the perf line.
+    static void PerfRead(std::optional<PerfLine::Window> window);
 
     std::thread thread;
     std::atomic<bool> stop{false};

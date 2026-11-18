@@ -883,6 +883,93 @@ push constant's unused `layer` field in thousandths (`XrScreenSink::ScreenDim`),
 from the next game picture. The method is logged at each session's start (`xr: Match Bottom Screen
 Brightness dims by ...`) and the dim when it changes.
 
+AzaharFrame bfidr: Dynamic Resolution that protects Black Frame Insertion (the 1.2.x plan's Phase 1,
+handoff report 76 item 4). Under GPU load the Full modes' pictures (Internal Resolution plus two
+steps) arrive late, and a late picture lit again doubles. With Dynamic Resolution on
+(`vr_dynamic_resolution`; nothing of this runs with it off, and nothing turns it on) and the top
+screen flashing in a Full mode for most of a second (`DynamicResolution::Second::bfi`, counted in
+the layer block: not held for a slow game, never in the projection layer), the second is also bad
+for it (`Controller::SymptomBad`, `BfiRules`, `SymptomWindow`) when GPU behind is at 0.84 of the
+period or more (7.0 ms at 120 Hz), or when it is at least 0.6 of the period (5.0 ms) and the last
+10 judged seconds hold more than 10 late releases of the top screen, more than 10 late pictures
+lit again (Motion Clarity's "lit for: late"), or 2 seconds with a compositor miss (an xrEndFrame
+over 1.44 display periods, 12 ms at 120 Hz, or fewer than 118 of 120 display frames). Fast forward
+is never judged so, nor the first 10 judged seconds after a game's start, a Load or a new Internal
+Resolution, nor 3 after a pause (the rasterizer cache filling again and the pacing relocking: 4 to
+23 late releases a second and 7 to 8 ms for 6 to 7 s after each Quick Load at 4x drawn, report
+79). Three such seconds in a row step down one step; fixd's own line (0.9 of the period) still
+steps after five. A step up needs the predicted cost (fixd's `Ratio`) under 0.75 of the stricter
+line (5.25 ms at 120 Hz), in a second with at most one late release, one late lit picture and no
+compositor miss. The floor stays the Internal Resolution setting, so only the two immersive steps
+come off.
+
+Why the stricter line counts by itself: the owner's headset session of report 85 (OoT mode 2 on
+quads, the flashing's rhythm perfect throughout) saw doubling at 5x drawn in heavy rooms where GPU
+behind read 6.6 to 8.6 ms with no late release and no compositor miss in the log, and at 6x drawn
+and up (8 to 12 ms, 8 to 34 late releases a second, xrEndFrame 12 to 16 ms; 67 to 101 display
+frames a second at 8x). Replayed over the per-second lines of reports 76, 79, 70 and 85
+(`replay_all.py` in report 84's tools): a step in every window the owner or the reports called
+bad (MK7 and OoT at 6x drawn and up within 3 to 11 s, OoT at 5x drawn in report 85's heavy rooms),
+none at a boot or a Load, in report 79's 504 s of MK7 at 4x drawn, in KIU flat, or at 4x drawn in
+report 85. At 4x drawn (a 2x setting) the owner still saw near-doubling in heavy rooms, but GPU
+behind stayed at 3.4 to 6.0 ms with no late release and no miss: nothing this controller reads
+shows it, so it would not step there even with the floor under the setting.
+
+A ceiling from what the screen can show (`ScreenCoverage`, averaged over the second), in every
+Full mode while Dynamic Resolution runs, Black Frame Insertion or not (the owner, 2026-11-17): no
+factor whose picture (400 x 240 times the factor) has more than 1.25 times the display pixels the
+head-driven top screen covers on both axes, from its live size over its distance from the left eye
+against the eye's field of view and the runtime's recommended eye image (asked once, `xr: the
+runtime's eye image is ...`). A new ceiling holds after 3 s in a row (`CeilingHold`; a higher one
+only 0.2 past its whole factor, as the held quad's size moves with the head), is never under the
+floor, is no step, no failed step up and no level remembered for the game, and when it lifts the
+level the seconds decided comes back. With Dynamic Resolution off there is no ceiling: the factor
+is the Internal Resolution setting's (with the Full modes' own steps), as the player set it, and
+nothing caps it. The step lines say why (`xr: Dynamic Resolution: 5x (was 6x; 3 bad seconds in a
+row with Black Frame Insertion (GPU behind at 7.0 ms or more, or with it over 5.0 ms: N late
+releases, N late pictures lit again, N seconds with a compositor miss in the last N s))`, `... the
+screen shows no more than 5x`), and `xr: Dynamic Resolution: Black Frame Insertion's rules on|off`
+when they start and stop.
+
+Two remembered levels a game (the owner, 2026-11-17): one while the setting asks for Black Frame
+Insertion where the game is on view (`Second::bfi_asked`: the Full modes' row, at a rate it
+flashes at), one without. A step taken for it is its own level only (`dynamic-resolution.txt`,
+`<title ID> <factor> bfi`; older builds skip that line), so turning it off goes back to the level
+without it, or the setting, at the next second, and turning it on again to its own level (or, with
+none yet, to the level without it). At 90 Hz it never flashes (below): the level without it, and
+these rules never run.
+
+Black Frame Insertion's helpers (`frame_xr/bfi_helpers.h`, the owner, 2026-11-17): turning the
+Full modes' row on (the VR menu's Immersive section or Azahar's window, global or for this game)
+also turns on Dynamic Resolution and Primary Screen as Panel where they are off, at the same
+scope, and a toast says so (`Dynamic Resolution and Primary Screen as Panel On for Black Frame
+Insertion`; in Azahar's window the panel's box ticks with it). Nothing is locked. Turning it off
+puts back what it turned on (`vr_bfi_set_dynamic_resolution`, `vr_bfi_set_panel`, kept in the
+game's file too), only where the player has not changed it since (`... Off Again`): the panel
+without the flashing doubles on head turns. Dynamic Resolution is now saved per game as well; its
+row writes at the scope it has.
+
+AzaharFrame bfidr: Black Frame Insertion only at 120 Hz (the owner, 2026-11-17). It flashes only
+where a 60 fps picture is on view a whole number of refreshes, 2 or more, within 0.05
+(`MotionClarity::EvenRate`, the frame loop's `RateGate`; at the headset's rates the same as the
+pacer's `EvenCadencePeriod`): 2 at 120 Hz, 4 at 240 Hz. At 72, 90 or 144 Hz (1.2, 1.5, 2.4) the
+scheduler's full-rate rule would engage with pictures lit at uneven spacing, so the frame loop
+leaves it out of effect there, the test switch `AZAHARFRAME_XR_SINGLE_FLASH=1` included (no
+backing, no dimmed bottom screen, the picture shown as with the setting off) and says so once:
+`xr: Black Frame Insertion not in effect: the display runs at 90 Hz, 1.50 refreshes a 60 fps
+picture; ...`, and `... the display's rate allows it again` when it does. At 120 Hz nothing
+changes. Its tooltips end with "Needs a 120 Hz display.", and while the display runs at another
+rate both rows (and both boxes in Azahar's window) say `Needs 120 Hz (Display at 90 Hz)`: a note,
+the switch still works.
+
+`xr: perf ...`, every 10 s while a game is live in VR (`frame_xr/perf_line.h`): the emulator's GPU
+work per game frame (`GpuBusyTimer`, only with `AZAHARFRAME_GPU_BUSY=1`, else "not measured"), the
+XR pass per draw, the late releases and late lit pictures, the longest xrEndFrame, the factor drawn
+and the screen's ceiling, and CPU as a share of one core per thread group from
+`/proc/self/task/*/stat` (emulation `EmuThread`, video `VulkanWorker`, present, `FrameXR`, handoff
+`XrRelease`, audio: the sink library's threads, named as they are on the system) with the three
+busiest others by name. The /proc read and the line run on a short thread of their own.
+
 Two more switches with it, for every mode (docs/TECHNICAL_NOTES.md): both eyes' top images in one
 swapchain (`AZAHARFRAME_XR_PACKED`) and one game frame's screens released together
 (`AZAHARFRAME_XR_SET_RELEASE`), so the two eyes never come from different game frames.

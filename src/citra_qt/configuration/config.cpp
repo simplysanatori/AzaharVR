@@ -541,6 +541,11 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.vr_motion_clarity_normal);    // AzaharFrame fixa
     ReadGlobalSetting(Settings::values.vr_motion_clarity_match_bottom); // AzaharFrame fixa
     ReadGlobalSetting(Settings::values.vr_screens_in_projection);    // AzaharFrame projdef
+    // AzaharFrame bfidr: Dynamic Resolution per game too (Black Frame Insertion turns it on at
+    // its row's scope), and what Black Frame Insertion turned on.
+    ReadGlobalSetting(Settings::values.vr_dynamic_resolution);
+    ReadGlobalSetting(Settings::values.vr_bfi_set_dynamic_resolution);
+    ReadGlobalSetting(Settings::values.vr_bfi_set_panel);
     ReadGlobalSetting(Settings::values.vr_immersive_world_set);
     ReadGlobalSetting(Settings::values.vr_immersive_eye_per_far);
     ReadGlobalSetting(Settings::values.vr_hide_bottom_screen);
@@ -685,7 +690,6 @@ void QtConfig::ReadVrValues() {
         ReadGlobalSetting(Settings::values.vr_screen_curve); // AzaharFrame curve
         ReadGlobalSetting(Settings::values.vr_screen_layout); // AzaharFrame layout
         ReadGlobalSetting(Settings::values.vr_move_screens);  // AzaharFrame menu
-        ReadGlobalSetting(Settings::values.vr_dynamic_resolution); // AzaharFrame menuux
         ReadGlobalSetting(Settings::values.vr_hint_reticle_shown);
         ReadGlobalSetting(Settings::values.vr_hint_mouse_shown);
     }
@@ -1340,6 +1344,9 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.vr_motion_clarity_normal);    // AzaharFrame fixa
     WriteGlobalSetting(Settings::values.vr_motion_clarity_match_bottom); // AzaharFrame fixa
     WriteGlobalSetting(Settings::values.vr_screens_in_projection);    // AzaharFrame projdef
+    WriteGlobalSetting(Settings::values.vr_dynamic_resolution); // AzaharFrame bfidr: per game too
+    WriteGlobalSetting(Settings::values.vr_bfi_set_dynamic_resolution);
+    WriteGlobalSetting(Settings::values.vr_bfi_set_panel);
     WriteGlobalSetting(Settings::values.vr_immersive_world_set);
     WriteGlobalSetting(Settings::values.vr_immersive_eye_per_far);
     WriteGlobalSetting(Settings::values.vr_hide_bottom_screen);
@@ -1417,7 +1424,6 @@ void QtConfig::SaveVrValues() {
         WriteGlobalSetting(Settings::values.vr_screen_curve); // AzaharFrame curve
         WriteGlobalSetting(Settings::values.vr_screen_layout); // AzaharFrame layout
         WriteGlobalSetting(Settings::values.vr_move_screens);  // AzaharFrame menu
-        WriteGlobalSetting(Settings::values.vr_dynamic_resolution); // AzaharFrame menuux
         WriteGlobalSetting(Settings::values.vr_hint_reticle_shown);
         WriteGlobalSetting(Settings::values.vr_hint_mouse_shown);
     }

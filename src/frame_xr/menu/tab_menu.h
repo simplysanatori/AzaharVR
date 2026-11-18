@@ -453,6 +453,10 @@ struct MenuModel {
     bool motion_clarity_immersive = false; ///< AzaharFrame projdef: vr_motion_clarity_immersive
     bool motion_clarity_normal = false;    ///< AzaharFrame fixa: vr_motion_clarity_normal
     bool match_bottom = false; ///< AzaharFrame fixa: vr_motion_clarity_match_bottom
+    /// AzaharFrame bfidr: the display's rate, whole Hz, while it is one Black Frame Insertion does
+    /// not flash at (MotionClarity::EvenRate); 0 at 120 Hz or not known. Both rows then say so
+    /// (a note, never a lock).
+    int bfi_uneven_hz = 0;
     bool screen_as_panel = false; ///< AzaharFrame projdef: !vr_screens_in_projection
     // AzaharFrame autosave: the running game's values (Per-Game, else Global)
     bool autosave = false;

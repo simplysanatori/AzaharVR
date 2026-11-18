@@ -50,7 +50,7 @@
 //     Dimming only: never a boost, so nothing clips.
 //
 // AZAHARFRAME_XR_SINGLE_FLASH keeps working as an override: 1 on (in every mode, as the test
-// switch always was), 0 off, unset the setting. Pure (unit-tested: src/tests/frame_xr/
+// switch always was; bfidr: at 120 Hz only, RateGate, like the setting), 0 off, unset the setting. Pure (unit-tested: src/tests/frame_xr/
 // motion_clarity.cpp).
 
 #pragma once
@@ -66,7 +66,7 @@
 
 namespace FrameXr::MotionClarity {
 
-/// AZAHARFRAME_XR_SINGLE_FLASH (live): "1" on in every mode, "0" off; anything else, or unset:
+/// AZAHARFRAME_XR_SINGLE_FLASH (live): "1" on in every mode (at 120 Hz: RateGate), "0" off; anything else, or unset:
 /// none (the setting holds).
 inline std::optional<bool> OverrideFrom(const std::optional<std::string>& v) {
     if (v && *v == "1") {
@@ -242,6 +242,80 @@ inline constexpr int64_t kGapKeepNs = 500'000'000;
 /// flash2: the beat of the states not played at a known rate (Scheduler::Beat): 60 pictures a
 /// second, a game's full rate.
 inline constexpr double kDefaultRate = 60.0;
+
+/// AzaharFrame bfidr (the owner, 2026-11-17: Black Frame Insertion only at 120 Hz): it flashes
+/// only where a full-rate picture (kDefaultRate a second) is on view a whole number of refreshes,
+/// 2 or more, within kEvenTolerance: 2 at 120 Hz (the 3DS's 59.8 pictures: 2.006), 4 at 240 Hz.
+/// At 72 Hz (1.2), 90 Hz (1.5) or 144 Hz (2.4) the scheduler's full-rate rule (kFastEnter) would
+/// engage too, with pictures lit at uneven spacing: there the picture is shown without flashing
+/// (as with the setting off), and the frame loop logs why once. A period not known (0) is taken as
+/// before (the beat's 2).
+inline constexpr double kEvenTolerance = 0.05;
+inline double RefreshesPerPicture(int64_t period_ns) {
+    return period_ns > 0 ? 1e9 / kDefaultRate / static_cast<double>(period_ns) : 2.0;
+}
+inline bool EvenRate(int64_t period_ns) {
+    const double per = RefreshesPerPicture(period_ns);
+    const double whole = std::round(per);
+    return whole >= 2.0 && std::abs(per - whole) <= kEvenTolerance;
+}
+
+/// AzaharFrame bfidr: the display's rate in whole Hz while Black Frame Insertion does not flash
+/// at it (the rows' "Needs 120 Hz" note), else 0 (120 Hz, or not known).
+inline int UnevenHz(int64_t period_ns) {
+    return period_ns > 0 && !EvenRate(period_ns)
+               ? static_cast<int>(std::lround(1e9 / static_cast<double>(period_ns)))
+               : 0;
+}
+
+/// AzaharFrame bfidr: the frame loop's gate (app.cpp, each frame): `asked` is the setting of the
+/// mode on view (InEffect, the override included, and not held), `period_ns` the runtime's
+/// predicted display period. On only at an EvenRate; `say` is the line to log this frame: Held
+/// once when it is asked for at an uneven rate, Again once when the rate allows it back.
+/// The rate it goes by is the first one it sees, then a new one only once it has held for
+/// kSettleFrames frames in a row: a single frame's prediction (the runtime predicts about 60 Hz
+/// for a frame now and then, e.g. when Black Frame Insertion is turned on) is not a change of
+/// rate, and logged "60 Hz" / "allows it again" pairs at each toggle.
+class RateGate {
+public:
+    /// About a quarter of a second at 120 Hz.
+    static constexpr int kSettleFrames = 30;
+    enum class Say { None, Held, Again };
+    struct Out {
+        bool on = false;
+        Say say = Say::None;
+    };
+    Out Next(bool asked, int64_t period_ns) {
+        const bool now_even = EvenRate(period_ns);
+        if (!known_) {
+            known_ = true;
+            even_ = now_even;
+        } else if (now_even != even_) {
+            if (++streak_ >= kSettleFrames) {
+                even_ = now_even;
+                streak_ = 0;
+            }
+        } else {
+            streak_ = 0;
+        }
+        const bool even = even_;
+        Out out{asked && even, Say::None};
+        if (asked && !even && !held_said_) {
+            held_said_ = true;
+            out.say = Say::Held;
+        } else if (even && held_said_) {
+            held_said_ = false;
+            out.say = Say::Again;
+        }
+        return out;
+    }
+
+private:
+    bool held_said_ = false;
+    bool known_ = false;
+    bool even_ = true;
+    int streak_ = 0;
+};
 
 class Scheduler {
 public:

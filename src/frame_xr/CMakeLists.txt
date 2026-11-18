@@ -24,6 +24,8 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     overlays.cpp
     pacing.cpp # AzaharFrame pacing
     pacing.h
+    perf_line.h # AzaharFrame bfidr
+    bfi_helpers.h # AzaharFrame bfidr
     session.cpp
     session.h
     toast_depth.h # AzaharFrame kiu2

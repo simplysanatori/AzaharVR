@@ -689,17 +689,19 @@ TEST_CASE("Dynamic Resolution: the start from a remembered level", "[frame_xr][f
 }
 
 TEST_CASE("Dynamic Resolution: the remembered levels' file", "[frame_xr][fixd]") {
-    const std::vector<std::pair<uint64_t, int>> levels{{0x0004000000030800ULL, 4},
-                                                       {0x0004000000125600ULL, 5}};
+    const LevelList levels{{{0x0004000000030800ULL, false}, 4},
+                           {{0x0004000000030800ULL, true}, 3},
+                           {{0x0004000000125600ULL, false}, 5}};
     const std::string text = FormatStore(levels);
-    CHECK(text == "0004000000030800 4\n0004000000125600 5\n");
+    CHECK(text == "0004000000030800 4\n0004000000030800 3 bfi\n0004000000125600 5\n");
     CHECK(ParseStore(text) == levels);
     // lines this build cannot read are left out; the last line for a game wins
     const auto parsed = ParseStore("# a comment\n0004000000030800 4\nzz 3\n0004000000030800 5\n"
                                    "0000000000000000 4\n0004000000054000 0\n0004000000054000 99\n"
-                                   "0004000000054000 4 extra\n000400000003080 4\n\n");
-    CHECK(parsed == std::vector<std::pair<uint64_t, int>>{{0x0004000000030800ULL, 5}});
-    CHECK(FormatStore({{0, 4}}).empty());
+                                   "0004000000054000 4 extra\n000400000003080 4\n"
+                                   "0004000000054000 4 bfi more\n\n");
+    CHECK(parsed == LevelList{{{0x0004000000030800ULL, false}, 5}});
+    CHECK(FormatStore({{{0, false}, 4}}).empty());
 }
 
 // AzaharFrame fixd: through the frame loop's side: a level stepped down to is remembered for the
@@ -713,14 +715,14 @@ TEST_CASE("Dynamic Resolution: the level remembered per game", "[frame_xr][fixd]
     const auto was_factor = factor.GetValue();
     setting.SetValue(true);
     factor.SetValue(4);
-    std::map<uint64_t, int> disk;
+    std::map<LevelKey, int> disk;
     int saves = 0;
     uint64_t title = 0x0004000000030800ULL;
     const auto store = [&] {
         LevelStore s;
-        s.load = [&] { return std::vector<std::pair<uint64_t, int>>(disk.begin(), disk.end()); };
-        s.save = [&](std::vector<std::pair<uint64_t, int>> levels) {
-            disk = std::map<uint64_t, int>(levels.begin(), levels.end());
+        s.load = [&] { return LevelList(disk.begin(), disk.end()); };
+        s.save = [&](LevelList levels) {
+            disk = std::map<LevelKey, int>(levels.begin(), levels.end());
             saves++;
         };
         s.title = [&] { return title; };
@@ -739,10 +741,10 @@ TEST_CASE("Dynamic Resolution: the level remembered per game", "[frame_xr][fixd]
     run(GpuBehind(), Controller::kDownAfter);
     CHECK(Drop() == 1);
     CHECK(RememberedFactor(title) == 5); // stepped down to it: remembered at once
-    CHECK(disk[title] == 5);
+    CHECK(disk[{title, false}] == 5);
     run(GpuBehind(), Controller::kSettle + Controller::kDownAfter);
     CHECK(Drop() == 2);
-    CHECK(disk[title] == 4);
+    CHECK(disk[{title, false}] == 4);
     // A Load: the screens go off. It starts at 4x again, not at 6x.
     run(off, 3);
     CHECK(Drop() == 2);
@@ -801,6 +803,591 @@ TEST_CASE("Dynamic Resolution: the level remembered per game", "[frame_xr][fixd]
     Uninstall();
 
     SetLevelStore({}); // nothing for the other tests
+    setting.SetValue(was);
+    factor.SetValue(was_factor);
+    V::g_base = 0;
+}
+
+// AzaharFrame bfidr: while Black Frame Insertion flashes in a Full mode, a picture late is lit
+// again and doubles: the symptoms count as well as the GPU's line (BfiRules), the screen's ceiling
+// (ScreenFactor) too; the floor stays the Internal Resolution setting.
+namespace {
+
+Second Bfi(double gpu_ms, uint32_t late = 0, uint32_t lit = 0, double end_ms = 1.0,
+           double period = kPeriod) {
+    Second s{1.0, static_cast<uint32_t>(1000.0 / period + 0.5), period, 60, 60, gpu_ms, true};
+    s.bfi = true;
+    s.bfi_asked = true;
+    s.late_releases = late;
+    s.late_lit = lit;
+    s.end_frame_max_ms = end_ms;
+    return s;
+}
+
+int Steps(Controller& c, const Second& s, int seconds, int max_drop = 2, int min_drop = 0) {
+    int steps = 0;
+    for (int i = 0; i < seconds; i++) {
+        c.Judge(s, max_drop, min_drop);
+        steps += c.LastStep() != 0 ? 1 : 0;
+    }
+    return steps;
+}
+
+} // namespace
+
+TEST_CASE("Dynamic Resolution: Black Frame Insertion's symptoms window", "[frame_xr][bfidr]") {
+    SymptomWindow w;
+    // One late release a second is not "more than about one a second": 10 in 10 s is not a trend.
+    for (int i = 0; i < BfiRules::kWindow; i++) {
+        w.Add(Bfi(6.0, 1));
+    }
+    CHECK(w.LateReleases() == 10);
+    CHECK_FALSE(w.Symptoms());
+    w.Add(Bfi(6.0, 2)); // the oldest second leaves: 11 in the last 10 s
+    CHECK(w.LateReleases() == 11);
+    CHECK(w.Symptoms());
+    // A burst of one second (the pacing's relock after the VR menu: 4-6) in a short window is no
+    // trend either: the count is over the whole window, however many seconds are in.
+    w.Clear();
+    w.Add(Bfi(6.0, 6));
+    w.Add(Bfi(6.0, 3));
+    w.Add(Bfi(6.0, 0));
+    CHECK_FALSE(w.Symptoms());
+    // Late pictures lit again count the same way, on their own.
+    w.Clear();
+    for (int i = 0; i < 4; i++) {
+        w.Add(Bfi(6.0, 0, 3));
+    }
+    CHECK(w.LateLit() == 12);
+    CHECK(w.Symptoms());
+    // Two seconds with an xrEndFrame over 1.44 periods (12 ms at 120 Hz); one is a single miss.
+    w.Clear();
+    w.Add(Bfi(6.0, 0, 0, 12.5));
+    CHECK_FALSE(w.Symptoms());
+    w.Add(Bfi(6.0, 0, 0, 11.5));
+    CHECK_FALSE(w.Symptoms());
+    w.Add(Bfi(6.0, 0, 0, 14.0));
+    CHECK(w.SlowSeconds() == 2);
+    CHECK(w.Symptoms());
+    // At 90 Hz the line is 1.44 periods too (16 ms): 14 ms is no miss there.
+    constexpr double k90 = 1000.0 / 90.0;
+    w.Clear();
+    for (int i = 0; i < 3; i++) {
+        w.Add(Bfi(6.0, 0, 0, 14.0, k90));
+    }
+    CHECK(w.SlowSeconds() == 0);
+    CHECK(SymptomWindow::Clean(Bfi(6.0, 1, 1, 14.0, k90)));
+    CHECK_FALSE(SymptomWindow::Clean(Bfi(6.0, 1, 1, 14.0)));
+    CHECK_FALSE(SymptomWindow::Clean(Bfi(6.0, 2)));
+    CHECK_FALSE(SymptomWindow::Clean(Bfi(6.0, 0, 2)));
+    CHECK(SymptomWindow::Clean(Bfi(6.0, 1, 1)));
+    // Display frames under 118 of 120 (refreshes the loop never ended) are a miss too.
+    Second short_second = Bfi(6.0);
+    short_second.display_frames = 110;
+    CHECK_FALSE(SymptomWindow::NoMiss(short_second));
+    short_second.display_frames = 118;
+    CHECK(SymptomWindow::NoMiss(short_second));
+    Second short90 = Bfi(6.0, 0, 0, 1.0, k90);
+    short90.display_frames = 87; // 88.5 is the line at 90 Hz
+    CHECK_FALSE(SymptomWindow::NoMiss(short90));
+    w.Clear();
+    short_second.display_frames = 101; // report 85 at 8x drawn: 67-101 a second
+    w.Add(short_second);
+    w.Add(short_second);
+    CHECK(w.Symptoms());
+}
+
+// AzaharFrame bfidr: report 85, the owner's headset session (OoT mode 2, Black Frame Insertion on
+// quads, its rhythm perfect throughout): the owner saw doubling at 5x drawn in heavy rooms (GPU
+// behind 6.6-8.6 ms, no late releases) and at 6x; "almost" at 4x drawn, with nothing in the log.
+TEST_CASE("Dynamic Resolution: with Black Frame Insertion, report 85's seconds",
+          "[frame_xr][bfidr]") {
+    struct Row {
+        double gpu;
+        uint32_t late;
+    };
+    // 5x drawn (a 3x setting), the heavy rooms from t=377.
+    const Row heavy[] = {{8.3, 7}, {8.1, 0}, {8.2, 0}, {6.6, 0}, {8.6, 1}};
+    Controller c;
+    int at = 0;
+    for (const Row& r : heavy) {
+        at++;
+        if (c.Judge(Bfi(r.gpu, r.late), 3) == 1) {
+            break;
+        }
+    }
+    CHECK(c.Drop() == 1);
+    CHECK(at == 3);
+    // Without Black Frame Insertion the same seconds are no step (fixd: 5 over 7.5 ms in a row).
+    Controller off;
+    for (const Row& r : heavy) {
+        Second s = Bfi(r.gpu, r.late);
+        s.bfi = false;
+        off.Judge(s, 3);
+    }
+    CHECK(off.Drop() == 0);
+    // 4x drawn (a 2x setting), t=476-495: nothing to see, nothing done. The floor (the setting)
+    // is not what holds it there: with the floor at 1x it would not step either.
+    const double light[] = {5.3, 5.7, 4.7, 4.8, 4.6, 5.2, 5.6, 5.6, 5.0, 4.6,
+                            5.0, 4.7, 4.8, 5.9, 5.4, 5.4, 5.6, 4.7, 4.9, 6.0};
+    Controller l;
+    for (int round = 0; round < 10; round++) {
+        for (const double g : light) {
+            l.Judge(Bfi(g, 0), 3);
+        }
+    }
+    CHECK(l.Drop() == 0);
+}
+
+TEST_CASE("Dynamic Resolution: with Black Frame Insertion, down on the symptoms after 3 seconds",
+          "[frame_xr][bfidr]") {
+    CHECK(BfiRules::kDownAfter == 3);
+    CHECK(Controller::kDownAfter == 5); // fixd's, for the GPU's line alone
+    // MK7 at 5x drawn (report 76: GPU behind about 6 ms, under the 7.5 ms line), 3 late releases
+    // a second: the window has more than 10 in its fourth second; 3 such seconds in a row.
+    Controller c;
+    CHECK_FALSE(Controller::Bad(Bfi(6.0, 3)));
+    CHECK(Run(c, Bfi(6.0, 3), 5) == 0);
+    CHECK(c.Judge(Bfi(6.0, 3), 2) == 1);
+    CHECK(c.LastStep() == 1);
+    CHECK(c.LastStepSymptoms());
+    CHECK(c.StepWindow().LateReleases() == 18);
+    // The same seconds without Black Frame Insertion: nothing (the GPU has room by fixd's line).
+    Controller off;
+    Second plain = Bfi(6.0, 3);
+    plain.bfi = false;
+    CHECK(Run(off, plain, 200) == 0);
+    // Late pictures lit again, or the compositor's misses, the same.
+    Controller lit;
+    CHECK(Run(lit, Bfi(6.0, 0, 4), 5) == 1);
+    Controller slow;
+    CHECK(Run(slow, Bfi(6.0, 0, 0, 13.0), 4) == 1); // the 2nd second fills the window, 3 more
+    // The stricter line alone (0.84 of the period, 7.0 ms at 120 Hz): 3 seconds too.
+    Controller line;
+    CHECK(Run(line, Bfi(7.2), 2) == 0);
+    CHECK(line.Judge(Bfi(7.2), 2) == 1);
+    CHECK(line.LastStepSymptoms());
+    // Without Black Frame Insertion: fixd's line (7.5 ms) and 5 seconds.
+    Second p72 = Bfi(7.2), p80 = Bfi(8.0);
+    p72.bfi = p80.bfi = false;
+    Controller plain_line;
+    CHECK(Run(plain_line, p72, 100) == 0);
+    CHECK(Run(plain_line, p80, 4) == 0);
+    CHECK(plain_line.Judge(p80, 2) == 1);
+    CHECK_FALSE(plain_line.LastStepSymptoms());
+    // A second without symptoms ends the run; the window then has to show them again.
+    Controller broken;
+    Run(broken, Bfi(6.0, 6), 3); // 18 late in 3 s: 2 symptom seconds (the 2nd and 3rd)
+    CHECK(broken.Drop() == 0);
+    broken.Judge(Bfi(4.0, 0), 2); // the GPU under the busy line: not a symptom second
+    CHECK(broken.Drop() == 0);
+    CHECK(Run(broken, Bfi(6.0, 0), 2) == 0); // the window still has 18 late: 2 seconds
+    CHECK(broken.Judge(Bfi(6.0, 0), 2) == 1); // the 3rd in a row
+}
+
+TEST_CASE("Dynamic Resolution: with Black Frame Insertion, not on a stalled emulation thread",
+          "[frame_xr][bfidr]") {
+    // Report 76's boot (t=13-16): 9-10 late releases a second with the GPU at 2-3 ms. A lower
+    // resolution would not help: never.
+    Controller boot;
+    CHECK(Run(boot, Bfi(2.4, 10), 200) == 0);
+    // Under the busy line (0.6 of the period, 5.0 ms at 120 Hz) the same.
+    Controller under;
+    CHECK(Run(under, Bfi(4.9, 4, 4, 20.0), 200) == 0);
+    // Fast forward (report 76, t=365-371: 100-116 late a second at 5 ms): more game frames than
+    // the 3DS draws, late by design.
+    Second ff = Bfi(5.2, 110);
+    ff.emu_frames = 110;
+    Controller fast;
+    CHECK(Run(fast, ff, 200) == 0);
+    CHECK_FALSE(fast.SymptomBad(ff));
+    // The pause after it (the menu) clears the window: its late seconds do not carry over.
+    Controller paused;
+    Run(paused, Bfi(6.0, 4), 3); // 12 late, 1 symptom second
+    Second menu = Bfi(6.0);
+    menu.emu_frames = 0;
+    paused.Judge(menu, 2);
+    CHECK(paused.Symptoms().Size() == 0);
+    CHECK(Run(paused, Bfi(6.0, 1), 30) == 0);
+}
+
+// AzaharFrame bfidr: report 76's own seconds (azahar_log.txt, the per-second lines): GPU behind,
+// late releases of the top screen, the slowest xrEndFrame.
+TEST_CASE("Dynamic Resolution: with Black Frame Insertion, report 76's seconds",
+          "[frame_xr][bfidr]") {
+    struct Row {
+        double gpu;
+        uint32_t late;
+        double end;
+    };
+    // OoT at 6x drawn, Render Margin 1.0 (6 % uneven seconds), back from the menu at t=542: the
+    // pacing's relock, then one second over the stricter line: no step in these eight (earlier,
+    // at t=517, three in a row over 7.0 ms do step: report 84's replay).
+    const Row oot[] = {{6.9, 6, 0.1}, {6.9, 3, 0.2}, {6.2, 0, 0.2}, {7.5, 0, 0.3}, {6.6, 0, 0.3},
+                       {6.8, 0, 0.2}, {6.3, 0, 0.1}, {6.5, 0, 0.2}};
+    Controller steady;
+    for (const Row& r : oot) {
+        steady.Judge(Bfi(r.gpu, r.late, 0, r.end), 2);
+    }
+    CHECK(steady.Drop() == 0);
+    // MK7 at 6x drawn from t=22.8 (the bad window: 5.3 late releases a second, compositor
+    // misses): a step at the third (the stricter line alone steps there too; fixd's line alone
+    // at the fifth).
+    const Row mk7[] = {{7.9, 19, 14.7}, {11.2, 21, 0.2}, {11.6, 13, 15.9},
+                       {13.0, 48, 0.1}, {10.6, 2, 0.2},  {10.9, 50, 12.6}};
+    Controller bad;
+    int at = 0;
+    for (const Row& r : mk7) {
+        at++;
+        if (bad.Judge(Bfi(r.gpu, r.late, 0, r.end), 2) == 1) {
+            break;
+        }
+    }
+    CHECK(bad.Drop() == 1);
+    CHECK(at == 3);
+    CHECK(bad.LastStepSymptoms());
+}
+
+TEST_CASE("Dynamic Resolution: with Black Frame Insertion, up only well under the stricter line",
+          "[frame_xr][bfidr]") {
+    Controller c;
+    // 0.75 x 7.0 ms at 120 Hz (5.25 ms) for the next factor, by the pixels' ratio here: 5x to
+    // 6x is x1.44. 3.5 ms predicts 5.04 ms (room), 3.8 ms 5.47 ms (none with it, room without:
+    // fixd's 5.6 ms).
+    CHECK(c.Good(Bfi(3.5), 5));
+    CHECK_FALSE(c.Good(Bfi(3.8), 5));
+    Second plain = Bfi(3.8);
+    plain.bfi = false;
+    CHECK(c.Good(plain, 5));
+    // A second with symptoms is never good.
+    CHECK_FALSE(c.Good(Bfi(3.5, 2), 5));
+    CHECK_FALSE(c.Good(Bfi(3.5, 0, 2), 5));
+    CHECK_FALSE(c.Good(Bfi(3.5, 0, 0, 13.0), 5));
+    // A fraction of the period: at 90 Hz the stricter line is 9.3 ms (up under 7.0 ms).
+    constexpr double k90 = 1000.0 / 90.0;
+    CHECK(c.Good(Bfi(4.8, 0, 0, 1.0, k90), 5));
+    CHECK_FALSE(c.Good(Bfi(5.0, 0, 0, 1.0, k90), 5));
+    // MK7 (report 72/76 medians): 5.1 ms at 4x predicts 8.0 ms at 5x by the pixels: it stays at
+    // 4x; 6.05 at 5x stays at 5x.
+    CHECK_FALSE(c.Good(Bfi(5.1), 4));
+    CHECK_FALSE(c.Good(Bfi(6.05), 5));
+}
+
+TEST_CASE("Dynamic Resolution: with Black Frame Insertion, no oscillation", "[frame_xr][bfidr]") {
+    // A heavy and a light stretch every 40 s. Heavy: 6x is far behind with late pictures, 5x
+    // holds (6 ms, clean). Light: 5x at 3.4 ms predicts room for 6x, where 5.0 ms is fine until
+    // the next heavy stretch. A failed step up waits 180 s, then 540 s, then not again.
+    Controller c;
+    int changes = 0, last_change = 0;
+    for (int t = 0; t < 1800; t++) {
+        const bool heavy = (t / 40) % 2 == 0;
+        const int factor = 6 - c.Drop();
+        const Second s = heavy ? (factor == 6 ? Bfi(10.5, 4, 1, 13.0) : Bfi(6.0, 0))
+                               : (factor == 6 ? Bfi(5.0, 0) : Bfi(3.4, 0));
+        c.Judge(s, 1);
+        if (c.LastStep() != 0) {
+            changes++;
+            last_change = t;
+        }
+    }
+    CHECK(changes <= 8);
+    CHECK(last_change < 1200); // settled at 5x for good
+    CHECK(c.Drop() == 1);
+}
+
+TEST_CASE("Dynamic Resolution: with Black Frame Insertion, the floor stays the setting",
+          "[frame_xr][bfidr]") {
+    namespace V = VideoCore::DynamicResolution;
+    auto& setting = Settings::values.vr_dynamic_resolution;
+    auto& factor = Settings::values.resolution_factor;
+    const bool was = setting.GetValue();
+    const auto was_factor = factor.GetValue();
+    SetLevelStore({});
+    for (const double hz : {90.0, 120.0}) {
+        const double period = 1000.0 / hz;
+        for (int ir = 2; ir <= 6; ir++) {
+            INFO("refresh " << hz << " Hz, Internal Resolution " << ir << "x");
+            factor.SetValue(ir);
+            const int base = ir + 2; // a Full mode
+            // Heavy: the GPU far behind, late pictures; never under the setting.
+            setting.SetValue(true);
+            V::Apply(base);
+            Install();
+            for (int i = 0; i < 300; i++) {
+                NoteSecond(Bfi(0.95 * period, 5, 2, 1.6 * period, period));
+            }
+            CHECK(Drop() == 2);
+            CHECK(V::Apply(base) == ir);
+            Uninstall();
+            // Symptoms with the GPU busy but under the line (0.7 of the period): two steps too.
+            Install();
+            for (int i = 0; i < 300; i++) {
+                NoteSecond(Bfi(0.7 * period, 3, 0, 1.0, period));
+            }
+            CHECK(Drop() == 2);
+            Uninstall();
+            // Under the busy line (0.5 of the period, a stalled emulation thread): none.
+            Install();
+            for (int i = 0; i < 300; i++) {
+                NoteSecond(Bfi(0.5 * period, 6, 3, 2.0 * period, period));
+            }
+            CHECK(Drop() == 0);
+            Uninstall();
+            // Dynamic Resolution off: Black Frame Insertion's rules do not turn it on.
+            setting.SetValue(false);
+            Install();
+            for (int i = 0; i < 300; i++) {
+                NoteSecond(Bfi(0.95 * period, 5, 2, 1.6 * period, period));
+            }
+            CHECK(Drop() == 0);
+            CHECK(V::Apply(base) == base);
+            Uninstall();
+        }
+    }
+    setting.SetValue(was);
+    factor.SetValue(was_factor);
+    V::g_base = 0;
+}
+
+TEST_CASE("Dynamic Resolution: the screen's ceiling", "[frame_xr][bfidr]") {
+    // A 1728 x 1728 eye image over a field of view of tan 2.4 both ways (about 100 degrees): 720
+    // pixels per unit of tan. A 5:3 screen of tan 1.6 x 0.96 covers 1152 x 691 of them: 2.88x
+    // the picture's at 1x on both axes, 3.6x with the oversampling: 3x is the most.
+    ScreenCover c{1.6, 0.96, 2.4, 2.4, 1728, 1728};
+    CHECK(ScreenFactor(c) == 3);
+    // The axis that needs the most decides (a tall screen: the height).
+    CHECK(ScreenFactor({1.6, 1.9, 2.4, 2.4, 1728, 1728}) == 7);
+    CHECK(ScreenFactor({2.2, 0.96, 2.4, 2.4, 1728, 1728}) == 4);
+    // Not known: none.
+    CHECK(ScreenFactor({}) == 0);
+    CHECK(ScreenFactor({1.6, 0.96, 0.0, 2.4, 1728, 1728}) == 0);
+    CHECK(ScreenFactor({1.6, 0.96, 2.4, 2.4, 0, 1728}) == 0);
+    // At least 1x, however small.
+    CHECK(ScreenFactor({0.01, 0.006, 2.4, 2.4, 1728, 1728}) == 1);
+    // Live from the sizes, never fitted: it only grows with the screen and the eye's pixels.
+    int last = 0;
+    for (double t = 0.2; t < 3.0; t += 0.05) {
+        const int f = ScreenFactor({t, t * 0.6, 2.4, 2.4, 1728, 1728});
+        CHECK(f >= last);
+        last = f;
+    }
+    CHECK(ScreenFactor({1.6, 0.96, 2.4, 2.4, 2160, 2160}) >= ScreenFactor(c));
+
+    // Held: a new value after 3 seconds in a row (a grip resize is one change, not many).
+    CeilingHold h;
+    CHECK(h.Next(4) == 0);
+    CHECK(h.Next(4) == 0);
+    CHECK(h.Next(4) == 4);
+    CHECK(h.Next(5.3) == 4);
+    CHECK(h.Next(6.3) == 4);
+    CHECK(h.Next(6.3) == 4);
+    CHECK(h.Next(6.3) == 6);
+    // Higher only kCeilingMargin past a whole factor; lower at once (after the hold).
+    CHECK(h.Next(7.1) == 6);
+    CHECK(h.Next(7.1) == 6);
+    CHECK(h.Next(7.1) == 6);
+    CHECK(h.Next(5.9) == 6);
+    CHECK(h.Next(5.9) == 6);
+    CHECK(h.Next(5.9) == 5);
+    CHECK(h.Next(0) == 5);
+    CHECK(h.Next(0) == 5);
+    CHECK(h.Next(0) == 0);
+    // A value that wanders across a whole factor with the head (3.9 to 4.15): one change, not
+    // one every few seconds.
+    CeilingHold noisy;
+    int changes = 0, was = 0;
+    for (int t = 0; t < 600; t++) {
+        const double v = 4.025 + 0.125 * std::sin(t * 0.7) + 0.05 * ((t * 7) % 3 - 1);
+        const int now = noisy.Next(v);
+        changes += now != was ? 1 : 0;
+        was = now;
+    }
+    CHECK(changes <= 3);
+    CHECK(ScreenCoverage({1.6, 0.96, 2.4, 2.4, 1728, 1728}) > 3.59);
+    CHECK(ScreenCoverage({}) == 0.0);
+
+    // The controller: the ceiling's moves are no step, and its level comes back when it lifts.
+    Controller k;
+    CHECK(k.Judge(Bfi(3.0), 2, 1) == 1);
+    CHECK(k.LastStep() == 0);
+    CHECK(k.OwnDrop() == 0);
+    CHECK(k.Ceilinged());
+    CHECK(Steps(k, Bfi(3.0), 60, 2, 1) == 0); // good seconds: no step up over the ceiling
+    CHECK(k.Drop() == 1);
+    CHECK(k.Judge(Bfi(3.0), 2, 0) == 0);
+    CHECK(k.LastStep() == 0);
+    // A step down under the ceiling is from the factor drawn.
+    Controller d;
+    d.Judge(Bfi(3.0), 2, 1);
+    CHECK(Steps(d, Bfi(9.0), Controller::kSettle + Controller::kDownAfter, 2, 1) == 1);
+    CHECK(d.OwnDrop() == 2);
+    CHECK(d.Drop() == 2);
+}
+
+TEST_CASE("Dynamic Resolution: the screen's ceiling through the frame loop's side",
+          "[frame_xr][bfidr]") {
+    namespace V = VideoCore::DynamicResolution;
+    auto& setting = Settings::values.vr_dynamic_resolution;
+    auto& factor = Settings::values.resolution_factor;
+    const bool was = setting.GetValue();
+    const auto was_factor = factor.GetValue();
+    setting.SetValue(true);
+    factor.SetValue(4);
+    std::map<LevelKey, int> disk;
+    const uint64_t title = 0x0004000000030800ULL;
+    LevelStore store;
+    store.load = [&] { return LevelList(disk.begin(), disk.end()); };
+    store.save = [&](LevelList levels) {
+        disk = std::map<LevelKey, int>(levels.begin(), levels.end());
+    };
+    store.title = [&] { return title; };
+    SetLevelStore(store);
+    V::Apply(6); // a Full mode over 4x
+    Install();
+    Second s = Bfi(3.0);
+    s.screen_factor = 5;
+    for (int i = 0; i < CeilingHold::kCeilingSeconds - 1; i++) {
+        NoteSecond(s);
+    }
+    CHECK(Drop() == 0);
+    NoteSecond(s);
+    CHECK(Drop() == 1);
+    CHECK(V::Apply(6) == 5);
+    // Held long: not remembered (the screen decided it, not the GPU).
+    for (int i = 0; i < kRememberAfter + 10; i++) {
+        NoteSecond(s);
+    }
+    CHECK(disk.empty());
+    // Under the floor: the setting (4x) is the most it takes off.
+    s.screen_factor = 2;
+    for (int i = 0; i < CeilingHold::kCeilingSeconds; i++) {
+        NoteSecond(s);
+    }
+    CHECK(V::Apply(6) == 4);
+    // Black Frame Insertion off: the ceiling holds all the same (the owner, 2026-11-17: whenever
+    // Dynamic Resolution runs).
+    s.bfi = false;
+    s.bfi_asked = false;
+    for (int i = 0; i < CeilingHold::kCeilingSeconds + 2; i++) {
+        NoteSecond(s);
+    }
+    CHECK(V::Apply(6) == 4);
+    s.screen_factor = 5.5; // up: past the margin
+    for (int i = 0; i < CeilingHold::kCeilingSeconds; i++) {
+        NoteSecond(s);
+    }
+    CHECK(V::Apply(6) == 5);
+    // Dynamic Resolution off: the setting's factor, no cap.
+    setting.SetValue(false);
+    NoteSecond(s);
+    CHECK(V::Apply(6) == 6);
+    Uninstall();
+    SetLevelStore({});
+    setting.SetValue(was);
+    factor.SetValue(was_factor);
+    V::g_base = 0;
+}
+
+// AzaharFrame bfidr: report 79's Quick Load at t=105 (4x drawn, Black Frame Insertion steady
+// before and after): the screens off, then 6-7 s of late releases with the GPU at 6.8-8.0 ms while
+// the rasterizer cache fills again. Its symptoms do not count for BfiRules::kAfterStart seconds.
+TEST_CASE("Dynamic Resolution: with Black Frame Insertion, a Load's own burst",
+          "[frame_xr][bfidr]") {
+    struct Row {
+        double gpu;
+        uint32_t late;
+    };
+    const Row after_load[] = {{7.2, 4}, {7.4, 5}, {6.8, 2}, {8.0, 0}, {7.8, 7},
+                              {7.9, 2}, {7.7, 1}, {6.6, 0}, {6.2, 0}, {6.0, 0}};
+    Controller c;
+    c.Start(0, true); // the screens back after the Load
+    for (const Row& r : after_load) {
+        c.Judge(Bfi(r.gpu, r.late), 2);
+    }
+    CHECK(c.Drop() == 0);
+    // After the hold the same symptoms count again.
+    for (const Row& r : after_load) {
+        c.Judge(Bfi(r.gpu, r.late), 2);
+    }
+    CHECK(c.Drop() == 1);
+    CHECK(c.LastStepSymptoms() == false); // LastStep is the last Judge's: none now
+    // A fresh start holds the symptoms, not the GPU's line.
+    Controller line;
+    line.Start(0);
+    CHECK(Run(line, Bfi(8.0), Controller::kDownAfter, 2) == 1);
+}
+
+// AzaharFrame bfidr: two remembered levels a game (the owner, 2026-11-17): a step taken for
+// Black Frame Insertion is its own level, remembered at once; turning it off goes back to the
+// level without it (here none: the full factor) at once, and turning it on again to its own.
+TEST_CASE("Dynamic Resolution: a step for Black Frame Insertion is its own level",
+          "[frame_xr][bfidr]") {
+    namespace V = VideoCore::DynamicResolution;
+    auto& setting = Settings::values.vr_dynamic_resolution;
+    auto& factor = Settings::values.resolution_factor;
+    const bool was = setting.GetValue();
+    const auto was_factor = factor.GetValue();
+    setting.SetValue(true);
+    factor.SetValue(4);
+    std::map<LevelKey, int> disk;
+    uint64_t title = 0x0004000000030800ULL;
+    LevelStore store;
+    store.load = [&] { return LevelList(disk.begin(), disk.end()); };
+    store.save = [&](LevelList levels) {
+        disk = std::map<LevelKey, int>(levels.begin(), levels.end());
+    };
+    store.title = [&] { return title; };
+    SetLevelStore(store);
+    V::Apply(6); // a Full mode over 4x
+    Install();
+    const auto run = [](const Second& s, int n) {
+        for (int i = 0; i < n; i++) {
+            NoteSecond(s);
+        }
+    };
+    // 7.2 ms with it flashing: under fixd's line (7.5 ms), over the stricter one (7.0 ms). Held
+    // after the start, then three seconds.
+    run(Bfi(7.2), BfiRules::kAfterStart + BfiRules::kDownAfter);
+    CHECK(Drop() == 1);
+    CHECK(disk[{title, true}] == 5);
+    CHECK(disk.count({title, false}) == 0);
+    // Turned off (the setting no longer asks for it): the full factor at the next second.
+    Second off = Bfi(7.2);
+    off.bfi = false;
+    off.bfi_asked = false;
+    run(off, 1);
+    CHECK(Drop() == 0);
+    CHECK(V::Apply(6) == 6);
+    // The same load without it: fixd's rules, no step; held long, 6x is its level.
+    run(off, kRememberAfter + 1);
+    CHECK(Drop() == 0);
+    CHECK(disk[{title, false}] == 6);
+    CHECK(disk[{title, true}] == 5);
+    // On again: its own level at once.
+    run(Bfi(3.0), 1);
+    CHECK(Drop() == 1);
+    Uninstall();
+    // The next start of the game: each mode's level.
+    SetLevelStore(store);
+    CHECK(RememberedFactor(title, true) == 5);
+    CHECK(RememberedFactor(title, false) == 6);
+    Install();
+    run(off, 1);
+    CHECK(Drop() == 0);
+    run(Bfi(3.0), 1);
+    CHECK(Drop() == 1);
+    Uninstall();
+    // A game with a level without it only: with it, from that level (a step for it only ever
+    // goes lower).
+    title = 0x0004000000054000ULL;
+    disk[{title, false}] = 5;
+    SetLevelStore(store);
+    Install();
+    run(Bfi(3.0), 1);
+    CHECK(Drop() == 1);
+    Uninstall();
+
+    SetLevelStore({});
     setting.SetValue(was);
     factor.SetValue(was_factor);
     V::g_base = 0;
