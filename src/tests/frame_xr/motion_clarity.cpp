@@ -832,16 +832,22 @@ TEST_CASE("Motion Clarity: only at a whole number of refreshes a picture", "[fra
     CHECK(MC::UnevenHz(period(120.0)) == 0);
     CHECK(MC::UnevenHz(0) == 0);
 
-    // The frame loop's gate: asked for at 90 Hz, off and said once; at 120 Hz on again and said
-    // once; not asked for, nothing said.
+    // The frame loop's gate: asked for at 90 Hz, off and said once; at 120 Hz on again (once
+    // the new rate has held kSettleFrames frames) and said once; not asked for, nothing said.
+    const int settle = MC::RateGate::kSettleFrames;
     {
         MC::RateGate g;
-        auto o = g.Next(true, period(90.0));
+        auto o = g.Next(true, period(90.0)); // the first rate counts at once
         CHECK(!o.on);
         CHECK(o.say == MC::RateGate::Say::Held);
         o = g.Next(true, period(90.0));
         CHECK(!o.on);
         CHECK(o.say == MC::RateGate::Say::None);
+        for (int i = 1; i < settle; ++i) {
+            o = g.Next(true, period(120.0));
+            CHECK(!o.on);
+            CHECK(o.say == MC::RateGate::Say::None);
+        }
         o = g.Next(true, period(120.0));
         CHECK(o.on);
         CHECK(o.say == MC::RateGate::Say::Again);
@@ -851,8 +857,33 @@ TEST_CASE("Motion Clarity: only at a whole number of refreshes a picture", "[fra
         o = g.Next(false, period(144.0));
         CHECK(!o.on);
         CHECK(o.say == MC::RateGate::Say::None);
-        CHECK(!g.Next(true, period(72.0)).on);
-        CHECK(g.Next(true, 0).on); // not known: as before
+        for (int i = 0; i < settle; ++i) {
+            o = g.Next(true, period(72.0));
+        }
+        CHECK(!o.on); // 72 Hz held: off
+        for (int i = 0; i < settle; ++i) {
+            o = g.Next(true, 0);
+        }
+        CHECK(o.on); // not known: as before
+    }
+    // bfidr: at 120 Hz, one frame predicted at 60 Hz (as at a toggle) changes nothing and logs
+    // nothing; nor do a few in a row.
+    {
+        MC::RateGate g;
+        CHECK(g.Next(true, period(120.0)).on);
+        for (int i = 0; i < 3; ++i) {
+            const auto o = g.Next(true, period(60.0));
+            CHECK(o.on);
+            CHECK(o.say == MC::RateGate::Say::None);
+        }
+        const auto o = g.Next(true, period(120.0));
+        CHECK(o.on);
+        CHECK(o.say == MC::RateGate::Say::None);
+        // a run just short of the settle length, then 120 Hz again: still nothing
+        for (int i = 0; i < settle - 1; ++i) {
+            CHECK(g.Next(true, period(60.0)).say == MC::RateGate::Say::None);
+        }
+        CHECK(g.Next(true, period(120.0)).say == MC::RateGate::Say::None);
     }
 
     // Through the gate and the scheduler, as the frame loop drives them: at 72, 90 and 144 Hz

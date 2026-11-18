@@ -272,15 +272,33 @@ inline int UnevenHz(int64_t period_ns) {
 /// mode on view (InEffect, the override included, and not held), `period_ns` the runtime's
 /// predicted display period. On only at an EvenRate; `say` is the line to log this frame: Held
 /// once when it is asked for at an uneven rate, Again once when the rate allows it back.
+/// The rate it goes by is the first one it sees, then a new one only once it has held for
+/// kSettleFrames frames in a row: a single frame's prediction (the runtime predicts about 60 Hz
+/// for a frame now and then, e.g. when Black Frame Insertion is turned on) is not a change of
+/// rate, and logged "60 Hz" / "allows it again" pairs at each toggle.
 class RateGate {
 public:
+    /// About a quarter of a second at 120 Hz.
+    static constexpr int kSettleFrames = 30;
     enum class Say { None, Held, Again };
     struct Out {
         bool on = false;
         Say say = Say::None;
     };
     Out Next(bool asked, int64_t period_ns) {
-        const bool even = EvenRate(period_ns);
+        const bool now_even = EvenRate(period_ns);
+        if (!known_) {
+            known_ = true;
+            even_ = now_even;
+        } else if (now_even != even_) {
+            if (++streak_ >= kSettleFrames) {
+                even_ = now_even;
+                streak_ = 0;
+            }
+        } else {
+            streak_ = 0;
+        }
+        const bool even = even_;
         Out out{asked && even, Say::None};
         if (asked && !even && !held_said_) {
             held_said_ = true;
@@ -294,6 +312,9 @@ public:
 
 private:
     bool held_said_ = false;
+    bool known_ = false;
+    bool even_ = true;
+    int streak_ = 0;
 };
 
 class Scheduler {
