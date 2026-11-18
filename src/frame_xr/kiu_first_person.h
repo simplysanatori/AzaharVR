@@ -6,7 +6,7 @@
 // only (the game-code hooks it stands on, kiu_hooks.h, are mapped for that one).
 //
 // AzaharFrame kiumode: first person is Immersive Mode's "Full (6DoF): Angel's Aim" (stored 4,
-// shown only while Kid Icarus: Uprising runs; Settings::kImmersiveModeAngelsAim). It is drawn as
+// listed in every Immersive Mode list; Settings::kImmersiveModeAngelsAim). It is drawn as
 // mode 3 (Settings::ImmersiveRenderMode, for every reader) and is in effect in VR for the
 // European game whose code the hooks checked (OnFor below); elsewhere it plays as Full (6DoF): Other
 // Games and the hooks' log says why. In effect, it turns on with first person (On) the eye hook,
