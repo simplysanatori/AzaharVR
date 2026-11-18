@@ -424,7 +424,8 @@ Aiming at Direct Aim when the mod is installed (`ControlsPreset::gyro_aim_with_m
   button (desktop runs, EUR, land battle; the game's held word is `[[0xD638A4] + 0x104]`, the same
   in the original b107c9b1 and the mod v172 21:9 b95ca36b): L fires; D-pad Left and Right move the
   power bar; D-pad Down uses the selected power; with the mod, ZR (bit 15) fires too and ZL (bit
-  14) reaches the game with nothing seen; without the mod ZL/ZR never reach it.
+  14) reaches the game with nothing seen; without the mod ZL and ZR reach the held word too (bits 14
+  and 15, a pull with Aiming on and Original), so the game's own code gets them either way.
 
 ### The app's own game-code hooks (test build; AzaharFrame kiuhook)
 

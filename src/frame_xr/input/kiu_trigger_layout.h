@@ -18,7 +18,9 @@
 //   ZR (mod)     fires too (the mod writes ir:rst's ZR into the held word, bit 15)
 //   ZL (mod)     reaches the held word (bit 14); no shot, and neither the reticle nor the camera
 //                moved (a tap and a 1.5 s hold, Aiming Off)
-//   ZL, ZR       without the mod, never reach the held word
+//   ZL, ZR       without the mod they reach the held word too (bits 14, 15, a pull with Aiming on
+//                and Original), so the game's own code gets them as with the mod (what it does
+//                with them: as above, inferred, the same code)
 // Original (0) keeps today's behaviour: with Aiming on, either trigger presses L as well as its
 // own ZL/ZR, so one pull fires and also does what ZL/ZR do.
 //
