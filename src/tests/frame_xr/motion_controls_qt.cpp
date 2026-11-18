@@ -644,3 +644,71 @@ TEST_CASE("VR group: Render Margin per axis and the May Warp note", "[frame_xr][
     CHECK(v.vr_immersive_render_margin_y.GetValue() == 2);
     Settings::SetConfiguringGlobal(true);
 }
+
+// AzaharFrame kiumode: Immersive Mode in Azahar's window: Angel's Aim (stored 4) above Other
+// Games in Kid Icarus: Uprising's Properties only; a stored 4 elsewhere shows as Other Games and
+// is kept unless another choice is made.
+TEST_CASE("VR group: Immersive Mode lists Angel's Aim in Kid Icarus' Properties only",
+          "[frame_xr][kiumode]") {
+    App();
+    auto& v = Settings::values;
+    Keep<u32, false> k{v.vr_immersive_mode};
+    constexpr u64 kKiu = 0x0004000000030200;   // Europe
+    constexpr u64 kOther = 0x0004000000034C00; // Asphalt 3D
+    const int off = ConfigurationShared::USE_GLOBAL_OFFSET;
+    Settings::SetConfiguringGlobal(false);
+    Values(v.vr_immersive_mode, 0u, 4u);
+    {
+        ConfigureFrameVr w(nullptr, kKiu);
+        auto* mode = In<QComboBox>(w, "frame_vr_mode_row");
+        REQUIRE(mode);
+        REQUIRE(mode->count() == 5 + off);
+        const char* want[5] = {"Off", "Wide (3DoF)", "Full (6DoF): Ocarina of Time, Majora's Mask",
+                               "Full (6DoF): Angel's Aim", "Full (6DoF): Other Games"};
+        for (int i = 0; i < 5; i++) {
+            CHECK(mode->itemText(i + off) == QString::fromUtf8(want[i]));
+        }
+        CHECK(mode->currentIndex() == 3 + off); // the stored 4
+        mode->setCurrentIndex(4 + off);         // Other Games
+        w.ApplyConfiguration();
+    }
+    CHECK(v.vr_immersive_mode.GetValue() == 3u);
+    {
+        ConfigureFrameVr w(nullptr, kKiu);
+        auto* mode = In<QComboBox>(w, "frame_vr_mode_row");
+        REQUIRE(mode);
+        CHECK(mode->currentIndex() == 4 + off);
+        mode->setCurrentIndex(3 + off); // Angel's Aim
+        w.ApplyConfiguration();
+    }
+    CHECK(v.vr_immersive_mode.GetValue() == 4u);
+    // Another game: four choices, the stored 4 shown as Other Games and kept on OK
+    {
+        ConfigureFrameVr w(nullptr, kOther);
+        auto* mode = In<QComboBox>(w, "frame_vr_mode_row");
+        REQUIRE(mode);
+        REQUIRE(mode->count() == 4 + off);
+        for (int i = 0; i < mode->count(); i++) {
+            CHECK(!mode->itemText(i).contains(QStringLiteral("Angel")));
+        }
+        CHECK(mode->currentIndex() == 3 + off);
+        w.ApplyConfiguration();
+    }
+    CHECK(v.vr_immersive_mode.GetValue() == 4u);
+    {
+        ConfigureFrameVr w(nullptr, kOther);
+        auto* mode = In<QComboBox>(w, "frame_vr_mode_row");
+        REQUIRE(mode);
+        mode->setCurrentIndex(2 + off);
+        w.ApplyConfiguration();
+    }
+    CHECK(v.vr_immersive_mode.GetValue() == 2u);
+    // The global settings: never Angel's Aim
+    Settings::SetConfiguringGlobal(true);
+    {
+        ConfigureFrameVr w;
+        auto* mode = In<QComboBox>(w, "frame_vr_mode_row");
+        REQUIRE(mode);
+        CHECK(mode->count() == 4);
+    }
+}

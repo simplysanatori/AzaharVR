@@ -8,6 +8,7 @@
 #include <span>
 #include <QString>
 #include <QWidget>
+#include "common/common_types.h" // AzaharFrame kiumode: u64
 
 namespace Ui {
 class ConfigureGraphics;
@@ -23,8 +24,9 @@ class ConfigureGraphics : public QWidget {
     Q_OBJECT
 
 public:
+    /// AzaharFrame kiumode: `title_id` the game whose Properties these are (0: global).
     explicit ConfigureGraphics(QString gl_renderer, std::span<const QString> physical_devices,
-                               bool is_powered_on, QWidget* parent = nullptr);
+                               bool is_powered_on, QWidget* parent = nullptr, u64 title_id = 0);
     ~ConfigureGraphics() override;
 
     void ApplyConfiguration();

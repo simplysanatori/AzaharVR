@@ -16,11 +16,12 @@
 #endif
 
 ConfigureGraphics::ConfigureGraphics(QString gl_renderer, std::span<const QString> physical_devices,
-                                     bool is_powered_on, QWidget* parent)
+                                     bool is_powered_on, QWidget* parent,
+                                     [[maybe_unused]] u64 title_id)
     : QWidget(parent), ui(std::make_unique<Ui::ConfigureGraphics>()) {
     ui->setupUi(this);
 #ifdef ENABLE_FRAME_XR // AzaharFrame: the VR group, above the spacer at the end
-    frame_vr = new ConfigureFrameVr(this);
+    frame_vr = new ConfigureFrameVr(this, title_id); // AzaharFrame kiumode: the game's own list
     ui->verticalLayout->insertWidget(ui->verticalLayout->count() - 1, frame_vr);
 #endif
 

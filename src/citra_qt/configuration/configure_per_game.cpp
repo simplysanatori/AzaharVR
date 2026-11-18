@@ -44,7 +44,8 @@ ConfigurePerGame::ConfigurePerGame(QWidget* parent, u64 title_id_, const QString
     enhancements_tab = std::make_unique<ConfigureEnhancements>(this);
     layout_tab = std::make_unique<ConfigureLayout>(this);
     graphics_tab =
-        std::make_unique<ConfigureGraphics>(gl_renderer, physical_devices, is_powered_on, this);
+        std::make_unique<ConfigureGraphics>(gl_renderer, physical_devices, is_powered_on, this,
+                                            title_id); // AzaharFrame kiumode
     system_tab = std::make_unique<ConfigureSystem>(system, this);
     debug_tab = std::make_unique<ConfigureDebug>(is_powered_on, this);
     cheat_tab = std::make_unique<ConfigureCheats>(system.CheatEngine(), title_id, this);

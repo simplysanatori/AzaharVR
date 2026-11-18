@@ -435,7 +435,7 @@ struct MenuModel {
     int accurate_image_copies = 1; ///< AzaharFrame accxfer, xfergpu: 0 Off, 1 Automatic, 2 On
     int fast_forward_speed = 1;  ///< index into OptionsFor(Id::FastForwardSpeed)
     int fast_forward_audio = 1;  ///< Settings::FastForwardAudio, an index of OptionsFor(Id::FastForwardAudio)
-    int immersive_mode = 0;
+    int immersive_mode = 0;      ///< AzaharFrame kiumode: the stored value, 0 to 4 (4 Angel's Aim)
     int margin_x = 4;  ///< AzaharFrame fovaxis: index of Off, 1.1x, 1.2x, 1.3x, 1.4x (across)
     int margin_y = 4;  ///< and up and down
     int game_fov = 60;   ///< 30 to 110 degrees
@@ -566,6 +566,10 @@ void DrawAutosavedLabel(Kit& kit, const Rect& r);
 
 /// The option lists (Azahar for Frame's own strings).
 const std::vector<std::string>& OptionsFor(Id id);
+/// AzaharFrame kiumode: as OptionsFor, for the menu as `model` has it: Immersive Mode lists
+/// Angel's Aim while Kid Icarus: Uprising runs (model.mods.angels_aim.shown; the index is
+/// Immersive::Names::ModeIndexOf's).
+const std::vector<std::string>& OptionsFor(Id id, const MenuModel& model);
 /// The label of an item, as on the menu.
 std::string LabelFor(Id id);
 /// One short sentence about a setting (the tooltip), or "".
