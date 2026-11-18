@@ -242,6 +242,7 @@ build, VR on the mock runtime with scripted head and controller poses.
 | `AZAHARFRAME_KIU_AIM_NO_MOD=1` | Direct Aim's reticle writer on the game without the mod ("The game's aim" below) |
 | `AZAHARFRAME_KIU_AIM_6DOF=1` | with first person and Direct Aim (Aiming: Direct Aim): the reticle where the hand's ray points in the game's world, through the game's camera |
 | `AZAHARFRAME_KIU_SHOTS_6DOF=1` | with first person: the game's own shots from the hand's ray; turns the bullet keep on |
+| `AZAHARFRAME_KIU_FP_FACTOR=<f>` | the most the game draws past its own frame on either axis in first person (1 to 8, default 6); past it the screen is smaller on that axis ("The screen in first person" below) |
 | `AZAHARFRAME_KIU_FP_TRACE=1\|2`, `AZAHARFRAME_KIU_FP_PROBE=<hex>` | a line of `key=value` words a second (2: a VBlank): the scene camera, the view register, the rest pose, the head, the hand's ray in the world, the reticle, the mailbox; and an actor's place in the world and in the head's view |
 
 ### The transform (`kiu_room.h`)
@@ -372,6 +373,25 @@ screen. A ray that leaves the game's view holds the reticle at the screen's edge
 | "aim hold" | in (run) | out by its context (files) | out by its context (files) | out by its context (run) |
 
 (The table of what was run on each is in the lane's report.)
+
+### The screen in first person (AzaharFrame kiufov)
+
+- **True size, always.** With `AZAHARFRAME_KIU_FIRST_PERSON=1` the screen is solved by
+  `Layout::SolveKiuFirstPerson` (`immersive_layout.h`), not from the game's screen settings: the
+  gains are 1 (the world rigid) and the game draws past its own frame on each axis by what that
+  axis of the view needs (the factors), up to `AZAHARFRAME_KIU_FP_FACTOR`. The screen is level
+  in yaw, pitched to the view's middle.
+- **The angle and shape** come from the scene's projection (0xE14BC4, the angle; 0xE14BC8, the
+  shape: 5:3 with or without the 21:9 mod), else the live angle and the camera's shape. A
+  catalog shape hint or a per-game Screen Shape other than Automatic wins over the projection's
+  shape (the 21:9 mod draws 7:3 with Screen Shape 21:9).
+- **Behind Pit.** `AZAHARFRAME_KIU_EYE_OFFSET=x,y,z` in first person is laid out along the
+  camera's level view (its yaw), not the player's body, which turns with shots.
+- **The land aim box.** With Right Stick turning (and so in first person) the "aim box" group
+  writes the land box as the whole screen and Direct Aim never pushes the Turn Zone; the box
+  words are the same with the 21:9 mod, the "aim hold" words are not.
+- **Not done.** HUD pieces that touch the game's frame's edge are pinned to the drawn area's
+  edge by the shader and stretch; Pit's own round shadow is drawn under the eye.
 
 ### Not done, risks
 
