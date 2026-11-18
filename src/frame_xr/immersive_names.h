@@ -37,6 +37,16 @@ inline constexpr const char* kHorizontalScaleTip =
     "Makes the screen wider or narrower. With Stretch, narrower brings the side HUD in.";
 inline constexpr const char* kVerticalScale = "Vertical Scale";
 inline constexpr const char* kVerticalScaleTip = "Makes the immersive screen taller or shorter.";
+/// AzaharFrame hudmove: Settings::values.vr_immersive_hud_spacing_x and _y, HUD Spacing
+/// (experimental; video_core/vr_hud_spacing.h). Proposed wording, not yet approved.
+inline constexpr const char* kHudSpacingHorizontal = "HUD Spacing: Horizontal";
+inline constexpr const char* kHudSpacingHorizontalTip =
+    "Experimental. In the Full modes, lower brings the game's HUD in from the sides, closer into "
+    "view; higher spreads it out. 100% is the game's own.";
+inline constexpr const char* kHudSpacingVertical = "HUD Spacing: Vertical";
+inline constexpr const char* kHudSpacingVerticalTip =
+    "Experimental. In the Full modes, lower brings the game's HUD in from above and below, closer "
+    "into view; higher spreads it out. 100% is the game's own.";
 /// AzaharFrame fovaxis: the note under Horizontal or Vertical Scale's label (VR menu) and after
 /// its value (Azahar's window) when the settings go past the caps against warping
 /// (Layout::ScalesMayWarp).

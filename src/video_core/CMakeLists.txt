@@ -19,6 +19,7 @@ add_library(video_core STATIC EXCLUDE_FROM_ALL
     rasterizer_accelerated.cpp
     rasterizer_accelerated.h
     vr_auto_shape.h # AzaharFrame fixes7
+    vr_hud_spacing.h # AzaharFrame hudmove
     vr_view_matrix.h # AzaharFrame
     kiu_view_tap.h # AzaharFrame kiuvr
     vr_dynamic_resolution.h # AzaharFrame menuux

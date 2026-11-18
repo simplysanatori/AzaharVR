@@ -282,6 +282,10 @@ enum class Id : int {
     ProjectileOpacity, ///< a slider, 20 to 100 (percent), with Projectiles on
     // AzaharFrame kiuweap2
     MuzzleFlashSize, ///< a slider, 50 to 300 (percent), with Muzzle Flash on
+    // AzaharFrame hudmove: HUD Spacing, sliders of 0 to 150 % (vr_immersive_hud_spacing_x,
+    // _up_down), per game, with the Experimental chip, never locked
+    HudSpacingX,
+    HudSpacingY,
     // AzaharFrame kiufire
     TriggerLayout, ///< index: 0 Original, 1 Fire and Power (vr_kiu_trigger_layout), Kid Icarus only
     Count
@@ -443,6 +447,8 @@ struct MenuModel {
     int scale_x = 0; ///< AzaharFrame kiu, fov100: percent, -100 to 100
     int scale_y = 0;
     int scale_mode = 1; ///< AzaharFrame fovscale: 0 Stretch, 1 Field of View
+    int hud_spacing_x = 100; ///< AzaharFrame hudmove: HUD Spacing, percent, 0 to 150
+    int hud_spacing_y = 100;
     /// AzaharFrame fovaxis: the scale rows' "May Warp" note (Layout::ScalesMayWarp)
     bool scale_x_warp = false;
     bool scale_y_warp = false;

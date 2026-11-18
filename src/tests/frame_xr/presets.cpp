@@ -44,6 +44,17 @@ TEST_CASE("FrameXr presets: the known games and their registers", "[frame_xr]") 
     REQUIRE(asphalt->scale_y == 40);
 }
 
+// AzaharFrame hudmove: HUD Spacing's far plane rule is Mario Kart 7's only (every release).
+TEST_CASE("FrameXr presets: the HUD on the far plane", "[frame_xr][hudmove]") {
+    std::size_t count = 0;
+    const ImmersivePresetTitle* titles = ImmersivePresetTitles(count);
+    const auto* mk7 = FindImmersivePreset(0x0004000000030800ull);
+    REQUIRE(mk7->hud_far_plane);
+    for (std::size_t i = 0; i < count; ++i) {
+        REQUIRE(titles[i].preset->hud_far_plane == (titles[i].preset == mk7));
+    }
+}
+
 // AzaharFrame depth: the measured games (IMMERSIVE.md, "Tuned games").
 TEST_CASE("FrameXr presets: measured angles, eyes and depth", "[frame_xr]") {
     const auto* mk7 = FindImmersivePreset(0x0004000000030800ull);

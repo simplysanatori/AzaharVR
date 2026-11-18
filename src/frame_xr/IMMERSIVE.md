@@ -400,6 +400,33 @@ Four per-game settings change this (**VR** group, logged as
   (proposed, not made: a tap of the right stick click while both grips hold the screen, which
   does nothing now).
 
+**HUD Spacing** (AzaharFrame hudmove, experimental; `vr_immersive_hud_spacing_x` and
+`vr_immersive_hud_spacing_y`, per game and global, 0 to 150 % (0 % draws it at the middle), 100 % = the game's own by default,
+read every frame; `video_core/vr_hud_spacing.h`). In the Full modes the game draws past its own
+frame and the screen is large, so a HUD at the frame's edges sits at the edges of the view (Mario
+Kart 7's, slightly out of it). The vertex shader already tells 2D from the world (`VrFactor`: w =
+1 is 2D, and a 2D vertex on or past an edge keeps its place, so full-screen passes stay whole); 2D
+inside the view is now also scaled about the middle by `spacing / 100` per axis (clip y across,
+clip x up and down: the top screen is drawn turned). 90 % across moves an element at the side of a
+400 pixel picture 20 pixels in; above 100 % spreads it out. No register of any game is read, so a
+HUD that is not drawn with w = 1 does not move (nothing goes wrong, nothing changes). Mario Kart
+7 draws its race HUD through a perspective projection instead, every vertex at the far plane (w -
+z = 0.049 after the shader's z flip; its world stays at 2.1 or more); its preset (`hud_far_plane`)
+has the shader scale vertices with w - z below 0.5 too, for that game only. A draw into the bottom screen's viewport (240 x 320)
+gets no scale (the rasterizer sets the uniforms per draw), so the Secondary screen's own 2D stays
+put. The scales
+go with the rest of the immersive data (`VRData::hud`, `SetVRHudSpacing`) and are 1 whenever
+immersive mode is not engaged in mode 2 or 3 (Off, Wide, paused for the Secondary screen or the
+in-game menu); mode 2's menu rule eases them back to 1 with the factor, so a game's own
+full-screen menu keeps its icons on its backdrop. At 100 % the shader divides by exactly 1, so the
+picture is bit for bit the same. The cost: an element shrinks by the same scale (more across than
+up and down narrows it), a 2D element that touches an edge stretches (its edge vertex stays), 2D
+markers the game places over the world (names over karts) move with the HUD, and 2D drawn into
+the game's own off-screen pictures moves too. Logged as `xr: immersive: HUD Spacing: Horizontal
+90%, HUD Spacing: Vertical 100% (2D scales 0.90 / 1.00)` when the setting changes, and by the
+renderer as `immersive: HUD Spacing drawing (...)` / `off` when the drawing starts or stops
+using the scales.
+
 Saved sizes are relative to that default. The file's `world` lines are written by this build;
 `screen` and `view` lines (1.2.0 test builds) and `head` lines (1.0, 1.1) had sizes against other
 defaults:

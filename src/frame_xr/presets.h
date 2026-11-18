@@ -84,6 +84,9 @@ struct ImmersivePreset {
     /// 1.2.0 RC2 (the owner): Settings::values.vr_show_controllers, per game since RC2 (-1 =
     /// keep). Builds before RC2 read it from the global file only.
     int32_t show_controllers = -1;
+    /// AzaharFrame hudmove: the game draws its HUD at the far plane (clip z = w) instead of
+    /// with w = 1, so HUD Spacing also scales vertices there (video_core/vr_hud_spacing.h).
+    bool hud_far_plane = false;
 };
 
 /// The preset for the game with this title id (any region), or null.

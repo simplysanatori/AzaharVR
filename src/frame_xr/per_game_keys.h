@@ -47,6 +47,8 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_immersive_scale_x); // AzaharFrame kiu
     f(v.vr_immersive_scale_y);
     f(v.vr_immersive_scale_mode); // AzaharFrame fovscale
+    f(v.vr_immersive_hud_spacing_x); // AzaharFrame hudmove
+    f(v.vr_immersive_hud_spacing_y);
     f(v.vr_motion_clarity_immersive); // AzaharFrame projdef, fixa: Immersive's Motion Clarity
     f(v.vr_screens_in_projection);
     f(v.vr_dynamic_resolution); // AzaharFrame bfidr: Black Frame Insertion's helpers

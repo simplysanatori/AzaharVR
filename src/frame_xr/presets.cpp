@@ -68,7 +68,8 @@ constexpr ImmersivePreset kMarioKart7{.name = "Mario Kart 7",
                                       .place_distance = 3.0f,
                                       .scale_mode = 1, // Field of View
                                       .world_scale = 10.0f,
-                                      .immersive_depth = 85};
+                                      .immersive_depth = 85,
+                                      .hud_far_plane = true};
 // Super Mario 3D Land: 45 degrees on the title and in the levels; the 3DS's eyes 58 units
 // apart in a level (the title camera is about 1500 units away): 100x. At 1x its 3D could not
 // be seen. Mock runs at 1.4x showed black below the floor of its levels; the owner plays it at

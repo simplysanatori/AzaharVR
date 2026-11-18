@@ -7,6 +7,8 @@
 #include "video_core/rasterizer_interface.h"
 #include "video_core/shader/generator/pica_fs_config.h"
 #include "video_core/shader/generator/shader_uniforms.h"
+#include "common/logging/log.h"     // AzaharFrame hudmove
+#include "video_core/vr_hud_spacing.h" // AzaharFrame hudmove
 
 namespace Memory {
 class MemorySystem;
@@ -33,10 +35,31 @@ public:
 protected:
     /// Sync vertex and framgent uniforms from PICA registers
     void SyncDrawUniforms();
+    /// AzaharFrame hudmove: HUD Spacing's scales for this draw into the vertex uniforms
+    /// (vr_hud_spacing.h ForDraw: none in the bottom screen's viewport).
+    void SyncHudSpacing();
 
     void SetVRData(const int32_t  &vrImmersiveMode, const float& immersiveModeFactor, int uoffset, const float& gamePosScaler, const float inv_view[16]) override;
     void SetVRFactorY(float factor_y) override; // AzaharFrame immersive
     void SetVRIpd(float ipd_m) override;         // AzaharFrame ipd
+    /// AzaharFrame hudmove: HUD Spacing's scales for the next draws (VrFactor); one that is not
+    /// usable is taken as 1 (vr_hud_spacing.h UsableScale). Each draw takes them into the vertex
+    /// uniforms (SyncHudSpacing). Logged when the drawing starts or stops using them (emulation
+    /// thread), not at each step of a change.
+    void SetVRHudSpacing(float across, float up_down, bool far_plane) override {
+        HudSpacing::Scales s{HudSpacing::UsableScale(across), HudSpacing::UsableScale(up_down),
+                             far_plane};
+        if (s.IsIdentity()) {
+            s.far_plane = false;
+        }
+        if (s.IsIdentity() != hud_spacing.IsIdentity()) {
+            LOG_INFO(Render,
+                     "immersive: HUD Spacing {} (2D scales {:.2f} across, {:.2f} up and down{})",
+                     s.IsIdentity() ? "off" : "drawing", s.across, s.up_down,
+                     s.far_plane ? ", and on the far plane" : "");
+        }
+        hud_spacing = s;
+    }
 
 protected:
     /// Structure that the hardware rendered vertices are composed of
@@ -84,6 +107,7 @@ protected:
     float vr_game_pos_scaler = 0.f;
     float vr_ipd = 0.065f;        ///< AzaharFrame ipd: the headset's IPD (SetVRIpd)
     float vr_ipd_logged = 0.0f;   ///< the separation last logged (0: none yet)
+    HudSpacing::Scales hud_spacing{}; ///< AzaharFrame hudmove: the scales set (SetVRHudSpacing)
     float vr_inv_view[16] = {};
     /// AzaharFrame oot: the uniforms uploaded last are the game's world camera, patched
     /// (each draw with them is noted: vr_immersive.h OnWorldDraw), and its projection (trace).

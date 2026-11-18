@@ -1672,6 +1672,26 @@ void OnFrame(const FrameInfo& info) {
         data.mode = static_cast<s32>(mode);
         data.factor = mode < 2 ? kWideFactor : g.solved.factor;
         data.factor_y = mode < 2 ? kWideFactor : g.solved.factor_y;
+        // AzaharFrame hudmove: HUD Spacing, the Full modes only, eased off with mode 2's menu
+        // rule (video_core/vr_hud_spacing.h); logged when the setting changes.
+        {
+            const int spacing_x = Settings::values.vr_immersive_hud_spacing_x.GetValue();
+            const int spacing_y = Settings::values.vr_immersive_hud_spacing_y.GetValue();
+            data.hud = VideoCore::HudSpacing::ForFrame(true, mode, spacing_x, spacing_y,
+                                                       g.menu_exact.Weight());
+            const ImmersivePreset* preset = FindImmersivePreset(g.title_id);
+            data.hud.far_plane = !data.hud.IsIdentity() && preset && preset->hud_far_plane;
+            static int logged[2] = {VideoCore::HudSpacing::kDefaultSpacing,
+                                    VideoCore::HudSpacing::kDefaultSpacing};
+            if (spacing_x != logged[0] || spacing_y != logged[1]) {
+                logged[0] = spacing_x;
+                logged[1] = spacing_y;
+                LOG_INFO(Frontend, "xr: immersive: {} {}%, {} {}% (2D scales {:.2f} / {:.2f})",
+                         Names::kHudSpacingHorizontal, spacing_x, Names::kHudSpacingVertical,
+                         spacing_y, VideoCore::HudSpacing::ScaleForSpacing(spacing_x),
+                         VideoCore::HudSpacing::ScaleForSpacing(spacing_y));
+            }
+        }
         data.uoffset = -1;
         if (g.view.valid) {
             XrQuaternionf q = Normalized(Mul(Conj(g.ref.orientation), g.view.head.orientation));
