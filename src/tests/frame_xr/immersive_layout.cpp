@@ -3053,3 +3053,95 @@ TEST_CASE("FrameXr fovscale: a head roll at unequal scales leaves no shear in Fi
         REQUIRE(inside[1][m] > 100);
     }
 }
+
+// AzaharFrame kiufov: Kid Icarus: Uprising's first person screen (SolveKiuFirstPerson).
+TEST_CASE("FrameXr immersive: Kid Icarus first person is at true size and fills the view",
+          "[frame_xr]") {
+    // The Frame's eyes as a headset run logged them, and the mock's.
+    const EyeFov l{Rad(-59.1f), Rad(50.4f), Rad(49.5f), Rad(-60.0f)};
+    const EyeFov r{Rad(-50.3f), Rad(59.1f), Rad(49.0f), Rad(-59.6f)};
+    const ViewFov frame = BothEyes(l, r);
+    const ViewFov mock = Symmetric(48.1f);
+    struct Camera {
+        float fov_deg, aspect;
+    };
+    // Land (no mod), the air with the 21:9 mod's shape, a zoom.
+    const Camera cameras[]{{45.0f, kAspect3ds}, {30.9f, 7.0f / 3.0f}, {38.0f, kAspect3ds}};
+    for (const ViewFov& view : {frame, mock}) {
+        const Cover cover = DefaultCover(view, ViewMiddlePitch(view), 0.0f);
+        for (const Camera& c : cameras) {
+            const HeadLocked s = SolveKiuFirstPerson(c.fov_deg, c.aspect, view);
+            const float t = std::tan(Rad(c.fov_deg) / 2.0f);
+            // Gains 1 both ways, no stretch: the screen is exactly what the game draws.
+            REQUIRE(s.gain == 1.0f);
+            REQUIRE(s.gain_x == 1.0f);
+            REQUIRE(s.stretch_x == 1.0f);
+            REQUIRE(s.stretch_y == 1.0f);
+            REQUIRE(s.tan_half_y == Approx(s.factor_y * t));
+            REQUIRE(s.tan_half_y * s.aspect == Approx(s.factor * c.aspect * t));
+            // It fills what either eye sees, in the view's shape, at the view's middle.
+            REQUIRE(s.tan_half_y == Approx(cover.tan_y));
+            REQUIRE(s.tan_half_y * s.aspect == Approx(cover.tan_x));
+            REQUIRE(s.pitch_rad == Approx(ViewMiddlePitch(view)));
+            REQUIRE(s.yaw_rad == 0.0f);
+            REQUIRE(s.factor > kFactorMax);
+            REQUIRE(s.factor_y > kFactorMax);
+            // The head's rotation reaches the game as it is (only the screen's own pitch is
+            // added, the same rotation the screen has).
+            const Quatf head = YawRotation(Rad(25.0f));
+            const Quatf given = GameCameraRotation(head, s);
+            const Quatf expect = In::Multiply(head, QuadRotation(s));
+            REQUIRE(given.x == Approx(expect.x).margin(1e-6));
+            REQUIRE(given.y == Approx(expect.y).margin(1e-6));
+            REQUIRE(given.z == Approx(expect.z).margin(1e-6));
+            REQUIRE(given.w == Approx(expect.w).margin(1e-6));
+        }
+    }
+    SECTION("the Frame's view on land: about 2.8x across and 3.6x up and down") {
+        const HeadLocked s = SolveKiuFirstPerson(45.0f, kAspect3ds, frame);
+        REQUIRE(s.factor == Approx(2.84f).margin(0.03f));
+        REQUIRE(s.factor_y == Approx(3.57f).margin(0.03f));
+    }
+    SECTION("past the factor's limit the screen is smaller, still at true size") {
+        const HeadLocked s = SolveKiuFirstPerson(30.9f, 7.0f / 3.0f, frame, 0.0f, 2.0f);
+        const float t = std::tan(Rad(30.9f) / 2.0f);
+        REQUIRE(s.factor == Approx(2.0f));
+        REQUIRE(s.factor_y == Approx(2.0f));
+        REQUIRE(s.gain == 1.0f);
+        REQUIRE(s.gain_x == 1.0f);
+        REQUIRE(s.tan_half_y == Approx(2.0f * t));
+        REQUIRE(s.tan_half_y * s.aspect == Approx(2.0f * 7.0f / 3.0f * t));
+    }
+    SECTION("never below the game's own frame, never past the ceiling") {
+        REQUIRE(SolveKiuFirstPerson(120.0f, kAspect3ds, mock).factor == kFactorMin);
+        const HeadLocked narrow = SolveKiuFirstPerson(10.0f, kAspect3ds, frame, 0.0f, 100.0f);
+        REQUIRE(narrow.factor_y == kKiuFpFactorCeiling);
+        REQUIRE(narrow.gain == 1.0f);
+    }
+}
+
+// AzaharFrame kiufov: what the owner's own Kid Icarus screen settings give in the normal view
+// (the headset run of 2026-11-18: Field of View, Horizontal Scale 25 %, Vertical Scale 100 %,
+// Render Margin 1.4x, size 1.59, 5.9 degrees down): gains well under 1, which first person does
+// not take (it never reads them); SolveHeadLocked itself is unchanged for every game.
+TEST_CASE("FrameXr immersive: the owner's Kid Icarus settings in the normal view", "[frame_xr]") {
+    const EyeFov l{Rad(-59.1f), Rad(50.4f), Rad(49.5f), Rad(-60.0f)};
+    const EyeFov r{Rad(-50.3f), Rad(59.1f), Rad(49.0f), Rad(-59.6f)};
+    const ViewFov frame = BothEyes(l, r);
+    Placement p;
+    p.size = 1.59f;
+    p.pitch_deg = -5.9f;
+    Options o;
+    o.wider = MarginFactor(4, ScaleMode::FieldOfView);
+    o.squeeze = SqueezeForScale(25);
+    o.squeeze_y = SqueezeForScale(100);
+    o.scale_fov = 1.0f;
+    o.caps = 1.0f;
+    const HeadLocked normal = SolveHeadLocked(p, 45.0f, kAspect3ds, frame, 0.0f, o);
+    REQUIRE(normal.gain_x < 0.7f);
+    REQUIRE(normal.gain < 0.7f);
+    REQUIRE(normal.factor <= kFovFactorMax);
+    const HeadLocked fp = SolveKiuFirstPerson(45.0f, kAspect3ds, frame);
+    REQUIRE(fp.gain_x == 1.0f);
+    REQUIRE(fp.gain == 1.0f);
+}

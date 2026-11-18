@@ -163,6 +163,8 @@ static double gRollRate = 0.0, gRollAmp = 20.0;
 // AzaharFrame ipd: MOCK_XR_IPD (the distance between the eyes, and the one after the step) and
 // MOCK_XR_IPD_JITTER.
 static double gIpd = 0.064, gIpd2 = 0.0, gIpdAt = 0.0, gIpdJitter = 0.0;
+// AzaharFrame kiufov: MOCK_XR_FOV, the left eye's angles (left, right, up, down), radians.
+static float gFov[4] = {-0.84f, 0.84f, 0.84f, -0.84f};
 static int gIpdStepSaid = 0;
 static double gEyesUntrackedS = 0.0; // MOCK_XR_EYES_UNTRACKED
 static int gEyesTrackedSaid = 0;
@@ -1902,7 +1904,9 @@ static XrResult XRAPI_CALL mLocateViews(XrSession s, const XrViewLocateInfo* li,
         const float half = (float)(ipd / 2.0);
         XrPosef eye = pmul(head, (XrPosef){tilt, {e ? half : -half, 0, 0}});
         v[e].pose = pmul(inv, eye);
-        v[e].fov = (XrFovf){-0.84f, 0.84f, 0.84f, -0.84f};
+        // AzaharFrame kiufov: MOCK_XR_FOV (the left eye's; the right eye's is its mirror).
+        v[e].fov = e ? (XrFovf){-gFov[1], -gFov[0], gFov[2], gFov[3]}
+                     : (XrFovf){gFov[0], gFov[1], gFov[2], gFov[3]};
         gLocates[gLocateNext].pose[e] = v[e].pose;
     }
     gLocates[gLocateNext].time = li->displayTime;
@@ -2020,6 +2024,16 @@ static void init(void) {
         gRollRate = atof(roll);
         const char* comma = strchr(roll, ',');
         if (comma && atof(comma + 1) > 0.0) gRollAmp = atof(comma + 1);
+    }
+    // AzaharFrame kiufov: MOCK_XR_FOV=left,right,up,down (degrees, the left eye's, e.g. the
+    // Frame's -59.1,50.4,49.5,-60.0); the right eye's is its mirror. Default +-48.1 (0.84 rad).
+    const char* fovEnv = getenv("MOCK_XR_FOV");
+    if (fovEnv && *fovEnv) {
+        float d[4];
+        if (sscanf(fovEnv, "%f,%f,%f,%f", &d[0], &d[1], &d[2], &d[3]) == 4) {
+            for (int i = 0; i < 4; i++) gFov[i] = d[i] * 3.14159265f / 180.0f;
+            trace("fov %.4f %.4f %.4f %.4f", gFov[0], gFov[1], gFov[2], gFov[3]);
+        }
     }
     const char* neck = getenv("MOCK_XR_NECK");
     if (neck && *neck) gNeck = atof(neck);

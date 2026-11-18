@@ -12,6 +12,7 @@
 #include "common/settings.h"
 #include "frame_xr/input/kiu_hooks.h"
 #include "frame_xr/input/kiu_turn.h"
+#include "frame_xr/immersive_layout.h" // AzaharFrame kiufov
 #include "frame_xr/kiu_first_person.h"
 
 // AzaharFrame kiuvr (kiu_first_person.h)
@@ -25,6 +26,7 @@ constexpr const char* kSwitchEyeM = "AZAHARFRAME_KIU_PLAYER_EYE_M";
 constexpr const char* kSwitchAimNoMod = "AZAHARFRAME_KIU_AIM_NO_MOD";
 constexpr const char* kSwitchAim6Dof = "AZAHARFRAME_KIU_AIM_6DOF";
 constexpr const char* kSwitchShots6Dof = "AZAHARFRAME_KIU_SHOTS_6DOF";
+constexpr const char* kSwitchFactor = "AZAHARFRAME_KIU_FP_FACTOR"; // AzaharFrame kiufov
 /// The aim object's world position (it is a node of the scene: the game puts it on the scene
 /// camera's ray through the reticle each frame).
 constexpr uint32_t kAimWorldPos = 0x54;
@@ -37,6 +39,8 @@ constexpr int64_t kStaleNs = 250'000'000;
 
 std::mutex g_mutex;
 Sample g_sample; ///< under g_mutex
+float g_scene_fov_deg = 0.0f; ///< under g_mutex (AzaharFrame kiufov)
+int64_t g_scene_fov_ns = 0;
 
 int64_t NowNs() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -153,6 +157,32 @@ float UnitsPerMetre() {
         }
     }
     return KR::LifeSizeUnitsPerMetre(KR::kEyeUnitsLand, eye_m);
+}
+
+float FactorMax() {
+    if (const auto text = Common::FrameTestSwitches::Value(kSwitchFactor)) {
+        float v = 0.0f;
+        if (Input::KiuHooks::ParseFloats(text->c_str(), &v, 1) == 1 && v >= 1.0f &&
+            v <= Immersive::Layout::kKiuFpFactorCeiling) {
+            return v;
+        }
+    }
+    return Immersive::Layout::kKiuFpFactorMax;
+}
+
+void PublishProjection(const Input::KiuRoom::Projection& projection) {
+    if (!projection.Ok()) {
+        return;
+    }
+    std::scoped_lock lock{g_mutex};
+    g_scene_fov_deg = projection.fov_y * 180.0f / 3.14159265358979f;
+    g_scene_fov_ns = NowNs();
+}
+
+float SceneFovYDeg() {
+    const int64_t now = NowNs();
+    std::scoped_lock lock{g_mutex};
+    return now - g_scene_fov_ns > kStaleNs ? 0.0f : g_scene_fov_deg;
 }
 
 void PublishView(const View& view) {

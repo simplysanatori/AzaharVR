@@ -38,6 +38,13 @@
 //                                     the ray, each with its own scatter, the lock target kept;
 //                                     bullets out of the game camera's view live on (as
 //                                     AZAHARFRAME_KIU_BULLET_KEEP).
+//   AZAHARFRAME_KIU_FP_FACTOR=<f>     AzaharFrame kiufov: the most the game draws past its own
+//                                     frame on either axis in first person (1 to 8, default 6:
+//                                     Layout::kKiuFpFactorMax). First person's screen is at true
+//                                     size (gains 1, whatever the game's screen settings are) and
+//                                     the game draws as much more on each axis as fills the view
+//                                     (Layout::SolveKiuFirstPerson); past this factor the screen
+//                                     is smaller on that axis instead.
 //   AZAHARFRAME_KIU_FP_TRACE=1|2      a line a second (2: a VBlank) with the transform's inputs
 //                                     and what it gives (kiu_hooks.cpp).
 //   AZAHARFRAME_KIU_FP_PROBE=<hex>    with the trace: the actor at that address, where it is in
@@ -69,6 +76,14 @@ inline constexpr const char* kEyeIndicator = "87,2";
 void OnGameBoot();
 /// The leaning scale in use, game units per metre: life size, or the override. Any thread.
 float UnitsPerMetre();
+
+/// AzaharFrame kiufov: AZAHARFRAME_KIU_FP_FACTOR (live), or Layout::kKiuFpFactorMax. Any thread.
+float FactorMax();
+/// AzaharFrame kiufov: the scene projection's vertical angle (degrees) and shape as the first
+/// person pass read them at the last VBlank (the angle the game draws its world with), published
+/// by the emulation thread; 0 when none was read in the last 250 ms. Any thread.
+void PublishProjection(const Input::KiuRoom::Projection& projection);
+float SceneFovYDeg();
 
 /// What mode 3 draws with this display frame, in the room (OpenXR's LOCAL space).
 struct View {

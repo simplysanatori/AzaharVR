@@ -750,6 +750,35 @@ bool KiuFirstPerson() {
     return Kiu::FirstPerson::ForTitle(g_title_id.load(std::memory_order_relaxed));
 }
 
+// AzaharFrame kiufov: first person's screen (Layout::SolveKiuFirstPerson) when it changes by
+// more than half a percent, at most once a second, and the first time.
+void LogKiuFirstPersonScreen(float fov_deg, bool from_scene, float aspect, float factor_max) {
+    static float logged[4]{};
+    static int64_t logged_ms = 0;
+    const L::HeadLocked& s = g.solved;
+    const float now[4]{s.factor, s.factor_y, fov_deg, aspect};
+    bool moved = false;
+    for (int i = 0; i < 4; i++) {
+        moved |= std::abs(now[i] - logged[i]) > 0.005f * std::abs(now[i]);
+    }
+    const int64_t now_ms = VideoCore::Immersive::SteadyMs();
+    if (!moved || (logged_ms != 0 && now_ms - logged_ms < 1000)) {
+        return;
+    }
+    std::copy(now, now + 4, logged);
+    logged_ms = now_ms;
+    const float across = 2.0f * Deg(std::atan(s.tan_half_y * s.aspect));
+    const float high = 2.0f * Deg(std::atan(s.tan_half_y));
+    LOG_INFO(Frontend,
+             "xr: Kid Icarus first person: the screen at true size (gains {:.4f} across, {:.4f} "
+             "up and down): the game draws {:.2f}x across, {:.2f}x up and down (at most {:.1f}x), "
+             "its angle {:.2f} degrees high ({}), shape {:.3f}; the screen {:.0f} x {:.0f} "
+             "degrees at {:.1f} degrees (the view's middle)",
+             s.gain_x, s.gain, s.factor, s.factor_y, factor_max, fov_deg,
+             from_scene ? "the scene's projection" : "the live angle", aspect, across, high,
+             Deg(s.pitch_rad));
+}
+
 // AzaharFrame kiuvr: what mode 3 draws with this frame (the rest pose, the head, the rotation
 // given to the game, the leaning scale), for the first person switch's room <-> game transform.
 void KiuFirstPersonFrame(u32 mode) {
@@ -1552,8 +1581,22 @@ void OnFrame(const FrameInfo& info) {
                 }
             }
         }
-        g.solved = L::SolveHeadLocked(g.head_place, screen_fov, cam.aspect, g.view_fov,
-                                      eye_shift, options, g.offset);
+        if (KiuFirstPerson()) {
+            // AzaharFrame kiufov: first person's own screen, at true size whatever this game's
+            // screen settings are (they stay saved for the normal view), the game drawing what
+            // fills the view (Layout::SolveKiuFirstPerson). Sized with the angle the game draws
+            // its world with right now: the scene projection's as read at the last VBlank, else
+            // the live angle as above.
+            const float scene_fov = Kiu::FirstPerson::SceneFovYDeg();
+            const float fp_fov = scene_fov > 0.0f ? scene_fov : options.live_fov_y_deg;
+            const float fp_max = Kiu::FirstPerson::FactorMax();
+            g.solved = L::SolveKiuFirstPerson(fp_fov, cam.aspect, g.view_fov, eye_shift, fp_max,
+                                              g.head_place.distance);
+            LogKiuFirstPersonScreen(fp_fov, scene_fov > 0.0f, cam.aspect, fp_max);
+        } else {
+            g.solved = L::SolveHeadLocked(g.head_place, screen_fov, cam.aspect, g.view_fov,
+                                          eye_shift, options, g.offset);
+        }
         g.fill = {true, screen_fov, cam.aspect, eye_shift}; // AzaharFrame fovaxis: Fill View
         if (info.screens_live) {
             LogScaleSplit(menu_weight);

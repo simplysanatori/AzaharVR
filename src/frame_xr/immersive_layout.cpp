@@ -700,6 +700,33 @@ HeadLocked SolveHeadLocked(const Placement& placement, float game_fov_y_deg, flo
     return s;
 }
 
+HeadLocked SolveKiuFirstPerson(float game_fov_y_deg, float aspect, const ViewFov& view,
+                               float eye_shift, float factor_max, float distance) {
+    HeadLocked s;
+    s.distance = std::isfinite(distance) && distance > 0.0f
+                     ? std::clamp(distance, kMinDistance, kMaxDistance)
+                     : kDefaultHeadDistance;
+    // At the view's middle, never turned (the placement's pitch and the offset are the normal
+    // view's): what fills the view there.
+    s.pitch_rad = ViewMiddlePitch(view);
+    s.yaw_rad = 0.0f;
+    const Cover cover = DefaultCover(view, s.pitch_rad, eye_shift);
+    const float t = GameTan(game_fov_y_deg);
+    const float a = std::isfinite(aspect) && aspect > 0.1f ? aspect : 5.0f / 3.0f;
+    const float hi = std::isfinite(factor_max)
+                         ? std::clamp(factor_max, kFactorMin, kKiuFpFactorCeiling)
+                         : kKiuFpFactorMax;
+    // Each axis draws what fills the view on it: the picture takes the view's shape, at one
+    // scale both ways (the screen is exactly what is drawn).
+    s.factor = std::clamp(cover.tan_x / (a * t), kFactorMin, hi);
+    s.factor_y = std::clamp(cover.tan_y / t, kFactorMin, hi);
+    s.tan_half_y = s.factor_y * t;
+    s.aspect = s.factor * a / s.factor_y;
+    s.gain = s.gain_x = 1.0f;
+    s.stretch_x = s.stretch_y = 1.0f;
+    return s;
+}
+
 Filled FillView(const Placement& placement, float game_fov_y_deg, float aspect,
                 const ViewFov& view, float eye_shift, int scale_y, const Options& options,
                 const LensOffset& offset) {

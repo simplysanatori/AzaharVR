@@ -222,6 +222,9 @@ struct FirstPersonNow {
 FirstPersonNow ReadFirstPerson(const KH::GameMemory& mem, int64_t host_now) {
     FirstPersonNow now;
     now.scene = Kiu::FirstPerson::ReadScene(mem);
+    if (now.scene.ok) {
+        Kiu::FirstPerson::PublishProjection(now.scene.projection); // AzaharFrame kiufov
+    }
     now.sample = Kiu::FirstPerson::Latest(host_now);
     if (now.scene.ok && now.sample.view.valid && now.sample.view.units_per_metre > 0.0f) {
         now.frame = {now.sample.view.rest, now.scene.camera, now.sample.view.units_per_metre};

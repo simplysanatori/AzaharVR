@@ -803,6 +803,24 @@ HeadLocked SolveHeadLocked(const Placement& placement, float game_fov_y_deg, flo
                            const ViewFov& view, float eye_shift = 0.0f,
                            const Options& options = {}, const LensOffset& offset = {});
 
+/// AzaharFrame kiufov: Kid Icarus: Uprising's first person (a test switch, kiu_first_person.h):
+/// the screen at true size whatever the game's own placement and scales are (those stay saved
+/// for the normal view, untouched): both gains exactly 1, no stretch, no caps, the screen at the
+/// view's middle with no offset, and the game drawing as much more on each axis as it takes to
+/// fill what either eye sees (DefaultCover at the view's middle), so the picture has the view's
+/// shape. Each axis's factor is kept within kFactorMin and `factor_max` (the test switch
+/// AZAHARFRAME_KIU_FP_FACTOR; kKiuFpFactorMax by default); past it the screen is that much
+/// smaller on that axis (still at true size: the edge of the view shows nothing there).
+/// `game_fov_y_deg` is the angle the game draws with right now and `aspect` its shape: the
+/// screen is sized from that same angle, so the gain is 1 by construction.
+inline constexpr float kKiuFpFactorMax = 6.0f;
+/// The highest factor the switch takes (the shader has no limit; past this a pixel of the
+/// game's picture is spread too thin to be worth drawing).
+inline constexpr float kKiuFpFactorCeiling = 8.0f;
+HeadLocked SolveKiuFirstPerson(float game_fov_y_deg, float aspect, const ViewFov& view,
+                               float eye_shift = 0.0f, float factor_max = kKiuFpFactorMax,
+                               float distance = kDefaultHeadDistance);
+
 /// AzaharFrame fovaxis: Fill View, set once (no mode). 1.2.0: across only, at kFillAcrossShare
 /// of the view. The placement size and Horizontal Scale that make the screen's width exactly
 /// kFillAcrossShare of the half width (tangent) that would cover what either eye sees
