@@ -3635,13 +3635,14 @@ void GMainWindow::BootGame(const QString& filename) {
         g_frame_runs++;                              // AzaharFrame texui
         g_frame_preload_nudge_title = 0; // AzaharFrame integ3: this run's own preload decides
 #endif
+#ifdef ENABLE_FRAME_XR // AzaharFrame kiumode: the last run's first person state goes, before the
+        // presets read the registers (kiu_first_person.h; no setting is written).
+        FrameXr::Kiu::Hooks::OnGameSettings(title_id);
+#endif
 #ifdef ENABLE_FRAME_XR // AzaharFrame vrqol: known immersive setups, unless the player chose
         if (const FrameXr::ImmersivePreset* preset = FrameXr::FindImmersivePreset(title_id)) {
             FrameXr::ApplyPresetSettings(*preset); // AzaharFrame presets
         }
-#endif
-#ifdef ENABLE_FRAME_XR // AzaharFrame kiuvr: a first person test switch's mode and registers
-        FrameXr::Kiu::Hooks::OnGameSettings(title_id);
 #endif
 #ifdef ENABLE_FRAME_XR // AzaharFrame reticle: Controls presets (controls_presets.h)
         // AzaharFrame kiu: starting values only: never over the game's own value, a global one

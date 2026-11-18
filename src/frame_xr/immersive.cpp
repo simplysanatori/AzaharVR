@@ -807,8 +807,9 @@ void KiuFirstPersonFrame(u32 mode) {
 }
 
 // AzaharFrame immersive: the immersive mode in use, the setting's (every game can turn it on).
+// AzaharFrame kiumode: as drawn: Angel's Aim (4) is mode 3 here and for the renderer (data.mode).
 u32 ModeInUse() {
-    return Settings::values.vr_immersive_mode.GetValue();
+    return Settings::ImmersiveRenderMode();
 }
 
 L::ScreenDecision Decision() {

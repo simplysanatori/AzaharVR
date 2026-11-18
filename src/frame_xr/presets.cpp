@@ -192,7 +192,9 @@ void ApplyPresetSettings(const ImmersivePreset& preset) {
     }
     // The immersive values apply when the game runs in the preset's mode (any mode for a game
     // that starts in the normal view).
-    const bool fits = preset.mode == 0 || mode.GetValue() == preset.mode;
+    // AzaharFrame kiumode: as drawn (a stored Angel's Aim, 4, fits a mode 3 preset).
+    const bool fits =
+        preset.mode == 0 || Settings::ImmersiveRenderModeOf(mode.GetValue()) == preset.mode;
     // AzaharFrame presets: a value of the preset's own, where this game has none and the global
     // one is the default.
     const auto fill = [&](auto& setting, auto value, const char* what) {

@@ -232,11 +232,25 @@ XR thread hands over, the scene camera), `kiu_hooks.cpp` (the VBlank pass), `kiu
 (Direct Aim's writer). The mock runs behind every **V** below were the real game, native desktop
 build, VR on the mock runtime with scripted head and controller poses.
 
+### Angel's Aim (AzaharFrame kiumode)
+
+First person is Immersive Mode's **Full (6DoF): Angel's Aim** (draft name), stored as 4 and
+listed above Other Games (3, unchanged) only while Kid Icarus: Uprising runs (the VR menu and the
+game's Properties). It is drawn as mode 3 by every reader (`Settings::ImmersiveRenderMode`). On
+the European game whose code the hooks check, it turns on with first person the eye hook, the
+culls off, the follow off, Right Stick turning, the land aim box, the aim from the hand with
+Direct Aim (`_AIM_6DOF`), the shots from the hand and the bullet keep (`_SHOTS_6DOF`), the timed
+enemy keep (12 s unless `_ENEMY_KEEP_S` says otherwise), the screen at true size and life size;
+it supplies View Matrix Register 90 and Eye Indicator `87,2` to the renderer in memory only
+(`Settings::RunSuppliedSetting`), so a save during play stores mode 4 and nothing else. Another
+mode chosen during play turns it off at the next VBlank. Other regions and other code play it as
+Other Games; the hooks' log line says why. The switches below still force their parts on.
+
 ### The switches
 
 | Switch | Does |
 |---|---|
-| `AZAHARFRAME_KIU_FIRST_PERSON=1` | live: the eye hook at the character's eyes, the culls off, the land camera's follow off, Right Stick turning on, the world at life size. Read once as the game boots: the run plays in Immersive Mode 3 with View Matrix Register 90 and Eye Indicator Register `87,2`, set in memory as a preset sets them (so they are saved with the game's settings if those are saved during the run; then Immersive Mode has to be put back by hand) |
+| `AZAHARFRAME_KIU_FIRST_PERSON=1` | the developer override of Immersive Mode's Angel's Aim (below): first person on in whatever mode the game runs (choose a Full mode), live: the eye hook at the character's eyes, the culls off, the land camera's follow off, Right Stick turning on, the world at life size, and on the European game the registers 90 and `87,2` supplied in memory. It sets no mode and writes no setting (AzaharFrame kiumode; it used to set mode 3 and the registers at boot) |
 | `AZAHARFRAME_KIU_WORLD_SCALE=<u>` | the leaning scale, game units per metre (0.5 to 100), over life size |
 | `AZAHARFRAME_KIU_PLAYER_EYE_M=<m>` | the player's eye height for life size (default 1.6 m: the character's eyes, 12.3 units up, are that high: 7.69 units a metre) |
 | `AZAHARFRAME_KIU_AIM_NO_MOD=1` | Direct Aim's reticle writer on the game without the mod ("The game's aim" below) |
@@ -264,10 +278,11 @@ world is one frame old.
   translation column is 0, the game draws everything relative to the scene's eye. The register's
   axes are the scene camera's (0.0000° apart at every VBlank of the land runs). The eye indicator
   `87,2` reads both eyes (293 of 293 two-eye swaps).
-- **Why the mode is set at boot and not live:** besides the XR thread, the 3D slider given to the
-  game (`core/hle/kernel/shared_page.cpp`, `service/hid`) and the internal resolution read the
-  Immersive Mode setting. With only the XR side in mode 3 the game kept its own stereo: each
-  eye's picture was shifted 51 px (1600 wide) the other way, the same at every depth.
+- **Why the mode is a real Immersive Mode (AzaharFrame kiumode):** besides the XR thread, the
+  3D slider given to the game (`core/hle/kernel/shared_page.cpp`, `service/hid`) and the internal
+  resolution read the Immersive Mode setting. With only the XR side in mode 3 the game kept its
+  own stereo: each eye's picture was shifted 51 px (1600 wide) the other way, the same at every
+  depth. A stored 4 is on mode 3's side of every one of them.
 - **The world holds still (V, land).** The Practice Range's dark floor line along world x = 0,
   in both eyes' pictures (2400 × 1440, 27.3 px a degree), against the line through the projected
   world points computed outside the app from the trace's raw values: head yawed 20°, −25°,
