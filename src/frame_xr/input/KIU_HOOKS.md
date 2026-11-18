@@ -94,6 +94,7 @@ rotation is applied on top of it); where that is in memory is not mapped yet.
 | `AZAHARFRAME_KIU_ENEMY_KEEP=1` | 0x3E8C9C | `0A000017` beq 0x3E8D00 | `0A00000E` beq 0x3E8CDC | a flier's path end: vanish → fly the path again |
 | `AZAHARFRAME_KIU_ENEMY_KEEP_S=<s>` | 0x3E8C9C | `0A000017` | beq keep_stub | the same, by the enemy's age (replaces the plain keep; they share the site) |
 | `AZAHARFRAME_KIU_GROUP_KEEP=1` | 0xA430FC | `E92D4FF8` push {r3-r11, lr} | `E12FFF1E` bx lr | a land spawner group's despawn does nothing |
+| `AZAHARFRAME_KIU_NO_FOLLOW=1` | 0x70401C | `EB031897` bl 0x7CA280 | `E1A00000` mov r0, r0 | the land camera's eased follow gets no movement input |
 
 The words at these sites, their context words and the cave are the same in the C-Stick & Gyro
 mod's v172 EUR base and 21:9 builds (V by comparing the files; the 16:9 build was not at hand: I),
@@ -152,12 +153,13 @@ counting across restarts) is less than the mailbox's limit: the function's own r
 | `AZAHARFRAME_KIU_ENEMY_KEEP=1` | passed fliers fly their path again, for good |
 | `AZAHARFRAME_KIU_ENEMY_KEEP_S=<seconds>` | the same until an enemy is that old; replaces ENEMY_KEEP |
 | `AZAHARFRAME_KIU_GROUP_KEEP=1` | land spawner groups are not despawned |
+| `AZAHARFRAME_KIU_NO_FOLLOW=1` | the land camera no longer takes back part of a turn while the player runs |
 | `AZAHARFRAME_KIU_HOOK_TRACE=1` (or 2) | a status line a second (2: one a VBlank): `xr: Kid Icarus hooks: t … [groups] player … scene eye …` |
 
 The hook is set when Kid Icarus: Uprising boots (`citra_qt.cpp`, `OnGameBoot`) and runs at each
 VBlank after Direct Aim's and Right Stick turning's (`common/frame_emu_poll.h`, `RunPatch`), in VR
 and in Flat. In Flat it also reads the switches file again once a second (no XR thread does there).
-With no switch on it reads the nine sites each VBlank and writes nothing, unless a save state
+With no switch on it reads the sites each VBlank and writes nothing, unless a save state
 brought our words back.
 
 ## What was seen (desktop, the real game, 2026-11-17)
@@ -189,3 +191,27 @@ brought our words back.
   control, 25 with ENEMY_KEEP (the player dies after about 47 s), 13 with `_S=12` (alive at 75 s),
   19 with `_S=25` (dies after about 52 s); new enemies keep arriving at the control's pace; no
   crash.
+- **GROUP_KEEP**: the word goes in and out and the game ran with it (V); **never seen to act**. In
+  Chapter 1's land section (reached by a scripted run of the air section) two scripted walks
+  provoked no group despawn: three Monoeyes appeared and were gone within 4 s with and without the
+  switch (the player was firing), then he stood at a wall. What it does to the level's progress is
+  not known (I).
+- **NO_FOLLOW**: V (Practice Range). The take-back is the battle camera's eased follow
+  (0x7CAFC8, called at 0x7041D0 with the block cam+0x4AC that 0x7CA280 fills at 0x70401C from the
+  player's movement). Control: running forward alone turns the yaw 5.5° in 4 s; a 45° turn written
+  while running keeps 26.6° (90°: 60.4°); a smooth turn while running gets 68 % of what was asked.
+  With the switch: 0.00°, 45.00° and 90.00° kept, 100 %. Standing and running sideways or back the
+  game's camera did not turn in either case, and the pitch still re-levels (the follow's own update
+  still runs; replacing that call instead stops the pitch re-level too). The third-person view
+  stays usable; what it loses is that slow turn toward the running direction.
+
+## Not done, not known
+
+- The headset: nothing here ran on it (the aarch64 build compiles and its unit tests pass).
+- Other regions and game versions: no table (the title and code checks leave everything off).
+- Multiplayer: not run. The shot stub compares the owner with the local player's actor (found
+  through the local aim object), so other players' shots should pass untouched (I).
+- The game's own aim quaternion at the moment of a shot is not mapped: a lane that aims with the
+  controller needs it to turn the game's aim onto the controller's ray.
+- Shots outside the one spawn call (dash shots, melee, powers) are not hooked.
+- Whether the rail's axes always are the world's (they were in Chapter 1's air section).

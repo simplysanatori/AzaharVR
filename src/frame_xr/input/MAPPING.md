@@ -408,6 +408,16 @@ Aiming at Direct Aim when the mod is installed (`ControlsPreset::gyro_aim_with_m
   which would stop the mod's aim. The controller keeps its beam; pointed at the bottom screen its
   trigger touches there as usual.
 
+### The app's own game-code hooks (test build; AzaharFrame kiuhook)
+
+Angel's Aim 6DoF: small patches to the European game's original code, in the game's memory, and
+three stubs in its code cave with a mailbox, all behind live test switches
+(`AZAHARFRAME_KIU_NOCULL`, `_BULLET_KEEP`, `_EYE`, `_EYE_OFFSET`, `_HIDE_PLAYER`, `_SHOT_TEST`,
+`_SHOT_NO_LOCK`, `_ENEMY_KEEP`, `_ENEMY_KEEP_S`, `_GROUP_KEEP`, `_NO_FOLLOW`, `_HOOK_TRACE`). Every
+address, the stubs, the mailbox's layout and what was seen working are in **`KIU_HOOKS.md`**
+beside this file; the code is `frame_xr/kiu_hooks.cpp`, `input/kiu_hooks.h` and
+`input/kiu_hooks_stubs.h`, the stubs' source `tools/kiu_hooks/stubs.s`.
+
 ### Right Stick turning (test build; AzaharFrame kiuturn)
 
 Angel's Aim 6DoF, Phase 1, behind test switches only (no setting, no menu row, no text in the
