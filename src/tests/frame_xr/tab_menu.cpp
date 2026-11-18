@@ -4643,6 +4643,7 @@ TEST_CASE("Controls tab: Angel's Aim's rows show in Kid Icarus only",
     }
     CHECK(ControlsScopeRows(false).size() + 15 == ControlsScopeRows().size()); // all but Check Aim
     CHECK(ControlsScopeRows(true) == ControlsScopeRows());
+}
 
 // AzaharFrame bfidr: while the display runs at a rate Black Frame Insertion does not flash at,
 // both rows say "Needs 120 Hz (Display at N Hz)" and stay live switches (a note, never a lock);

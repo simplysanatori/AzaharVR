@@ -717,6 +717,7 @@ TEST_CASE("VR group: Immersive Mode lists Angel's Aim everywhere",
         CHECK(mode->itemText(3) == QString::fromUtf8(Names::kModeAngelsAim));
         CHECK(mode->itemText(4) == QStringLiteral("Full (6DoF): Other Games"));
     }
+}
 
 // AzaharFrame bfidr: Black Frame Insertion's helpers in Azahar's window (frame_xr/bfi_helpers.h):
 // ticking its box ticks Primary Screen as Panel where it was off, and OK turns Dynamic Resolution
