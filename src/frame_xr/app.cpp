@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <cstdio>
 #include <fstream> // AzaharFrame bfidr: the perf line
 #include <map>
 #include <optional>
@@ -459,7 +460,21 @@ void Runtime::PerfRead(std::optional<PerfLine::Window> window) {
                 const double secs = std::chrono::duration<double>(now - g_perf_at).count();
                 const PerfLine::CpuShares cpu =
                     PerfLine::Shares(g_perf_tasks, tasks, secs, sysconf(_SC_CLK_TCK));
-                LOG_INFO(Frontend, "xr: {}", PerfLine::Format(*window, gpu_on, cpu));
+                const auto slurp = [](const char* path) {
+                    std::string text;
+                    if (std::FILE* f = std::fopen(path, "r")) {
+                        char chunk[4096];
+                        std::size_t n;
+                        while ((n = std::fread(chunk, 1, sizeof(chunk), f)) > 0) {
+                            text.append(chunk, n);
+                        }
+                        std::fclose(f);
+                    }
+                    return text;
+                };
+                LOG_INFO(Frontend, "xr: {}{}", PerfLine::Format(*window, gpu_on, cpu),
+                         PerfLine::MemoryNote(slurp("/proc/self/status"),
+                                              slurp("/proc/meminfo")));
             }
             g_perf_tasks = std::move(tasks);
             g_perf_at = now;

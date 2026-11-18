@@ -126,3 +126,19 @@ TEST_CASE("perf line: the line", "[frame_xr][bfidr]") {
     CHECK(b.find("drawn at") == std::string::npos);
     CHECK(b.find("others 0, process 0") != std::string::npos);
 }
+
+TEST_CASE("perf line: the memory note", "[frame_xr][bfidr]") {
+    using FrameXr::PerfLine::MemoryNote;
+    const std::string status = "Name:\tazahar\nVmPeak:\t 9000000 kB\nVmRSS:\t 2097152 kB\n";
+    const std::string meminfo = "MemTotal:       16000000 kB\nMemFree:          100000 kB\n"
+                                "MemAvailable:    4194304 kB\nSwapTotal:       8388608 kB\n"
+                                "SwapFree:        7340032 kB\n";
+    CHECK(MemoryNote(status, meminfo) ==
+          "; memory: process 2048 MB, available 4096 MB, swap used 1024 MB");
+    // no swap: left out
+    CHECK(MemoryNote(status, "MemAvailable: 1048576 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n") ==
+          "; memory: process 2048 MB, available 1024 MB");
+    // a key only as part of another key's name does not count
+    CHECK(MemoryNote("XVmRSS: 5 kB\n", "") == "");
+    CHECK(MemoryNote("", "") == "");
+}

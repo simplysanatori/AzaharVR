@@ -245,4 +245,54 @@ inline std::string Format(const Window& w, bool gpu_busy_on, const CpuShares& cp
     return out;
 }
 
+/// AzaharFrame bfidr: the line's memory note, from /proc/self/status and /proc/meminfo:
+/// "; memory: process N MB, available N MB, swap used N MB" (a field it can not find is left
+/// out; all missing gives ""). Added after the headset stalls of 2026-11-18, which came
+/// minutes into play: the line now says whether something was growing.
+inline long long KbField(std::string_view text, std::string_view key) {
+    std::size_t at = 0;
+    while ((at = text.find(key, at)) != std::string_view::npos) {
+        if (at == 0 || text[at - 1] == '\n') {
+            std::size_t i = at + key.size();
+            while (i < text.size() && (text[i] == ' ' || text[i] == '\t')) {
+                i++;
+            }
+            long long v = 0;
+            bool any = false;
+            while (i < text.size() && text[i] >= '0' && text[i] <= '9') {
+                v = v * 10 + (text[i] - '0');
+                i++;
+                any = true;
+            }
+            return any ? v : -1;
+        }
+        at += key.size();
+    }
+    return -1;
+}
+
+inline std::string MemoryNote(std::string_view status, std::string_view meminfo) {
+    const long long rss = KbField(status, "VmRSS:");
+    const long long avail = KbField(meminfo, "MemAvailable:");
+    const long long swap_total = KbField(meminfo, "SwapTotal:");
+    const long long swap_free = KbField(meminfo, "SwapFree:");
+    std::string out;
+    char buf[64];
+    const auto add = [&](const char* what, long long kb) {
+        std::snprintf(buf, sizeof(buf), "%s%s %lld MB", out.empty() ? "; memory: " : ", ", what,
+                      kb / 1024);
+        out += buf;
+    };
+    if (rss >= 0) {
+        add("process", rss);
+    }
+    if (avail >= 0) {
+        add("available", avail);
+    }
+    if (swap_total > 0 && swap_free >= 0) {
+        add("swap used", swap_total - swap_free);
+    }
+    return out;
+}
+
 } // namespace FrameXr::PerfLine
