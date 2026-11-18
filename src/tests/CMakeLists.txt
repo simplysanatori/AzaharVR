@@ -42,6 +42,7 @@ add_executable(tests
     frame_xr/direct_aim.cpp # AzaharFrame kiuaim2
     frame_xr/direct_aim_lock.cpp # AzaharFrame kiuaim3
     frame_xr/kiu_turn.cpp # AzaharFrame kiuturn
+    frame_xr/kiu_hooks.cpp # AzaharFrame kiuhook
     frame_xr/aim_along_weapon.cpp # AzaharFrame kiuinteg
     ../frame_xr/immersive_layout.cpp # AzaharFrame
     frame_xr/immersive_layout.cpp # AzaharFrame

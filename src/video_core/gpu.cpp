@@ -603,6 +603,8 @@ void GPU::VBlankCallback(std::uintptr_t user_data, s64 cycles_late) {
     Common::FrameEmuPoll::RunAim(static_cast<int64_t>(impl->timing.GetTicks()));
     // AzaharFrame kiuturn: then Right Stick turning writes the land camera's turn (kiu_turn.h).
     Common::FrameEmuPoll::RunTurn(static_cast<int64_t>(impl->timing.GetTicks()), true);
+    // AzaharFrame kiuhook: then the game-code patches and their mailbox (kiu_hooks.h).
+    Common::FrameEmuPoll::RunPatch(static_cast<int64_t>(impl->timing.GetTicks()));
 
     // Present renderered frame.
     impl->renderer->SwapBuffers();

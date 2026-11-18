@@ -10,6 +10,7 @@
 // too and at each VBlank (video_core/gpu.cpp), where it writes the game's reticle between the
 // game's frames.
 // AzaharFrame kiuturn: a third, Right Stick turning's (frame_xr/kiu_turn.h), at the same two places.
+// AzaharFrame kiuhook: a fourth, the game-code patches' (frame_xr/kiu_hooks.h), at each VBlank.
 
 #pragma once
 
@@ -62,6 +63,23 @@ inline void SetTurn(TurnHook hook) {
 inline void RunTurn(int64_t ticks, bool vblank) {
     if (const TurnHook hook = TurnSlot().load(std::memory_order_acquire)) {
         hook(ticks, vblank);
+    }
+}
+
+/// AzaharFrame kiuhook: the game-code patches' hook (frame_xr/kiu_hooks.h), at each VBlank after
+/// the two above. Set when Kid Icarus: Uprising boots.
+inline std::atomic<Hook>& PatchSlot() {
+    static std::atomic<Hook> hook{nullptr};
+    return hook;
+}
+
+inline void SetPatch(Hook hook) {
+    PatchSlot().store(hook, std::memory_order_release);
+}
+
+inline void RunPatch(int64_t ticks) {
+    if (const Hook hook = PatchSlot().load(std::memory_order_acquire)) {
+        hook(ticks);
     }
 }
 

@@ -86,6 +86,10 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     kiu_turn.cpp # AzaharFrame kiuturn
     kiu_turn.h
     input/kiu_turn.h
+    kiu_hooks.cpp # AzaharFrame kiuhook
+    kiu_hooks.h
+    input/kiu_hooks.h
+    input/kiu_hooks_stubs.h
     input/screen_rig.cpp
     input/screen_rig.h
     input/screen_view.cpp

@@ -194,6 +194,7 @@ Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin);
 #include "frame_xr/auto_shape.h"       // AzaharFrame fixes7
 #include "frame_xr/controls_presets.h" // AzaharFrame reticle
 #include "frame_xr/kiu_scan.h"          // AzaharFrame kiuguns: IsKidIcarus
+#include "frame_xr/kiu_hooks.h"         // AzaharFrame kiuhook
 #include "core/mods/aspect.h"           // AzaharFrame fixes7
 #include "frame_xr/presets.h" // AzaharFrame vrqol
 #include "frame_xr/render_margin.h" // AzaharFrame fovaxis
@@ -3713,6 +3714,7 @@ void GMainWindow::BootGame(const QString& filename) {
     // (core/frame_weapon_models.h): the game's own RomFS as the game reads it (LayeredFS mods
     // too), handed to a thread of its own; nothing here waits for it.
     if (Loader::ResultStatus::Success == res && !is_artic && FrameXr::Kiu::IsKidIcarus(title_id)) {
+        FrameXr::Kiu::Hooks::OnGameBoot(); // AzaharFrame kiuhook: test switches only
         std::shared_ptr<FileSys::RomFSReader> romfs;
         if (system.GetAppLoader().ReadRomFS(romfs) == Loader::ResultStatus::Success && romfs) {
             // Made now when Weapon in Hand is on, else the first time it is turned on.
