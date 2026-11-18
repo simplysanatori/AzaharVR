@@ -22,8 +22,11 @@
 #include "citra_qt/configuration/configuration_shared.h"
 #include "citra_qt/configuration/configure_frame_vr.h"
 #include "common/settings.h"
+#include "common/stall_telemetry.h"    // AzaharFrame bfidr: the display's rate
+#include "frame_xr/bfi_helpers.h"      // AzaharFrame bfidr
 #include "frame_xr/immersive_layout.h" // AzaharFrame fov100: the scales' range
 #include "frame_xr/immersive_names.h"  // AzaharFrame kiu
+#include "frame_xr/motion_clarity.h"   // AzaharFrame bfidr: UnevenHz
 #include "frame_xr/render_margin.h"    // AzaharFrame fovaxis
 
 namespace {
@@ -400,6 +403,36 @@ ConfigureFrameVr::ConfigureFrameVr(QWidget* parent) : QGroupBox(parent) {
     clarity_normal_check->setObjectName(QStringLiteral("frame_vr_motion_clarity_normal_check"));
     clarity_normal_check->setToolTip(tr(Names::kMotionClarityNormalWindowTip));
     layout->addWidget(clarity_normal_check);
+    // AzaharFrame bfidr: Black Frame Insertion's helpers (frame_xr/bfi_helpers.h): ticking its
+    // box ticks Primary Screen as Panel too, so it shows; unticking it unticks the panel again
+    // where Black Frame Insertion had turned it on. Never once the player clicked the panel's
+    // box here. Dynamic Resolution (the VR menu's row) follows at OK (ApplyConfiguration).
+    connect(panel_check, &QCheckBox::clicked, this, [this] { panel_clicked = true; });
+    connect(clarity_immersive_check, &QCheckBox::clicked, this, [this] {
+        if (panel_clicked) {
+            return;
+        }
+        const bool on = clarity_immersive_check->checkState() == Qt::Checked;
+        const bool off = clarity_immersive_check->checkState() == Qt::Unchecked;
+        const bool global = Settings::IsConfiguringGlobal();
+        const bool by_bfi = Settings::values.vr_bfi_set_panel.GetValue(global);
+        if ((on && !panel_check->isChecked()) || (off && by_bfi && panel_check->isChecked())) {
+            panel_check->setCheckState(on ? Qt::Checked : Qt::Unchecked);
+            if (!global) {
+                panel_state = on ? ConfigurationShared::CheckState::On
+                                 : ConfigurationShared::CheckState::Off;
+            }
+        }
+    });
+    // AzaharFrame bfidr: while VR runs at a rate it does not flash at, both boxes say so: a note
+    // after the label, never a lock.
+    if (const int hz = FrameXr::MotionClarity::UnevenHz(
+            Common::StallTelemetry::Get().display_period_ns.load(std::memory_order_relaxed))) {
+        const QString note = QStringLiteral(" \u00b7 ") +
+                             QString::fromStdString(Names::NeedsRefreshNote(hz));
+        clarity_immersive_check->setText(tr(Names::kMotionClarityImmersiveWindow) + note);
+        clarity_normal_check->setText(tr(Names::kMotionClarityNormalWindow) + note);
+    }
     // AzaharFrame fixa: Match Bottom Screen Brightness (vr_motion_clarity_match_bottom), one box
     // for both, never greyed.
     match_bottom_check = new QCheckBox(tr(Names::kMatchBottom), this);
@@ -792,6 +825,11 @@ void ConfigureFrameVr::UpdateWarpNotes() {
 }
 
 void ConfigureFrameVr::ApplyConfiguration() {
+    // AzaharFrame bfidr: Black Frame Insertion and its helpers as they were before this window's
+    // values (the global ones in the global window, the game's in its own).
+    const bool configuring_global = Settings::IsConfiguringGlobal();
+    const bool bfi_was = Settings::values.vr_motion_clarity_immersive.GetValue(configuring_global);
+    const bool panel_was = !Settings::values.vr_screens_in_projection.GetValue(configuring_global);
     if (Settings::IsConfiguringGlobal()) {
         if (offset_reset_pending) { // AzaharFrame vrsize
             offset_reset_pending = false;
@@ -931,6 +969,45 @@ void ConfigureFrameVr::ApplyConfiguration() {
             s.SetGlobal(false);
             s.SetValue(!panel_check->isChecked());
         }
+    }
+    {
+        // AzaharFrame bfidr: Black Frame Insertion's helpers at its scope (bfi_helpers.h): on with
+        // it, put back with it unless changed since; the panel's box clicked here is the player's
+        // choice.
+        namespace H = FrameXr::BfiHelpers;
+        auto& v = Settings::values;
+        const bool g = configuring_global;
+        const bool panel_now = !v.vr_screens_in_projection.GetValue(g);
+        const bool bfi_now = v.vr_motion_clarity_immersive.GetValue(g);
+        // The panel's box is the player's when they clicked it, or when it changed while Black
+        // Frame Insertion did not; else a change came with Black Frame Insertion's box.
+        const bool player_panel = panel_clicked || (panel_now != panel_was && bfi_now == bfi_was);
+        H::State st{v.vr_dynamic_resolution.GetValue(g), player_panel ? panel_now : panel_was,
+                    v.vr_bfi_set_dynamic_resolution.GetValue(g), v.vr_bfi_set_panel.GetValue(g)};
+        st = H::OnPlayer(st, false, player_panel && panel_now != panel_was);
+        H::Change c = H::OnBfi(bfi_was, bfi_now, st);
+        if (player_panel) {
+            c.state.panel = panel_now;
+            c.state.panel_by_bfi = false;
+        }
+        const auto put = [g](auto& s, bool value) {
+            if (s.GetValue(g) == value) {
+                return;
+            }
+            if (g) {
+                if (s.UsingGlobal()) {
+                    s.SetValue(value);
+                }
+            } else {
+                s.SetGlobal(false);
+                s.SetValue(value);
+            }
+        };
+        put(v.vr_dynamic_resolution, c.state.dynamic_resolution);
+        put(v.vr_screens_in_projection, !c.state.panel);
+        put(v.vr_bfi_set_dynamic_resolution, c.state.dynamic_resolution_by_bfi);
+        put(v.vr_bfi_set_panel, c.state.panel_by_bfi);
+        panel_clicked = false;
     }
     ConfigurationShared::ApplyPerGameSetting(
         &Settings::values.vr_immersive_depth, immersive_depth_scope,

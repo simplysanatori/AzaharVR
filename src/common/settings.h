@@ -832,6 +832,12 @@ struct Values {
     // (frame_xr/vis/proj_path.h); the normal and the wide view are always panels. Never locked. A
     // new key: older builds ignore it, and a config without it reads the default.
     SwitchableSetting<bool> vr_screens_in_projection{true, "vr_screens_in_projection"};
+    // AzaharFrame bfidr: turning the Full modes' Black Frame Insertion on turned these on (Dynamic
+    // Resolution, Primary Screen as Panel), at the row's scope: turning it off puts them back
+    // unless the player changed them since (frame_xr/bfi_helpers.h). New keys: older builds
+    // ignore them.
+    SwitchableSetting<bool> vr_bfi_set_dynamic_resolution{false, "vr_bfi_set_dynamic_resolution"};
+    SwitchableSetting<bool> vr_bfi_set_panel{false, "vr_bfi_set_panel"};
     SwitchableSetting<bool> vr_immersive_world_set{false, "vr_immersive_world_set"};
     SwitchableSetting<float> vr_immersive_eye_per_far{0.0f, "vr_immersive_eye_per_far"};
     // AzaharFrame: show only the top screen in VR (the bottom one comes back with the bumper
@@ -958,7 +964,7 @@ struct Values {
     // for Input (pressing the pad touches, held it drags); 0 Off (config file only). The
     // controller touchpad maps onto the bottom screen. AzaharFrame menuux: Tap by default.
     SwitchableSetting<u32, true> vr_touchpad_touch{1, 0, 2, "vr_touchpad_touch"};
-    // AzaharFrame menuux: Dynamic Resolution, global: the internal resolution goes down a step
+    // AzaharFrame menuux: Dynamic Resolution: the internal resolution goes down a step
     // while the headset misses frames and back up when it holds them (frame_xr/dynamic_resolution.h).
     SwitchableSetting<bool> vr_dynamic_resolution{false, "vr_dynamic_resolution"};
     // AzaharFrame mouse: Bottom Screen Reticle: 0 Off, 1 Left Controller, 2 Right Controller,

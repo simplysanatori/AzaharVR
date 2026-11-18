@@ -15,6 +15,8 @@
 #include "common/logging/log.h"
 #include "common/param_package.h"
 #include "common/settings.h"
+#include "common/stall_telemetry.h"     // AzaharFrame bfidr: the display's rate
+#include "frame_xr/bfi_helpers.h"        // AzaharFrame bfidr
 #include "frame_xr/dynamic_resolution.h" // AzaharFrame menuux
 #include "video_core/vr_cache_save.h"        // AzaharFrame flash3
 #include "frame_xr/immersive.h"          // AzaharFrame fovonce: MeasureCameraAgain
@@ -27,6 +29,7 @@
 #include "frame_xr/input/reticle.h" // AzaharFrame reticle: Reticle Speed
 #include "frame_xr/menu/md3.h"
 #include "frame_xr/menu_panel.h"
+#include "frame_xr/motion_clarity.h" // AzaharFrame bfidr: UnevenHz
 #include "frame_xr/per_game.h" // AzaharFrame useglobal
 #include "frame_xr/render_margin.h" // AzaharFrame fovaxis
 #include "frame_xr/session.h"
@@ -1211,6 +1214,8 @@ void MenuPanel::BuildModel(const Host& host) {
     m.motion_clarity_immersive = v.vr_motion_clarity_immersive.GetValue(); // AzaharFrame projdef
     m.motion_clarity_normal = v.vr_motion_clarity_normal.GetValue();       // AzaharFrame fixa
     m.match_bottom = v.vr_motion_clarity_match_bottom.GetValue();           // AzaharFrame fixa
+    m.bfi_uneven_hz = MotionClarity::UnevenHz( // AzaharFrame bfidr
+        Common::StallTelemetry::Get().display_period_ns.load(std::memory_order_relaxed));
     m.screen_as_panel = !v.vr_screens_in_projection.GetValue();            // AzaharFrame projdef
     // AzaharFrame autosave: the running game's values (its own, else the global ones)
     m.autosave = v.autosave_enabled.GetValue();
@@ -1259,6 +1264,35 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
     r.command = MenuCommand::SetSetting;
     r.per_game = per_game;
     r.value = value;
+    // AzaharFrame bfidr: a change besides the row's own (Black Frame Insertion's helpers), sent to
+    // the Qt side to be saved at the same scope.
+    const auto send = [&host](MenuSetting setting, int val, bool scope_game) {
+        MenuRequest h;
+        h.command = MenuCommand::SetSetting;
+        h.setting = setting;
+        h.value = val;
+        h.per_game = scope_game;
+        if (host.request) {
+            host.request(h);
+        }
+    };
+    // AzaharFrame bfidr: what Black Frame Insertion turned on, at a scope (bfi_helpers.h).
+    const auto set_marks = [&](const BfiHelpers::State& s, bool scope_game) {
+        if (s.dynamic_resolution_by_bfi == v.vr_bfi_set_dynamic_resolution.GetValue() &&
+            s.panel_by_bfi == v.vr_bfi_set_panel.GetValue()) {
+            return;
+        }
+        Apply(v.vr_bfi_set_dynamic_resolution, s.dynamic_resolution_by_bfi, scope_game);
+        Apply(v.vr_bfi_set_panel, s.panel_by_bfi, scope_game);
+        send(MenuSetting::BfiHelperMarks,
+             (s.dynamic_resolution_by_bfi ? 1 : 0) | (s.panel_by_bfi ? 2 : 0), scope_game);
+    };
+    const auto helpers = [&v] {
+        return BfiHelpers::State{v.vr_dynamic_resolution.GetValue(),
+                                 !v.vr_screens_in_projection.GetValue(),
+                                 v.vr_bfi_set_dynamic_resolution.GetValue(),
+                                 v.vr_bfi_set_panel.GetValue()};
+    };
     const u32 u = static_cast<u32>(std::max(value, 0));
     switch (id) {
     case Id::HideBottomScreen:
@@ -1298,7 +1332,11 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         DynamicResolution::Reset(); // from the new value, no step off
         break;
     case Id::DynamicResolution:
-        Apply(v.vr_dynamic_resolution, value != 0, false);
+        // AzaharFrame bfidr: at the scope it has (Black Frame Insertion may have turned it on
+        // for this game), and the player's own choice from now on.
+        r.per_game = !v.vr_dynamic_resolution.UsingGlobal();
+        Apply(v.vr_dynamic_resolution, value != 0, r.per_game);
+        set_marks(BfiHelpers::OnPlayer(helpers(), true, false), r.per_game);
         r.setting = MenuSetting::DynamicResolution;
         // AzaharFrame ui2: off is the full factor at once; on again carries on where it was.
         DynamicResolution::SetEnabled(value != 0);
@@ -1597,14 +1635,41 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         Apply(v.vr_immersive_follow_screen, value != 0, per_game);
         r.setting = MenuSetting::FollowScreen;
         break;
-    case Id::MotionClarity: // AzaharFrame flash, projdef; fixa: the Full modes (path follows it)
-        // The warning once each time it is turned on.
-        if (value != 0 && !v.vr_motion_clarity_immersive.GetValue()) {
+    case Id::MotionClarity: { // AzaharFrame flash, projdef; fixa: the Full modes (path follows it)
+        const bool was = v.vr_motion_clarity_immersive.GetValue();
+        const bool on = value != 0;
+        Apply(v.vr_motion_clarity_immersive, on, per_game);
+        r.setting = MenuSetting::MotionClarityImmersive;
+        // AzaharFrame bfidr: its helpers on with it (and put back with it), at its scope, sent
+        // after the row's own change; the toast says so, else the warning once each time it is
+        // turned on.
+        const BfiHelpers::State before = helpers();
+        const BfiHelpers::Change c = BfiHelpers::OnBfi(was, on, before);
+        const bool dr = c.state.dynamic_resolution != before.dynamic_resolution;
+        const bool panel = c.state.panel != before.panel;
+        if (host.request) {
+            host.request(r);
+        }
+        if (dr) {
+            Apply(v.vr_dynamic_resolution, c.state.dynamic_resolution, per_game);
+            DynamicResolution::SetEnabled(c.state.dynamic_resolution);
+            send(MenuSetting::DynamicResolution, c.state.dynamic_resolution ? 1 : 0, per_game);
+        }
+        if (panel) {
+            Apply(v.vr_screens_in_projection, !c.state.panel, per_game);
+            send(MenuSetting::ScreensInProjection, c.state.panel ? 0 : 1, per_game);
+        }
+        set_marks(c.state, per_game);
+        if (dr || panel) {
+            ShowToastText(Immersive::Names::BfiHelpersToast(dr, panel, on), ToastTime::Long);
+        } else if (on && !was) {
             ShowToastText(Immersive::Names::kMotionClarityImmersiveToast, ToastTime::Long);
         }
-        Apply(v.vr_motion_clarity_immersive, value != 0, per_game);
-        r.setting = MenuSetting::MotionClarityImmersive;
-        break;
+        LOG_INFO(Frontend, "xr: in-game menu: {} = {}{}{}{}", Menu::LabelFor(id), value,
+                 per_game ? " (this game)" : "", dr ? ", Dynamic Resolution with it" : "",
+                 panel ? ", Primary Screen as Panel with it" : "");
+        return; // sent above
+    }
     case Id::MotionClarityNormal: // AzaharFrame fixa: the Off and Wide modes', live
         if (value != 0 && !v.vr_motion_clarity_normal.GetValue()) {
             ShowToastText(Immersive::Names::kMotionClarityImmersiveToast, ToastTime::Long);
@@ -1629,6 +1694,7 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
                           ToastTime::Long);
         }
         Apply(v.vr_screens_in_projection, in_projection, per_game);
+        set_marks(BfiHelpers::OnPlayer(helpers(), false, true), per_game); // AzaharFrame bfidr
         r.setting = MenuSetting::ScreensInProjection;
         r.value = in_projection ? 1 : 0;
         break;

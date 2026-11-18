@@ -381,6 +381,9 @@ enum class MenuSetting {
     MuzzleFlashSize, ///< AzaharFrame kiuweap2: `value` percent, 50 to 300
                      ///< (vr_light_gun_muzzle_flash_size)
     AngelsAimIntroShown, ///< AzaharFrame kiuweap2: `value` 1 (vr_angels_aim_intro_shown, global)
+    /// AzaharFrame bfidr: what Black Frame Insertion turned on (bfi_helpers.h): `value` bit 0
+    /// vr_bfi_set_dynamic_resolution, bit 1 vr_bfi_set_panel
+    BfiHelperMarks,
 };
 struct MenuRequest {
     MenuCommand command = MenuCommand::Continue;

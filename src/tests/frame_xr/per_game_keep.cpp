@@ -140,7 +140,10 @@ TEST_CASE("Per-Game: every per-game row's key is kept across the read of the gam
         }
     }
     // The two that reverted in session 651, by name.
-    for (const char* key : {"vr_motion_clarity_immersive", "vr_screens_in_projection"}) {
+    // AzaharFrame bfidr: and Black Frame Insertion's helpers, written at its scope.
+    for (const char* key : {"vr_motion_clarity_immersive", "vr_screens_in_projection",
+                            "vr_dynamic_resolution", "vr_bfi_set_dynamic_resolution",
+                            "vr_bfi_set_panel"}) {
         INFO(key);
         CHECK(std::find(labels.begin(), labels.end(), key) != labels.end());
     }
