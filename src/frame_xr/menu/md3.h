@@ -166,9 +166,13 @@ public:
     void Slider(const Rect& r, float t, const std::string& value, State state, int stops = 0,
                 float value_w = 64.0f);
     /// A tonal menu button showing `value` with a drop-down arrow.
-    void MenuButton(const Rect& r, const std::string& value, bool open, State state);
+    /// `recommended`: the Recommended badge (name_chip.h) after the value.
+    void MenuButton(const Rect& r, const std::string& value, bool open, State state,
+                    bool recommended = false);
     /// An open menu of `options` at `r` (its top left and width; the height follows).
-    Rect Menu(const Rect& r, const std::vector<std::string>& options, int selected, int hover);
+    /// `recommended` is the index of the option with the Recommended badge after it (-1 = none).
+    Rect Menu(const Rect& r, const std::vector<std::string>& options, int selected, int hover,
+              int recommended = -1);
     static float MenuItemHeight() {
         return 48.0f;
     }
