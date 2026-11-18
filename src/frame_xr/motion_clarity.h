@@ -260,6 +260,14 @@ inline bool EvenRate(int64_t period_ns) {
     return whole >= 2.0 && std::abs(per - whole) <= kEvenTolerance;
 }
 
+/// AzaharFrame bfidr: the display's rate in whole Hz while Black Frame Insertion does not flash
+/// at it (the rows' "Needs 120 Hz" note), else 0 (120 Hz, or not known).
+inline int UnevenHz(int64_t period_ns) {
+    return period_ns > 0 && !EvenRate(period_ns)
+               ? static_cast<int>(std::lround(1e9 / static_cast<double>(period_ns)))
+               : 0;
+}
+
 /// AzaharFrame bfidr: the frame loop's gate (app.cpp, each frame): `asked` is the setting of the
 /// mode on view (InEffect, the override included, and not held), `period_ns` the runtime's
 /// predicted display period. On only at an EvenRate; `say` is the line to log this frame: Held

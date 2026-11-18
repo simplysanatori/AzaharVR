@@ -16,6 +16,7 @@
 #include "common/logging/log.h"
 #include "common/frame_flat.h"
 #include "common/frame_test_switches.h" // AzaharFrame integ9
+#include "common/stall_telemetry.h"     // AzaharFrame bfidr
 #include "frame_xr/controls.h"
 #include "frame_xr/screen_handover.h" // AzaharFrame flash3
 #include "frame_xr/session.h"
@@ -385,6 +386,8 @@ bool Runtime::CreateSession() {
     if (XR_FAILED(r)) {
         LOG_ERROR(Frontend, "xr: xrCreateSession: {}", ResultName(r));
         session = XR_NULL_HANDLE;
+    // AzaharFrame bfidr: no display rate without a session (Black Frame Insertion's rows).
+    Common::StallTelemetry::Get().display_period_ns.store(0, std::memory_order_relaxed);
         return false;
     }
     // AzaharFrame dbl: the display refresh rates the runtime offers (XR_FB_display_refresh_rate),

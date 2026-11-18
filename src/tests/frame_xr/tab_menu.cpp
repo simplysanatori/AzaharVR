@@ -4212,10 +4212,11 @@ TEST_CASE("Tab menu: Motion Clarity's two rows", "[frame_xr][tabmenu][projdef][f
     CHECK(LabelFor(Id::MotionClarityNormal) == "Black Frame Insertion");
     CHECK(ExplainFor(Id::MotionClarity) ==
           "Experimental. In the Full modes, adds a black frame after each picture for a clearer "
-          "view on head turns. Uses Primary Screen as Panel. May flicker.");
+          "view on head turns. Uses Primary Screen as Panel. May flicker. Needs a 120 Hz "
+          "display.");
     CHECK(ExplainFor(Id::MotionClarityNormal) ==
           "Experimental. In the Off and Wide modes, adds a black frame after each picture on the "
-          "Primary screen for clearer motion. May flicker.");
+          "Primary screen for clearer motion. May flicker. Needs a 120 Hz display.");
     CHECK(std::string{Names::kExperimental} == "Experimental");
     CHECK_FALSE(MenuModel{}.motion_clarity_immersive); // off, the default
     CHECK_FALSE(MenuModel{}.motion_clarity_normal);
@@ -4232,6 +4233,10 @@ TEST_CASE("Tab menu: Motion Clarity's two rows", "[frame_xr][tabmenu][projdef][f
         constexpr float kOneLine =
             static_cast<float>(FrameXr::ToastFit::kAtlasW) - 2.0f * FrameXr::ToastFit::kPadPx;
         CHECK(ui::TextWidth(ui::kFontLarge, Names::kMotionClarityImmersiveToast) <= kOneLine);
+        // AzaharFrame bfidr: the helpers' toast, the longest, fits two lines in the small font.
+        const std::string helpers = Names::BfiHelpersToast(true, true, true);
+        const auto lines = ui::WrapText(ui::kFontSmall, helpers, kOneLine, 3);
+        CHECK(lines.size() <= 2);
         CHECK(std::string{Names::kMotionClarityImmersiveToast} ==
               "Black Frame Insertion: May Flicker");
     }
@@ -4450,4 +4455,46 @@ TEST_CASE("Tab menu: Render Margin with Stretch only, and Fill View",
     CHECK(std::vector<Id>(fov.order.begin(), fov.order.begin() + above + 1) ==
           std::vector<Id>(stretch.order.begin(), stretch.order.begin() + above + 1));
     // Their values are the settings' (BuildModel reads them each frame); hiding writes nothing.
+}
+
+// AzaharFrame bfidr: while the display runs at a rate Black Frame Insertion does not flash at,
+// both rows say "Needs 120 Hz (Display at N Hz)" and stay live switches (a note, never a lock);
+// at 120 Hz (or not known) no note.
+TEST_CASE("Tab menu: Black Frame Insertion's rows at a rate it does not flash at",
+          "[frame_xr][tabmenu][bfidr]") {
+    namespace Names = FrameXr::Immersive::Names;
+    CHECK(Names::NeedsRefreshNote(90) == "Needs 120 Hz (Display at 90 Hz)");
+    CHECK(MenuModel{}.bfi_uneven_hz == 0);
+    struct Case {
+        SettingsSection section;
+        Id id;
+        int mode;
+    };
+    for (const Case c : {Case{SettingsSection::Immersive, Id::MotionClarity, 2},
+                         Case{SettingsSection::Graphics, Id::MotionClarityNormal, 0}}) {
+        for (const int hz : {0, 90}) {
+            Drawn d;
+            MenuModel m = Sample();
+            m.immersive_mode = c.mode;
+            m.bfi_uneven_hz = hz;
+            MenuView v;
+            v.tab = Tab::Settings;
+            v.section = c.section;
+            bool live = false, note = false;
+            std::vector<DrawnText> texts;
+            d.kit.RecordText(&texts);
+            for (float scroll = 0.0f; scroll <= 3000.0f; scroll += kRowH) {
+                v.scroll[static_cast<int>(Tab::Settings)] = scroll;
+                d.Draw(m, v);
+                live |= FindHit(d, c.id, -1) != nullptr;
+            }
+            d.kit.RecordText(nullptr);
+            for (const auto& t : texts) {
+                note |= t.text == "Needs 120 Hz (Display at 90 Hz)";
+            }
+            INFO("section " << static_cast<int>(c.section) << ", " << hz << " Hz");
+            CHECK(live);
+            CHECK(note == (hz == 90));
+        }
+    }
 }

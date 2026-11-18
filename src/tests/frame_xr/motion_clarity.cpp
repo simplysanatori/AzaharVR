@@ -825,6 +825,13 @@ TEST_CASE("Motion Clarity: only at a whole number of refreshes a picture", "[fra
         CHECK(MC::EvenRate(period(hz)) == Common::XrPacer::EvenCadencePeriod(period(hz)));
     }
 
+    // The rows' note: the rate in whole Hz where it does not flash, else 0.
+    CHECK(MC::UnevenHz(period(90.0)) == 90);
+    CHECK(MC::UnevenHz(period(72.0)) == 72);
+    CHECK(MC::UnevenHz(period(144.0)) == 144);
+    CHECK(MC::UnevenHz(period(120.0)) == 0);
+    CHECK(MC::UnevenHz(0) == 0);
+
     // The frame loop's gate: asked for at 90 Hz, off and said once; at 120 Hz on again and said
     // once; not asked for, nothing said.
     {

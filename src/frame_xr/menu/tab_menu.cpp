@@ -205,8 +205,13 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
                                m.accurate_image_copies));
             // AzaharFrame fixa: Motion Clarity in the Off and Wide modes (vr_motion_clarity_normal),
             // never locked: in the Full modes it does nothing (Immersive has their own row).
-            rows.push_back(
-                row(Id::MotionClarityNormal, RowKind::Switch, 0, m.motion_clarity_normal));
+            {
+                Row bfi = row(Id::MotionClarityNormal, RowKind::Switch, 0, m.motion_clarity_normal);
+                if (m.bfi_uneven_hz > 0) { // AzaharFrame bfidr: a note, not a lock
+                    bfi.value = Immersive::Names::NeedsRefreshNote(m.bfi_uneven_hz);
+                }
+                rows.push_back(bfi);
+            }
             // AzaharFrame fixa: Match Bottom Screen Brightness drops down under it while it is on.
             if (m.motion_clarity_normal) {
                 rows.push_back(row(Id::MatchBottomNormal, RowKind::Switch, 0, m.match_bottom));
@@ -275,7 +280,13 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
         // AzaharFrame flash; fixa: Motion Clarity in the Full modes (vr_motion_clarity_immersive,
         // read alone), never locked: elsewhere it does nothing, and its tooltip says where it
         // works (the Graphics section has the Off and Wide modes' own).
-        rows.push_back(row(Id::MotionClarity, RowKind::Switch, 0, m.motion_clarity_immersive));
+        {
+            Row bfi = row(Id::MotionClarity, RowKind::Switch, 0, m.motion_clarity_immersive);
+            if (m.bfi_uneven_hz > 0) { // AzaharFrame bfidr: a note, not a lock
+                bfi.value = Immersive::Names::NeedsRefreshNote(m.bfi_uneven_hz);
+            }
+            rows.push_back(bfi);
+        }
         // AzaharFrame fixa: Match Bottom Screen Brightness drops down under it while it is on.
         if (m.motion_clarity_immersive) {
             rows.push_back(row(Id::MatchBottom, RowKind::Switch, 0, m.match_bottom));

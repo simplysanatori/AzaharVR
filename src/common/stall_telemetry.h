@@ -89,6 +89,9 @@ struct StallTelemetry {
     // AzaharFrame bfidr: the renderer's GPU busy timer runs (AZAHARFRAME_GPU_BUSY=1 and the queue
     // has timestamps), for the XR thread's perf line ("not measured" without it).
     std::atomic<bool> gpu_busy_on{false};
+    // AzaharFrame bfidr: the XR runtime's display period now (0: no VR session), for Black Frame
+    // Insertion's rows: it flashes only at 120 Hz (MotionClarity::EvenRate).
+    std::atomic<std::int64_t> display_period_ns{0};
 
     static StallTelemetry& Get() {
         static StallTelemetry instance;

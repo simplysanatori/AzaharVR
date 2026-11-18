@@ -938,6 +938,9 @@ void Runtime::FrameLoop() {
         last_wait = now;
         phases = {};
         display_period_ns = fs.predictedDisplayPeriod; // AzaharFrame menuux
+        // AzaharFrame bfidr: the display's rate for Black Frame Insertion's rows ("Needs 120 Hz").
+        Common::StallTelemetry::Get().display_period_ns.store(fs.predictedDisplayPeriod,
+                                                             std::memory_order_relaxed);
 
         auto mark = Clock::now();
         Watchdog::Beat("xrBeginFrame (with the queue lock)");
