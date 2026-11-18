@@ -75,6 +75,10 @@ V on land (Practice Range) and in the air (Chapter 1).
 | 0x34 | f32 ×4 shot frame: the rotation of the player's parent (`world q × conj(local q)`; identity on land) | the framework |
 | 0x44 | f32 ×3 shot offset from the player's position, in the spawn's space (world axes on land; the rail's axes in the air, which were the world's in Chapter 1) | the same |
 | 0x50 | f32 seconds: a passed flier younger than this flies its path again | the timed enemy keep |
+| 0x54 | u32 the scene camera node to widen (0xE14B88); 0: none (the camera stub passes the game through) | the wide camera |
+| 0x58 | f32 the angle to give it, up and down (radians) | the same |
+| 0x5C | f32 the shape to give it (across / up and down) | the same |
+| 0x60 | f32 the game's own shape, kept to put back (a record, not read by the stub) | the same |
 
 In code: `Mailbox`, `EyeRequest`, `ShotRequest`, `Fill`. First person's shots
 (`AZAHARFRAME_KIU_SHOTS_6DOF`, below) fill a `ShotRequest` with `absolute`: the rotation is the
@@ -97,6 +101,7 @@ spawn, so the app does not have to know the game's aim beforehand.
 | `AZAHARFRAME_KIU_NO_FOLLOW=1` | 0x70401C | `EB031897` bl 0x7CA280 | `E1A00000` mov r0, r0 | the land camera's eased follow no longer turns the camera while the player runs (what the call computes: I) |
 | `AZAHARFRAME_KIU_AIM_NO_MOD=1`, `AZAHARFRAME_KIU_AIM_6DOF=1` ("aim hold") | 0x6D215C | `0A000002` beq 0x6D216C | `EA000002` b 0x6D216C | the land reticle's eased moves (back to its rest height after a touch, the flick's glide) do nothing, as in the air |
 | | 0x6D1680 | `0A00001F` beq 0x6D1704 | `EA00001F` b 0x6D1704 | the aim box is the whole screen on the ground too (the air's box), so the game's clamp never turns the camera for the reticle |
+| first person in a battle ("wide camera") | 0x45E04C | `EDD00A0F` vldr s1, [r0, #0x3C] | b fov_stub | the scene camera's setter: the camera named in the mailbox gets our angle and shape |
 | `AZAHARFRAME_KIU_FIRST_PERSON=1` ("player shadow") | 0x57B054 | `E92D4030` push {r4, r5, lr} | b shadow_stub | the player's own round shadow is not put in the frame's shadow list; everyone else's is |
 
 "Aim hold" is for the game **without** the C-Stick & Gyro mod only: its context holds three words
@@ -265,6 +270,7 @@ Other Games; the hooks' log line says why. The switches below still force their 
 | `AZAHARFRAME_KIU_AIM_NO_MOD=1` | Direct Aim's reticle writer on the game without the mod ("The game's aim" below) |
 | `AZAHARFRAME_KIU_AIM_6DOF=1` | with first person and Direct Aim (Aiming: Direct Aim): the reticle where the hand's ray points in the game's world, through the game's camera |
 | `AZAHARFRAME_KIU_SHOTS_6DOF=1` | with first person: the game's own shots from the hand's ray; turns the bullet keep on |
+| `AZAHARFRAME_KIU_FP_WIDE=0\|1\|2` | first person's scene camera (default 1): 1, as wide as the view and in its shape (the screen then needs no drawing past the frame); 2, as wide but in the game's own shape (square pixels; some of the picture falls outside the view across); 0, the game's own camera and the old draw-past-the-frame path ("The wide camera" below) |
 | `AZAHARFRAME_KIU_FP_FACTOR=<f>` | the most the game draws past its own frame on either axis in first person (1 to 8, default 6); past it the screen is smaller on that axis ("The screen in first person" below) |
 | `AZAHARFRAME_KIU_FP_TRACE=1\|2`, `AZAHARFRAME_KIU_FP_PROBE=<hex>` | a line of `key=value` words a second (2: a VBlank): the scene camera, the view register, the rest pose, the head, the hand's ray in the world, the reticle, the mailbox; and an actor's place in the world and in the head's view |
 
@@ -415,7 +421,62 @@ screen. A ray that leaves the game's view holds the reticle at the screen's edge
   writes the land box as the whole screen and Direct Aim never pushes the Turn Zone; the box
   words are the same with the 21:9 mod, the "aim hold" words are not.
 - **Not done.** HUD pieces that touch the game's frame's edge are pinned to the drawn area's
-  edge by the shader and stretch. (Pit's own round shadow under the eye: done, below.)
+  edge by the shader and stretch. (Pit's own round shadow under the eye: done, below.) With the
+  wide camera (below, the default) the drawn area is the frame and they no longer stretch.
+
+### The wide camera (AzaharFrame kiuwide)
+
+In first person, once a battle has a player, the "wide camera" group gives the game's own scene
+camera the headset view's angle and shape, so the game's 400×240 frame is the whole view at
+true size (factor 1, gains 1) and the reticle can reach everywhere in view.
+
+- **Where the game sets it (V, code and memory, EUR original).** The scene camera node
+  0xE14B88 holds the eye at +8, the angle at +0x3C (0xE14BC4) and the shape at +0x40
+  (0xE14BC8); clearing bits 0x5C of its flags (+0x6C) has the projection and cull planes rebuilt
+  (built at 0xB4FB1C, planes 0xB4FBC8). The setter at 0x45E04C loads the angle the game wants
+  this frame (`vldr s1, [r0, #0x3C]`), compares, stores it and clears those bits; its caller
+  stores the shape (0x45DFF4, I). Land, air and the air's zooms all pass it.
+- **The stub.** `b fov_stub` at 0x45E04C. If r0 is the node in the mailbox, the stub writes our
+  shape and angle into the node and clears those bits when either differs, and returns from the
+  setter without the game's store (so the game's zoom does nothing while it is in); otherwise
+  it runs the replaced `vldr` and goes on at 0x45E050. It reads the mailbox through r12 only
+  and on the pass path changes only r12 and the flags. Eleven context words (the setter's rest,
+  the shape store and the projection builder's two loads).
+- **The values.** `Layout::KiuWideCamera` takes the view's cover at the screen's pitch (the
+  view's middle): the angle up and down and the shape across over up and down, the angle
+  rounded up to 0.01°. The mock view (126×112°) gives 111.51° and 1.336; the Frame's catalog
+  view about 112° and 1.32. The angle is constant: the game's own zooms are not followed.
+- **With the 21:9 mod.** The mod scales the cached projection across by its own ratio, so the
+  shape asked for is the view's divided by that (0.954 for 21:9 with Screen Shape 21:9), and
+  the mod's drawn shape is the view's (V, the node and the screen log).
+- **Back out.** The game's shape is kept (read from the node before the first change, in the
+  mailbox's record) and put back only when the node still holds exactly ours; the angle is the
+  game's own again at its next frame. Switching `AZAHARFRAME_KIU_FP_WIDE` 1 → 0 → 2 → 1 during
+  play in the air: 1.3359 → 1.6667 (the game's) with the zoom followed again → 1.6667 → 1.3359
+  (V).
+- **The aim.** The reticle is the hand's ray through the wide projection; the aim box is the
+  whole screen. Rays up to ±60° across, +45° up, −55° down and the four ±50°/+30°, −38°
+  corners land on their pixel (0.00 px) with the game's aim point on the ray (0.000°) on land;
+  −75° is held at the frame's edge (V, mock view). Shots leave along the ray at those angles.
+
+| Run (desktop, mock view) | Reticle off its pixel | Game's aim point off the ray | Shots' direction off the ray |
+|---|---|---|---|
+| land, no mod | 0.00 px | 0.000° | 0.000° |
+| air, no mod | 0.00 px (0.50 once) | 0.000–0.07° (one corner: 30.5°, below) | 0.0000–0.0001° (the firing VBlank's mailbox) |
+| land, 21:9 mod | 0.00 px | 1.2–2.8° (the mod's own aim maths) | 0.000° |
+| land, `FP_WIDE=2` | 0.00 px | 0.000° | 0.000° |
+| land, `FP_WIDE=0` (control) | held at the old frame's edges (about ±35° across) | — | — |
+
+- **Pixels.** The render target is unchanged (400×240 × the resolution factor), now spread
+  over the whole view; its pixels are 0.80 as wide as tall (1.336 drawn on 5:3). The HUD is
+  drawn in the same frame: its panels sit at the view's lower corners, readable and not
+  stretched. `FP_WIDE=2` keeps square pixels but draws about a fifth of its width outside the
+  view.
+- **Open (I).** In the air, the hand ray at +50° left and −38° down puts the game's aim point
+  about 30° off (twice, the same corner; the reticle is on its pixel): likely the game's own
+  air aim limit or a lock. With the mod, the game's aim point is 1.2–2.8° off the ray (the
+  reticle is right). Lock-on now reaches further out (an enemy 33° off was homed on). The
+  camera is widened only while the battle has a player: cutscenes and menus keep the game's.
 
 ### The player's round shadow (AzaharFrame kiushadow)
 
@@ -449,6 +510,7 @@ off): one word, `b shadow_stub` at 0x57B054.
 ### Not done, risks
 
 - The headset: nothing here ran on it.
+- The wide camera with the 21:9 mod in the air has not been run.
 - The world tilts with the game camera's pitch (3° down on land at rest; the rail's in the
   air) and shakes with the game's own camera shake: the rest frame is the game camera's, level
   only when the camera is. A level frame from the camera's yaw alone is the next step if the
