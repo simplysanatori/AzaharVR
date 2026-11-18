@@ -7,8 +7,8 @@
 //
 // AzaharFrame kiumode: first person is Immersive Mode's "Full (6DoF): Angel's Aim" (stored 4,
 // shown only while Kid Icarus: Uprising runs; Settings::kImmersiveModeAngelsAim). It is drawn as
-// mode 3 (Settings::ImmersiveRenderMode, for every reader) and is in effect for the European
-// game whose code the hooks checked (OnFor below); elsewhere it plays as Full (6DoF): Other
+// mode 3 (Settings::ImmersiveRenderMode, for every reader) and is in effect in VR for the
+// European game whose code the hooks checked (OnFor below); elsewhere it plays as Full (6DoF): Other
 // Games and the hooks' log says why. In effect, it turns on with first person (On) the eye hook,
 // the culls off, the follow off, Right Stick turning, the land aim box, the aim from the hand
 // (with Direct Aim), the shots from the hand and the bullet keep, the timed enemy keep
@@ -78,14 +78,16 @@ inline constexpr float kAngelsAimEnemyKeepS = 12.0f;
 constexpr bool WantedFor(bool dev_switch, uint32_t stored_mode, uint64_t title) {
     return dev_switch || (stored_mode == kModeAngelsAim && IsKidIcarus(title));
 }
-/// Angel's Aim is in effect: the stored mode is 4, the game is the European one and its code is
-/// the one the hooks are mapped for (checked by the hooks: SetGameCode).
-constexpr bool AngelsAimFor(uint32_t stored_mode, uint64_t title, bool code_ok) {
-    return stored_mode == kModeAngelsAim && title == Input::KiuTurn::kTitleEur && code_ok;
+/// Angel's Aim is in effect: the stored mode is 4, the game is the European one, its code is the
+/// one the hooks are mapped for (checked by the hooks: SetGameCode) and the game is on view in
+/// VR (`in_vr`: in Flat no Immersive Mode does anything, nor does this one).
+constexpr bool AngelsAimFor(uint32_t stored_mode, uint64_t title, bool code_ok, bool in_vr) {
+    return stored_mode == kModeAngelsAim && title == Input::KiuTurn::kTitleEur && code_ok && in_vr;
 }
 /// First person is on: Angel's Aim in effect, or the developer switch.
-constexpr bool OnFor(bool dev_switch, uint32_t stored_mode, uint64_t title, bool code_ok) {
-    return dev_switch || AngelsAimFor(stored_mode, title, code_ok);
+constexpr bool OnFor(bool dev_switch, uint32_t stored_mode, uint64_t title, bool code_ok,
+                     bool in_vr) {
+    return dev_switch || AngelsAimFor(stored_mode, title, code_ok, in_vr);
 }
 
 /// First person is on (live): Angel's Aim in effect, or AZAHARFRAME_KIU_FIRST_PERSON. Any thread.

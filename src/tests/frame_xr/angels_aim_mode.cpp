@@ -46,21 +46,25 @@ TEST_CASE("Angel's Aim: stored values and the 4 to 3 mapping", "[frame_xr][kiumo
 
 TEST_CASE("Angel's Aim: first person's truth table", "[frame_xr][kiumode]") {
     // In effect: mode 4, the European game, its code the mapped one.
-    CHECK(FP::AngelsAimFor(4, kEur, true));
-    CHECK(!FP::AngelsAimFor(4, kEur, false)); // code not checked yet, or another code
-    CHECK(!FP::AngelsAimFor(4, kUsa, true));  // other regions: plays as Other Games
-    CHECK(!FP::AngelsAimFor(4, kJpnMod, true));
-    CHECK(!FP::AngelsAimFor(4, kAsphalt, true)); // a stored 4 elsewhere: as 3
+    CHECK(FP::AngelsAimFor(4, kEur, true, true));
+    CHECK(!FP::AngelsAimFor(4, kEur, false, true)); // code not checked yet, or another code
+    CHECK(!FP::AngelsAimFor(4, kUsa, true, true));  // other regions: plays as Other Games
+    CHECK(!FP::AngelsAimFor(4, kJpnMod, true, true));
+    CHECK(!FP::AngelsAimFor(4, kAsphalt, true, true)); // a stored 4 elsewhere: as 3
     for (u32 m : {0u, 1u, 2u, 3u}) {
-        CHECK(!FP::AngelsAimFor(m, kEur, true)); // Other Games is not first person
+        CHECK(!FP::AngelsAimFor(m, kEur, true, true)); // Other Games is not first person
     }
+    // In Flat (no VR session) no Immersive Mode does anything, Angel's Aim neither.
+    CHECK(!FP::AngelsAimFor(4, kEur, true, false));
+    CHECK(!FP::OnFor(false, 4, kEur, true, false));
+    CHECK(FP::OnFor(true, 4, kEur, true, false)); // the developer switch: as before
     // On: Angel's Aim in effect, or the developer switch (whatever the mode).
-    CHECK(FP::OnFor(false, 4, kEur, true));
-    CHECK(!FP::OnFor(false, 3, kEur, true));
-    CHECK(!FP::OnFor(false, 4, kUsa, true));
-    CHECK(!FP::OnFor(false, 4, kEur, false));
-    CHECK(FP::OnFor(true, 0, kEur, true));
-    CHECK(FP::OnFor(true, 3, kUsa, false));
+    CHECK(FP::OnFor(false, 4, kEur, true, true));
+    CHECK(!FP::OnFor(false, 3, kEur, true, true));
+    CHECK(!FP::OnFor(false, 4, kUsa, true, true));
+    CHECK(!FP::OnFor(false, 4, kEur, false, true));
+    CHECK(FP::OnFor(true, 0, kEur, true, true));
+    CHECK(FP::OnFor(true, 3, kUsa, false, true));
     // Wanted (the hooks say why it is not in effect): any region of the game, or the switch.
     CHECK(FP::WantedFor(false, 4, kUsa));
     CHECK(FP::WantedFor(false, 4, kJpnMod));

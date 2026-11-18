@@ -8,6 +8,7 @@
 #include <cmath>
 #include <mutex>
 #include <string>
+#include "common/frame_flat.h" // AzaharFrame kiumode: frame_flat_mono
 #include "common/frame_test_switches.h"
 #include "common/logging/log.h"
 #include "common/settings.h"
@@ -18,6 +19,7 @@
 
 namespace FrameXr {
 uint64_t GameTitleId(); // frame_xr.h (AzaharFrame kiumode: the running game)
+bool IsStarted();       // frame_xr.h (AzaharFrame kiumode: an XR runtime)
 } // namespace FrameXr
 
 // AzaharFrame kiuvr (kiu_first_person.h)
@@ -65,6 +67,11 @@ uint32_t StoredMode() {
     return Settings::values.vr_immersive_mode.GetValue();
 }
 
+/// The game is on view in VR: an XR runtime with a session (in Flat the window shows one eye).
+bool InVr() {
+    return IsStarted() && !Settings::frame_flat_mono.load(std::memory_order_relaxed);
+}
+
 /// Aiming is Direct Aim (vr_gyro_aim 2, Light Gun).
 bool DirectAim() {
     return Settings::values.vr_gyro_aim.GetValue() == 2;
@@ -75,7 +82,8 @@ bool DirectAim() {
 bool AngelsAim() {
     const uint64_t title = GameTitleId();
     return AngelsAimFor(StoredMode(), title,
-                        title != 0 && g_code_title.load(std::memory_order_relaxed) == title);
+                        title != 0 && g_code_title.load(std::memory_order_relaxed) == title,
+                        InVr());
 }
 
 bool On() {

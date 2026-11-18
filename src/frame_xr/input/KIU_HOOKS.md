@@ -236,8 +236,8 @@ build, VR on the mock runtime with scripted head and controller poses.
 
 First person is Immersive Mode's **Full (6DoF): Angel's Aim** (draft name), stored as 4 and
 listed above Other Games (3, unchanged) only while Kid Icarus: Uprising runs (the VR menu and the
-game's Properties). It is drawn as mode 3 by every reader (`Settings::ImmersiveRenderMode`). On
-the European game whose code the hooks check, it turns on with first person the eye hook, the
+game's Properties). It is drawn as mode 3 by every reader (`Settings::ImmersiveRenderMode`). In
+VR (not in Flat), on the European game whose code the hooks check, it turns on with first person the eye hook, the
 culls off, the follow off, Right Stick turning, the land aim box, the aim from the hand with
 Direct Aim (`_AIM_6DOF`), the shots from the hand and the bullet keep (`_SHOTS_6DOF`), the timed
 enemy keep (12 s unless `_ENEMY_KEEP_S` says otherwise), the screen at true size and life size;
