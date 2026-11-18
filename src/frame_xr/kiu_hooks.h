@@ -24,6 +24,13 @@
 //                                     three, started from the player's position plus that offset
 //                                     (side, up, ahead of the game camera's level view).
 //   AZAHARFRAME_KIU_SHOT_NO_LOCK=1    with SHOT_TEST: the shots get no lock target (no homing).
+//   AZAHARFRAME_KIU_ENEMY_KEEP=1      flying enemies whose scripted path ends fly it again
+//                                     instead of vanishing (they come round and keep shooting).
+//   AZAHARFRAME_KIU_ENEMY_KEEP_S=<seconds>
+//                                     the same until an enemy has been on its path that long,
+//                                     then it leaves as in the game; replaces ENEMY_KEEP.
+//   AZAHARFRAME_KIU_GROUP_KEEP=1      land spawner groups are not despawned as the player moves
+//                                     on.
 //   AZAHARFRAME_KIU_HOOK_TRACE=1|2    a status line a second (2: one a VBlank): the groups, the
 //                                     player, the scene eye.
 //

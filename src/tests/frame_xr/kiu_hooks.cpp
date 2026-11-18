@@ -116,8 +116,10 @@ FakeMemory Game() {
     return m;
 }
 
+// Every group that can be in at once (the plain enemy keep shares its site with the timed one).
 constexpr uint32_t kAll = Bit(Group::NoCull) | Bit(Group::BulletKeep) | Bit(Group::Eye) |
-                          Bit(Group::Shot);
+                          Bit(Group::Shot) | Bit(Group::EnemyKeepTimed) | Bit(Group::GroupKeep);
+constexpr std::size_t kAllWords = kPatches.size() - 1;
 
 bool SiteIs(const FakeMemory& m, Group g, bool patched) {
     bool all = true;
@@ -205,7 +207,14 @@ TEST_CASE("Kid Icarus hooks: branch words and the table", "[frame_xr][kiuhook]")
         CHECK(p.addr < kCaveStart); // in the game's own code, never in the cave
         CHECK(p.original != p.patched);
         for (std::size_t j = 0; j < i; ++j) {
-            CHECK(kPatches[j].addr != p.addr);
+            // Two patches share an address only as the two enemy keeps do: the same game word,
+            // different words of ours, different groups.
+            if (kPatches[j].addr == p.addr) {
+                CHECK(p.addr == kSitePathEnd);
+                CHECK(kPatches[j].original == p.original);
+                CHECK(kPatches[j].patched != p.patched);
+                CHECK(kPatches[j].group != p.group);
+            }
         }
         for (const Context& c : kContext) {
             CHECK(c.addr != p.addr); // a context word is never one we change
@@ -335,9 +344,11 @@ TEST_CASE("Kid Icarus hooks: the groups go in, stay, and come out", "[frame_xr][
     SECTION("everything at once, and out again") {
         r = Sync(m, kAll, Mailbox{});
         CHECK(r.in_mask == kAll);
-        CHECK(r.code_writes == Stubs::kImage.size() + kPatches.size());
+        CHECK(r.code_writes == Stubs::kImage.size() + kAllWords);
         for (const Patch& p : kPatches) {
-            CHECK(m.Get32(p.addr) == p.patched);
+            if (p.group != Group::EnemyKeep) {
+                CHECK(m.Get32(p.addr) == p.patched);
+            }
         }
         r = Sync(m, 0, Mailbox{});
         CHECK(r.in_mask == 0);
@@ -362,6 +373,8 @@ TEST_CASE("Kid Icarus hooks: a word that differs keeps its group out", "[frame_x
         CHECK(r.Of(Group::BulletKeep) == GroupState::In);
         CHECK(r.Of(Group::Eye) == GroupState::In);
         CHECK(r.Of(Group::Shot) == GroupState::In);
+        CHECK(r.Of(Group::EnemyKeepTimed) == GroupState::In);
+        CHECK(r.Of(Group::GroupKeep) == GroupState::In);
         for (const auto& w : m.writes) {
             CHECK(w.addr != 0x773294);
             CHECK(w.addr != 0x77DB44);
@@ -405,6 +418,76 @@ TEST_CASE("Kid Icarus hooks: a word that differs keeps its group out", "[frame_x
         m.Set32(0x704178, kInvented);
         CHECK_FALSE(GameCodeMatches(m));
     }
+}
+
+TEST_CASE("Kid Icarus hooks: the enemy keeps", "[frame_xr][kiuhook]") {
+    FakeMemory m = Game();
+    const uint32_t plain = Beq(kSitePathEnd, Stubs::kPathRestart);
+    const uint32_t timed = Beq(kSitePathEnd, kKeepStub);
+    CHECK(plain == 0x0A00000E);
+    CHECK((timed >> 24) == 0x0A);
+    CHECK(timed != plain);
+
+    // The plain keep: one word, no cave.
+    SyncResult r = Sync(m, Bit(Group::EnemyKeep), Mailbox{});
+    CHECK(r.Of(Group::EnemyKeep) == GroupState::In);
+    CHECK(r.Of(Group::EnemyKeepTimed) == GroupState::Out);
+    CHECK(r.code_writes == 1);
+    CHECK(r.cave == Cave::NotLooked);
+    CHECK(m.Get32(kSitePathEnd) == plain);
+
+    // Over to the timed keep: the image, the mailbox with its limit, then the shared word; no
+    // "the game's code differs" for the sibling's word.
+    Mailbox mb;
+    mb.keep_seconds = 20.0f;
+    r = Sync(m, Bit(Group::EnemyKeepTimed), mb);
+    CHECK(r.Of(Group::EnemyKeepTimed) == GroupState::In);
+    CHECK(r.Of(Group::EnemyKeep) == GroupState::Out);
+    CHECK(r.different_addr == 0);
+    CHECK(m.Get32(kSitePathEnd) == timed);
+    CHECK(ImageInPlace(m));
+    CHECK(std::bit_cast<float>(m.Get32(kMailbox + Stubs::kMbKeepSeconds)) == 20.0f);
+    // Stays so, and nothing but the mailbox is written again.
+    m.writes.clear();
+    r = Sync(m, Bit(Group::EnemyKeepTimed), mb);
+    CHECK(r.Of(Group::EnemyKeepTimed) == GroupState::In);
+    CHECK(r.code_writes == 0);
+
+    // And back to the plain keep.
+    r = Sync(m, Bit(Group::EnemyKeep), Mailbox{});
+    CHECK(r.Of(Group::EnemyKeep) == GroupState::In);
+    CHECK(r.Of(Group::EnemyKeepTimed) == GroupState::Out);
+    CHECK(r.different_addr == 0);
+    CHECK(m.Get32(kSitePathEnd) == plain);
+
+    // Both off: the game's word.
+    r = Sync(m, 0, Mailbox{});
+    CHECK(m.Get32(kSitePathEnd) == 0x0A000017);
+    CHECK_FALSE(AnyOurs(m));
+
+    // Something else at the site keeps both out.
+    m.Set32(kSitePathEnd, kInvented);
+    r = Sync(m, Bit(Group::EnemyKeep), Mailbox{});
+    CHECK(r.Of(Group::EnemyKeep) == GroupState::Different);
+    r = Sync(m, Bit(Group::EnemyKeepTimed), mb);
+    CHECK(r.Of(Group::EnemyKeepTimed) == GroupState::Different);
+    CHECK(m.Get32(kSitePathEnd) == kInvented);
+    m.Set32(kSitePathEnd, 0x0A000017);
+
+    // The land groups' despawn: its first word becomes bx lr.
+    r = Sync(m, Bit(Group::GroupKeep), Mailbox{});
+    CHECK(r.Of(Group::GroupKeep) == GroupState::In);
+    CHECK(m.Get32(kSiteGroupDespawn) == 0xE12FFF1E);
+    r = Sync(m, 0, Mailbox{});
+    CHECK(m.Get32(kSiteGroupDespawn) == 0xE92D4FF8);
+
+    // The limit: only a finite, positive number of seconds; it needs no player.
+    FakeMemory none;
+    const Player nobody = FindPlayer(none);
+    CHECK(Fill(nobody, EyeRequest{}, ShotRequest{}, 1, 25.0f).keep_seconds == 25.0f);
+    CHECK(Fill(nobody, EyeRequest{}, ShotRequest{}, 1, -3.0f).keep_seconds == 0.0f);
+    CHECK(Fill(nobody, EyeRequest{}, ShotRequest{}, 1, std::nanf("")).keep_seconds == 0.0f);
+    CHECK(Fill(nobody, EyeRequest{}, ShotRequest{}, 1).keep_seconds == 0.0f);
 }
 
 TEST_CASE("Kid Icarus hooks: the cave", "[frame_xr][kiuhook]") {
@@ -477,7 +560,7 @@ TEST_CASE("Kid Icarus hooks: a save state loaded under us", "[frame_xr][kiuhook]
         m = Game();
         const SyncResult r = Sync(m, kAll, mb);
         CHECK(r.in_mask == kAll);
-        CHECK(r.code_writes == Stubs::kImage.size() + kPatches.size());
+        CHECK(r.code_writes == Stubs::kImage.size() + kAllWords);
     }
 
     SECTION("a state with the patches in, every switch off: they come out") {
@@ -485,7 +568,7 @@ TEST_CASE("Kid Icarus hooks: a save state loaded under us", "[frame_xr][kiuhook]
         m.writes.clear();
         REQUIRE(AnyOurs(m));
         const SyncResult r = Sync(m, 0, Mailbox{});
-        CHECK(r.code_writes == kPatches.size());
+        CHECK(r.code_writes == kAllWords);
         CHECK_FALSE(AnyOurs(m));
         for (const Patch& p : kPatches) {
             CHECK(m.Get32(p.addr) == p.original);
@@ -523,7 +606,10 @@ TEST_CASE("Kid Icarus hooks: the mailbox's layout", "[frame_xr][kiuhook]") {
     CHECK(Stubs::kMbShotRotation == 0x24);
     CHECK(Stubs::kMbShotFrame == 0x34);
     CHECK(Stubs::kMbShotOffset == 0x44);
-    CHECK(Stubs::kMbSize == 0x50);
+    CHECK(Stubs::kMbKeepSeconds == 0x50);
+    CHECK(Stubs::kMbSize == 0x54);
+    // The keep stub reads its limit off r12 too: vldr s1, [r12, #0x50] = 0xEDDC0A14.
+    CHECK(Stubs::kImage[Stubs::kKeepStub / 4 + 2] == (0xEDDC0A00u | (Stubs::kMbKeepSeconds / 4)));
     // The stubs read those offsets off r12: ldr rX, [r12, #imm] = 0xE59C?imm.
     const auto loads = [](uint32_t offset) {
         int n = 0;
@@ -570,6 +656,7 @@ TEST_CASE("Kid Icarus hooks: the mailbox's layout", "[frame_xr][kiuhook]") {
     mb.shot_rotation = {0.1f, 0.2f, 0.3f, 0.9f};
     mb.shot_frame = {0.4f, 0.5f, 0.6f, 0.7f};
     mb.shot_offset = {20.0f, 5.0f, -1.0f};
+    mb.keep_seconds = 25.0f;
     const auto w = mb.Words();
     const auto f = [&w](uint32_t offset) { return std::bit_cast<float>(w[offset / 4]); };
     CHECK(w[0x04 / 4] == 77);
@@ -586,6 +673,8 @@ TEST_CASE("Kid Icarus hooks: the mailbox's layout", "[frame_xr][kiuhook]") {
     CHECK(f(0x40) == 0.7f);
     CHECK(f(0x44) == 20.0f);
     CHECK(f(0x4C) == -1.0f);
+    CHECK(f(0x50) == 25.0f);
+    CHECK(std::bit_cast<float>(Mailbox{}.Words()[0x50 / 4]) == 0.0f); // nothing kept
     mb.shot_rotate = false;
     mb.shot_no_target = false;
     CHECK(mb.Words()[0x20 / 4] == 2);

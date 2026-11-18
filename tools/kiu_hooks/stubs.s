@@ -27,7 +27,8 @@
         .equ    MB_SHOT_ROTATION,  0x24    @ f32 x4 quaternion x y z w: q' = rotation * q
         .equ    MB_SHOT_FRAME,     0x34    @ f32 x4 quaternion: the player's parent's rotation (identity on land)
         .equ    MB_SHOT_OFFSET,    0x44    @ f32 x3: start = frame * the player's local position + this
-        .equ    MB_SIZE,           0x50
+        .equ    MB_KEEP_SECONDS,   0x50    @ f32: a passed flier younger than this flies its path again
+        .equ    MB_SIZE,           0x54
 
         .equ    EYE_ON,            1
         .equ    SHOT_ROTATE,       1
@@ -38,8 +39,9 @@
         .equ    ACTOR_WORLD_POS,   0x54    @ f32 x3
         .equ    ACTOR_LOCAL_POS,   0x74    @ f32 x3, in the parent's frame
         .equ    TRANSFORM_POS,     0x14    @ the camera hand-over's transform: f32 x3
+        .equ    PATH_STATE_TIME,   0x34    @ a flier's path state: f32 seconds since it entered it
 
-        .global image_start, eye_stub, shot_stub, image_end
+        .global image_start, eye_stub, shot_stub, keep_stub, image_end
 image_start:
         .ascii  "KIUH"                  @ the image's tag
         .word   IMAGE_VERSION
@@ -161,10 +163,28 @@ shot_stub:
 9:      pop     {r4, r5}
         ldr     pc, lit_spawn           @ 0x485638
 
+@ ---- A passed flier: entered by `beq keep_stub` at 0x3E8C9C in place of `beq 0x3E8D00`, inside
+@ the function that ends a flying enemy's scripted path (0x3E8C34), where the enemy's placement
+@ has no "fly it again" flag and the game goes on to make it vanish. r4 = the path state, the
+@ function's frame is pushed, r6 = 1. Younger than the mailbox's limit (seconds since the enemy
+@ entered its path state; the game keeps counting across restarts): the function's own restart
+@ code (0x3E8CDC); else its vanish code (0x3E8D00), as the game. Uses r12, s0, s1 and the flags
+@ (both targets write s0 or call a function before reading any of them); r0-r3 are kept.
+keep_stub:
+        ldr     r12, lit_mailbox
+        vldr    s0, [r4, #PATH_STATE_TIME]
+        vldr    s1, [r12, #MB_KEEP_SECONDS]
+        vcmpe.f32 s0, s1
+        vmrs    APSR_nzcv, fpscr
+        ldrmi   pc, lit_path_restart    @ less than the limit (not for a NaN): 0x3E8CDC
+        ldr     pc, lit_path_vanish     @ 0x3E8D00
+
 @ ---- Literals (the only words that name an address) ----
 lit_mailbox:        .word   MAILBOX
 lit_actor_vtable:   .word   ACTOR_VTABLE
 lit_sink_continue:  .word   SINK_CONTINUE
 lit_spawn:          .word   SPAWN
 lit_no_target:      .word   0xFFFFFE00
+lit_path_restart:   .word   PATH_RESTART
+lit_path_vanish:    .word   PATH_VANISH
 image_end:

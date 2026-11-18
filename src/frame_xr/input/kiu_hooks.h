@@ -50,7 +50,12 @@ constexpr uint32_t B(uint32_t from, uint32_t to) {
 constexpr uint32_t Bl(uint32_t from, uint32_t to) {
     return 0xEB000000u | (((to - from - 8u) >> 2) & 0x00FFFFFFu);
 }
+/// `beq to` placed at `from`.
+constexpr uint32_t Beq(uint32_t from, uint32_t to) {
+    return 0x0A000000u | (((to - from - 8u) >> 2) & 0x00FFFFFFu);
+}
 inline constexpr uint32_t kMovR0One = 0xE3A00001; ///< mov r0, #1
+inline constexpr uint32_t kBxLr = 0xE12FFF1E;     ///< bx lr
 
 // ---- The game (EUR original code) ----
 
@@ -70,7 +75,10 @@ inline constexpr uint32_t kSiteBulletView = 0x41FF1C; ///< a flying bullet's in-
 inline constexpr uint32_t kSitePooledBulletView = 0x40BD6C; ///< the pooled rapid bullet's
 inline constexpr uint32_t kSiteCameraSink = 0x63409C; ///< the camera hand-over's entry
 inline constexpr uint32_t kSiteShotSpawn = 0x5043E4;  ///< the player's shot: bl 0x485638
+inline constexpr uint32_t kSitePathEnd = 0x3E8C9C;     ///< a flier's path end: beq "vanish"
+inline constexpr uint32_t kSiteGroupDespawn = 0xA430FC; ///< a land spawner group's despawn
 inline constexpr uint32_t kEyeStub = kImageBase + Stubs::kEyeStub;
+inline constexpr uint32_t kKeepStub = kImageBase + Stubs::kKeepStub;
 inline constexpr uint32_t kShotStub = kImageBase + Stubs::kShotStub;
 
 inline constexpr uint32_t kSceneEye = 0xE14B90;    ///< the scene camera's eye, 3 floats
@@ -105,6 +113,10 @@ static_assert(Bl(kSiteBulletView, 0x4EC640) == 0xEB0331C7);
 static_assert(Bl(kSitePooledBulletView, 0x4EC640) == 0xEB038233);
 static_assert(B(kSiteSceneCull, kSceneCullInside) == 0xEA000040);
 static_assert(B(kSiteObjectCull, kObjectCullVisible) == 0xEAFFFFF9);
+static_assert(Beq(kSitePathEnd, Stubs::kPathVanish) == 0x0A000017);
+static_assert(Beq(kSitePathEnd, Stubs::kPathRestart) == 0x0A00000E);
+static_assert(Stubs::kImage[Stubs::kLitPathRestart / 4] == Stubs::kPathRestart);
+static_assert(Stubs::kImage[Stubs::kLitPathVanish / 4] == Stubs::kPathVanish);
 
 // ---- The patch table ----
 
@@ -113,14 +125,17 @@ enum class Group : uint8_t {
     BulletKeep, ///< AZAHARFRAME_KIU_BULLET_KEEP: bullets out of the game camera's view live on
     Eye,        ///< AZAHARFRAME_KIU_EYE: the camera hand-over goes through the eye stub
     Shot,       ///< AZAHARFRAME_KIU_SHOT_TEST: the player's shot spawn goes through the shot stub
+    EnemyKeep,  ///< AZAHARFRAME_KIU_ENEMY_KEEP: passed fliers fly their path again, for good
+    EnemyKeepTimed, ///< AZAHARFRAME_KIU_ENEMY_KEEP_S: the same until they are that old (a stub)
+    GroupKeep,  ///< AZAHARFRAME_KIU_GROUP_KEEP: land spawner groups are not despawned
 };
-inline constexpr std::size_t kGroupCount = 4;
+inline constexpr std::size_t kGroupCount = 7;
 
 constexpr uint32_t Bit(Group g) {
     return 1u << static_cast<uint32_t>(g);
 }
 constexpr bool UsesStubs(Group g) {
-    return g == Group::Eye || g == Group::Shot;
+    return g == Group::Eye || g == Group::Shot || g == Group::EnemyKeepTimed;
 }
 inline const char* GroupName(Group g) {
     switch (g) {
@@ -132,6 +147,12 @@ inline const char* GroupName(Group g) {
         return "eye";
     case Group::Shot:
         return "shot";
+    case Group::EnemyKeep:
+        return "enemy keep";
+    case Group::EnemyKeepTimed:
+        return "enemy keep (timed)";
+    case Group::GroupKeep:
+        return "group keep";
     }
     return "?";
 }
@@ -143,7 +164,7 @@ struct Patch {
     uint32_t original; ///< the game's word: anything else there and the group stays out
     uint32_t patched;
 };
-inline constexpr std::array<Patch, 6> kPatches{{
+inline constexpr std::array<Patch, 9> kPatches{{
     // and r0, r1, #0xFF (the top of the sphere-against-six-planes loop) -> b 0x77DC4C, the
     // function's own "wholly inside" exit (the same stack: sub sp, #0xC before, add after).
     {Group::NoCull, kSiteSceneCull, 0xE20100FF, B(kSiteSceneCull, kSceneCullInside)},
@@ -158,6 +179,14 @@ inline constexpr std::array<Patch, 6> kPatches{{
     {Group::Eye, kSiteCameraSink, 0xE92D4070, B(kSiteCameraSink, kEyeStub)},
     // bl 0x485638 -> bl shot_stub, which ends in 0x485638 (lr stays the call's).
     {Group::Shot, kSiteShotSpawn, 0xEBFE0493, Bl(kSiteShotSpawn, kShotStub)},
+    // beq 0x3E8D00 (the placement has no "fly it again" flag: vanish) -> beq 0x3E8CDC, the
+    // function's own restart code a few words on (the same frame, r4 = the path state).
+    {Group::EnemyKeep, kSitePathEnd, 0x0A000017, Beq(kSitePathEnd, Stubs::kPathRestart)},
+    // The same word -> beq keep_stub, which picks the restart or the vanish code by the enemy's
+    // age. The two groups share the site: only one of them is ever wanted.
+    {Group::EnemyKeepTimed, kSitePathEnd, 0x0A000017, Beq(kSitePathEnd, kKeepStub)},
+    // push {r3-r11, lr} (the function's first instruction) -> bx lr: the despawn does nothing.
+    {Group::GroupKeep, kSiteGroupDespawn, 0xE92D4FF8, kBxLr},
 }};
 
 /// Words a group relies on without changing them (where it jumps to, what the stub assumes of the
@@ -167,7 +196,7 @@ struct Context {
     uint32_t addr;
     uint32_t word;
 };
-inline constexpr std::array<Context, 22> kContext{{
+inline constexpr std::array<Context, 33> kContext{{
     {Group::NoCull, 0x77DB24, 0xE24DD00C},   // sub sp, sp, #0xC (the frame the exit undoes)
     {Group::NoCull, 0x77DC4C, 0xE1C401D8},   // ldrd r0, r1, [r4, #0x18]
     {Group::NoCull, 0x77DC50, 0xE28DD00C},   // add sp, sp, #0xC
@@ -194,6 +223,19 @@ inline constexpr std::array<Context, 22> kContext{{
     {Group::Shot, 0x5043DC, 0xE1A02007},     // mov r2, r7 (the owner)
     {Group::Shot, 0x485638, 0xE92D4FFF},     // push {r0-r11, lr}
     {Group::Shot, 0x5043C0, 0xE28D204C},     // add r2, sp, #0x4C (the position local)
+    // The path end (0x3E8C34): its frame and r4, the flag test before the site, and the two
+    // places it may go on to.
+    {Group::EnemyKeep, 0x3E8C34, 0xE92D40F8}, // push {r3-r7, lr}
+    {Group::EnemyKeep, 0x3E8C38, 0xE1A04000}, // mov r4, r0
+    {Group::EnemyKeep, 0x3E8C98, 0xE1B01A21}, // lsrs r1, r1, #0x14 (the flag the beq tests)
+    {Group::EnemyKeep, 0x3E8CDC, 0xE3A05000}, // mov r5, #0 (the restart code)
+    {Group::EnemyKeep, 0x3E8CFC, 0xE8BD80F8}, // pop {r3-r7, pc} (its end)
+    {Group::EnemyKeepTimed, 0x3E8C34, 0xE92D40F8},
+    {Group::EnemyKeepTimed, 0x3E8C38, 0xE1A04000},
+    {Group::EnemyKeepTimed, 0x3E8C98, 0xE1B01A21},
+    {Group::EnemyKeepTimed, 0x3E8CDC, 0xE3A05000},
+    {Group::EnemyKeepTimed, 0x3E8D00, 0xE5945030}, // ldr r5, [r4, #0x30] (the vanish code)
+    {Group::GroupKeep, 0xA43100, 0xE280106C},      // add r1, r0, #0x6C (the function's next word)
 }};
 
 // ---- Small maths (float, as the game's) ----
@@ -262,6 +304,7 @@ struct Mailbox {
     Quat shot_rotation; ///< q' = rotation * q, in the spawn's space (world axes on land)
     Quat shot_frame;    ///< the player's parent's rotation: spawn space from his local position
     Vec3 shot_offset;   ///< from the player's position, in the spawn's space
+    float keep_seconds = 0.0f; ///< a passed flier younger than this flies its path again
 
     /// The words as they lie in the game's memory from kMailbox.
     std::array<uint32_t, kMailboxWords> Words() const {
@@ -291,6 +334,7 @@ struct Mailbox {
         f(Stubs::kMbShotOffset, shot_offset.x);
         f(Stubs::kMbShotOffset + 4, shot_offset.y);
         f(Stubs::kMbShotOffset + 8, shot_offset.z);
+        f(Stubs::kMbKeepSeconds, keep_seconds);
         return w;
     }
 };
@@ -480,11 +524,14 @@ inline ShotRequest ShotTest(const Vec3& view, float yaw_rad, float pitch_rad, co
     return r;
 }
 
-/// The mailbox for this VBlank. No player: everything off (the stubs pass through).
+/// The mailbox for this VBlank. No player: the eye and the shot off (their stubs pass through).
+/// `keep_seconds` needs no player (it is about the enemies): not finite or negative counts as 0,
+/// with which every passed flier vanishes as in the game.
 inline Mailbox Fill(const Player& p, const EyeRequest& eye, const ShotRequest& shot,
-                    uint32_t serial) {
+                    uint32_t serial, float keep_seconds = 0.0f) {
     Mailbox mb;
     mb.serial = serial;
+    mb.keep_seconds = std::isfinite(keep_seconds) && keep_seconds > 0.0f ? keep_seconds : 0.0f;
     if (!p.Ok()) {
         return mb;
     }
@@ -655,8 +702,27 @@ inline Cave LookAtCave(const Reader& m) {
 /// in). The caller has checked the title and the game's code (GameCodeMatches).
 inline SyncResult Sync(GameMemory& m, uint32_t wanted, const Mailbox& mailbox) {
     SyncResult r;
-    enum : uint8_t { kGame, kOurs, kOther, kUnmapped };
-    std::array<uint8_t, kPatches.size()> site{};
+    enum : uint8_t { kGame, kOurs, kSibling, kOther, kUnmapped };
+    // What a site holds for patch `p`: the game's word, this patch's, the word of another patch
+    // of ours at the same address (two groups may share a site; one of them is wanted at most),
+    // or something else.
+    const auto look = [&m](const Patch& p, uint32_t& v) -> uint8_t {
+        if (!m.Read32(p.addr, v)) {
+            return kUnmapped;
+        }
+        if (v == p.original) {
+            return kGame;
+        }
+        if (v == p.patched) {
+            return kOurs;
+        }
+        for (const Patch& q : kPatches) {
+            if (q.addr == p.addr && q.patched == v) {
+                return kSibling;
+            }
+        }
+        return kOther;
+    };
     std::array<bool, kGroupCount> usable{};
     usable.fill(true);
     std::array<bool, kGroupCount> readable{};
@@ -667,20 +733,14 @@ inline SyncResult Sync(GameMemory& m, uint32_t wanted, const Mailbox& mailbox) {
             r.different_word = word;
         }
     };
-    for (std::size_t i = 0; i < kPatches.size(); ++i) {
-        const Patch& p = kPatches[i];
+    for (const Patch& p : kPatches) {
         const auto g = static_cast<std::size_t>(p.group);
         uint32_t v = 0;
-        if (!m.Read32(p.addr, v)) {
-            site[i] = kUnmapped;
+        const uint8_t state = look(p, v);
+        if (state == kUnmapped) {
             usable[g] = false;
             readable[g] = false;
-        } else if (v == p.original) {
-            site[i] = kGame;
-        } else if (v == p.patched) {
-            site[i] = kOurs;
-        } else {
-            site[i] = kOther;
+        } else if (state == kOther) {
             usable[g] = false;
             if ((wanted & Bit(p.group)) != 0) {
                 different(p.addr, v);
@@ -730,32 +790,39 @@ inline SyncResult Sync(GameMemory& m, uint32_t wanted, const Mailbox& mailbox) {
             cave_ok = wrote;
         }
     }
-    // The sites, last.
+    // The sites, last: first every group that goes out (its words back to the game's), then
+    // every group that goes in, each site read again (a shared site may just have changed).
+    std::array<bool, kGroupCount> go_in{};
+    for (std::size_t g = 0; g < kGroupCount; ++g) {
+        const auto group = static_cast<Group>(g);
+        go_in[g] = (wanted & Bit(group)) != 0 && usable[g] && (!UsesStubs(group) || cave_ok);
+    }
+    for (const bool in : {false, true}) {
+        for (const Patch& p : kPatches) {
+            if (go_in[static_cast<std::size_t>(p.group)] != in) {
+                continue;
+            }
+            uint32_t v = 0;
+            const uint8_t state = look(p, v);
+            if (in && (state == kGame || state == kSibling)) {
+                r.code_writes += m.WriteCode(p.addr, p.patched) ? 1 : 0;
+            } else if (!in && state == kOurs) {
+                r.code_writes += m.WriteCode(p.addr, p.original) ? 1 : 0;
+            }
+        }
+    }
     for (std::size_t g = 0; g < kGroupCount; ++g) {
         const auto group = static_cast<Group>(g);
         const bool want = (wanted & Bit(group)) != 0;
-        const bool go_in = want && usable[g] && (!UsesStubs(group) || cave_ok);
         bool all_in = true;
-        for (std::size_t i = 0; i < kPatches.size(); ++i) {
-            const Patch& p = kPatches[i];
-            if (p.group != group) {
-                continue;
+        for (const Patch& p : kPatches) {
+            uint32_t v = 0;
+            if (p.group == group) {
+                all_in = all_in && look(p, v) == kOurs;
             }
-            if (go_in && site[i] == kGame) {
-                if (m.WriteCode(p.addr, p.patched)) {
-                    ++r.code_writes;
-                    site[i] = kOurs;
-                }
-            } else if (!go_in && site[i] == kOurs) {
-                if (m.WriteCode(p.addr, p.original)) {
-                    ++r.code_writes;
-                    site[i] = kGame;
-                }
-            }
-            all_in = all_in && site[i] == kOurs;
         }
         GroupState state = GroupState::Out;
-        if (go_in && all_in) {
+        if (go_in[g] && all_in) {
             state = GroupState::In;
             r.in_mask |= Bit(group);
         } else if (want && !readable[g]) {

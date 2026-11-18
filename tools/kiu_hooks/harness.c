@@ -12,17 +12,19 @@ struct Regs {
 
 extern void call_shot(const struct Regs* in);
 extern void call_eye(const struct Regs* in);
+extern u32 call_keep(const struct Regs* in);
 extern char shot_return[];
 
 // What the stubs' literals name (stubs.s without stubs-eur.inc).
-u32 MAILBOX[0x50 / 4];
+u32 MAILBOX[0x54 / 4];
 char ACTOR_VTABLE[4];
 
-struct Regs spawn_seen, sink_seen;
+struct Regs spawn_seen, sink_seen, keep_seen;
 u32 spawn_calls, sink_calls, shot_sp, eye_sp;
 
 enum { MB_PLAYER = 0x08, MB_EYE_NODE = 0x0C, MB_EYE_FLAGS = 0x10, MB_EYE_OFFSET = 0x14,
-       MB_SHOT_FLAGS = 0x20, MB_SHOT_ROTATION = 0x24, MB_SHOT_FRAME = 0x34, MB_SHOT_OFFSET = 0x44 };
+       MB_SHOT_FLAGS = 0x20, MB_SHOT_ROTATION = 0x24, MB_SHOT_FRAME = 0x34, MB_SHOT_OFFSET = 0x44,
+       MB_KEEP_SECONDS = 0x50 };
 
 static long sys(long n, long a, long b, long c) {
     register long r7 __asm__("r7") = n;
@@ -95,7 +97,7 @@ static void shot_case(u32 flags, int owner_is_player, const char* name) {
     const float pos0[3] = {pos[0], pos[1], pos[2]};
     float* local = (float*)&actor[0x74 / 4];
     local[0] = 10.0f, local[1] = -4.0f, local[2] = 2.5f;
-    for (int i = 0; i < 0x50 / 4; i++) MAILBOX[i] = 0;
+    for (int i = 0; i < 0x54 / 4; i++) MAILBOX[i] = 0;
     MAILBOX[MB_PLAYER / 4] = (u32)actor;
     MAILBOX[MB_SHOT_FLAGS / 4] = flags;
     put_f(MB_SHOT_ROTATION, rot, 4);
@@ -147,7 +149,7 @@ static void eye_case(u32 flags, int node_matches, int actor_ok, int has_player, 
     float* world = (float*)&actor[0x54 / 4];
     world[0] = -47.3f, world[1] = 148.6f, world[2] = -1441.4f;
     actor[0] = actor_ok ? (u32)ACTOR_VTABLE : 0x12345678u;
-    for (int i = 0; i < 0x50 / 4; i++) MAILBOX[i] = 0;
+    for (int i = 0; i < 0x54 / 4; i++) MAILBOX[i] = 0;
     MAILBOX[MB_PLAYER / 4] = has_player ? (u32)actor : 0;
     MAILBOX[MB_EYE_NODE / 4] = 0x00777000u;
     MAILBOX[MB_EYE_FLAGS / 4] = flags;
@@ -184,6 +186,21 @@ static void eye_case(u32 flags, int node_matches, int actor_ok, int has_player, 
     actor[0] = (u32)ACTOR_VTABLE;
 }
 
+static void keep_case(float age, float limit, u32 want, const char* name) {
+    static u32 state[0x40 / 4];
+    ((float*)state)[0x34 / 4] = age;
+    for (int i = 0; i < 0x54 / 4; i++) MAILBOX[i] = 0;
+    put_f(MB_KEEP_SECONDS, &limit, 1);
+    struct Regs in;
+    fill(&in);
+    in.r[4] = (u32)state;
+    const u32 where = call_keep(&in);
+    say(name);
+    say("\n");
+    check(where == want, "the right code is reached (1 restart, 2 vanish)");
+    check(same_regs(&in, &keep_seen, 0, 11), "r0-r11 as the function had them");
+}
+
 void _start(void) {
     actor[0] = (u32)ACTOR_VTABLE;
     other_actor[0] = (u32)ACTOR_VTABLE;
@@ -199,6 +216,11 @@ void _start(void) {
     eye_case(1, 1, 0, 1, "eye: the actor is gone");
     eye_case(1, 1, 1, 0, "eye: no player");
     eye_case(1, 1, 1, 1, "eye: on");
+    keep_case(3.5f, 20.0f, 1, "keep: younger than the limit: restart");
+    keep_case(20.0f, 20.0f, 2, "keep: at the limit: vanish");
+    keep_case(31.0f, 20.0f, 2, "keep: older: vanish");
+    keep_case(3.5f, 0.0f, 2, "keep: a zero limit: vanish (the game's own)");
+    keep_case(0.0f / 0.0f * 0.0f + (float)__builtin_nanf(""), 20.0f, 2, "keep: a NaN age: vanish");
     say(failures ? "stubs: FAILED\n" : "stubs: all checks passed\n");
     sys(1, failures ? 1 : 0, 0, 0);
     for (;;) {

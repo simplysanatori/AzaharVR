@@ -20,17 +20,22 @@ inline constexpr uint32_t kMailbox = 0x00C95F00; ///< the cave's last 0x100 byte
 inline constexpr uint32_t kActorVtable = 0x00CA046C; ///< the game's generic actor
 inline constexpr uint32_t kSinkContinue = 0x006340A0; ///< the camera hand-over's second instruction
 inline constexpr uint32_t kSpawn = 0x00485638; ///< the bullet spawn
+inline constexpr uint32_t kPathRestart = 0x003E8CDC; ///< the path end's "fly it again" code
+inline constexpr uint32_t kPathVanish = 0x003E8D00; ///< the path end's vanish code
 
-inline constexpr uint32_t kImageVersion = 1;
+inline constexpr uint32_t kImageVersion = 2;
 inline constexpr uint32_t kImageTag = 0x4855494B; ///< "KIUH", the image's first word
 // Offsets in the image: the stubs' entries and the literals.
 inline constexpr uint32_t kEyeStub = 0x008;
 inline constexpr uint32_t kShotStub = 0x06C;
-inline constexpr uint32_t kLitMailbox = 0x180;
-inline constexpr uint32_t kLitActorVtable = 0x184;
-inline constexpr uint32_t kLitSinkContinue = 0x188;
-inline constexpr uint32_t kLitSpawn = 0x18C;
-inline constexpr uint32_t kLitNoTarget = 0x190;
+inline constexpr uint32_t kKeepStub = 0x180;
+inline constexpr uint32_t kLitMailbox = 0x19C;
+inline constexpr uint32_t kLitActorVtable = 0x1A0;
+inline constexpr uint32_t kLitSinkContinue = 0x1A4;
+inline constexpr uint32_t kLitSpawn = 0x1A8;
+inline constexpr uint32_t kLitNoTarget = 0x1AC;
+inline constexpr uint32_t kLitPathRestart = 0x1B0;
+inline constexpr uint32_t kLitPathVanish = 0x1B4;
 
 // The mailbox: offsets from its base, and the flags.
 inline constexpr uint32_t kMbMagic = 0x00; ///< u32 'KIUM'
@@ -43,17 +48,18 @@ inline constexpr uint32_t kMbShotFlags = 0x20; ///< u32 bit 0: rotate, bit 1: mo
 inline constexpr uint32_t kMbShotRotation = 0x24; ///< f32 x4 quaternion x y z w: q' = rotation * q
 inline constexpr uint32_t kMbShotFrame = 0x34; ///< f32 x4 quaternion: the player's parent's rotation (identity on land)
 inline constexpr uint32_t kMbShotOffset = 0x44; ///< f32 x3: start = frame * the player's local position + this
-inline constexpr uint32_t kMbSize = 0x50;
+inline constexpr uint32_t kMbKeepSeconds = 0x50; ///< f32: a passed flier younger than this flies its path again
+inline constexpr uint32_t kMbSize = 0x54;
 inline constexpr uint32_t kEyeOn = 0x01;
 inline constexpr uint32_t kShotRotate = 0x01;
 inline constexpr uint32_t kShotMove = 0x02;
 inline constexpr uint32_t kShotNoTarget = 0x04;
 
-inline constexpr std::array<uint32_t, 101> kImage{{
+inline constexpr std::array<uint32_t, 110> kImage{{
     0x4855494B, // 000 "KIUH"
-    0x00000001, // 004 the image's version
+    0x00000002, // 004 the image's version
     0xE92D4070, // 008 eye_stub: push {r4, r5, r6, lr}
-    0xE59FC16C, // 00C ldr r12, [pc, #364]
+    0xE59FC188, // 00C ldr r12, [pc, #392]
     0xE59C1010, // 010 ldr r1, [r12, #16]
     0xE3110001, // 014 tst r1, #1
     0x0A000012, // 018 beq 0x68
@@ -64,7 +70,7 @@ inline constexpr std::array<uint32_t, 101> kImage{{
     0xE3510000, // 02C cmp r1, #0
     0x0A00000C, // 030 beq 0x68
     0xE5914000, // 034 ldr r4, [r1]
-    0xE59F5144, // 038 ldr r5, [pc, #324]
+    0xE59F5160, // 038 ldr r5, [pc, #352]
     0xE1540005, // 03C cmp r4, r5
     0x1A000008, // 040 bne 0x68
     0xE2811054, // 044 add r1, r1, #84
@@ -76,8 +82,8 @@ inline constexpr std::array<uint32_t, 101> kImage{{
     0xEE311A22, // 05C vadd.f32 s2, s2, s5
     0xE2821014, // 060 add r1, r2, #20
     0xEC810A03, // 064 vstmia r1, {s0, s1, s2}
-    0xE59FF118, // 068 ldr pc, [pc, #280]
-    0xE59FC10C, // 06C shot_stub: ldr r12, [pc, #268]
+    0xE59FF134, // 068 ldr pc, [pc, #308]
+    0xE59FC128, // 06C shot_stub: ldr r12, [pc, #296]
     0xE92D0030, // 070 push {r4, r5}
     0xE59C4020, // 074 ldr r4, [r12, #32]
     0xE3540000, // 078 cmp r4, #0
@@ -141,16 +147,25 @@ inline constexpr std::array<uint32_t, 101> kImage{{
     0xE59D5050, // 160 ldr r5, [sp, #80]
     0xEC852A03, // 164 vstmia r5, {s4, s5, s6}
     0xE3140004, // 168 tst r4, #4
-    0x159F501C, // 16C ldrne r5, [pc, #28]
+    0x159F5038, // 16C ldrne r5, [pc, #56]
     0x158D5054, // 170 strne r5, [sp, #84]
     0xECBD0B10, // 174 vpop {d0, d1, d2, d3, d4, d5, d6, d7}
     0xE8BD0030, // 178 pop {r4, r5}
-    0xE59FF008, // 17C ldr pc, [pc, #8]
-    0x00C95F00, // 180 lit_mailbox: .word 0x00c95f00
-    0x00CA046C, // 184 lit_actor_vtable: .word 0x00ca046c
-    0x006340A0, // 188 lit_sink_continue: .word 0x006340a0
-    0x00485638, // 18C lit_spawn: .word 0x00485638
-    0xFFFFFE00, // 190 lit_no_target: .word 0xfffffe00
+    0xE59FF024, // 17C ldr pc, [pc, #36]
+    0xE59FC014, // 180 keep_stub: ldr r12, [pc, #20]
+    0xED940A0D, // 184 vldr s0, [r4, #52]
+    0xEDDC0A14, // 188 vldr s1, [r12, #80]
+    0xEEB40AE0, // 18C vcmpe.f32 s0, s1
+    0xEEF1FA10, // 190 vmrs APSR_nzcv, fpscr
+    0x459FF014, // 194 ldrmi pc, [pc, #20]
+    0xE59FF014, // 198 ldr pc, [pc, #20]
+    0x00C95F00, // 19C lit_mailbox: .word 0x00c95f00
+    0x00CA046C, // 1A0 lit_actor_vtable: .word 0x00ca046c
+    0x006340A0, // 1A4 lit_sink_continue: .word 0x006340a0
+    0x00485638, // 1A8 lit_spawn: .word 0x00485638
+    0xFFFFFE00, // 1AC lit_no_target: .word 0xfffffe00
+    0x003E8CDC, // 1B0 lit_path_restart: .word 0x003e8cdc
+    0x003E8D00, // 1B4 lit_path_vanish: .word 0x003e8d00
 }};
 
 } // namespace FrameXr::Input::KiuHooks::Stubs

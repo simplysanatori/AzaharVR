@@ -6,7 +6,7 @@
         .fpu    vfpv2
         .arm
         .text
-        .global call_shot, call_eye, SPAWN, SINK_CONTINUE
+        .global call_shot, call_eye, call_keep, SPAWN, SINK_CONTINUE, PATH_RESTART, PATH_VANISH
 
 @ struct Regs { u32 r[13]; u32 sp; u32 lr; u32 stack[4]; float s[16]; }   (r at 0, sp 52, lr 56, stack 60, s 76)
         .macro  capture reg
@@ -111,6 +111,26 @@ SINK_CONTINUE:
         add     r0, r0, #1
         str     r0, [r12]
         pop     {r4, r5, r6, pc}
+
+@ u32 call_keep(const struct Regs* in): r0-r11 from `in`, then `bl keep_stub` (the game enters it
+@ by a branch; the stand-ins return here). Returns 1 when the restart code was reached, 2 for
+@ the vanish code; keep_seen gets r0-r11 as they arrived there.
+call_keep:
+        push    {r4-r11, lr}
+        mov     r12, r0
+        ldm     r12, {r0-r11}
+        bl      keep_stub
+        pop     {r4-r11, pc}
+PATH_RESTART:
+        ldr     r12, =keep_seen
+        capture r12
+        mov     r0, #1
+        bx      lr
+PATH_VANISH:
+        ldr     r12, =keep_seen
+        capture r12
+        mov     r0, #2
+        bx      lr
 
         .global shot_return
         .ltorg

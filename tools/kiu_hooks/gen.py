@@ -82,8 +82,8 @@ def main():
     p(f"inline constexpr uint32_t kImageVersion = {eur['IMAGE_VERSION'][0]};")
     p(f"inline constexpr uint32_t kImageTag = 0x{words[0]:08X}; ///< \"KIUH\", the image's first word")
     p("// Offsets in the image: the stubs' entries and the literals.")
-    for name in ("eye_stub", "shot_stub", "lit_mailbox", "lit_actor_vtable", "lit_sink_continue",
-                 "lit_spawn", "lit_no_target"):
+    for name in ("eye_stub", "shot_stub", "keep_stub", "lit_mailbox", "lit_actor_vtable",
+                 "lit_sink_continue", "lit_spawn", "lit_no_target", "lit_path_restart", "lit_path_vanish"):
         p(f"inline constexpr uint32_t k{camel(name)} = 0x{syms[name]:03X};")
     p()
     p("// The mailbox: offsets from its base, and the flags.")

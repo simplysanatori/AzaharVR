@@ -36,6 +36,9 @@ constexpr const char* kSwitchEyeOffset = "AZAHARFRAME_KIU_EYE_OFFSET";
 constexpr const char* kSwitchHide = "AZAHARFRAME_KIU_HIDE_PLAYER";
 constexpr const char* kSwitchShot = "AZAHARFRAME_KIU_SHOT_TEST";
 constexpr const char* kSwitchShotNoLock = "AZAHARFRAME_KIU_SHOT_NO_LOCK";
+constexpr const char* kSwitchEnemyKeep = "AZAHARFRAME_KIU_ENEMY_KEEP";
+constexpr const char* kSwitchEnemyKeepS = "AZAHARFRAME_KIU_ENEMY_KEEP_S";
+constexpr const char* kSwitchGroupKeep = "AZAHARFRAME_KIU_GROUP_KEEP";
 constexpr const char* kSwitchTrace = "AZAHARFRAME_KIU_HOOK_TRACE";
 
 constexpr float kDegToRad = std::numbers::pi_v<float> / 180.0f;
@@ -222,9 +225,21 @@ void Hook(int64_t ticks) {
     float shot_values[5] = {};
     const int shot_count = shot_text ? KH::ParseFloats(shot_text->c_str(), shot_values, 5) : 0;
     const bool want_shot = shot_count == 2 || shot_count == 5;
+    // The timed keep replaces the plain one (they share a site).
+    float keep_seconds = 0.0f;
+    if (const auto text = Switch(kSwitchEnemyKeepS)) {
+        float v = 0.0f;
+        if (KH::ParseFloats(text->c_str(), &v, 1) == 1 && v > 0.0f) {
+            keep_seconds = v;
+        }
+    }
+    const bool want_keep_timed = keep_seconds > 0.0f;
+    const bool want_enemy_keep = !want_keep_timed && SwitchIs(kSwitchEnemyKeep, "1");
+    const bool want_group_keep = SwitchIs(kSwitchGroupKeep, "1");
     const auto trace_text = Switch(kSwitchTrace);
     const int trace = trace_text ? std::atoi(trace_text->c_str()) : 0;
-    const bool any = want_nocull || want_keep || want_eye || want_hide || want_shot || trace > 0;
+    const bool any = want_nocull || want_keep || want_eye || want_hide || want_shot ||
+                     want_keep_timed || want_enemy_keep || want_group_keep || trace > 0;
 
     if (title != Input::KiuTurn::kTitleEur) {
         if (any) {
@@ -279,11 +294,14 @@ void Hook(int64_t ticks) {
                             {shot_values[2], shot_values[3], shot_values[4]}, shot_count == 5,
                             SwitchIs(kSwitchShotNoLock, "1"));
     }
-    const KH::Mailbox mailbox = KH::Fill(p, eye, shot, ++s.serial);
+    const KH::Mailbox mailbox = KH::Fill(p, eye, shot, ++s.serial, keep_seconds);
     const uint32_t wanted = (want_nocull ? KH::Bit(KH::Group::NoCull) : 0u) |
                             (want_keep ? KH::Bit(KH::Group::BulletKeep) : 0u) |
                             (want_eye ? KH::Bit(KH::Group::Eye) : 0u) |
-                            (want_shot ? KH::Bit(KH::Group::Shot) : 0u);
+                            (want_shot ? KH::Bit(KH::Group::Shot) : 0u) |
+                            (want_enemy_keep ? KH::Bit(KH::Group::EnemyKeep) : 0u) |
+                            (want_keep_timed ? KH::Bit(KH::Group::EnemyKeepTimed) : 0u) |
+                            (want_group_keep ? KH::Bit(KH::Group::GroupKeep) : 0u);
     const KH::SyncResult r = KH::Sync(mem, wanted, mailbox);
     LogChanges(s, r);
 
@@ -345,6 +363,9 @@ void Hook(int64_t ticks) {
                            mailbox.shot_rotate ? " rotate" : "", mailbox.shot_move ? " move" : "",
                            mailbox.shot_no_target ? " no-lock" : "", Text(mailbox.shot_rotation),
                            Text(mailbox.shot_frame), Text(mailbox.shot_offset));
+    }
+    if (mailbox.keep_seconds > 0.0f) {
+        box += fmt::format("; fliers kept {:.1f} s", mailbox.keep_seconds);
     }
     LOG_INFO(Frontend, "xr: Kid Icarus hooks: t {:.4f} [{}] {}{}", TicksToS(ticks), groups, player,
              box);
