@@ -521,6 +521,10 @@ const std::vector<Id>& ControlsScopeRows();
 bool KiuOnlyControlsRow(Id id);
 /// ControlsScopeRows without the Kid Icarus: Uprising rows when `kiu` is false.
 std::vector<Id> ControlsScopeRows(bool kiu);
+/// AzaharFrame kiurec: the Immersive Mode choice that carries the Recommended badge (name_chip.h):
+/// Angel's Aim (index 3) while Kid Icarus: Uprising is the game and the menu is on its Per-Game
+/// scope (MenuModel::mods.angels_aim.shown, scope 1); -1 in every other game and in Global.
+int RecommendedModeIndex(const MenuModel& model);
 /// The per-game rows of a tab (the Settings tab: of `section`) the running game has its own
 /// value for, in order: what the Per-Game tooltip counts and Use Global Values for All clears.
 std::vector<Id> GameValueRows(const MenuModel& model, Tab tab,

@@ -116,11 +116,14 @@ constexpr ImmersivePreset kZelda3D{.name = "Ocarina of Time 3D / Majora's Mask 3
 constexpr ImmersivePreset kAsphalt3D{
     .name = "Asphalt 3D", .mode = 3, .register_offset = 8, .scale_x = 40, .scale_y = 40};
 // Kid Icarus: Uprising aims with a reticle the game draws on the screen (2D) and shoots along
-// its own camera; in the Full modes the world is drawn from a camera turned with the head, which
-// the game does not know about, so its shots fly off where the unturned camera looked while the
-// reticle stays on the screen: they come apart whenever the head turns. Wide (mode 1) keeps
-// them together but adds little. So it starts in the normal view (mode 0: Immersive Mode stays
-// Off); the player can still turn it on from the VR menu or its properties.
+// its own camera; in the other Full modes the world is drawn from a camera turned with the head,
+// which the game does not know about, so its shots fly off where the unturned camera looked while
+// the reticle stays on the screen: they come apart whenever the head turns. Full (6DoF): Angel's
+// Aim (Immersive::Names::kModeAngelsAim, stored 4) is the mode that keeps them together: it
+// brings first person, the aim from the hand and its own registers in memory. So (the owner's
+// decision, 2026-11-18) the game starts in it, for a player with no Immersive Mode of their own
+// for the game (ApplyPresetSettings); a mode the player chose, Off included, stays. Registers:
+// none (-1); Angel's Aim supplies its own.
 // 1.2.0 RC2 (the owner): the owner's own settings of 2026-11-15, from the game's file
 // (config/custom/0004000000030200.ini), as starting values: 3D Depth 100, Internal Resolution
 // 4x, Texture Filter 2, Async Shader Compilation on, Motion Clarity in the Off and Wide modes on
@@ -129,7 +132,7 @@ constexpr ImmersivePreset kAsphalt3D{
 // Motion Clarity off are the defaults; World Scale is measured, not preset. The Controls values
 // are the Controls preset's (controls_presets.h).
 constexpr ImmersivePreset kKidIcarusUprising{.name = "Kid Icarus: Uprising",
-                                             .mode = 0,
+                                             .mode = 4,
                                              .register_offset = -1,
                                              .factor_3d = 100,
                                              .resolution = 4,
@@ -183,9 +186,9 @@ void ApplyPresetSettings(const ImmersivePreset& preset) {
     auto& mode = v.vr_immersive_mode;
     auto& offset = v.vr_si_mode_register_offset;
     // Only where this game's config has no value of its own and the global one is still the
-    // default (Off, Auto); a value the player set, even Off, is left alone. A mode 0 preset (Kid
-    // Icarus: Uprising) keeps the default: the game starts in the normal view, and nothing is set
-    // for the mode, so the player can still turn Immersive Mode on.
+    // default (Off, Auto); a value the player set, even Off, is left alone (a saved Off is the
+    // game's own value, so UsingGlobal() is false; Kid Icarus: Uprising's preset, 4, is given to
+    // a game with none). A mode 0 preset would keep the default and set nothing.
     if (preset.mode != 0 && mode.UsingGlobal() && mode.GetValue() == 0) {
         mode.SetGlobal(false);
         mode.SetValue(preset.mode);
@@ -194,8 +197,9 @@ void ApplyPresetSettings(const ImmersivePreset& preset) {
     // The immersive values apply when the game runs in the preset's mode (any mode for a game
     // that starts in the normal view).
     // AzaharFrame kiumode: as drawn (a stored Angel's Aim, 4, fits a mode 3 preset).
-    const bool fits =
-        preset.mode == 0 || Settings::ImmersiveRenderModeOf(mode.GetValue()) == preset.mode;
+    // AzaharFrame kiurec: and a mode 4 preset fits whatever draws as it does (4 and 3).
+    const bool fits = preset.mode == 0 || Settings::ImmersiveRenderModeOf(mode.GetValue()) ==
+                                              Settings::ImmersiveRenderModeOf(preset.mode);
     // AzaharFrame presets: a value of the preset's own, where this game has none and the global
     // one is the default.
     const auto fill = [&](auto& setting, auto value, const char* what) {

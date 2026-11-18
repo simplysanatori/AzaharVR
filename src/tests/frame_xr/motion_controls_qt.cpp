@@ -671,7 +671,9 @@ TEST_CASE("VR group: Immersive Mode lists Angel's Aim everywhere",
         const char* want[5] = {"Off", "Wide (3DoF)", "Full (6DoF): Ocarina of Time, Majora's Mask",
                                Names::kModeAngelsAim, "Full (6DoF): Other Games"};
         for (int i = 0; i < 5; i++) {
-            CHECK(mode->itemText(i + off) == QString::fromUtf8(want[i]));
+            // AzaharFrame kiurec: Kid Icarus: Uprising's own list marks Angel's Aim Recommended
+            const QString extra = i == 3 ? QStringLiteral(" (Recommended)") : QString();
+            CHECK(mode->itemText(i + off) == QString::fromUtf8(want[i]) + extra);
         }
         CHECK(mode->currentIndex() == 3 + off); // the stored 4
         mode->setCurrentIndex(4 + off);         // Other Games
@@ -796,4 +798,41 @@ TEST_CASE("VR group: Black Frame Insertion turns its helpers on", "[frame_xr][bf
     }
     CHECK_FALSE(v.vr_dynamic_resolution.GetValue(true));
     CHECK_FALSE(v.vr_screens_in_projection.GetValue(true)); // left on: the player set it
+}
+
+// AzaharFrame kiurec: the Recommended suffix "(Recommended)" (kRecommendedChip) after Angel's Aim,
+// in Kid Icarus: Uprising's own Properties only (any region): not in another game, not in Global.
+TEST_CASE("VR group: Angel's Aim is Recommended only in Kid Icarus: Uprising's Properties",
+          "[frame_xr][kiurec]") {
+    App();
+    const int off = ConfigurationShared::USE_GLOBAL_OFFSET;
+    Settings::SetConfiguringGlobal(false);
+    for (const u64 kiu : {0x0004000000030000ull, 0x0004000000030100ull, 0x0004000000030200ull,
+                          0x0004000000030300ull}) {
+        ConfigureFrameVr w(nullptr, kiu);
+        auto* mode = In<QComboBox>(w, "frame_vr_mode_row");
+        REQUIRE(mode);
+        REQUIRE(mode->count() == 5 + off);
+        CHECK(mode->itemText(3 + off) == QString::fromUtf8(FrameXr::Immersive::Names::kModeAngelsAim) +
+                                                     QStringLiteral(" (Recommended)"));
+        for (const int i : {0, 1, 2, 4}) { // no other choice has it
+            CHECK(!mode->itemText(i + off).contains(QStringLiteral("Recommended")));
+        }
+    }
+    constexpr u64 kOther = 0x0004000000034C00; // Asphalt 3D
+    {
+        ConfigureFrameVr w(nullptr, kOther);
+        auto* mode = In<QComboBox>(w, "frame_vr_mode_row");
+        REQUIRE(mode);
+        for (int i = 0; i < 5; i++) {
+            CHECK(!mode->itemText(i + off).contains(QStringLiteral("Recommended")));
+        }
+    }
+    Settings::SetConfiguringGlobal(true);
+    {
+        ConfigureFrameVr w;
+        auto* mode = In<QComboBox>(w, "frame_vr_mode_row");
+        REQUIRE(mode);
+        CHECK(mode->itemText(3) == QString::fromUtf8(FrameXr::Immersive::Names::kModeAngelsAim));
+    }
 }

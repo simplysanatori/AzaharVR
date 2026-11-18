@@ -487,6 +487,12 @@ std::vector<Id> ControlsScopeRows(bool kiu) {
     return rows;
 }
 
+int RecommendedModeIndex(const MenuModel& model) {
+    return model.mods.angels_aim.shown && model.scope == 1
+               ? Immersive::Names::ModeIndexOf(Immersive::Names::kModeStoredAngelsAim)
+               : -1;
+}
+
 // AzaharFrame useglobal; reticle: any tab with the scope control
 std::vector<Id> GameValueRows(const MenuModel& model, Tab tab, SettingsSection section) {
     std::vector<Id> ids;
@@ -2731,7 +2737,9 @@ void TabMenu::DrawRows(Kit& kit, const MenuModel& model, const MenuView& view, c
             const std::size_t sel =
                 std::min(static_cast<std::size_t>(std::max(r.selected, 0)), opts.size() - 1);
             kit.MenuButton(mb, r.value.empty() ? opts[sel] : r.value, view.open_menu == r.id,
-                           StateOf(view, whole, enabled));
+                           StateOf(view, whole, enabled),
+                           r.id == Id::ImmersiveMode && r.value.empty() &&
+                               static_cast<int>(sel) == RecommendedModeIndex(model)); // kiurec
             if (enabled) {
                 AddHit(mb, whole, list);
             }
@@ -2782,7 +2790,10 @@ void TabMenu::DrawRows(Kit& kit, const MenuModel& model, const MenuView& view, c
         }
         const int hover = view.hover.id == view.open_menu ? view.hover.index : -1;
         const Rect box = kit.Menu({open_anchor.x0, y0, open_anchor.x1, y0 + h}, opts, open_selected,
-                                  hover);
+                                  hover,
+                                  view.open_menu == Id::ImmersiveMode
+                                      ? RecommendedModeIndex(model)
+                                      : -1); // AzaharFrame kiurec
         const Rect everything{0, 0, kPanelW, kPanelH};
         AddHit(box, {Id::None, kMenuAreaIndex}, everything); // the menu's own area eats clicks
         for (int i = 0; i < static_cast<int>(opts.size()); i++) {

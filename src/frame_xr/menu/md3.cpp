@@ -9,6 +9,7 @@
 #include <mutex>
 
 #include "frame_xr/menu/md3_fonts.h"
+#include "frame_xr/menu/name_chip.h" // AzaharFrame kiurec: the Recommended badge
 
 namespace FrameXr::Menu {
 
@@ -409,19 +410,26 @@ void Kit::Slider(const Rect& r, float t, const std::string& value, State state, 
     }
 }
 
-void Kit::MenuButton(const Rect& r, const std::string& value, bool open, State state) {
+void Kit::MenuButton(const Rect& r, const std::string& value, bool open, State state,
+                     bool recommended) {
     const float radius = r.H() * 0.5f;
     const bool off = state == State::Disabled;
     Fill(r, radius, off ? Tok::kOnSurface : Tok::kSecondaryContainer, off ? kDisabledContainer : 1.0f);
     StateLayer(r, radius, Tok::kOnSecondaryContainer, open ? State::Pressed : state);
     const uint32_t fg = off ? Tok::kOnSurface : Tok::kOnSecondaryContainer;
     const float op = off ? kDisabledContent : 1.0f;
-    TextMid(r.x0 + 20.0f, r.Cy(), Type::Label, fg, Fit(Type::Label, value, r.W() - 20.0f - 44.0f),
-            0, op);
+    const float badge = recommended ? kRecommendedBadgeGap + kRecommendedBadge : 0.0f;
+    const float drawn = TextMid(r.x0 + 20.0f, r.Cy(), Type::Label, fg,
+                                Fit(Type::Label, value, r.W() - 20.0f - 44.0f - badge), 0, op);
+    if (recommended) { // AzaharFrame kiurec: the check-mark seal, as in the mods catalogue
+        Icon(r.x0 + 20.0f + drawn + kRecommendedBadgeGap + kRecommendedBadge * 0.5f, r.Cy(),
+             kRecommendedBadge, ::FrameXr::Menu::Icon::kVerified, true, Tok::kPrimary, op);
+    }
     Icon(r.x1 - 26.0f, r.Cy(), 24.0f, Sym::kArrowDropDown, false, fg, op);
 }
 
-Rect Kit::Menu(const Rect& r, const std::vector<std::string>& options, int selected, int hover) {
+Rect Kit::Menu(const Rect& r, const std::vector<std::string>& options, int selected, int hover,
+               int recommended) {
     const float item = MenuItemHeight(), pad = 8.0f;
     const Rect box{r.x0, r.y0, r.x1, r.y0 + pad * 2.0f + item * static_cast<float>(options.size())};
     Fill(box, 16.0f, Tok::kSurfaceContainerHigh);
@@ -439,8 +447,15 @@ Rect Kit::Menu(const Rect& r, const std::vector<std::string>& options, int selec
         if (on) {
             Icon(ir.x0 + 24.0f, ir.Cy(), 20.0f, Sym::kCheck, false, fg);
         }
-        TextMid(ir.x0 + 48.0f, ir.Cy(), Type::Label, fg,
-                Fit(Type::Label, options[i], ir.W() - 64.0f));
+        const bool badge = static_cast<int>(i) == recommended;
+        const float drawn =
+            TextMid(ir.x0 + 48.0f, ir.Cy(), Type::Label, fg,
+                    Fit(Type::Label, options[i],
+                        ir.W() - 64.0f - (badge ? kRecommendedBadgeGap + kRecommendedBadge : 0.0f)));
+        if (badge) { // AzaharFrame kiurec: the check-mark seal, as in the mods catalogue
+            Icon(ir.x0 + 48.0f + drawn + kRecommendedBadgeGap + kRecommendedBadge * 0.5f,
+                 ir.Cy(), kRecommendedBadge, ::FrameXr::Menu::Icon::kVerified, true, Tok::kPrimary);
+        }
     }
     return box;
 }

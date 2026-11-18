@@ -117,11 +117,14 @@ TEST_CASE("Angel's Aim: the registers are supplied in memory, never stored",
     eye.SetGlobal(eye_global);
 }
 
-TEST_CASE("Angel's Aim: Kid Icarus: Uprising's preset stays Off", "[frame_xr][kiumode]") {
+// AzaharFrame kiurec (the owner, 2026-11-18): the preset starts the game in Angel's Aim; the
+// registers stay none (Angel's Aim supplies its own).
+TEST_CASE("Angel's Aim: Kid Icarus: Uprising's preset starts in Angel's Aim",
+          "[frame_xr][kiumode][kiurec]") {
     for (uint64_t t : {kJpnMod, kUsa, kEur, uint64_t{0x0004000000030300ull}}) {
         const FrameXr::ImmersivePreset* p = FrameXr::FindImmersivePreset(t);
         REQUIRE(p);
-        CHECK(p->mode == 0);
+        CHECK(p->mode == N::kModeStoredAngelsAim);
         CHECK(p->register_offset == -1);
         CHECK(p->eye_indicator == nullptr);
     }

@@ -20,6 +20,7 @@
 #include "frame_xr/input/reticle.h" // AzaharFrame mouse
 #include "frame_xr/toast_fit.h"     // AzaharFrame menuux
 #include "frame_xr/immersive_names.h" // AzaharFrame projdef
+#include "frame_xr/menu/name_chip.h"   // AzaharFrame kiurec
 #include "frame_xr/ui/ui_canvas.h"
 
 using namespace FrameXr::Menu;
@@ -4685,4 +4686,78 @@ TEST_CASE("Tab menu: Black Frame Insertion's rows at a rate it does not flash at
             CHECK(note == (hz == 90));
         }
     }
+}
+
+// AzaharFrame kiurec (the owner, 2026-11-18): the Immersive Mode list shows the Recommended badge
+// (name_chip.h's check-mark seal) after Angel's Aim, only in Kid Icarus: Uprising's Per-Game scope:
+// not in other games, not in Global, not on any other choice.
+TEST_CASE("Tab menu: Angel's Aim is Recommended only in Kid Icarus: Uprising", "[frame_xr][kiurec]") {
+    // the rule
+    MenuModel m = Sample();
+    CHECK(RecommendedModeIndex(m) == -1); // another game
+    m.mods.angels_aim.shown = true;
+    m.scope = 0;
+    CHECK(RecommendedModeIndex(m) == -1); // Global
+    m.scope = 1;
+    CHECK(RecommendedModeIndex(m) == 3);
+    CHECK(OptionsFor(Id::ImmersiveMode)[3] == FrameXr::Immersive::Names::kModeAngelsAim);
+    CHECK(std::string(FrameXr::Menu::kRecommendedChip) == "Recommended");
+    // what is drawn: the open list's Angel's Aim item and, with it chosen, the button; nothing
+    // else changes with the badge
+    struct Shot {
+        std::vector<uint32_t> px;
+        Rect item, button;
+    };
+    const auto shoot = [](bool kiu, int scope, int mode) {
+        Drawn d;
+        MenuModel model = Sample();
+        model.mods.angels_aim.shown = kiu;
+        model.scope = scope;
+        model.immersive_mode = mode;
+        MenuView v;
+        v.tab = Tab::Settings;
+        v.section = SettingsSection::Immersive;
+        v.open_menu = Id::ImmersiveMode;
+        d.Draw(model, v);
+        Shot s;
+        s.px = d.canvas.px;
+        const auto* item = FindHit(d, Id::ImmersiveMode, 3);
+        const auto* other = FindHit(d, Id::ImmersiveMode, 2);
+        REQUIRE(item);
+        REQUIRE(other);
+        s.item = item->r;
+        const auto* label = FindHit(d, Id::ImmersiveMode, kLabelIndex);
+        REQUIRE(label);
+        s.button = label->r;
+        return s;
+    };
+    const auto differs = [](const Shot& a, const Shot& b, const Rect& r) {
+        bool in = false, out = false;
+        for (std::size_t i = 0; i < a.px.size(); i++) {
+            if (a.px[i] == b.px[i]) {
+                continue;
+            }
+            const float x = static_cast<float>(i % static_cast<std::size_t>(kPanelW));
+            const float y = static_cast<float>(i / static_cast<std::size_t>(kPanelW));
+            (x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1 ? in : out) = true;
+        }
+        return std::pair{in, out};
+    };
+    // Angel's Aim (stored 4) not chosen: only its item in the open list changes
+    const Shot base = shoot(false, 1, 2);
+    const Shot per_game = shoot(true, 1, 2);
+    const auto [in, out] = differs(base, per_game, base.item);
+    CHECK(in);
+    CHECK(!out);
+    // Global and another game: no badge at all
+    const auto g = differs(shoot(false, 0, 2), shoot(true, 0, 2), base.item); // the same scope
+    CHECK(!g.first);
+    CHECK(!g.second);
+    const auto o = differs(base, shoot(false, 1, 2), base.item);
+    CHECK(!o.first);
+    CHECK(!o.second);
+    // Angel's Aim chosen: the item changes (badge) and so does the button's value
+    const Shot chosen_plain = shoot(false, 1, 4);
+    const Shot chosen_badge = shoot(true, 1, 4);
+    CHECK(chosen_plain.px != chosen_badge.px);
 }
