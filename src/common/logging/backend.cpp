@@ -3,6 +3,7 @@
 // Refer to the misc/licenses/gplv2.txt file included.
 
 #include <chrono>
+#include <string>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/regex.hpp>
 
@@ -154,9 +155,24 @@ public:
         auto old_filename = filename;
         boost::replace_all(old_filename, ".txt", ".old.txt");
 
+        // AzaharFrame: keep the logs of the last kKeptRuns runs, not one. The last run's stays
+        // azahar_log.old.txt (the crash report reads it); older ones move down to
+        // azahar_log.old2.txt .. azahar_log.old<kKeptRuns>.txt, the oldest dropped. A crash in one
+        // game was lost when two more games were started before its log was copied.
+        constexpr int kKeptRuns = 8;
+        const auto older = [&filename](int n) {
+            auto name = filename;
+            boost::replace_all(name, ".txt", ".old" + std::to_string(n) + ".txt");
+            return name;
+        };
+
         // Existence checks are done within the functions themselves.
         // We don't particularly care if these succeed or not.
-        static_cast<void>(FileUtil::Delete(old_filename));
+        static_cast<void>(FileUtil::Delete(older(kKeptRuns)));
+        for (int n = kKeptRuns; n > 2; n--) {
+            static_cast<void>(FileUtil::Rename(older(n - 1), older(n)));
+        }
+        static_cast<void>(FileUtil::Rename(old_filename, older(2)));
         static_cast<void>(FileUtil::Rename(filename, old_filename));
 
         // _SH_DENYWR allows read only access to the file for other programs.
