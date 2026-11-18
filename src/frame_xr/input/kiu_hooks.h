@@ -84,16 +84,26 @@ inline constexpr uint32_t kReticleEaseNone = 0x6D216C;  ///< its own "none" exit
 inline constexpr uint32_t kSiteReticleBox = 0x6D1680;   ///< the aim box: ground or not
 inline constexpr uint32_t kReticleBoxWhole = 0x6D1704;  ///< its own whole-screen box (the air's)
 inline constexpr uint32_t kSiteShadow = 0x57B054;       ///< an actor's round shadow: its entry
+inline constexpr uint32_t kSiteNodeFov = 0x45E04C;      ///< a camera node's angle setter: its entry
 inline constexpr uint32_t kEyeStub = kImageBase + Stubs::kEyeStub;
 inline constexpr uint32_t kKeepStub = kImageBase + Stubs::kKeepStub;
 inline constexpr uint32_t kShotStub = kImageBase + Stubs::kShotStub;
 inline constexpr uint32_t kShadowStub = kImageBase + Stubs::kShadowStub;
+inline constexpr uint32_t kFovStub = kImageBase + Stubs::kFovStub;
 
 inline constexpr uint32_t kSceneEye = 0xE14B90;    ///< the scene camera's eye, 3 floats
 inline constexpr uint32_t kSceneLookAt = 0xE14B9C; ///< and its look-at point
 inline constexpr uint32_t kSceneUp = 0xE14BA8;     ///< and its up vector
 inline constexpr uint32_t kSceneFovY = 0xE14BC4;   ///< the scene projection's angle, radians
 inline constexpr uint32_t kSceneAspect = 0xE14BC8; ///< and its width over its height
+/// AzaharFrame kiuwide: the scene camera's node (kSceneEye is its +8, kSceneFovY its +0x3C,
+/// kSceneAspect its +0x40); its flags at +0x6C, whose bits kNodeDirty the angle setter clears so
+/// that the projection (and what is made from it) is built again.
+inline constexpr uint32_t kSceneNode = 0xE14B88;
+inline constexpr uint32_t kNodeFlags = 0x6C;
+inline constexpr uint32_t kNodeDirty = 0x5C;
+static_assert(kSceneFovY == kSceneNode + 0x3C && kSceneAspect == kSceneNode + 0x40 &&
+              kSceneEye == kSceneNode + 8);
 
 // The player (KIU_HOOKS.md, "The player"): aim = [[0xE14504] + 8] - 0x10 as kiu_turn.h.
 inline constexpr uint32_t kOwnerVtable = 0xCEAC40;
@@ -120,6 +130,9 @@ static_assert(Stubs::kImage[Stubs::kEyeStub / 4] == 0xE92D4070,
               "the eye stub starts with the instruction it replaces");
 static_assert(Stubs::kImage[Stubs::kLitShadowContinue / 4] == kSiteShadow + 4);
 static_assert(Stubs::kShadowContinue == kSiteShadow + 4);
+static_assert(Stubs::kImage[Stubs::kLitFovContinue / 4] == kSiteNodeFov + 4); // AzaharFrame kiuwide
+static_assert(Stubs::kImage[Stubs::kFovPass / 4] == 0xEDD00A0F,
+              "the fov stub's pass path runs the instruction it replaces");
 // The encoders give the game's own words back.
 static_assert(Bl(kSiteShotSpawn, 0x485638) == 0xEBFE0493);
 static_assert(Bl(kSiteBulletView, 0x4EC640) == 0xEB0331C7);
@@ -160,15 +173,19 @@ enum class Group : uint8_t {
     /// AzaharFrame kiushadow: the player's own round shadow is not drawn (first person: it lies
     /// right under the eye); everyone else's is, as in the game (a stub).
     PlayerShadow,
+    /// AzaharFrame kiuwide: the scene camera's angle and shape are the app's (the mailbox's), so
+    /// the game's own frame is as wide as the view in first person; the game's zooms do nothing
+    /// (a stub).
+    WideCamera,
 };
-inline constexpr std::size_t kGroupCount = 11;
+inline constexpr std::size_t kGroupCount = 12;
 
 constexpr uint32_t Bit(Group g) {
     return 1u << static_cast<uint32_t>(g);
 }
 constexpr bool UsesStubs(Group g) {
     return g == Group::Eye || g == Group::Shot || g == Group::EnemyKeepTimed ||
-           g == Group::PlayerShadow;
+           g == Group::PlayerShadow || g == Group::WideCamera;
 }
 inline const char* GroupName(Group g) {
     switch (g) {
@@ -194,6 +211,8 @@ inline const char* GroupName(Group g) {
         return "aim box";
     case Group::PlayerShadow:
         return "player shadow";
+    case Group::WideCamera:
+        return "wide camera";
     }
     return "?";
 }
@@ -205,7 +224,7 @@ struct Patch {
     uint32_t original; ///< the game's word: anything else there and the group stays out
     uint32_t patched;
 };
-inline constexpr std::array<Patch, 13> kPatches{{
+inline constexpr std::array<Patch, 14> kPatches{{
     // and r0, r1, #0xFF (the top of the sphere-against-six-planes loop) -> b 0x77DC4C, the
     // function's own "wholly inside" exit (the same stack: sub sp, #0xC before, add after).
     {Group::NoCull, kSiteSceneCull, 0xE20100FF, B(kSiteSceneCull, kSceneCullInside)},
@@ -248,6 +267,10 @@ inline constexpr std::array<Patch, 13> kPatches{{
     // +0x30) -> b shadow_stub, which returns at once for the player's actor and otherwise runs
     // the push and goes on.
     {Group::PlayerShadow, kSiteShadow, 0xE92D4030, B(kSiteShadow, kShadowStub)},
+    // AzaharFrame kiuwide. vldr s1, [r0, #0x3C] (the first instruction of a camera node's angle
+    // setter: r0 the node, s0 the angle) -> b fov_stub, which for the mailbox's node makes the
+    // angle and shape the mailbox's and otherwise runs the vldr and goes on.
+    {Group::WideCamera, kSiteNodeFov, 0xEDD00A0F, B(kSiteNodeFov, kFovStub)},
 }};
 
 /// Words a group relies on without changing them (where it jumps to, what the stub assumes of the
@@ -257,7 +280,7 @@ struct Context {
     uint32_t addr;
     uint32_t word;
 };
-inline constexpr std::array<Context, 64> kContext{{
+inline constexpr std::array<Context, 75> kContext{{
     {Group::NoCull, 0x77DB24, 0xE24DD00C},   // sub sp, sp, #0xC (the frame the exit undoes)
     {Group::NoCull, 0x77DC4C, 0xE1C401D8},   // ldrd r0, r1, [r4, #0x18]
     {Group::NoCull, 0x77DC50, 0xE28DD00C},   // add sp, sp, #0xC
@@ -338,6 +361,21 @@ inline constexpr std::array<Context, 64> kContext{{
     {Group::PlayerShadow, 0x57B190, 0xEBFE2869},   // bl 0x50533C (the shadow, the other way)
     {Group::PlayerShadow, 0x57B198, 0xECBD8B02},   // vpop {d8}
     {Group::PlayerShadow, 0x57B19C, 0xE8BD8030},   // pop {r4, r5, pc}
+    // AzaharFrame kiuwide: the angle setter after its first word, as the stub stands in for it
+    // (the angle at the node's +0x3C, the dirty bits 0x5C of its +0x6C, nothing else written);
+    // the node's shape at +0x40 (its constructor's store) and the projection builder's reads of
+    // the angle and the shape (the projection at the node's +0x2C: its +0x10 and +0x14).
+    {Group::WideCamera, 0x45E050, 0xEEF40A40},     // vcmp.f32 s1, s0
+    {Group::WideCamera, 0x45E054, 0xEEF1FA10},     // vmrs APSR_nzcv, fpscr
+    {Group::WideCamera, 0x45E058, 0x0A000003},     // beq 0x45E06C
+    {Group::WideCamera, 0x45E05C, 0xED800A0F},     // vstr s0, [r0, #0x3C]
+    {Group::WideCamera, 0x45E060, 0xE590106C},     // ldr r1, [r0, #0x6C]
+    {Group::WideCamera, 0x45E064, 0xE3C1105C},     // bic r1, r1, #0x5C
+    {Group::WideCamera, 0x45E068, 0xE580106C},     // str r1, [r0, #0x6C]
+    {Group::WideCamera, 0x45E06C, 0xE12FFF1E},     // bx lr
+    {Group::WideCamera, 0x45DFF4, 0xED841A10},     // vstr s2, [r4, #0x40] (the shape)
+    {Group::WideCamera, 0xB4FB38, 0xED910A04},     // vldr s0, [r1, #0x10] (the angle)
+    {Group::WideCamera, 0xB4FB40, 0xED919A05},     // vldr s18, [r1, #0x14] (the shape)
 }};
 
 // ---- Small maths (float, as the game's) ----
@@ -420,6 +458,12 @@ struct Mailbox {
     Quat shot_frame;    ///< the player's parent's rotation: spawn space from his local position
     Vec3 shot_offset;   ///< from the player's position, in the spawn's space
     float keep_seconds = 0.0f; ///< a passed flier younger than this flies its path again
+    /// AzaharFrame kiuwide: the scene camera node whose angle and shape are these (0: none, the
+    /// game's own), and the game's own shape for it (what the app puts back; no stub reads it).
+    uint32_t wide_node = 0;
+    float wide_fov_y = 0.0f; ///< radians, up and down
+    float wide_aspect = 0.0f;
+    float wide_game_aspect = 0.0f;
 
     /// The words as they lie in the game's memory from kMailbox.
     std::array<uint32_t, kMailboxWords> Words() const {
@@ -451,6 +495,10 @@ struct Mailbox {
         f(Stubs::kMbShotOffset + 4, shot_offset.y);
         f(Stubs::kMbShotOffset + 8, shot_offset.z);
         f(Stubs::kMbKeepSeconds, keep_seconds);
+        w[Stubs::kMbWideNode / 4] = wide_node;
+        f(Stubs::kMbWideFov, wide_fov_y);
+        f(Stubs::kMbWideAspect, wide_aspect);
+        f(Stubs::kMbWideGameAspect, wide_game_aspect);
         return w;
     }
 };
@@ -707,6 +755,88 @@ inline std::optional<uint32_t> HideWrite(uint32_t scale_bits, bool want) {
         return std::bit_cast<uint32_t>(1.0f);
     }
     return std::nullopt;
+}
+
+// ---- The scene camera's angle and shape (AzaharFrame kiuwide) ----
+
+/// What the app asks of the scene camera: its angle up and down (radians) and its shape (width
+/// over height, the field the game's projection is built from).
+struct WideRequest {
+    bool on = false;
+    float fov_y = 0.0f;
+    float aspect = 0.0f;
+};
+/// Values the stub may be given: within what the projection's builder takes without a guard of
+/// its own (it divides by tan(fov / 2) and by the shape).
+inline bool WideValuesOk(float fov_y, float aspect) {
+    return std::isfinite(fov_y) && std::isfinite(aspect) && fov_y >= 0.2f && fov_y <= 2.8f &&
+           aspect >= 0.25f && aspect <= 8.0f;
+}
+/// A shape the game may have of its own (to keep and put back).
+inline bool GameAspectOk(float aspect) {
+    return std::isfinite(aspect) && aspect >= 0.25f && aspect <= 8.0f;
+}
+
+/// What the mailbox in the game's memory says was asked of the scene camera (it is in save
+/// states too, with the code cave): the node, the shape it was given and the game's own.
+struct WideRecord {
+    uint32_t node = 0;
+    uint32_t aspect_bits = 0;
+    uint32_t game_aspect_bits = 0;
+};
+inline WideRecord ReadWideRecord(const Reader& m) {
+    WideRecord r;
+    uint32_t magic = 0;
+    if (!m.Read32(kMailbox + Stubs::kMbMagic, magic) || magic != kMailboxMagic ||
+        !m.Read32(kMailbox + Stubs::kMbWideNode, r.node) ||
+        !m.Read32(kMailbox + Stubs::kMbWideAspect, r.aspect_bits) ||
+        !m.Read32(kMailbox + Stubs::kMbWideGameAspect, r.game_aspect_bits)) {
+        return {};
+    }
+    return r;
+}
+/// The shape in the scene camera is one the app gave it: the record's, or `last_asked_bits` (the
+/// shape the app asked for last; the stub may not have run since the record changed).
+inline bool WideAspectIsOurs(uint32_t node_aspect_bits, const WideRecord& rec,
+                             uint32_t last_asked_bits = 0) {
+    return rec.node == kSceneNode &&
+           (node_aspect_bits == rec.aspect_bits ||
+            (last_asked_bits != 0 && node_aspect_bits == last_asked_bits));
+}
+/// The game's own shape for the scene camera: the record's when the node holds a shape the app
+/// gave it (it was widened, perhaps in a save state), else the node's now.
+inline float WideGameAspect(uint32_t node_aspect_bits, const WideRecord& rec,
+                            uint32_t last_asked_bits = 0) {
+    const float game = std::bit_cast<float>(rec.game_aspect_bits);
+    if (WideAspectIsOurs(node_aspect_bits, rec, last_asked_bits) && GameAspectOk(game)) {
+        return game;
+    }
+    return std::bit_cast<float>(node_aspect_bits);
+}
+/// Not widening: what to write into the scene camera's shape, if anything. Only a shape the app
+/// gave it goes back to the game's own as the record has it (as HideWrite: nothing else is
+/// ever touched).
+inline std::optional<uint32_t> WideRestore(uint32_t node_aspect_bits, const WideRecord& rec,
+                                           uint32_t last_asked_bits = 0) {
+    if (!WideAspectIsOurs(node_aspect_bits, rec, last_asked_bits) ||
+        node_aspect_bits == rec.game_aspect_bits ||
+        !GameAspectOk(std::bit_cast<float>(rec.game_aspect_bits))) {
+        return std::nullopt;
+    }
+    return rec.game_aspect_bits;
+}
+/// The mailbox's wide fields for a request (`game_aspect`: WideGameAspect). Left at none when
+/// the request is off or its values are not ones the stub may be given.
+inline void FillWide(Mailbox& mb, const WideRequest& wide, float game_aspect) {
+    mb.wide_node = 0;
+    mb.wide_fov_y = mb.wide_aspect = mb.wide_game_aspect = 0.0f;
+    if (!wide.on || !WideValuesOk(wide.fov_y, wide.aspect) || !GameAspectOk(game_aspect)) {
+        return;
+    }
+    mb.wide_node = kSceneNode;
+    mb.wide_fov_y = wide.fov_y;
+    mb.wide_aspect = wide.aspect;
+    mb.wide_game_aspect = game_aspect;
 }
 
 // ---- Switch values ----

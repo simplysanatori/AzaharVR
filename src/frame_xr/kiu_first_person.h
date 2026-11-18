@@ -48,6 +48,17 @@
 //                                     the game draws as much more on each axis as fills the view
 //                                     (Layout::SolveKiuFirstPerson); past this factor the screen
 //                                     is smaller on that axis instead.
+//   AZAHARFRAME_KIU_FP_WIDE=0|1|2     AzaharFrame kiuwide: the game's own camera as wide as the
+//                                     view (default 1): in a battle the scene camera's angle
+//                                     and shape are the app's (the hooks' "wide camera" group),
+//                                     those that make the game's own frame what fills the view,
+//                                     so the screen is the game's frame at true size (factor 1,
+//                                     Layout::KiuWideCamera) and the reticle reaches every place
+//                                     in view. The game's zooms do nothing then. 2: the same
+//                                     but the game's own shape kept (square pixels, the HUD
+//                                     undistorted; the frame then reaches past the view's sides).
+//                                     0: the game's camera as it is and the game drawing past
+//                                     its frame (AzaharFrame kiufov), as before.
 //   AZAHARFRAME_KIU_FP_TRACE=1|2      a line a second (2: a VBlank) with the transform's inputs
 //                                     and what it gives (kiu_hooks.cpp).
 //   AZAHARFRAME_KIU_FP_PROBE=<hex>    with the trace: the actor at that address, where it is in
@@ -123,6 +134,27 @@ float FactorMax();
 /// draws wider: the caller takes the mod's shape where it is known).
 void PublishProjection(const Input::KiuRoom::Projection& projection);
 bool SceneProjection(float& fov_y_deg, float& aspect);
+/// AzaharFrame kiuwide: the game's own shape for the scene camera (its field before the app
+/// widened it), published by the hooks each VBlank; 0 when not known. Any thread.
+void PublishGameAspect(float aspect);
+float GameAspect();
+
+/// AzaharFrame kiuwide: AZAHARFRAME_KIU_FP_WIDE (live): 0 off, 1 the view's shape (default), 2
+/// the game's own shape kept. Any thread.
+int WideMode();
+/// AzaharFrame kiuwide: the scene camera's angle (up and down, degrees) and field (the shape
+/// the game's projection is built from) that make the game's own frame fill the view: the XR
+/// thread, from the Full view's screen solve (Layout::KiuWideCamera, the C-Stick & Gyro mod's
+/// widening taken out of the shape). The hooks take it at each VBlank: false when the switch is
+/// off or nothing was published since the game booted (the last one is kept however old: it
+/// follows the view alone; `fov_y_rad` in radians).
+void PublishWideTarget(float fov_y_deg, float field_aspect);
+bool WideTarget(float& fov_y_rad, float& field_aspect);
+/// AzaharFrame kiuwide: the shape the game draws (and aims) its world with as the XR thread's
+/// screen solve took it (the projection's field times a widescreen mod's widening), published
+/// each display frame; the aim's first guess (KiuRoom::AimShape). 0: none since the game booted.
+void PublishDrawnShape(float aspect);
+float DrawnShape();
 
 /// What mode 3 draws with this display frame, in the room (OpenXR's LOCAL space).
 struct View {
