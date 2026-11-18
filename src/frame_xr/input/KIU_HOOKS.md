@@ -97,6 +97,7 @@ spawn, so the app does not have to know the game's aim beforehand.
 | `AZAHARFRAME_KIU_NO_FOLLOW=1` | 0x70401C | `EB031897` bl 0x7CA280 | `E1A00000` mov r0, r0 | the land camera's eased follow no longer turns the camera while the player runs (what the call computes: I) |
 | `AZAHARFRAME_KIU_AIM_NO_MOD=1`, `AZAHARFRAME_KIU_AIM_6DOF=1` ("aim hold") | 0x6D215C | `0A000002` beq 0x6D216C | `EA000002` b 0x6D216C | the land reticle's eased moves (back to its rest height after a touch, the flick's glide) do nothing, as in the air |
 | | 0x6D1680 | `0A00001F` beq 0x6D1704 | `EA00001F` b 0x6D1704 | the aim box is the whole screen on the ground too (the air's box), so the game's clamp never turns the camera for the reticle |
+| `AZAHARFRAME_KIU_FIRST_PERSON=1` ("player shadow") | 0x57B054 | `E92D4030` push {r4, r5, lr} | b shadow_stub | the player's own round shadow is not put in the frame's shadow list; everyone else's is |
 
 "Aim hold" is for the game **without** the C-Stick & Gyro mod only: its context holds three words
 of the reticle's code where the mod has its hooks (0x6D219C, 0x6D280C, 0x6D2F7C), so with the mod
@@ -149,6 +150,14 @@ scripted path (0x3E8C34), where the placement has no "fly it again" flag: r4 = t
 While float `[state + 0x34]` (seconds since the enemy entered its path state; the game keeps
 counting across restarts) is less than the mailbox's limit: the function's own restart code
 (0x3E8CDC); else its vanish code (0x3E8D00), as the game. Uses r12, s0, s1 and the flags only.
+
+**shadow_stub** (0x57B054 → `b shadow_stub`; AzaharFrame kiushadow). The first instruction of
+the function that puts an actor's round shadow on the ground for this frame, entered by `bl` from
+the actor's movement states: r0 = the state, the actor at `[r0 + 0x30]`. When that actor is the
+mailbox's player the stub returns at once (`bx lr`), so his shadow is not in the list; otherwise
+it runs the replaced push and goes on at 0x57B058. No player in the mailbox: every shadow, as the
+game. Uses r2, r12 and the flags only (the function writes r2 before reading it and never reads
+r12; its own early exit changes r2 and the flags too).
 
 ## The switches (all live; `kiu_hooks.h`)
 
@@ -391,7 +400,36 @@ screen. A ray that leaves the game's view holds the reticle at the screen's edge
   writes the land box as the whole screen and Direct Aim never pushes the Turn Zone; the box
   words are the same with the 21:9 mod, the "aim hold" words are not.
 - **Not done.** HUD pieces that touch the game's frame's edge are pinned to the drawn area's
-  edge by the shader and stretch; Pit's own round shadow is drawn under the eye.
+  edge by the shader and stretch. (Pit's own round shadow under the eye: done, below.)
+
+### The player's round shadow (AzaharFrame kiushadow)
+
+In first person the "player shadow" group is in (`Kiu::FirstPerson::On()`; out again when it is
+off): one word, `b shadow_stub` at 0x57B054.
+
+- **What draws it (V on the desktop, the real game).** A circle-shadow renderer, singleton
+  `[0xD49490]` (made by 0x238938 with room for 64; its shader binds ViewMtx, ProjMtx, Position,
+  Normal, Front and Color and loads "CircleShadow"), keeps a list rebuilt each frame: +0
+  positions (12 bytes each), +0xC room, +0x10 parameters (0x40 bytes each), +0x14 count.
+  0x505340 → 0x4B0158 appends one shadow (position, normal, front, radius, alpha).
+- **Pit's entry (V).** In the Practice Range the list holds one shadow: under Pit (y 0.3),
+  radius 6.5, alpha 120/255. Holding the list's room at 0 empties it and the soft dark disc under
+  Pit's feet is gone from the picture; it comes back with the room. The ShadowDisp anime
+  command's byte (`[actor + 0x200] + 0x8D`) does not take it out (V: the entry stays).
+- **Who appends it.** 0x57B054(state, mode), called from Pit's movement states (0x551238 and
+  0x551828): gates on the state's fields, then 0x5B26AC(actor, 6.5) (a ray down, then 0x505340)
+  or 0x50533C. Radius 6.5 and alpha 120 are its literals (V); that Pit's entry comes from it is V
+  by the stub (only it is skipped, the entry goes).
+- **Everyone else's.** In Chapter 1's land section the list holds three more shadows (radius 9,
+  far away; one is under a food pickup): they stay with the group in and Pit's goes (V, list).
+  They come another way (0x57C5C4 → 0x5A41E8), so the stub's pass-through for another actor's
+  movement state is V only on the stub's test bench; no enemy with a round shadow was found on
+  the desktop (the Practice Range's Monoeye casts none), so "enemies keep theirs" is I.
+- **The air.** No round shadow in Chapter 1's air section (the list is empty; V).
+- **The four codes.** The function 0x57B054–0x57B1C8, 0x5B26AC–0x5B2824, the callers
+  0x551238–0x551838 and the empty cave are byte for byte the same in the original, the mod's
+  base, 16:9 and 21:9 builds (V, files).
+
 
 ### Not done, risks
 
