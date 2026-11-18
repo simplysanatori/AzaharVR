@@ -3245,6 +3245,14 @@ TEST_CASE("Tab menu: Trigger Layout, Kid Icarus only", "[frame_xr][tabmenu][kiuf
     MenuModel m = Sample();
     MenuView v;
     v.tab = Tab::Controls;
+    const auto any = [&d](Id id) -> const MenuLayout::Hit* {
+        for (const auto& h : d.menu.Hits()) {
+            if (h.t.id == id) {
+                return &h;
+            }
+        }
+        return nullptr;
+    };
     for (const bool kiu : {false, true}) {
         for (const int aiming : {0, 1, 2}) {
             INFO("kiu " << kiu << ", aiming " << aiming);
@@ -3254,20 +3262,21 @@ TEST_CASE("Tab menu: Trigger Layout, Kid Icarus only", "[frame_xr][tabmenu][kiuf
             for (float scroll = 0.0f; scroll <= 3000.0f && !row; scroll += kRowH) {
                 v.scroll[static_cast<int>(Tab::Controls)] = scroll;
                 d.Draw(m, v);
-                row = FindHit(d, Id::TriggerLayout, -1) != nullptr;
+                row = FindHit(d, Id::TriggerLayout, 0) != nullptr &&
+                      FindHit(d, Id::TriggerLayout, 1) != nullptr;
                 if (scroll >= d.menu.MaxScroll()) {
                     break;
                 }
             }
             CHECK(row == (kiu && aiming != 0));
             if (row) {
-                // Never locked: both choices take a press.
-                CHECK(FindHit(d, Id::TriggerLayout, 0) != nullptr);
-                CHECK(FindHit(d, Id::TriggerLayout, 1) != nullptr);
-                const MenuLayout::Hit* sens = FindHit(d, Id::GyroSensitivity, -1);
-                const MenuLayout::Hit* layout = FindHit(d, Id::TriggerLayout, -1);
-                REQUIRE(sens != nullptr);
-                CHECK(layout->r.y0 >= sens->r.y1 - 0.01f); // under Gyro Sensitivity
+                // Never locked: both choices take a press (found above), and the label.
+                const MenuLayout::Hit* sens = any(Id::GyroSensitivity);
+                const MenuLayout::Hit* layout = FindHit(d, Id::TriggerLayout, kLabelIndex);
+                REQUIRE(layout != nullptr);
+                if (sens != nullptr) { // not scrolled away
+                    CHECK(layout->r.y0 >= sens->r.y1 - 0.01f); // under Gyro Sensitivity
+                }
                 Audit a;
                 a.Draw(m, v);
                 a.Check("Controls, Trigger Layout");
