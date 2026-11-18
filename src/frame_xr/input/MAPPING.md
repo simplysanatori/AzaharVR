@@ -407,6 +407,24 @@ Aiming at Direct Aim when the mod is installed (`ControlsPreset::gyro_aim_with_m
   the shelved C-Stick at Edge with it), so the trigger is ZL/ZR, which the mod fires with, and never a touch,
   which would stop the mod's aim. The controller keeps its beam; pointed at the bottom screen its
   trigger touches there as usual.
+- **Trigger Layout** (`vr_kiu_trigger_layout`, per game too; AzaharFrame kiufire): a row under
+  Gyro Sensitivity, only while Kid Icarus: Uprising is open and Aiming is on. Shown **Fire and
+  Power** · **Original**, stored 1 and 0; Original (0) is the default and is the trigger above:
+  either trigger presses L as well as its own ZL/ZR. Fire and Power (`input/kiu_trigger_layout.h`,
+  run in `InputBridge::Process` on the pad's controls before they are written; the game must be
+  Kid Icarus by its title id, `controls.cpp`): the aiming hand's trigger (Motion Controls' left
+  controller with Left Controller, else the right) presses only L, held as long as the trigger
+  (rapid fire, charge); the other trigger presses D-pad Down once a pull (the game's "use power");
+  the bumpers no longer press L and R: left is D-pad Left (previous power), right D-pad Right
+  (next power), as a 100 ms press. With Direct Aim a bumper acts as it is pressed and nothing
+  recentres. With Gyro Aim a bumper acts when let go within 0.5 s; held 0.5 s it picks nothing and
+  presses ZL for 100 ms instead (meant as the recentre; not proven: on the desktop ZL moved neither
+  the reticle nor the camera). The Frame's D-pad keeps its presses. The controls go through the
+  controls profile, so a remapped profile changes what they press. What the game does with each
+  button (desktop runs, EUR, land battle; the game's held word is `[[0xD638A4] + 0x104]`, the same
+  in the original b107c9b1 and the mod v172 21:9 b95ca36b): L fires; D-pad Left and Right move the
+  power bar; D-pad Down uses the selected power; with the mod, ZR (bit 15) fires too and ZL (bit
+  14) reaches the game with nothing seen; without the mod ZL/ZR never reach it.
 
 ### The app's own game-code hooks (test build; AzaharFrame kiuhook)
 
