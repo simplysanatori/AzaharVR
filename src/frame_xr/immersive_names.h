@@ -274,7 +274,7 @@ inline constexpr const char* kModeOff = "Off";
 inline constexpr const char* kModeWide = "Wide (3DoF)";
 inline constexpr const char* kModeZelda = "Full (6DoF): Ocarina of Time, Majora's Mask";
 /// DRAFT (the owner's draft name, for the owner): Kid Icarus: Uprising's first person.
-inline constexpr const char* kModeAngelsAim = "Full (6DoF): Angel's Aim";
+inline constexpr const char* kModeAngelsAim = "Full (6DoF): Kid Icarus: Uprising / Angel's Aim";
 inline constexpr const char* kModeOtherGames = "Full (6DoF): Other Games";
 inline constexpr std::uint32_t kModeStoredAngelsAim = 4;
 /// The choices in the shown order.

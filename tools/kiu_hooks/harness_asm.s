@@ -6,7 +6,7 @@
         .fpu    vfpv2
         .arm
         .text
-        .global call_shot, call_eye, call_keep, call_shadow, SPAWN, SINK_CONTINUE, PATH_RESTART, PATH_VANISH, SHADOW_CONTINUE
+        .global call_shot, call_eye, call_keep, call_shadow, call_fov, SPAWN, SINK_CONTINUE, PATH_RESTART, PATH_VANISH, SHADOW_CONTINUE, FOV_CONTINUE
 
 @ struct Regs { u32 r[13]; u32 sp; u32 lr; u32 stack[4]; float s[16]; }   (r at 0, sp 52, lr 56, stack 60, s 76)
         .macro  capture reg
@@ -190,6 +190,56 @@ SHADOW_CONTINUE:
         ldr     r2, [r0, #8]
         ldr     r0, [r0, #0]
         pop     {r4, r5, pc}
+
+@ AzaharFrame kiuwide. void call_fov(const struct Regs* in): r0-r11 and s0-s15 from `in`, then
+@ `bl` to the patched site's stand-in, the stub itself (the site holds `b fov_stub`); fov_back
+@ gets r0-r11, sp and s0-s15 as they come back to the caller (either way).
+call_fov:
+        push    {r4-r11, lr}
+        mov     r12, r0
+        ldr     r0, =fov_sp
+        str     sp, [r0]
+        add     r0, r12, #76
+        vldmia  r0, {s0-s15}
+        ldm     r12, {r0-r11}
+        bl      fov_stub
+        ldr     r12, =fov_back
+        capture r12
+        str     sp, [r12, #52]
+        add     r0, r12, #76
+        vstmia  r0, {s0-s15}
+        pop     {r4-r11, pc}
+
+@ The rest of the angle setter (0x45E050 on): records r0-r11, sp and s0-s15 (the stub ran its
+@ first instruction, vldr s1, [r0, #0x3C]), then returns to the caller as the setter would.
+FOV_CONTINUE:
+        push    {r0}
+        ldr     r0, =fov_seen
+        str     r1, [r0, #4]
+        str     r2, [r0, #8]
+        str     r3, [r0, #12]
+        str     r4, [r0, #16]
+        str     r5, [r0, #20]
+        str     r6, [r0, #24]
+        str     r7, [r0, #28]
+        str     r8, [r0, #32]
+        str     r9, [r0, #36]
+        str     r10, [r0, #40]
+        str     r11, [r0, #44]
+        add     r1, sp, #4
+        str     r1, [r0, #52]
+        add     r1, r0, #76
+        vstmia  r1, {s0-s15}
+        pop     {r1}
+        str     r1, [r0, #0]
+        ldr     r1, =fov_calls
+        ldr     r2, [r1]
+        add     r2, r2, #1
+        str     r2, [r1]
+        ldr     r1, [r0, #4]
+        ldr     r2, [r0, #8]
+        ldr     r0, [r0, #0]
+        bx      lr
 
         .global shot_return
         .ltorg

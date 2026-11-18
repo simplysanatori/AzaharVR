@@ -1593,14 +1593,36 @@ void OnFrame(const FrameInfo& info) {
             // there); else the live angle and the shape as above.
             float fp_fov = options.live_fov_y_deg, fp_aspect = cam.aspect;
             const bool scene = Kiu::FirstPerson::SceneProjection(fp_fov, fp_aspect);
+            // AzaharFrame kiuwide: what the mod widens the field by (the shape it draws over the
+            // game's own field: 1 without a mod), so the shape drawn is the field (the game's,
+            // or the one the app gave it) times that.
+            float widen = 1.0f;
             if (!scene) {
                 fp_fov = options.live_fov_y_deg;
                 fp_aspect = cam.aspect;
-            } else if (AutoShape::Hint() > 0.0f) {
-                fp_aspect = AutoShape::Hint();
-            } else if (g.shape != AutoShape::kAutomatic) {
-                fp_aspect = TopAspect(); // a Screen Shape chosen for the game
+            } else {
+                const float game_field = Kiu::FirstPerson::GameAspect() > 0.1f
+                                             ? Kiu::FirstPerson::GameAspect()
+                                             : fp_aspect;
+                if (AutoShape::Hint() > 0.0f) {
+                    widen = AutoShape::Hint() / game_field;
+                } else if (g.shape != AutoShape::kAutomatic) {
+                    widen = TopAspect() / game_field; // a Screen Shape chosen for the game
+                }
+                fp_aspect *= widen;
+                // AzaharFrame kiuwide: the game's own camera as wide as the view
+                // (AZAHARFRAME_KIU_FP_WIDE): the angle and the field the hooks give the scene
+                // camera, the mod's widening taken out of the shape; the screen below is then
+                // sized from the camera as the game has it (factor 1 once it is in).
+                if (const int wide = Kiu::FirstPerson::WideMode(); wide != 0) {
+                    const L::KiuWide w = L::KiuWideCamera(g.view_fov, eye_shift,
+                                                          wide == 2 ? game_field * widen : 0.0f);
+                    if (w.ok) {
+                        Kiu::FirstPerson::PublishWideTarget(w.fov_y_deg, w.aspect / widen);
+                    }
+                }
             }
+            Kiu::FirstPerson::PublishDrawnShape(fp_aspect);
             const float fp_max = Kiu::FirstPerson::FactorMax();
             g.solved = L::SolveKiuFirstPerson(fp_fov, fp_aspect, g.view_fov, eye_shift, fp_max,
                                               g.head_place.distance);

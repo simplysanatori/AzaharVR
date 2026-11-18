@@ -823,8 +823,8 @@ struct Values {
     Setting<u32, true> vr_xr_image_lag{0, 0, 1, "vr_xr_image_lag"};
     // AzaharFrame: switchable, so the Qt window can set them per game (same keys as CitraVR).
     // AzaharFrame kiumode: 0 Off, 1 Wide (3DoF), 2 Full (6DoF): Ocarina of Time, Majora's Mask,
-    // 3 Full (6DoF): Other Games, 4 Full (6DoF): Angel's Aim (Kid Icarus: Uprising's first
-    // person; drawn as 3: ImmersiveRenderMode). Not ranged: an older build reads a 4 as its own
+    // 3 Full (6DoF): Other Games, 4 Full (6DoF): Kid Icarus: Uprising / Angel's Aim (that game's
+    // first person; drawn as 3: ImmersiveRenderMode). Not ranged: an older build reads a 4 as its own
     // default branch (no head tracking), never a clamp.
     SwitchableSetting<u32> vr_immersive_mode{0, "vr_immersive_mode"};
     // AzaharFrame kiumode: the two registers can be supplied by a running game (Angel's Aim),

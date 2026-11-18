@@ -14,19 +14,21 @@ extern void call_shot(const struct Regs* in);
 extern void call_eye(const struct Regs* in);
 extern u32 call_keep(const struct Regs* in);
 extern void call_shadow(const struct Regs* in);
+extern void call_fov(const struct Regs* in);
 extern char shot_return[];
 
 // What the stubs' literals name (stubs.s without stubs-eur.inc).
-u32 MAILBOX[0x54 / 4];
+u32 MAILBOX[0x64 / 4];
 char ACTOR_VTABLE[4];
 
-struct Regs spawn_seen, sink_seen, keep_seen, shadow_seen, shadow_back;
+struct Regs spawn_seen, sink_seen, keep_seen, shadow_seen, shadow_back, fov_seen, fov_back;
 float shot_base[4]; // the caller's aim quaternion before scatter, put at its [sp + 0x70]
-u32 spawn_calls, sink_calls, shot_sp, eye_sp, shadow_calls, shadow_sp;
+u32 spawn_calls, sink_calls, shot_sp, eye_sp, shadow_calls, shadow_sp, fov_calls, fov_sp;
 
 enum { MB_PLAYER = 0x08, MB_EYE_NODE = 0x0C, MB_EYE_FLAGS = 0x10, MB_EYE_OFFSET = 0x14,
        MB_SHOT_FLAGS = 0x20, MB_SHOT_ROTATION = 0x24, MB_SHOT_FRAME = 0x34, MB_SHOT_OFFSET = 0x44,
-       MB_KEEP_SECONDS = 0x50 };
+       MB_KEEP_SECONDS = 0x50, MB_WIDE_NODE = 0x54, MB_WIDE_FOV = 0x58, MB_WIDE_ASPECT = 0x5C,
+       MB_WIDE_GAME_ASPECT = 0x60 };
 
 static long sys(long n, long a, long b, long c) {
     register long r7 __asm__("r7") = n;
@@ -101,7 +103,7 @@ static void shot_case(u32 flags, int owner_is_player, const char* name) {
     const float pos0[3] = {pos[0], pos[1], pos[2]};
     float* local = (float*)&actor[0x74 / 4];
     local[0] = 10.0f, local[1] = -4.0f, local[2] = 2.5f;
-    for (int i = 0; i < 0x54 / 4; i++) MAILBOX[i] = 0;
+    for (int i = 0; i < 0x64 / 4; i++) MAILBOX[i] = 0;
     MAILBOX[MB_PLAYER / 4] = (u32)actor;
     MAILBOX[MB_SHOT_FLAGS / 4] = flags;
     put_f(MB_SHOT_ROTATION, rot, 4);
@@ -163,7 +165,7 @@ static void eye_case(u32 flags, int node_matches, int actor_ok, int has_player, 
     float* world = (float*)&actor[0x54 / 4];
     world[0] = -47.3f, world[1] = 148.6f, world[2] = -1441.4f;
     actor[0] = actor_ok ? (u32)ACTOR_VTABLE : 0x12345678u;
-    for (int i = 0; i < 0x54 / 4; i++) MAILBOX[i] = 0;
+    for (int i = 0; i < 0x64 / 4; i++) MAILBOX[i] = 0;
     MAILBOX[MB_PLAYER / 4] = has_player ? (u32)actor : 0;
     MAILBOX[MB_EYE_NODE / 4] = 0x00777000u;
     MAILBOX[MB_EYE_FLAGS / 4] = flags;
@@ -203,7 +205,7 @@ static void eye_case(u32 flags, int node_matches, int actor_ok, int has_player, 
 static void keep_case(float age, float limit, u32 want, const char* name) {
     static u32 state[0x40 / 4];
     ((float*)state)[0x34 / 4] = age;
-    for (int i = 0; i < 0x54 / 4; i++) MAILBOX[i] = 0;
+    for (int i = 0; i < 0x64 / 4; i++) MAILBOX[i] = 0;
     put_f(MB_KEEP_SECONDS, &limit, 1);
     struct Regs in;
     fill(&in);
@@ -218,7 +220,7 @@ static void keep_case(float age, float limit, u32 want, const char* name) {
 static void shadow_case(int has_player, int owner_is_player, const char* name) {
     static u32 state[0x40 / 4];
     state[0x30 / 4] = owner_is_player ? (u32)actor : (u32)other_actor;
-    for (int i = 0; i < 0x54 / 4; i++) MAILBOX[i] = 0;
+    for (int i = 0; i < 0x64 / 4; i++) MAILBOX[i] = 0;
     MAILBOX[MB_PLAYER / 4] = has_player ? (u32)actor : 0;
     struct Regs in;
     fill(&in);
@@ -243,6 +245,53 @@ static void shadow_case(int has_player, int owner_is_player, const char* name) {
         check(shadow_seen.sp == shadow_sp - 12, "sp after the function's own push");
         check(shadow_seen.stack[0] == in.r[4] && shadow_seen.stack[1] == in.r[5],
               "the pushed r4, r5 are the caller's");
+    }
+}
+
+// AzaharFrame kiuwide. which: 0 no node in the mailbox, 1 the node, 2 another node. `have`: the
+// node already holds 0 neither, 1 the angle, 2 the shape, 3 both of the mailbox's.
+static u32 node[0x80 / 4];
+static u32 other_node[0x80 / 4];
+static void fov_case(int which, int have, const char* name) {
+    const float game_fov = 0.7854f, game_aspect = 1.6667f, our_fov = 1.9500f, our_aspect = 1.3200f;
+    const u32 flags = 0xFFFFFFFFu;
+    for (int i = 0; i < 0x64 / 4; i++) MAILBOX[i] = 0;
+    MAILBOX[MB_WIDE_NODE / 4] = which == 1 ? (u32)node : which == 2 ? (u32)other_node : 0;
+    put_f(MB_WIDE_FOV, &our_fov, 1);
+    put_f(MB_WIDE_ASPECT, &our_aspect, 1);
+    put_f(MB_WIDE_GAME_ASPECT, &game_aspect, 1);
+    ((float*)node)[0x3C / 4] = (have & 1) ? our_fov : game_fov;
+    ((float*)node)[0x40 / 4] = (have & 2) ? our_aspect : game_aspect;
+    node[0x6C / 4] = flags;
+    struct Regs in;
+    fill(&in);
+    in.r[0] = (u32)node;
+    in.s[0] = 0.6000f; // the angle the game asks for
+    const u32 calls = fov_calls;
+    call_fov(&in);
+    say(name);
+    say("\n");
+    check(fov_back.sp == fov_sp, "sp back as at the call");
+    check(fov_back.r[0] == in.r[0] && same_regs(&in, &fov_back, 2, 11),
+          "r0, r2-r11 back as the caller set them");
+    const float* nf = (const float*)node;
+    if (which != 1) {
+        check(fov_calls == calls + 1, "not the mailbox's node: the setter goes on once");
+        check(fov_seen.r[0] == in.r[0] && same_regs(&in, &fov_seen, 1, 11),
+              "r0-r11 reach it as the caller set them");
+        check(fov_seen.sp == fov_sp, "sp at the setter as at the call");
+        check(fov_seen.s[0] == in.s[0], "the game's angle reaches it");
+        check(fov_seen.s[1] == nf[0x3C / 4], "s1 holds the node's angle (the replaced vldr)");
+        check(nf[0x3C / 4] == ((have & 1) ? our_fov : game_fov) &&
+                  nf[0x40 / 4] == ((have & 2) ? our_aspect : game_aspect) &&
+                  node[0x6C / 4] == flags,
+              "the node untouched by the stub");
+    } else {
+        check(fov_calls == calls, "the mailbox's node: the setter is not run");
+        check(nf[0x3C / 4] == our_fov && nf[0x40 / 4] == our_aspect, "the angle and shape ours");
+        check(node[0x6C / 4] == (have == 3 ? flags : (flags & ~0x5Cu)),
+              have == 3 ? "both ours already: the flags untouched" : "the dirty bits cleared");
+        check(same_floats(&in, &fov_back), "s0-s15 back as the caller set them");
     }
 }
 
@@ -274,6 +323,13 @@ void _start(void) {
     shadow_case(1, 0, "shadow: another actor's: drawn");
     shadow_case(0, 1, "shadow: no player: drawn");
     shadow_case(0, 0, "shadow: no player, another actor: drawn");
+    fov_case(0, 0, "fov: no node: the game's angle");
+    fov_case(2, 0, "fov: another node: the game's angle");
+    fov_case(2, 3, "fov: another node, the mailbox's values in this one: untouched");
+    fov_case(1, 0, "fov: the node: angle and shape ours, rebuilt");
+    fov_case(1, 1, "fov: the node with our angle: the shape ours, rebuilt");
+    fov_case(1, 2, "fov: the node with our shape: the angle ours, rebuilt");
+    fov_case(1, 3, "fov: the node with both: nothing changes");
     say(failures ? "stubs: FAILED\n" : "stubs: all checks passed\n");
     sys(1, failures ? 1 : 0, 0, 0);
     for (;;) {

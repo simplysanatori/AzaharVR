@@ -821,6 +821,21 @@ HeadLocked SolveKiuFirstPerson(float game_fov_y_deg, float aspect, const ViewFov
                                float eye_shift = 0.0f, float factor_max = kKiuFpFactorMax,
                                float distance = kDefaultHeadDistance);
 
+/// AzaharFrame kiuwide: Kid Icarus: Uprising's first person with the game's own camera widened
+/// (AZAHARFRAME_KIU_FP_WIDE): the game camera's angle up and down and its shape that make the
+/// game's own frame exactly what SolveKiuFirstPerson fills the view with (the same cover: what
+/// either eye sees at the view's middle pitch, `eye_shift` as there), so that solve gives factor
+/// 1 on both axes. `keep_aspect` > 0: that shape is kept (square pixels) and the angle is the
+/// smallest that covers both axes (the frame then reaches past the view on the other one,
+/// factor 1 still). The angle is rounded up to 0.01 degree and the shape to 1/10000, so a view whose
+/// numbers move by a hair asks the game for nothing new. `ok` false: no usable view.
+struct KiuWide {
+    bool ok = false;
+    float fov_y_deg = 0.0f;
+    float aspect = 0.0f;
+};
+KiuWide KiuWideCamera(const ViewFov& view, float eye_shift = 0.0f, float keep_aspect = 0.0f);
+
 /// AzaharFrame fovaxis: Fill View, set once (no mode). 1.2.0: across only, at kFillAcrossShare
 /// of the view. The placement size and Horizontal Scale that make the screen's width exactly
 /// kFillAcrossShare of the half width (tangent) that would cover what either eye sees

@@ -34,21 +34,34 @@ constexpr const char* kSwitchAimNoMod = "AZAHARFRAME_KIU_AIM_NO_MOD";
 constexpr const char* kSwitchAim6Dof = "AZAHARFRAME_KIU_AIM_6DOF";
 constexpr const char* kSwitchShots6Dof = "AZAHARFRAME_KIU_SHOTS_6DOF";
 constexpr const char* kSwitchFactor = "AZAHARFRAME_KIU_FP_FACTOR"; // AzaharFrame kiufov
+constexpr const char* kSwitchWide = "AZAHARFRAME_KIU_FP_WIDE";     // AzaharFrame kiuwide
 /// The aim object's world position (it is a node of the scene: the game puts it on the scene
 /// camera's ray through the reticle each frame).
 constexpr uint32_t kAimWorldPos = 0x54;
+/// AzaharFrame kiuwide: how near (a share) the game's aim, as measured, must be to the shape known
+/// from the projection for that one to be taken (AimThroughCamera).
+constexpr float kKnownShapeShare = 0.03f;
 
 bool SwitchOn(const char* name) {
     const auto v = Common::FrameTestSwitches::Value(name);
     return v && *v == "1";
 }
 constexpr int64_t kStaleNs = 250'000'000;
+/// AzaharFrame kiuwide: the scene camera's angle and shape are kept this long, so a stalled frame
+/// (a slow VBlank, a picture dump) doesn't send the screen back to the live angle for a moment.
+constexpr int64_t kSceneStaleNs = 2'000'000'000;
 
 std::mutex g_mutex;
 Sample g_sample; ///< under g_mutex
 float g_scene_fov_deg = 0.0f; ///< under g_mutex (AzaharFrame kiufov)
 float g_scene_aspect = 0.0f;
 int64_t g_scene_fov_ns = 0;
+// AzaharFrame kiuwide, under g_mutex.
+float g_wide_fov_deg = 0.0f, g_wide_field = 0.0f;
+int64_t g_wide_ns = 0;
+float g_drawn_shape = 0.0f;
+int64_t g_drawn_ns = 0;
+std::atomic<float> g_game_aspect{0.0f};
 
 int64_t NowNs() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -185,9 +198,27 @@ AimNow AimThroughCamera(const Input::KiuHooks::Reader& mem, uint32_t aim,
         shape.Update(scene.camera, scene.projection.fov_y, screen,
                      {std::bit_cast<float>(px), std::bit_cast<float>(py)}, now.game_point);
     }
+    // AzaharFrame kiuwide: a new field (the camera widened, or back) is a new shape: measured
+    // afresh, from the shape the screen solve takes as drawn.
+    static float shape_field = 0.0f;
+    if (std::abs(scene.projection.aspect - shape_field) > 0.001f * shape_field) {
+        shape_field = scene.projection.aspect;
+        shape.Reset();
+    }
     KR::Projection projection = scene.projection;
-    projection.aspect = shape.Get(sample.view.measured_aspect > 0.5f ? sample.view.measured_aspect
-                                                                      : scene.projection.aspect);
+    const float drawn = DrawnShape();
+    const float known = drawn > 0.5f                          ? drawn
+                        : sample.view.measured_aspect > 0.5f ? sample.view.measured_aspect
+                                                              : scene.projection.aspect;
+    projection.aspect = shape.Get(known);
+    // AzaharFrame kiuwide: the readings are noisy (the game's point is a frame older than the
+    // pixel) and, with the reticle near a wide camera's edge, they feed back through the pixel
+    // into the next reading (seen: the shape swinging 1.5 % every few frames, the reticle 4 px).
+    // So a measured shape near the one known from the projection gives way to that one: the
+    // readings only correct a shape that is plainly not the game's (a widescreen mod's unknown).
+    if (std::abs(projection.aspect - known) < kKnownShapeShare * known) {
+        projection.aspect = known;
+    }
     now.aspect = projection.aspect;
     now.aspect_readings = shape.Count();
     now.depth = KR::CameraDepth(scene.camera, now.game_point);
@@ -244,12 +275,73 @@ void PublishProjection(const Input::KiuRoom::Projection& projection) {
 bool SceneProjection(float& fov_y_deg, float& aspect) {
     const int64_t now = NowNs();
     std::scoped_lock lock{g_mutex};
-    if (g_scene_fov_ns == 0 || now - g_scene_fov_ns > kStaleNs) {
+    if (g_scene_fov_ns == 0 || now - g_scene_fov_ns > kSceneStaleNs) {
         return false;
     }
     fov_y_deg = g_scene_fov_deg;
     aspect = g_scene_aspect;
     return true;
+}
+
+void PublishGameAspect(float aspect) {
+    g_game_aspect.store(std::isfinite(aspect) && aspect > 0.0f ? aspect : 0.0f,
+                        std::memory_order_relaxed);
+}
+
+float GameAspect() {
+    return g_game_aspect.load(std::memory_order_relaxed);
+}
+
+int WideMode() {
+    const auto v = Common::FrameTestSwitches::Value(kSwitchWide);
+    if (v && *v == "0") {
+        return 0;
+    }
+    if (v && *v == "2") {
+        return 2;
+    }
+    return 1;
+}
+
+void PublishWideTarget(float fov_y_deg, float field_aspect) {
+    if (!std::isfinite(fov_y_deg) || !std::isfinite(field_aspect) || !(fov_y_deg > 0.0f) ||
+        !(field_aspect > 0.0f)) {
+        return;
+    }
+    std::scoped_lock lock{g_mutex};
+    g_wide_fov_deg = fov_y_deg;
+    g_wide_field = field_aspect;
+    g_wide_ns = NowNs();
+}
+
+bool WideTarget(float& fov_y_rad, float& field_aspect) {
+    if (WideMode() == 0) {
+        return false;
+    }
+    // Kept however old: it follows the view's numbers alone, which do not change in a session, and
+    // a display frame that stalls (seen: 0.3 s writing a picture) must not drop the game's camera
+    // back to its own for a frame.
+    std::scoped_lock lock{g_mutex};
+    if (g_wide_ns == 0) {
+        return false;
+    }
+    fov_y_rad = g_wide_fov_deg * 3.14159265358979f / 180.0f;
+    field_aspect = g_wide_field;
+    return true;
+}
+
+void PublishDrawnShape(float aspect) {
+    if (!std::isfinite(aspect) || !(aspect > 0.0f)) {
+        return;
+    }
+    std::scoped_lock lock{g_mutex};
+    g_drawn_shape = aspect;
+    g_drawn_ns = NowNs();
+}
+
+float DrawnShape() {
+    std::scoped_lock lock{g_mutex};
+    return g_drawn_ns != 0 ? g_drawn_shape : 0.0f; // the last one (as WideTarget)
 }
 
 void PublishView(const View& view) {
@@ -269,6 +361,10 @@ void OnGameBoot() {
     // then (before the presets, which read the registers).
     SetGameCode(0, false);
     SupplyRegisters(false);
+    // AzaharFrame kiuwide: the last run's camera and shape are not this one's.
+    std::scoped_lock lock{g_mutex};
+    g_wide_ns = g_drawn_ns = g_scene_fov_ns = 0;
+    g_game_aspect.store(0.0f, std::memory_order_relaxed);
 }
 
 Sample Latest(int64_t host_now_ns) {

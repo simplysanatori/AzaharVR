@@ -4530,7 +4530,7 @@ TEST_CASE("Tab menu: Immersive Mode lists Angel's Aim in every game",
     namespace N = FrameXr::Immersive::Names;
     const std::vector<std::string> want{"Off", "Wide (3DoF)",
                                         "Full (6DoF): Ocarina of Time, Majora's Mask",
-                                        "Full (6DoF): Angel's Aim", "Full (6DoF): Other Games"};
+                                        N::kModeAngelsAim, N::kModeOtherGames};
     CHECK(OptionsFor(Id::ImmersiveMode) == want);
     // The open menu: five items in global scope, in another game and in Kid Icarus.
     Drawn d;

@@ -121,7 +121,7 @@ FakeMemory Game() {
 constexpr uint32_t kAll = Bit(Group::NoCull) | Bit(Group::BulletKeep) | Bit(Group::Eye) |
                           Bit(Group::Shot) | Bit(Group::EnemyKeepTimed) | Bit(Group::GroupKeep) |
                           Bit(Group::NoFollow) | Bit(Group::AimHold) | Bit(Group::AimBox) |
-                          Bit(Group::PlayerShadow);
+                          Bit(Group::PlayerShadow) | Bit(Group::WideCamera);
 constexpr std::size_t kAllWords = kPatches.size() - 1;
 
 bool SiteIs(const FakeMemory& m, Group g, bool patched) {
@@ -565,6 +565,165 @@ TEST_CASE("Kid Icarus hooks: the player's shadow", "[frame_xr][kiuhook]") {
     }
 }
 
+TEST_CASE("Kid Icarus hooks: the wide camera", "[frame_xr][kiuhook][kiuwide]") {
+    // The words: the site is the camera node angle setter's first instruction,
+    // vldr s1, [r0, #0x3C]; ours branches into the cave, to the stub.
+    const Patch* site = nullptr;
+    for (const Patch& p : kPatches) {
+        if (p.group == Group::WideCamera) {
+            CHECK(site == nullptr); // one word only
+            site = &p;
+        }
+    }
+    REQUIRE(site != nullptr);
+    CHECK(site->addr == 0x45E04C);
+    CHECK(site->addr == kSiteNodeFov);
+    CHECK(site->original == 0xEDD00A0F);
+    CHECK(site->patched == B(kSiteNodeFov, kFovStub));
+    const int32_t off = static_cast<int32_t>(site->patched << 8) >> 6;
+    CHECK(kSiteNodeFov + 8u + static_cast<uint32_t>(off) == kFovStub);
+    CHECK(UsesStubs(Group::WideCamera));
+    CHECK(std::string_view(GroupName(Group::WideCamera)) == "wide camera");
+    CHECK(kSceneNode == 0xE14B88);
+    CHECK(Stubs::kImageVersion == 5);
+    // The stub: inside the image, after the others. Its first words compare the mailbox's node
+    // with r0 through r12 only; the pass path runs the site's instruction and loads pc with the
+    // setter's second; the node's path writes +0x3C, +0x40 and clears 0x5C in +0x6C.
+    CHECK(kFovStub > kShadowStub);
+    CHECK(kImageBase + Stubs::kFovPass + 4 < kImageBase + kImageBytes);
+    const uint32_t at = Stubs::kFovStub / 4;
+    CHECK(Stubs::kImage[at] == 0xE59FC000u + (Stubs::kLitMailbox - Stubs::kFovStub - 8));
+    CHECK(Stubs::kImage[at + 1] == (0xE59CC000u | Stubs::kMbWideNode)); // ldr r12, [r12, #node]
+    CHECK(Stubs::kImage[at + 2] == 0xE15C0000u);                        // cmp r12, r0
+    CHECK(Stubs::kImage[Stubs::kFovPass / 4] == site->original);          // vldr s1, [r0, #0x3C]
+    CHECK((Stubs::kImage[Stubs::kFovPass / 4 + 1] & 0xFFFFF000u) == 0xE59FF000u); // ldr pc, [pc, #n]
+    CHECK(Stubs::kImage[Stubs::kLitFovContinue / 4] == 0x45E050);
+    int stores = 0, bic = 0;
+    for (uint32_t i = at; i < Stubs::kFovPass / 4; ++i) {
+        const uint32_t w = Stubs::kImage[i];
+        stores += (w == 0xE580C03Cu || w == 0xE580C040u) ? 1 : 0; // str r12, [r0, #0x3C / #0x40]
+        bic += w == 0xE3C1105Cu ? 1 : 0;                          // bic r1, r1, #0x5C
+    }
+    CHECK(stores == 2);
+    CHECK(bic == 1);
+    // Its context: the setter as the stub stands in for it, the shape's place, the builder.
+    std::map<uint32_t, uint32_t> ctx;
+    for (const Context& c : kContext) {
+        if (c.group == Group::WideCamera) {
+            ctx[c.addr] = c.word;
+        }
+    }
+    CHECK(ctx.size() == 11);
+    CHECK(ctx[0x45E05C] == 0xED800A0F); // vstr s0, [r0, #0x3C]: the angle at +0x3C
+    CHECK(ctx[0x45E064] == 0xE3C1105C); // bic r1, r1, #0x5C: the dirty bits
+    CHECK(ctx[0x45E06C] == kBxLr);
+    CHECK(ctx[0x45DFF4] == 0xED841A10); // vstr s2, [r4, #0x40]: the shape at +0x40
+
+    FakeMemory m = Game();
+    const float game_aspect = 400.0f / 240.0f;
+    m.SetF(kSceneAspect, game_aspect);
+    m.SetF(kSceneFovY, 0.7854f);
+    m.Set32(kSceneNode + kNodeFlags, 0xFFu);
+    Mailbox mb;
+    FillWide(mb, {true, 1.95f, 1.32f}, game_aspect);
+    REQUIRE(mb.wide_node == kSceneNode);
+
+    SECTION("the mailbox's fields") {
+        const auto w = mb.Words();
+        CHECK(w[0x54 / 4] == kSceneNode);
+        CHECK(std::bit_cast<float>(w[0x58 / 4]) == 1.95f);
+        CHECK(std::bit_cast<float>(w[0x5C / 4]) == 1.32f);
+        CHECK(std::bit_cast<float>(w[0x60 / 4]) == game_aspect);
+        CHECK(Mailbox{}.Words()[0x54 / 4] == 0); // none: the stub passes every node
+        // Values the builder could not take, or no shape of the game's: none.
+        Mailbox bad;
+        FillWide(bad, {true, 3.1f, 1.32f}, game_aspect);
+        CHECK(bad.wide_node == 0);
+        FillWide(bad, {true, 1.95f, 0.0f}, game_aspect);
+        CHECK(bad.wide_node == 0);
+        FillWide(bad, {true, std::nanf(""), 1.32f}, game_aspect);
+        CHECK(bad.wide_node == 0);
+        FillWide(bad, {true, 1.95f, 1.32f}, 0.0f);
+        CHECK(bad.wide_node == 0);
+        FillWide(bad, {false, 1.95f, 1.32f}, game_aspect);
+        CHECK(bad.wide_node == 0);
+    }
+
+    SECTION("in: the image, the mailbox, the site last; out again") {
+        SyncResult r = Sync(m, Bit(Group::WideCamera), mb);
+        CHECK(r.Of(Group::WideCamera) == GroupState::In);
+        CHECK(r.cave == Cave::Ours);
+        CHECK(ImageInPlace(m));
+        CHECK(m.Get32(kMailbox + Stubs::kMbWideNode) == kSceneNode);
+        CHECK(m.Get32(kSiteNodeFov) == B(kSiteNodeFov, kFovStub));
+        REQUIRE_FALSE(m.writes.empty());
+        CHECK(m.writes.back().addr == kSiteNodeFov);
+        // The app never writes the node itself while it is in (the stub does, in the game's
+        // own frame).
+        for (const auto& w : m.writes) {
+            CHECK((w.addr < kSceneNode || w.addr >= kSceneNode + 0x80));
+        }
+        r = Sync(m, 0, Mailbox{});
+        CHECK(r.Of(Group::WideCamera) == GroupState::Out);
+        CHECK(m.Get32(kSiteNodeFov) == 0xEDD00A0F);
+        CHECK_FALSE(AnyOurs(m));
+    }
+
+    SECTION("a context word differs (another build): the site stays the game's") {
+        m.Set32(0x45E064, kInvented);
+        const SyncResult r = Sync(m, Bit(Group::WideCamera), mb);
+        CHECK(r.Of(Group::WideCamera) == GroupState::Different);
+        CHECK(r.different_addr == 0x45E064);
+        CHECK(m.Get32(kSiteNodeFov) == 0xEDD00A0F);
+    }
+
+    SECTION("the game's own shape and putting it back") {
+        // Before anything: the record is empty, the node's shape is the game's.
+        WideRecord rec = ReadWideRecord(m);
+        CHECK(rec.node == 0);
+        const uint32_t game_bits = std::bit_cast<uint32_t>(game_aspect);
+        CHECK(WideGameAspect(game_bits, rec) == game_aspect);
+        CHECK_FALSE(WideRestore(game_bits, rec));
+        // Widened (the stub wrote the node in the game's frame): the record says so.
+        REQUIRE(Sync(m, Bit(Group::WideCamera), mb).Of(Group::WideCamera) == GroupState::In);
+        m.SetF(kSceneAspect, 1.32f);
+        rec = ReadWideRecord(m);
+        CHECK(rec.node == kSceneNode);
+        const uint32_t ours = std::bit_cast<uint32_t>(1.32f);
+        CHECK(WideAspectIsOurs(ours, rec));
+        CHECK(WideGameAspect(ours, rec) == game_aspect); // not our own shape taken for the game's
+        CHECK(WideRestore(ours, rec) == game_bits);
+        // The shape asked for last, before the stub has run with it: ours too.
+        const uint32_t newer = std::bit_cast<uint32_t>(1.30f);
+        CHECK(WideRestore(newer, rec, newer) == game_bits);
+        CHECK_FALSE(WideRestore(newer, rec));
+        // Anything else is the game's doing: never touched.
+        CHECK_FALSE(WideRestore(std::bit_cast<uint32_t>(1.5f), rec, newer));
+        CHECK(WideGameAspect(std::bit_cast<uint32_t>(1.5f), rec) == 1.5f);
+        // Already the game's: nothing to do.
+        CHECK_FALSE(WideRestore(game_bits, rec));
+        // An old mailbox (no tag): no record.
+        m.Set32(kMailbox, 0);
+        CHECK(ReadWideRecord(m).node == 0);
+    }
+
+    SECTION("a save state made widened, loaded with first person off") {
+        REQUIRE(Sync(m, Bit(Group::WideCamera), mb).Of(Group::WideCamera) == GroupState::In);
+        m.SetF(kSceneAspect, 1.32f);
+        FakeMemory loaded = m;
+        REQUIRE(AnyOurs(loaded));
+        // The record travels with the state (the cave is in it): the shape goes back to the
+        // game's even though this run never asked for anything.
+        const WideRecord rec = ReadWideRecord(loaded);
+        const auto back = WideRestore(loaded.Get32(kSceneAspect), rec);
+        REQUIRE(back);
+        CHECK(std::bit_cast<float>(*back) == game_aspect);
+        const SyncResult r = Sync(loaded, 0, Mailbox{});
+        CHECK(r.code_writes == 1);
+        CHECK(loaded.Get32(kSiteNodeFov) == 0xEDD00A0F);
+    }
+}
+
 TEST_CASE("Kid Icarus hooks: the enemy keeps", "[frame_xr][kiuhook]") {
     FakeMemory m = Game();
     const uint32_t plain = Beq(kSitePathEnd, Stubs::kPathRestart);
@@ -760,7 +919,11 @@ TEST_CASE("Kid Icarus hooks: the mailbox's layout", "[frame_xr][kiuhook]") {
     CHECK(Stubs::kMbShotFrame == 0x34);
     CHECK(Stubs::kMbShotOffset == 0x44);
     CHECK(Stubs::kMbKeepSeconds == 0x50);
-    CHECK(Stubs::kMbSize == 0x54);
+    CHECK(Stubs::kMbWideNode == 0x54); // AzaharFrame kiuwide
+    CHECK(Stubs::kMbWideFov == 0x58);
+    CHECK(Stubs::kMbWideAspect == 0x5C);
+    CHECK(Stubs::kMbWideGameAspect == 0x60);
+    CHECK(Stubs::kMbSize == 0x64);
     // The keep stub reads its limit off r12 too: vldr s1, [r12, #0x50] = 0xEDDC0A14.
     CHECK(Stubs::kImage[Stubs::kKeepStub / 4 + 2] == (0xEDDC0A00u | (Stubs::kMbKeepSeconds / 4)));
     // The stubs read those offsets off r12: ldr rX, [r12, #imm] = 0xE59C?imm.

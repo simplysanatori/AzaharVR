@@ -132,6 +132,10 @@ struct State {
     int64_t poll_ns = 0;
     int64_t trace_ns = 0;
     int64_t fp_trace_ns = 0; ///< AzaharFrame kiuvr
+    /// AzaharFrame kiuwide: the scene camera's shape the app asked for last (0: none yet), and
+    /// the game's own shape once known.
+    uint32_t wide_asked_bits = 0;
+    float game_aspect = 0.0f;
 };
 
 State& TheState() {
@@ -356,6 +360,10 @@ void TraceFirstPerson(State& s, const KH::GameMemory& mem, const KH::Player& p,
             }
         }
     }
+    if (mailbox.wide_node != 0) { // AzaharFrame kiuwide
+        line += fmt::format(" wide_fov={:.5f} wide_aspect={:.5f} game_aspect={:.5f}",
+                            mailbox.wide_fov_y, mailbox.wide_aspect, mailbox.wide_game_aspect);
+    }
     if (mailbox.shot_rotate || mailbox.shot_move) {
         line += fmt::format(" shot_flags={}{}{}{} shot_q={} shot_offset={} shot_frame={}",
                             mailbox.shot_rotate ? "r" : "", mailbox.shot_absolute ? "a" : "",
@@ -551,7 +559,44 @@ void Hook(int64_t ticks) {
             shot = ShotFromHand(fp_now, KH::Fill(p, eye, {}, 0));
         }
     }
-    const KH::Mailbox mailbox = KH::Fill(p, eye, shot, ++s.serial, keep_seconds);
+    KH::Mailbox mailbox = KH::Fill(p, eye, shot, ++s.serial, keep_seconds);
+    // AzaharFrame kiuwide: in first person, in a battle (the player's actor known), the scene
+    // camera gets the angle and shape that make the game's own frame what fills the view
+    // (Kiu::FirstPerson::WideTarget, AZAHARFRAME_KIU_FP_WIDE); otherwise a shape the app gave it
+    // goes back to the game's own (the angle comes back with the game's next frame by itself).
+    {
+        KH::WideRequest wide;
+        if (first_person && p.actor != 0) {
+            wide.on = Kiu::FirstPerson::WideTarget(wide.fov_y, wide.aspect);
+        }
+        uint32_t node_aspect = 0;
+        const bool have_aspect = mem.Read32(KH::kSceneAspect, node_aspect);
+        const KH::WideRecord rec = KH::ReadWideRecord(mem);
+        if (have_aspect && !(s.game_aspect > 0.0f)) {
+            const float game = KH::WideGameAspect(node_aspect, rec, s.wide_asked_bits);
+            if (KH::GameAspectOk(game)) {
+                s.game_aspect = game;
+            }
+        }
+        if (!wide.on && have_aspect) {
+            if (const auto back = KH::WideRestore(node_aspect, rec, s.wide_asked_bits)) {
+                uint32_t flags = 0;
+                if (mem.WriteData(KH::kSceneAspect, *back) &&
+                    mem.Read32(KH::kSceneNode + KH::kNodeFlags, flags)) {
+                    mem.WriteData(KH::kSceneNode + KH::kNodeFlags, flags & ~KH::kNodeDirty);
+                }
+                LOG_INFO(Frontend,
+                         "xr: Kid Icarus hooks: the scene camera's shape is the game's again "
+                         "({:.4f})",
+                         std::bit_cast<float>(*back));
+            }
+        }
+        KH::FillWide(mailbox, wide, s.game_aspect);
+        if (mailbox.wide_node != 0) {
+            s.wide_asked_bits = std::bit_cast<uint32_t>(mailbox.wide_aspect);
+        }
+        Kiu::FirstPerson::PublishGameAspect(s.game_aspect);
+    }
     const uint32_t wanted = (want_nocull ? KH::Bit(KH::Group::NoCull) : 0u) |
                             (want_keep ? KH::Bit(KH::Group::BulletKeep) : 0u) |
                             (want_eye ? KH::Bit(KH::Group::Eye) : 0u) |
@@ -562,7 +607,8 @@ void Hook(int64_t ticks) {
                             (want_no_follow ? KH::Bit(KH::Group::NoFollow) : 0u) |
                             (want_aim_hold ? KH::Bit(KH::Group::AimHold) : 0u) |
                             (want_aim_box ? KH::Bit(KH::Group::AimBox) : 0u) |
-                            (want_player_shadow ? KH::Bit(KH::Group::PlayerShadow) : 0u);
+                            (want_player_shadow ? KH::Bit(KH::Group::PlayerShadow) : 0u) |
+                            (mailbox.wide_node != 0 ? KH::Bit(KH::Group::WideCamera) : 0u);
     const KH::SyncResult r = KH::Sync(mem, wanted, mailbox);
     LogChanges(s, r);
 

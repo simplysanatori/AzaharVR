@@ -28,7 +28,11 @@
         .equ    MB_SHOT_FRAME,     0x34    @ f32 x4 quaternion: the player's parent's rotation (identity on land)
         .equ    MB_SHOT_OFFSET,    0x44    @ f32 x3: start = frame * the player's local position + this
         .equ    MB_KEEP_SECONDS,   0x50    @ f32: a passed flier younger than this flies its path again
-        .equ    MB_SIZE,           0x54
+        .equ    MB_WIDE_NODE,      0x54    @ u32 the scene camera node whose angle and shape are the app's, 0: none
+        .equ    MB_WIDE_FOV,       0x58    @ f32 its angle up and down, radians
+        .equ    MB_WIDE_ASPECT,    0x5C    @ f32 its width over its height
+        .equ    MB_WIDE_GAME_ASPECT, 0x60  @ f32 the game's own shape for it (the app puts it back; no stub reads it)
+        .equ    MB_SIZE,           0x64
 
         .equ    EYE_ON,            1
         .equ    SHOT_ROTATE,       1
@@ -42,8 +46,12 @@
         .equ    TRANSFORM_POS,     0x14    @ the camera hand-over's transform: f32 x3
         .equ    PATH_STATE_TIME,   0x34    @ a flier's path state: f32 seconds since it entered it
         .equ    SHADOW_ACTOR,      0x30    @ the round shadow's caller (a movement state): its actor
+        .equ    NODE_FOV,          0x3C    @ a camera node: its projection's angle up and down (f32, radians)
+        .equ    NODE_ASPECT,       0x40    @ and its width over its height (f32)
+        .equ    NODE_FLAGS,        0x6C    @ its flags: the setter clears NODE_DIRTY when the angle changes
+        .equ    NODE_DIRTY,        0x5C    @ (the projection and what is made from it are built again)
 
-        .global image_start, eye_stub, shot_stub, keep_stub, shadow_stub, image_end
+        .global image_start, eye_stub, shot_stub, keep_stub, shadow_stub, fov_stub, image_end
 image_start:
         .ascii  "KIUH"                  @ the image's tag
         .word   IMAGE_VERSION
@@ -231,6 +239,43 @@ shadow_stub:
 1:      push    {r4, r5, lr}            @ the instruction replaced at 0x57B054
         ldr     pc, lit_shadow_continue @ 0x57B058, the function's second instruction
 
+@ ---- The scene camera's angle and shape (AzaharFrame kiuwide): entered by `b fov_stub` at
+@ 0x45E04C, the first instruction of a camera node's angle setter (r0 = the node, s0 = the angle
+@ the game asks for, radians; the scene camera's is set by it every game frame, land and air,
+@ through each of the game's cameras). For the mailbox's node the angle and the shape become the
+@ mailbox's (the game's s0 is not used, so its zooms do nothing) and, when either was not ours
+@ yet, the node's dirty bits are cleared as the setter does for a new angle, so its projection
+@ (and its cull planes) are built again from them. Any other node, or none in the mailbox: the
+@ replaced instruction and on, as the game, with only r12 and the flags changed. On the mailbox's
+@ path r1, r12 and the flags (the setter itself writes r1, s1 and the flags); s0, s1 are kept.
+fov_stub:
+        ldr     r12, lit_mailbox
+        ldr     r12, [r12, #MB_WIDE_NODE]
+        cmp     r12, r0
+        bne     fov_pass
+        cmp     r12, #0
+        beq     fov_pass
+        ldr     r12, lit_mailbox
+        ldr     r1, [r12, #MB_WIDE_FOV]
+        ldr     r12, [r0, #NODE_FOV]
+        cmp     r12, r1                 @ the angle is ours already?
+        ldr     r12, lit_mailbox
+        ldr     r12, [r12, #MB_WIDE_ASPECT]
+        ldreq   r1, [r0, #NODE_ASPECT]
+        cmpeq   r1, r12                 @ and the shape?
+        bxeq    lr                      @ both: nothing changes (as the setter with the same angle)
+        str     r12, [r0, #NODE_ASPECT]
+        ldr     r12, lit_mailbox
+        ldr     r12, [r12, #MB_WIDE_FOV]
+        str     r12, [r0, #NODE_FOV]
+        ldr     r1, [r0, #NODE_FLAGS]
+        bic     r1, r1, #NODE_DIRTY
+        str     r1, [r0, #NODE_FLAGS]
+        bx      lr
+fov_pass:
+        vldr    s1, [r0, #NODE_FOV]     @ the instruction replaced at 0x45E04C
+        ldr     pc, lit_fov_continue    @ 0x45E050, the setter's second instruction
+
 @ ---- Literals (the only words that name an address) ----
 lit_mailbox:        .word   MAILBOX
 lit_actor_vtable:   .word   ACTOR_VTABLE
@@ -240,4 +285,5 @@ lit_no_target:      .word   0xFFFFFE00
 lit_path_restart:   .word   PATH_RESTART
 lit_path_vanish:    .word   PATH_VANISH
 lit_shadow_continue: .word  SHADOW_CONTINUE
+lit_fov_continue:   .word   FOV_CONTINUE
 image_end:
