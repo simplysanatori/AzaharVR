@@ -224,6 +224,167 @@ brought our words back.
   stays usable; what it loses is the camera's own turn while the player runs. Not checked: a
   lock-on, camera modes 0 and 2, event cameras, and whatever else reads cam+0x4AC.
 
+## First person in 6DoF (AzaharFrame kiuvr; test switches)
+
+Code: `input/kiu_room.h` (pure: the room ↔ game transform, the reticle's projection, the shots'
+aim; tests in `tests/frame_xr/kiu_room.cpp`), `kiu_first_person.{h,cpp}` (the switches, what the
+XR thread hands over, the scene camera), `kiu_hooks.cpp` (the VBlank pass), `kiu_probe.cpp`
+(Direct Aim's writer). The mock runs behind every **V** below were the real game, native desktop
+build, VR on the mock runtime with scripted head and controller poses.
+
+### The switches
+
+| Switch | Does |
+|---|---|
+| `AZAHARFRAME_KIU_FIRST_PERSON=1` | live: the eye hook at the character's eyes, the culls off, the land camera's follow off, Right Stick turning on, the world at life size. Read once as the game boots: the run plays in Immersive Mode 3 with View Matrix Register 90 and Eye Indicator Register `87,2`, set in memory as a preset sets them (so they are saved with the game's settings if those are saved during the run; then Immersive Mode has to be put back by hand) |
+| `AZAHARFRAME_KIU_WORLD_SCALE=<u>` | the leaning scale, game units per metre (0.5 to 100), over life size |
+| `AZAHARFRAME_KIU_PLAYER_EYE_M=<m>` | the player's eye height for life size (default 1.6 m: the character's eyes, 12.3 units up, are that high: 7.69 units a metre) |
+| `AZAHARFRAME_KIU_AIM_NO_MOD=1` | Direct Aim's reticle writer on the game without the mod ("The game's aim" below) |
+| `AZAHARFRAME_KIU_AIM_6DOF=1` | with first person and Direct Aim (Aiming: Direct Aim): the reticle where the hand's ray points in the game's world, through the game's camera |
+| `AZAHARFRAME_KIU_SHOTS_6DOF=1` | with first person: the game's own shots from the hand's ray; turns the bullet keep on |
+| `AZAHARFRAME_KIU_FP_TRACE=1\|2`, `AZAHARFRAME_KIU_FP_PROBE=<hex>` | a line of `key=value` words a second (2: a VBlank): the scene camera, the view register, the rest pose, the head, the hand's ray in the world, the reticle, the mailbox; and an actor's place in the world and in the head's view |
+
+### The transform (`kiu_room.h`)
+
+Mode 3 draws through `view'(x) = Rc⁻¹ · (V · x − s · h)`: `V` the game's view matrix, `h` and
+`Rc` the head's position and rotation in the rest frame (the head's place and heading when the
+Full view started or was re-centred, level), `s` the leaning scale. So **the rest frame, scaled
+by `s`, is the game camera's frame**: a point `p` of the room (rest frame, metres) is the world
+point `eye + Qcam · (s · p)`, a direction `d` is `Qcam · d`. Everything is taken from the scene
+camera (0xE14B90 eye, 0xE14B9C look-at, 0xE14BA8 up): the only camera there is on land and in the
+air. What is made from it is an offset from the eye and a direction, never an absolute position:
+the eye itself is the player plus the eye offset, which the stubs read at the frame they run in,
+so the rail's 21 units a frame never enter. The camera read at a VBlank is the game frame
+before's: while it turns (the rail's curves; the shake the game gives its camera when the player
+fires or is hit: up to 1.8° from one VBlank to the next in the mock runs) the hand's ray in the
+world is one frame old.
+
+- **The view register (V).** For this game register 90 holds the camera's rotation only: its
+  translation column is 0, the game draws everything relative to the scene's eye. The register's
+  axes are the scene camera's (0.0000° apart at every VBlank of the land runs). The eye indicator
+  `87,2` reads both eyes (293 of 293 two-eye swaps).
+- **Why the mode is set at boot and not live:** besides the XR thread, the 3D slider given to the
+  game (`core/hle/kernel/shared_page.cpp`, `service/hid`) and the internal resolution read the
+  Immersive Mode setting. With only the XR side in mode 3 the game kept its own stereo: each
+  eye's picture was shifted 51 px (1600 wide) the other way, the same at every depth.
+- **The world holds still (V, land).** The Practice Range's dark floor line along world x = 0,
+  in both eyes' pictures (2400 × 1440, 27.3 px a degree), against the line through the projected
+  world points computed outside the app from the trace's raw values: head yawed 20°, −25°,
+  pitched 15°, yaw 30° with pitch −10°, moved 0.30 m right, 0.20 m up, 0.40 m forward, and a
+  mixed pose: mean 0.4 to 1.3 px, worst 5.7 px (0.21°). The same with the C-Stick & Gyro mod's
+  21:9 build, with the picture's shape as the app measures it from the game's draws (2.333): mean
+  0.3 to 0.9 px, worst 2.1 px. The range's dummy is no fixed point (it turns and bobs: its middle
+  is up to 1° from where its actor's position would be).
+- **The stick turns the world, not the head (V, land).** The right stick held right for 0.25 s:
+  the game camera's yaw −22.56° (90 °/s), the head's pose in the trace unchanged, and the floor
+  line where the turned camera puts it (mean 0.6 to 1.2 px, worst 2.1).
+- **In the air: I for the picture.** The same code draws it; the register's axes are the scene
+  camera's there too, and the eye is the player's (the hook lane's V). No still thing was found
+  to measure in the air pictures.
+- **Life size.** `s` = 12.3 / the player's eye height: the floor under the rest pose is the
+  character's feet (unit test). First person leans by this scale instead of the one World Scale
+  and the game's 3D give, saves nothing for the game and skips World Scale's migration.
+- **Not rigid when the screen is resized or moved.** The Full view's screen at its default size
+  and place gives gains 1 (the trace's `gains=`): only then is the head's rotation the game
+  camera's. Horizontal or Vertical Scale as Stretch, a grabbed and resized screen or a pitched
+  one give the game `Layout::GameCameraRotation` instead, and the hand's ray no longer matches
+  the picture. Render Margin and the scales as Field of View only draw more around: fine.
+
+### The game's aim (V unless marked; the game without the mod)
+
+The aim object (`aim = [[0xE14504] + 8] − 0x10`, the land or the air class) is the reticle and a
+node of the scene:
+
+- `+0xA4, +0xA8` the reticle's pixel in a screen of `+0xE0` × `+0xE8` (400 × 240) with its
+  middle at `+0xE4, +0xEC`.
+- `+0x54` its world position: **the game's aim point**, which the game puts each frame on the
+  scene camera's ray through the pixel, at a fixed depth along the camera's view (500.6 units on
+  land, 1500 in the air) or on what is under the reticle (74.7 units with the reticle on the
+  Practice Range's dummy from 95 units). The pixel of a world point is the scene projection's:
+  `x = cx + (w / 2) · X / (Z · tan(fov / 2) · aspect)`, `y = cy − (h / 2) · Y / (Z · tan(fov / 2))`,
+  the angle read from 0xE14BC4.
+- **The shape is not always the scene projection's.** The mod's 21:9 build leaves 5:3 in the
+  projection's field (0xE14BC8) and aims, and draws, 2.3333 wide. So the aim takes its shape
+  from the game's own aim: the aim point's `X / (Z tan)` over the pixel's share of the half
+  width (`KiuRoom::AimShape`: readings with the reticle 16 px or more off the middle and still),
+  starting from the shape the immersive code measured from the game's draws, else the field.
+- `+0x84` flags. With bit 0 or bit 1 set the pixel is the aim and stays; with neither, the
+  class's own per-frame function (vtable +0x2C: 0x76ED88 on land, 0x76E9EC in the air) puts the
+  reticle back: the screen's rest point on land (200, 104), in the air the pixel its old point
+  in the world is seen at now. A stylus touch gives 0x43 and leaves **0x41** after it; a value
+  written from outside with no touch is taken down again by the game within a frame. Bit 3 is
+  the clamp's.
+- On land the function 0x6D213C eases the reticle (back to its rest height when aiming stops:
+  a fifth of the way each frame; the flick's glide), and 0x6D163C keeps it in the aim box (0.7
+  to 1.3 of the middle across), past which the clamp 0x6D2C08 turns the camera. In the air the
+  first does nothing (no battle camera) and the box is the whole screen.
+
+**Direct Aim without the mod** (`AZAHARFRAME_KIU_AIM_NO_MOD=1`, or `_AIM_6DOF`): the probe takes
+the game's own aim object (the European game's code, checked), writes the pixel as with the mod
+and, at every poll, puts the flags' 0x41 back; the "aim hold" patches stop the eased moves and
+make the land box the whole screen, so the reticle stays where it is put and never turns the
+camera (the stick turns). **With the mod** the probe's mod route runs, as before, and the "aim
+hold" group stays out by its context: one writer in either case.
+
+**The aim in first person** (`AZAHARFRAME_KIU_AIM_6DOF=1`): the hand's ray, through the
+transform, is followed to the depth the game's own aim point has now (its fixed range, or the
+thing the reticle is on: the game's own pick, read back a frame later) and that point is seen
+through the scene camera: that pixel is Direct Aim's target in place of the ray's point on a
+screen. A ray that leaves the game's view holds the reticle at the screen's edge on its side.
+
+| Proof (land, Practice Range; air, Chapter 1) | Result |
+|---|---|
+| the reticle read back against the pixel asked, every VBlank of the second before each shot | 0.00 px, 60 of 60, land and air; flags 0x41 at all of them |
+| the game's aim point against the hand's ray (seen from the ray's origin) | land 0.000°, with the reticle on the dummy 0.008° (max 0.017°); air 0.000° to 0.018° (max 0.020°) |
+| rays out of the game's view (35° to 100° off) | the reticle held at the screen's edge on that side |
+
+### Shots from the hand (`AZAHARFRAME_KIU_SHOTS_6DOF=1`)
+
+- **The game's aim at a shot (V in code and by result).** 0x503F8C calls the shooter's aim
+  (vtable +0x34 = 0x7014C8) with four pointers: the start (from 0x539120, the muzzle), the
+  quaternion, and a fourth local at its `sp + 0x70`. 0x7019A0 gets the aim quaternion from
+  0x4C14B0 (the direction from the start to the aim object's world position, made a quaternion
+  with the world's up kept up: +z the direction, x = up × z), copies it to that fourth local,
+  and only then adds the weapon's tilt and each bullet's scatter to the quaternion that goes to
+  the spawn. So at 0x5043E4 the caller's `sp + 0x70` still holds the aim without scatter.
+- **What the app fills.** `ShotRequest.absolute`: the rotation is the game's kind of aim
+  quaternion for the hand's ray (`KiuRoom::ShotQuat`), and the stub makes each bullet's
+  quaternion `rotation × conj(aim) × q`: the bullet keeps its own scatter and tilt, about the
+  ray. The offset is the eye offset plus the ray's origin from the eye (the transform). The lock
+  target is left as the game chose it.
+- **The ray's origin** is the one ray's (Direct Aim's and the laser's): the drawn weapon's
+  muzzle (`vis/weapon_fit.h`) when the weapon is in the hand, else the aim pose.
+
+| Proof | Result |
+|---|---|
+| land, charged, 6 hand poses, the ray 7° to 76° from the game camera's view, the head turned too | start 0.000 units from the ray's origin, direction 0.000° from the ray; without a lock all 31 points of the path (259 units, the shot's range) within 0.00 of the ray |
+| land, the ray at the dummy (95 units) | the shot ends at it after 63 to 66 units; with the reticle 20° beside it the game still locks it and the shot bends 15 units off its line to reach it (the game's own lock) |
+| land, rapid (24 to 26 pooled bullets a phase) | every bullet's line passes the ray's origin within 0.00; about the ray they scatter +0.2° ± 6.3° sideways and −6.8° ± 1.0° up; the game's own shots about its own aim in the same run: +2.8° ± 7.9° and −5.0° ± 5.4° (a rough control: its aim per bullet is estimated) |
+| air (Chapter 1), charged, 7 hand poses, 0° to 100° from the game camera's view | each bullet's direction 0.0000° to 0.0001° and start 0.000 to 0.004 units from the mailbox of one VBlank between the trigger and its first sighting; against the ray of 1.6 s into the pose 0.03° to 0.57° and 0.03 to 3.4 units (the rail turned and the player moved meanwhile); the first 5 points within 0.09 to 0.58 units of the ray; a shot 100° off the game's view flew its whole range (the bullet keep) |
+| air, rapid | not measured (the pooled bullets' records are not mapped in the air: I, the same stub) |
+| after the stick's turn | the next shot leaves along the ray in the turned world (0.000°) |
+
+### The four game codes (EUR)
+
+| | original `b107c9b1` | mod base `b01e1f4a` | mod 16:9 `6a062f17` | mod 21:9 `b95ca36b` |
+|---|---|---|---|---|
+| the sites, context and cave of every group but "aim hold" | V (run) | V (files) | V (files) | V (files) |
+| "aim hold" | in (run) | out by its context (files) | out by its context (files) | out by its context (run) |
+
+(The table of what was run on each is in the lane's report.)
+
+### Not done, risks
+
+- The headset: nothing here ran on it.
+- The world tilts with the game camera's pitch (3° down on land at rest; the rail's in the
+  air) and shakes with the game's own camera shake: the rest frame is the game camera's, level
+  only when the camera is. A level frame from the camera's yaw alone is the next step if the
+  owner's check asks for it.
+- Dash shots, melee and powers do not pass the spawn call (the hook lane's note).
+- The hand's ray is the right hand's when no controller aims, and Direct Aim must be on for
+  `AZAHARFRAME_KIU_AIM_6DOF`.
+- The reticle sprite the game draws is 2D: it sits on the head-locked picture, not in the world.
+
 ## Not done, not known
 
 - The headset: nothing here ran on it (the aarch64 build compiles).
