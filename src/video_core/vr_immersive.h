@@ -97,6 +97,7 @@ public:
         ipd.store(data.ipd, std::memory_order_relaxed);
         hud_across.store(data.hud.across, std::memory_order_relaxed); // AzaharFrame hudmove
         hud_up_down.store(data.hud.up_down, std::memory_order_relaxed);
+        hud_far_plane.store(data.hud.far_plane, std::memory_order_relaxed);
         seq.store(s + 2, std::memory_order_release);
     }
 
@@ -131,6 +132,7 @@ public:
             d.ipd = ipd.load(std::memory_order_relaxed);
             d.hud.across = hud_across.load(std::memory_order_relaxed); // AzaharFrame hudmove
             d.hud.up_down = hud_up_down.load(std::memory_order_relaxed);
+            d.hud.far_plane = hud_far_plane.load(std::memory_order_relaxed);
             std::atomic_thread_fence(std::memory_order_acquire);
             if (seq.load(std::memory_order_relaxed) == s0) {
                 out = d;
@@ -156,6 +158,7 @@ private:
     std::atomic<float> ipd{0.065f};
     std::atomic<float> hud_across{1.0f};  ///< AzaharFrame hudmove
     std::atomic<float> hud_up_down{1.0f};
+    std::atomic<bool> hud_far_plane{false};
 };
 
 inline Mailbox g_mailbox;
@@ -914,7 +917,7 @@ inline void ApplyPending(RasterizerInterface* rasterizer) {
     rasterizer->SetVRData(d.mode, d.factor, d.uoffset, d.game_pos_scaler, d.inv_view.data());
     rasterizer->SetVRFactorY(d.factor_y);
     rasterizer->SetVRIpd(d.ipd);
-    rasterizer->SetVRHudSpacing(d.hud.across, d.hud.up_down); // AzaharFrame hudmove
+    rasterizer->SetVRHudSpacing(d.hud.across, d.hud.up_down, d.hud.far_plane); // hudmove
     g_content.Applied(d.pose);
 }
 

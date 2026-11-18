@@ -47,6 +47,7 @@ R"(    float vr_immersive_mode_factor; // CitraVR: appended last to keep existin
     float vr_immersive_mode_factor_y; // AzaharFrame immersive: up and down (clip x)
     float vr_hud_up_down; // AzaharFrame hudmove: HUD Spacing, 2D inside the view (clip x)
     float vr_hud_across;  // and across (clip y); 1 = where the game draws it
+    float vr_hud_far_plane; // 1: also a vertex at the far plane (Mario Kart 7's HUD)
 };
 
 const vec2 EPSILON_Z = vec2(0.000001f, -1.00001f);
@@ -56,12 +57,15 @@ const vec2 EPSILON_Z = vec2(0.000001f, -1.00001f);
 // pass (a depth or stencil mask, a copy of the last frame) still covers the whole picture, where
 // shrunk it cut the world off at the game's own frame (Ocarina of Time 3D) or nested copies of
 // the last frame (Majora's Mask 3D). 2D inside the view (the HUD) shrinks with the world.
-// AzaharFrame hudmove: and by HUD Spacing's scales on top (video_core/vr_hud_spacing.h; 1 = none).
+// AzaharFrame hudmove: and by HUD Spacing's scales on top (video_core/vr_hud_spacing.h; 1 = none),
+// which with vr_hud_far_plane also take a vertex on the far plane (z = w).
 vec2 VrFactor(vec4 pos) {
     vec2 f = vec2(vr_immersive_mode_factor_y, vr_immersive_mode_factor);
     if (abs(pos.w - 1.0) < 0.0001) {
         f = mix(f / vec2(vr_hud_up_down, vr_hud_across), vec2(1.0),
                 greaterThanEqual(abs(pos.xy), vec2(0.999)));
+    } else if (vr_hud_far_plane != 0.0 && abs(pos.w - pos.z) < 0.5) {
+        f /= vec2(vr_hud_up_down, vr_hud_across);
     }
     return f;
 }

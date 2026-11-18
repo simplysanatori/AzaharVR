@@ -17,6 +17,16 @@
 // 2D vertices inside the view are scaled about the middle: no register of any game is read, so
 // a game whose HUD is not drawn with w = 1 shows no change rather than a wrong one.
 //
+// Mario Kart 7 draws its race HUD (rank, item box) through a perspective projection instead (w
+// about 1525), every vertex at the far end of the depth range: w - z = 0.049 (clip z after the
+// shader's flip; 0 is the far plane), where its world's vertices keep w - z = 2.4 to 3 (desktop
+// census of a 50 s race, 80 million vertices: none below 2.41). Its preset turns on a second rule
+// (ImmersivePreset::hud_far_plane): a vertex with w - z below 0.5 is scaled the same way. Off for
+// every other game, so their world can never meet it.
+//
+// The 3DS's bottom screen is drawn with the same 2D vertices; a draw into its 240 x 320 viewport
+// gets no HUD scale (the rasterizer checks it per draw, ForDraw).
+//
 // The scale applies to vertices, so an element also gets that much smaller on that axis (a
 // different amount across than up and down narrows or flattens it a little).
 //
@@ -40,6 +50,8 @@ inline constexpr int kDefaultSpacing = 100;
 inline constexpr float kFlatW = 0.0001f;
 /// The shader's edge test (VrFactor): a 2D vertex at or past this keeps its place.
 inline constexpr float kEdge = 0.999f;
+/// The far plane test (VrFactor, with hud_far_plane): |w - z| below this (clip units).
+inline constexpr float kFarPlane = 0.5f;
 /// What the rasterizer accepts (anything else is taken as 1, no change).
 inline constexpr float kMinScale = 0.5f;
 inline constexpr float kMaxScale = 1.5f;
@@ -59,16 +71,17 @@ inline float UsableScale(float scale) {
 }
 
 /// The two scales: across the picture (clip y: the top screen is drawn turned) and up and down
-/// (clip x).
+/// (clip x). `far_plane`: the game's HUD is drawn on the far plane (its preset's hud_far_plane).
 struct Scales {
     float across = 1.0f;
     float up_down = 1.0f;
+    bool far_plane = false;
 
     bool IsIdentity() const {
         return across == 1.0f && up_down == 1.0f;
     }
     bool operator==(const Scales& o) const {
-        return across == o.across && up_down == o.up_down;
+        return across == o.across && up_down == o.up_down && far_plane == o.far_plane;
     }
     bool operator!=(const Scales& o) const {
         return !(*this == o);
@@ -93,24 +106,45 @@ inline Scales ForFrame(bool engaged, unsigned mode, int spacing_x, int spacing_y
     return {eased(spacing_x), eased(spacing_y)};
 }
 
+/// The scales one draw uses (emulation thread, per draw): none for a draw into the bottom
+/// screen's viewport (240 x 320, drawn turned), `s` for everything else.
+inline Scales ForDraw(Scales s, float viewport_width, float viewport_height) {
+    if (viewport_width == 240.0f && viewport_height == 320.0f) {
+        return {};
+    }
+    return s;
+}
+
+/// Whether a vertex lies at the far plane (clip z = w, as the shader sees it: after the z flip).
+inline bool OnFarPlane(float z, float w) {
+    return std::abs(w - z) < kFarPlane;
+}
+
 /// The divisor of one clip component in the vertex shader (VrFactor with the HUD scale): the
 /// periphery `factor` of that axis for every vertex; for a 2D vertex (w = 1) on or past the edge
-/// 1, inside the view `factor / hud_scale`.
-inline float ClipDivisor(float clip, float w, float factor, float hud_scale) {
+/// 1, inside the view `factor / hud_scale`; with `far_plane`, a vertex on the far plane
+/// `factor / hud_scale` too.
+inline float ClipDivisor(float clip, float z, float w, float factor, float hud_scale,
+                         bool far_plane) {
     if (std::abs(w - 1.0f) < kFlatW) {
         return std::abs(clip) >= kEdge ? 1.0f : factor / hud_scale;
+    }
+    if (far_plane && OnFarPlane(z, w)) {
+        return factor / hud_scale;
     }
     return factor;
 }
 
 /// A clip position after the vertex shader (the C++ form of VrFactor): `clip_x` is up and down,
-/// `clip_y` across. `factor` is across, `factor_y` up and down (as shader_uniforms.h).
+/// `clip_y` across, `z` after the shader's z flip. `factor` is across, `factor_y` up and down
+/// (as shader_uniforms.h).
 struct Clip {
     float x, y, w;
+    float z = 0.0f;
 };
 inline Clip ApplyVertex(Clip p, float factor, float factor_y, Scales s) {
-    return {p.x / ClipDivisor(p.x, p.w, factor_y, s.up_down),
-            p.y / ClipDivisor(p.y, p.w, factor, s.across), p.w};
+    return {p.x / ClipDivisor(p.x, p.z, p.w, factor_y, s.up_down, s.far_plane),
+            p.y / ClipDivisor(p.y, p.z, p.w, factor, s.across, s.far_plane), p.w, p.z};
 }
 
 } // namespace VideoCore::HudSpacing

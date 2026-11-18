@@ -1561,6 +1561,8 @@ void OnFrame(const FrameInfo& info) {
             const int spacing_y = Settings::values.vr_immersive_hud_spacing_y.GetValue();
             data.hud = VideoCore::HudSpacing::ForFrame(true, mode, spacing_x, spacing_y,
                                                        g.menu_exact.Weight());
+            const ImmersivePreset* preset = FindImmersivePreset(g.title_id);
+            data.hud.far_plane = !data.hud.IsIdentity() && preset && preset->hud_far_plane;
             static int logged[2] = {VideoCore::HudSpacing::kDefaultSpacing,
                                     VideoCore::HudSpacing::kDefaultSpacing};
             if (spacing_x != logged[0] || spacing_y != logged[1]) {

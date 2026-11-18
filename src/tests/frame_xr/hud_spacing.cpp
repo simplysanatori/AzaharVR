@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <limits>
 #include <string>
+#include <utility>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include "common/settings.h"
@@ -139,6 +140,48 @@ TEST_CASE("FrameXr hudmove: which vertices move", "[frame_xr][hudmove]") {
             REQUIRE(p.y == b.y);
         }
     }
+    SECTION("the far plane rule is off unless the game's preset turns it on") {
+        // Mario Kart 7's HUD as traced on the desktop: w 1525.2083, z 1525.1589 after the flip.
+        const Clip hud{900.0f, 1200.0f, 1525.2083f, 1525.1589f};
+        const Clip a = ApplyVertex(hud, factor, factor_y, in);
+        const Clip b = Before(hud, factor, factor_y);
+        REQUIRE(a.x == b.x);
+        REQUIRE(a.y == b.y);
+    }
+    SECTION("with the far plane rule a vertex on the far plane moves like 2D") {
+        const Scales far{0.8f, 0.9f, true};
+        const Clip hud{900.0f, 1200.0f, 1525.2083f, 1525.1589f};
+        const Clip a = ApplyVertex(hud, factor, factor_y, far);
+        const Clip b = Before(hud, factor, factor_y);
+        REQUIRE(a.y == Approx(b.y * 0.8f));
+        REQUIRE(a.x == Approx(b.x * 0.9f));
+        REQUIRE(a.w == hud.w); // only x and y: it stays on the far plane
+        // Past the edge too: its whole quad moves (no edge rule here).
+        const Clip past = ApplyVertex({1600.0f, -1600.0f, 1525.0f, 1524.95f}, 1.0f, 1.0f, far);
+        REQUIRE(past.x == Approx(1600.0f * 0.9f));
+        REQUIRE(past.y == Approx(-1600.0f * 0.8f));
+        // At 100 % nothing moves, rule or not.
+        const Clip same = ApplyVertex(hud, factor, factor_y, {1.0f, 1.0f, true});
+        REQUIRE(same.x == b.x);
+        REQUIRE(same.y == b.y);
+    }
+    SECTION("the far plane rule leaves the world alone") {
+        // Mario Kart 7's world in a race (desktop census): w - z (after the flip) from 3 near the
+        // camera down to 2.41 at the sky (w 9805); behind the camera (negative w) larger.
+        const Scales far{0.8f, 0.9f, true};
+        for (const auto& [w, z] : {std::pair{50.0f, 47.0f}, std::pair{1525.0f, 1522.1f},
+                                   std::pair{9804.764f, 9802.352f}, std::pair{-574.7f, -577.7f},
+                                   std::pair{-11523.0f, -11526.0f}}) {
+            const Clip p{0.3f * w, -0.7f * w, w, z};
+            const Clip a = ApplyVertex(p, factor, factor_y, far);
+            const Clip b = Before(p, factor, factor_y);
+            REQUIRE(a.x == b.x);
+            REQUIRE(a.y == b.y);
+        }
+        REQUIRE(OnFarPlane(1525.1589f, 1525.2083f));
+        REQUIRE_FALSE(OnFarPlane(9802.352f, 9804.764f));
+        REQUIRE_FALSE(OnFarPlane(-1525.0f, 1525.0f)); // the near side (z = -w)
+    }
     SECTION("an element keeps its order and its middle moves by the scale") {
         // A 40 x 24 pixel element at the right edge of a 400 x 240 picture (clip y 0.8 to 1.0
         // would touch the edge; this one stops at 0.98): it moves in by 20 % of its distance.
@@ -156,6 +199,17 @@ TEST_CASE("FrameXr hudmove: which vertices move", "[frame_xr][hudmove]") {
 
 // The shader's text and the uniform block it reads: the two scales after the up and down
 // factor, defaulting to 1, the block's size unchanged.
+TEST_CASE("FrameXr hudmove: the bottom screen's draws get no scale", "[frame_xr][hudmove]") {
+    const Scales in{0.85f, 0.9f, true};
+    // The bottom screen's viewport (240 x 320, drawn turned): none, far plane rule off too.
+    REQUIRE(ForDraw(in, 240.0f, 320.0f) == Scales{});
+    // The top screen's (240 x 400) and anything else: the scales as set.
+    REQUIRE(ForDraw(in, 240.0f, 400.0f) == in);
+    REQUIRE(ForDraw(in, 256.0f, 416.0f) == in);
+    REQUIRE(ForDraw(in, 320.0f, 240.0f) == in);
+    REQUIRE(ForDraw(Scales{}, 240.0f, 400.0f).IsIdentity());
+}
+
 TEST_CASE("FrameXr hudmove: the vertex shader reads the scales", "[frame_xr][hudmove]") {
     const std::string vs =
         Pica::Shader::Generator::GLSL::GenerateTrivialVertexShader(false, false);
@@ -169,17 +223,23 @@ TEST_CASE("FrameXr hudmove: the vertex shader reads the scales", "[frame_xr][hud
     REQUIRE(vs.find(across) > vs.find(up_down));
     REQUIRE(vs.find("f = mix(f / vec2(vr_hud_up_down, vr_hud_across), vec2(1.0),") !=
             std::string::npos);
+    REQUIRE(vs.find("float vr_hud_far_plane;") > vs.find(across));
+    REQUIRE(vs.find("} else if (vr_hud_far_plane != 0.0 && abs(pos.w - pos.z) < 0.5) {") !=
+            std::string::npos);
     REQUIRE(vs.find("gl_Position.xy /= VrFactor(gl_Position);") != std::string::npos);
 
     using Pica::Shader::Generator::VSUniformData;
     const VSUniformData data{};
     REQUIRE(data.vr_hud_up_down == 1.0f);
     REQUIRE(data.vr_hud_across == 1.0f);
+    REQUIRE(data.vr_hud_far_plane == 0.0f);
     // std140: plain floats packed after the factors (as the GLSL block declares them).
     REQUIRE(offsetof(VSUniformData, vr_hud_up_down) ==
             offsetof(VSUniformData, vr_immersive_mode_factor_y) + 4);
     REQUIRE(offsetof(VSUniformData, vr_hud_across) ==
             offsetof(VSUniformData, vr_hud_up_down) + 4);
+    REQUIRE(offsetof(VSUniformData, vr_hud_far_plane) ==
+            offsetof(VSUniformData, vr_hud_across) + 4);
 }
 
 TEST_CASE("FrameXr hudmove: the scales reach the emulation thread", "[frame_xr][hudmove]") {
@@ -190,11 +250,13 @@ TEST_CASE("FrameXr hudmove: the scales reach the emulation thread", "[frame_xr][
     REQUIRE(d.hud.IsIdentity()); // CitraVR's "off" values move nothing
     d.mode = 3;
     d.hud = ForFrame(true, 3, 85, 95, 0.0f);
+    d.hud.far_plane = true;
     box.Publish(d);
     VRData out;
     u32 serial = 0;
     REQUIRE(box.Read(out, serial));
     REQUIRE(out.hud == d.hud);
+    REQUIRE(out.hud.far_plane);
     box.Publish(VRData{});
     REQUIRE(box.Read(out, serial));
     REQUIRE(out.hud.IsIdentity());
@@ -210,12 +272,14 @@ struct FakeRasterizer final : VideoCore::RasterizerInterface {
     void InvalidateRegion(PAddr, u32) override {}
     void FlushAndInvalidateRegion(PAddr, u32) override {}
     void ClearAll(bool) override {}
-    void SetVRHudSpacing(float across_, float up_down_) override {
+    void SetVRHudSpacing(float across_, float up_down_, bool far_plane_) override {
         across = across_;
         up_down = up_down_;
+        far_plane = far_plane_;
         calls++;
     }
     float across = 0.0f, up_down = 0.0f;
+    bool far_plane = true;
     int calls = 0;
 };
 } // namespace
@@ -226,18 +290,21 @@ TEST_CASE("FrameXr hudmove: the rasterizer gets the scales at the latch", "[fram
     VRData d;
     d.mode = 3;
     d.hud = ForFrame(true, 3, 90, 100, 0.0f);
+    d.hud.far_plane = true;
     Publish(d);
     FakeRasterizer r;
     LatchFrame(&r);
     REQUIRE(r.calls == 1);
     REQUIRE(r.across == Approx(0.9f));
     REQUIRE(r.up_down == 1.0f);
+    REQUIRE(r.far_plane);
     // Paused or out of the Full modes: the XR thread publishes 1, and the rasterizer gets it.
     Publish(VRData{});
     LatchFrame(&r);
     REQUIRE(r.calls == 2);
     REQUIRE(r.across == 1.0f);
     REQUIRE(r.up_down == 1.0f);
+    REQUIRE_FALSE(r.far_plane);
 }
 
 TEST_CASE("FrameXr hudmove: the settings", "[frame_xr][hudmove]") {

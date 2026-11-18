@@ -161,8 +161,25 @@ void RasterizerAccelerated::SetFreeCam(const std::array<f32, 16>& matrix, bool s
 }
 #endif
 
+void RasterizerAccelerated::SyncHudSpacing() {
+    // The viewport's size registers hold half the width and height (f24).
+    const float width = f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f;
+    const float height = f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f;
+    const HudSpacing::Scales s = HudSpacing::ForDraw(hud_spacing, width, height);
+    const float far_plane = s.far_plane ? 1.0f : 0.0f;
+    if (vs_data.vr_hud_across != s.across || vs_data.vr_hud_up_down != s.up_down ||
+        vs_data.vr_hud_far_plane != far_plane) {
+        vs_data.vr_hud_across = s.across;
+        vs_data.vr_hud_up_down = s.up_down;
+        vs_data.vr_hud_far_plane = far_plane;
+        vs_data_dirty = true;
+    }
+}
+
 void RasterizerAccelerated::SyncDrawUniforms() {
     auto& dirty = pica.dirty_regs;
+
+    SyncHudSpacing(); // AzaharFrame hudmove
 
     // The register that contains the flip bit also contains the framebuffer dimentions
     // that we don't depend on. So avoid the dirty table and check manually

@@ -95,12 +95,14 @@ struct VSUniformData {
     // down (clip x) and across (clip y); 1 = none (video_core/vr_hud_spacing.h).
     float vr_hud_up_down = 1.0f;
     float vr_hud_across = 1.0f;
+    // 1: the scales also take a vertex on the far plane (ImmersivePreset::hud_far_plane).
+    float vr_hud_far_plane = 0.0f;
 };
 #ifdef ENABLE_FREECAM
 static_assert(sizeof(VSUniformData) == 128, // AzaharFrame hudmove: was 112
               "The size of the VSUniformData does not match the structure in the shader");
 #else
-static_assert(sizeof(VSUniformData) == 48,
+static_assert(sizeof(VSUniformData) == 64, // AzaharFrame hudmove: was 48
               "The size of the VSUniformData does not match the structure in the shader");
 #endif
 static_assert(sizeof(VSUniformData) < 16384,
