@@ -79,12 +79,19 @@ inline constexpr uint32_t kSiteShotSpawn = 0x5043E4;  ///< the player's shot: bl
 inline constexpr uint32_t kSitePathEnd = 0x3E8C9C;     ///< a flier's path end: beq "vanish"
 inline constexpr uint32_t kSiteGroupDespawn = 0xA430FC; ///< a land spawner group's despawn
 inline constexpr uint32_t kSiteFollowInput = 0x70401C;  ///< the land camera's follow: its input
+inline constexpr uint32_t kSiteReticleEase = 0x6D215C;  ///< the land reticle's eased moves: their gate
+inline constexpr uint32_t kReticleEaseNone = 0x6D216C;  ///< its own "none" exit
+inline constexpr uint32_t kSiteReticleBox = 0x6D1680;   ///< the aim box: ground or not
+inline constexpr uint32_t kReticleBoxWhole = 0x6D1704;  ///< its own whole-screen box (the air's)
 inline constexpr uint32_t kEyeStub = kImageBase + Stubs::kEyeStub;
 inline constexpr uint32_t kKeepStub = kImageBase + Stubs::kKeepStub;
 inline constexpr uint32_t kShotStub = kImageBase + Stubs::kShotStub;
 
 inline constexpr uint32_t kSceneEye = 0xE14B90;    ///< the scene camera's eye, 3 floats
 inline constexpr uint32_t kSceneLookAt = 0xE14B9C; ///< and its look-at point
+inline constexpr uint32_t kSceneUp = 0xE14BA8;     ///< and its up vector
+inline constexpr uint32_t kSceneFovY = 0xE14BC4;   ///< the scene projection's angle, radians
+inline constexpr uint32_t kSceneAspect = 0xE14BC8; ///< and its width over its height
 
 // The player (KIU_HOOKS.md, "The player"): aim = [[0xE14504] + 8] - 0x10 as kiu_turn.h.
 inline constexpr uint32_t kOwnerVtable = 0xCEAC40;
@@ -116,6 +123,8 @@ static_assert(Bl(kSitePooledBulletView, 0x4EC640) == 0xEB038233);
 static_assert(B(kSiteSceneCull, kSceneCullInside) == 0xEA000040);
 static_assert(B(kSiteObjectCull, kObjectCullVisible) == 0xEAFFFFF9);
 static_assert(Bl(kSiteFollowInput, 0x7CA280) == 0xEB031897);
+static_assert(Beq(kSiteReticleEase, kReticleEaseNone) == 0x0A000002);
+static_assert(Beq(kSiteReticleBox, kReticleBoxWhole) == 0x0A00001F);
 static_assert(Beq(kSitePathEnd, Stubs::kPathVanish) == 0x0A000017);
 static_assert(Beq(kSitePathEnd, Stubs::kPathRestart) == 0x0A00000E);
 static_assert(Stubs::kImage[Stubs::kLitPathRestart / 4] == Stubs::kPathRestart);
@@ -132,8 +141,13 @@ enum class Group : uint8_t {
     EnemyKeepTimed, ///< AZAHARFRAME_KIU_ENEMY_KEEP_S: the same until they are that old (a stub)
     GroupKeep,  ///< AZAHARFRAME_KIU_GROUP_KEEP: land spawner groups are not despawned
     NoFollow,   ///< AZAHARFRAME_KIU_NO_FOLLOW: the land camera takes no turn back while running
+    /// AzaharFrame kiuvr: AZAHARFRAME_KIU_AIM_NO_MOD / _AIM_6DOF: on land the reticle stays
+    /// where it is put (no eased moves) and may be anywhere on the screen (never the original
+    /// game's aim box, so it never turns the camera). Only on the game without the C-Stick &
+    /// Gyro mod: its context holds three of the mod's hook sites.
+    AimHold,
 };
-inline constexpr std::size_t kGroupCount = 8;
+inline constexpr std::size_t kGroupCount = 9;
 
 constexpr uint32_t Bit(Group g) {
     return 1u << static_cast<uint32_t>(g);
@@ -159,6 +173,8 @@ inline const char* GroupName(Group g) {
         return "group keep";
     case Group::NoFollow:
         return "no follow";
+    case Group::AimHold:
+        return "aim hold";
     }
     return "?";
 }
@@ -170,7 +186,7 @@ struct Patch {
     uint32_t original; ///< the game's word: anything else there and the group stays out
     uint32_t patched;
 };
-inline constexpr std::array<Patch, 10> kPatches{{
+inline constexpr std::array<Patch, 12> kPatches{{
     // and r0, r1, #0xFF (the top of the sphere-against-six-planes loop) -> b 0x77DC4C, the
     // function's own "wholly inside" exit (the same stack: sub sp, #0xC before, add after).
     {Group::NoCull, kSiteSceneCull, 0xE20100FF, B(kSiteSceneCull, kSceneCullInside)},
@@ -199,6 +215,14 @@ inline constexpr std::array<Patch, 10> kPatches{{
     // taken back, and the follow still re-levels the pitch. What 0x7CA280 computes was not read
     // (by its effect: the player's movement, for the follow).
     {Group::NoFollow, kSiteFollowInput, 0xEB031897, kNop},
+    // AzaharFrame kiuvr. beq 0x6D216C (no battle camera: in the air; the function that eases the
+    // land reticle, back to its rest height after a touch and after a flick, does nothing) ->
+    // b 0x6D216C: nothing on land either, so a reticle put somewhere stays there.
+    {Group::AimHold, kSiteReticleEase, 0x0A000002, B(kSiteReticleEase, kReticleEaseNone)},
+    // beq 0x6D1704 (the aim object's "ground" byte is 0: the box is the whole screen) ->
+    // b 0x6D1704: the whole screen on the ground too, so the game's clamp never finds the
+    // reticle past the box and never turns the camera for it.
+    {Group::AimHold, kSiteReticleBox, 0x0A00001F, B(kSiteReticleBox, kReticleBoxWhole)},
 }};
 
 /// Words a group relies on without changing them (where it jumps to, what the stub assumes of the
@@ -208,7 +232,7 @@ struct Context {
     uint32_t addr;
     uint32_t word;
 };
-inline constexpr std::array<Context, 36> kContext{{
+inline constexpr std::array<Context, 55> kContext{{
     {Group::NoCull, 0x77DB24, 0xE24DD00C},   // sub sp, sp, #0xC (the frame the exit undoes)
     {Group::NoCull, 0x77DC4C, 0xE1C401D8},   // ldrd r0, r1, [r4, #0x18]
     {Group::NoCull, 0x77DC50, 0xE28DD00C},   // add sp, sp, #0xC
@@ -235,6 +259,12 @@ inline constexpr std::array<Context, 36> kContext{{
     {Group::Shot, 0x5043DC, 0xE1A02007},     // mov r2, r7 (the owner)
     {Group::Shot, 0x485638, 0xE92D4FFF},     // push {r0-r11, lr}
     {Group::Shot, 0x5043C0, 0xE28D204C},     // add r2, sp, #0x4C (the position local)
+    // AzaharFrame kiuvr: the caller's frame as the stub's "absolute" mode reads it: the aim
+    // quaternion before scatter at its sp + 0x70, written by the shooter's aim call.
+    {Group::Shot, 0x503F98, 0xE24DD08C},     // sub sp, sp, #0x8C
+    {Group::Shot, 0x503F9C, 0xE28D3070},     // add r3, sp, #0x70 (the aim call's fourth argument)
+    {Group::Shot, 0x504014, 0xE12FFF3C},     // blx ip (the shooter's aim call)
+    {Group::Shot, 0x5043CC, 0xE28DC058},     // add ip, sp, #0x58 (the quaternion local)
     // The path end (0x3E8C34): its frame and r4, the flag test before the site, and the two
     // places it may go on to.
     {Group::EnemyKeep, 0x3E8C34, 0xE92D40F8}, // push {r3-r7, lr}
@@ -251,6 +281,26 @@ inline constexpr std::array<Context, 36> kContext{{
     {Group::NoFollow, 0x704018, 0xE58D0050},       // str r0, [sp, #0x50] (the block, kept for later)
     {Group::NoFollow, 0x7041BC, 0xE59D3050},       // ldr r3, [sp, #0x50] (handed to the follow)
     {Group::NoFollow, 0x7041D0, 0xEB031B7C},       // bl 0x7CAFC8 (the follow's update)
+    // AzaharFrame kiuvr: the eased moves' gate and its "none" exit; the box's test, its
+    // whole-screen code and the two numbers that code loads (1 and -1: the box's bottom and top
+    // as shares of the screen's middle, and the same for its sides).
+    {Group::AimHold, 0x6D2158, 0xE24DD0B0},        // sub sp, sp, #0xB0
+    {Group::AimHold, 0x6D2160, 0xE5D400D5},        // ldrb r0, [r4, #0xD5]
+    {Group::AimHold, 0x6D216C, 0xE5C45208},        // strb r5, [r4, #0x208] (no eased move)
+    {Group::AimHold, 0x6D2170, 0xE28DD0B0},        // add sp, sp, #0xB0
+    {Group::AimHold, 0x6D167C, 0xE3510000},        // cmp r1, #0 (the "ground" byte)
+    {Group::AimHold, 0x6D1704, 0xED9F0A6D},        // vldr s0, [pc, #0x1B4] (1.0)
+    {Group::AimHold, 0x6D1708, 0xEDDF0A6D},        // vldr s1, [pc, #0x1B4] (-1.0)
+    {Group::AimHold, 0x6D170C, 0xE28400F0},        // add r0, r4, #0xF0
+    {Group::AimHold, 0x6D1710, 0xEC800A02},        // vstmia r0, {s0, s1}
+    {Group::AimHold, 0x6D1714, 0xEA00001D},        // b 0x6D1790 (the box from them)
+    {Group::AimHold, 0x6D18C0, 0x3F800000},        // 1.0
+    {Group::AimHold, 0x6D18C4, 0xBF800000},        // -1.0
+    // Three places of the reticle's own code where the C-Stick & Gyro mod puts its hooks: with
+    // the mod these differ, the group stays out and the mod's own route aims.
+    {Group::AimHold, 0x6D219C, 0xEB05512B},        // bl 0x826650
+    {Group::AimHold, 0x6D280C, 0xEB10FF21},        // bl 0xB12498
+    {Group::AimHold, 0x6D2F7C, 0xE594008C},        // ldr r0, [r4, #0x8C]
 }};
 
 // ---- Small maths (float, as the game's) ----
@@ -261,6 +311,16 @@ struct Vec3 {
 struct Quat {
     float x = 0.0f, y = 0.0f, z = 0.0f, w = 1.0f;
 };
+/// (AzaharFrame kiuvr: found with the type, so input/kiu_room.h and its users share them.)
+constexpr Vec3 operator+(const Vec3& a, const Vec3& b) {
+    return {a.x + b.x, a.y + b.y, a.z + b.z};
+}
+constexpr Vec3 operator-(const Vec3& a, const Vec3& b) {
+    return {a.x - b.x, a.y - b.y, a.z - b.z};
+}
+constexpr Vec3 operator*(const Vec3& a, float k) {
+    return {a.x * k, a.y * k, a.z * k};
+}
 
 /// The quaternion product, as the game composes them: (a * b) applied to v is a applied to
 /// (b applied to v).
@@ -316,6 +376,9 @@ struct Mailbox {
     bool shot_rotate = false;
     bool shot_move = false;
     bool shot_no_target = false;
+    /// AzaharFrame kiuvr: the rotation is the aim itself: q' = rotation * conj(the game's aim
+    /// before scatter) * q (needs shot_rotate).
+    bool shot_absolute = false;
     Quat shot_rotation; ///< q' = rotation * q, in the spawn's space (world axes on land)
     Quat shot_frame;    ///< the player's parent's rotation: spawn space from his local position
     Vec3 shot_offset;   ///< from the player's position, in the spawn's space
@@ -337,7 +400,8 @@ struct Mailbox {
         f(Stubs::kMbEyeOffset + 8, eye_offset.z);
         w[Stubs::kMbShotFlags / 4] = (shot_rotate ? Stubs::kShotRotate : 0u) |
                                      (shot_move ? Stubs::kShotMove : 0u) |
-                                     (shot_no_target ? Stubs::kShotNoTarget : 0u);
+                                     (shot_no_target ? Stubs::kShotNoTarget : 0u) |
+                                     (shot_absolute && shot_rotate ? Stubs::kShotAbsolute : 0u);
         f(Stubs::kMbShotRotation, shot_rotation.x);
         f(Stubs::kMbShotRotation + 4, shot_rotation.y);
         f(Stubs::kMbShotRotation + 8, shot_rotation.z);
@@ -506,6 +570,11 @@ struct ShotRequest {
     bool move = false;
     Vec3 offset;         ///< from the player's position, world axes (= the spawn's on land)
     bool no_target = false;
+    /// AzaharFrame kiuvr: `rotation` is the aim itself (the game's kind of aim quaternion for
+    /// the direction wanted, KiuRoom::ShotQuat): each bullet's q becomes
+    /// rotation * conj(the game's own aim before scatter) * q, so it keeps its scatter and the
+    /// weapon's tilt about the new direction. The stub reads the game's aim at the spawn.
+    bool absolute = false;
 };
 
 /// The rotation of the player's parent (the rail in the air; none on land, where it comes out
@@ -567,6 +636,7 @@ inline Mailbox Fill(const Player& p, const EyeRequest& eye, const ShotRequest& s
         mb.shot_offset = shot.offset;
     }
     mb.shot_no_target = shot.no_target;
+    mb.shot_absolute = mb.shot_rotate && shot.absolute;
     return mb;
 }
 

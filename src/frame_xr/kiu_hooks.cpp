@@ -18,9 +18,12 @@
 #include "core/memory.h"
 #include "frame_xr/frame_xr.h"
 #include "frame_xr/input/kiu_hooks.h"
+#include "frame_xr/input/kiu_room.h" // AzaharFrame kiuvr
+#include "frame_xr/kiu_first_person.h"
 #include "frame_xr/kiu_hooks.h"
 #include "frame_xr/kiu_scan.h"
 #include "frame_xr/test_switches.h"
+#include "video_core/kiu_view_tap.h" // AzaharFrame kiuvr: the view register's tap
 
 // AzaharFrame kiuhook (kiu_hooks.h)
 namespace FrameXr::Kiu::Hooks {
@@ -41,6 +44,11 @@ constexpr const char* kSwitchEnemyKeepS = "AZAHARFRAME_KIU_ENEMY_KEEP_S";
 constexpr const char* kSwitchGroupKeep = "AZAHARFRAME_KIU_GROUP_KEEP";
 constexpr const char* kSwitchNoFollow = "AZAHARFRAME_KIU_NO_FOLLOW";
 constexpr const char* kSwitchTrace = "AZAHARFRAME_KIU_HOOK_TRACE";
+// AzaharFrame kiuvr (kiu_first_person.h)
+constexpr const char* kSwitchFpTrace = "AZAHARFRAME_KIU_FP_TRACE";
+constexpr const char* kSwitchFpProbe = "AZAHARFRAME_KIU_FP_PROBE";
+/// The eye above the player's position in an air battle (he lies flat there), his own axes.
+constexpr KH::Vec3 kEyeOffsetAir{0.0f, 3.0f, 0.0f};
 
 constexpr float kDegToRad = std::numbers::pi_v<float> / 180.0f;
 /// With no switch on, how often the player is looked for (to show him again after a save state
@@ -122,6 +130,7 @@ struct State {
     bool hidden = false;
     int64_t poll_ns = 0;
     int64_t trace_ns = 0;
+    int64_t fp_trace_ns = 0; ///< AzaharFrame kiuvr
 };
 
 State& TheState() {
@@ -190,6 +199,190 @@ void LogChanges(State& s, const KH::SyncResult& r) {
     s.have_last = true;
 }
 
+// ---- AzaharFrame kiuvr: first person (kiu_first_person.h) ----
+
+namespace KR = Input::KiuRoom;
+
+std::string Csv(const KH::Vec3& v) {
+    return fmt::format("{:.5f},{:.5f},{:.5f}", v.x, v.y, v.z);
+}
+std::string Csv(const KH::Quat& q) {
+    return fmt::format("{:.6f},{:.6f},{:.6f},{:.6f}", q.x, q.y, q.z, q.w);
+}
+
+/// What the first person pass knows at this VBlank.
+struct FirstPersonNow {
+    Kiu::FirstPerson::Scene scene; ///< the scene camera (of the game frame before this VBlank)
+    Kiu::FirstPerson::Sample sample;
+    Kiu::FirstPerson::WorldRay ray; ///< the hand's ray in the world
+    KR::Frame frame;                ///< valid with frame_ok
+    bool frame_ok = false;
+};
+
+FirstPersonNow ReadFirstPerson(const KH::GameMemory& mem, int64_t host_now) {
+    FirstPersonNow now;
+    now.scene = Kiu::FirstPerson::ReadScene(mem);
+    now.sample = Kiu::FirstPerson::Latest(host_now);
+    if (now.scene.ok && now.sample.view.valid && now.sample.view.units_per_metre > 0.0f) {
+        now.frame = {now.sample.view.rest, now.scene.camera, now.sample.view.units_per_metre};
+        now.frame_ok = true;
+    }
+    now.ray = Kiu::FirstPerson::HandRay(now.sample, now.scene);
+    return now;
+}
+
+/// AZAHARFRAME_KIU_SHOTS_6DOF: the player's shots from the hand's ray: each bullet starts at
+/// the ray's origin (the eye offset plus the origin's place from the eye: no absolute position,
+/// so nothing of it is a game frame old but the camera's turn) and gets the game's kind of aim
+/// quaternion for the ray's direction in place of the game's own aim (the stub keeps each
+/// bullet's scatter). The lock target stays. Without a hand or a view: nothing (the game's own).
+KH::ShotRequest ShotFromHand(const FirstPersonNow& now, const KH::Mailbox& eye_mailbox) {
+    KH::ShotRequest shot;
+    if (!now.ray.ok || !eye_mailbox.eye_on) {
+        return shot;
+    }
+    shot.rotate = true;
+    shot.absolute = true;
+    shot.rotation = KR::ShotQuat(now.ray.direction);
+    shot.move = true;
+    shot.offset = eye_mailbox.eye_offset + now.ray.from_eye;
+    return shot;
+}
+
+/// AZAHARFRAME_KIU_FP_TRACE: one line of key=value words (the proof scripts read them).
+void TraceFirstPerson(State& s, const KH::GameMemory& mem, const KH::Player& p,
+                      const KH::Mailbox& mailbox, const FirstPersonNow& now, int64_t ticks,
+                      int64_t host_now, int level) {
+    auto& tap = VideoCore::Immersive::g_world_view_tap;
+    tap.wanted.store(level > 0, std::memory_order_relaxed);
+    if (level <= 0 || (level < 2 && host_now - s.fp_trace_ns < 1'000'000'000)) {
+        return;
+    }
+    s.fp_trace_ns = host_now;
+    std::string line = fmt::format("t={:.4f} host={} player={} land={} playing={}",
+                                   TicksToS(ticks), host_now, p.actor != 0 ? 1 : 0,
+                                   p.land ? 1 : 0, p.Ok() ? 1 : 0);
+    if (p.actor != 0) {
+        line += fmt::format(" player_world={} player_local={} player_q={} eye_offset={}",
+                            Csv(p.world_p), Csv(p.local_p), Csv(p.world_q),
+                            Csv(mailbox.eye_offset));
+    }
+    if (now.scene.ok) {
+        const KR::GameCamera& camera = now.scene.camera;
+        KH::Vec3 look_at, up;
+        KH::ReadVec3(mem, KH::kSceneLookAt, look_at);
+        KH::ReadVec3(mem, KH::kSceneUp, up);
+        line += fmt::format(" cam_eye={} cam_look={} cam_up={} cam_q={} fov={:.5f} aspect={:.5f}",
+                            Csv(camera.eye), Csv(look_at), Csv(up), Csv(camera.q),
+                            now.scene.projection.fov_y, now.scene.projection.aspect);
+        // The view register of the last world draw against that camera: how far the register's
+        // axes are from the camera's (degrees) and its eye from the camera's (game units).
+        float rows[12];
+        uint32_t stored = 0;
+        if (tap.Load(rows, stored)) {
+            const KH::Vec3 rx{rows[0], rows[1], rows[2]}, ry{rows[4], rows[5], rows[6]},
+                rz{rows[8], rows[9], rows[10]};
+            const KH::Quat reg_q = KR::FromAxes(rx, ry, rz);
+            const KH::Quat d = KH::Mul(KH::Conj(camera.q), reg_q);
+            const float turn_deg =
+                2.0f * std::atan2(std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z), std::abs(d.w)) *
+                (180.0f / std::numbers::pi_v<float>);
+            // eye = -R^T t
+            const KH::Vec3 reg_eye{-(rx.x * rows[3] + ry.x * rows[7] + rz.x * rows[11]),
+                                   -(rx.y * rows[3] + ry.y * rows[7] + rz.y * rows[11]),
+                                   -(rx.z * rows[3] + ry.z * rows[7] + rz.z * rows[11])};
+            line += fmt::format(" reg_count={} reg_rows={:.5f},{:.5f},{:.5f},{:.5f},{:.5f},{:.5f},"
+                                "{:.5f},{:.5f},{:.5f},{:.5f},{:.5f},{:.5f} reg_turn_deg={:.4f} "
+                                "reg_eye={} reg_eye_off={:.4f}",
+                                stored, rows[0], rows[1], rows[2], rows[3], rows[4], rows[5],
+                                rows[6], rows[7], rows[8], rows[9], rows[10], rows[11], turn_deg,
+                                Csv(reg_eye), KR::Length(reg_eye - camera.eye));
+        }
+    }
+    const auto& view = now.sample.view;
+    line += fmt::format(" view={}", view.valid ? 1 : 0);
+    if (view.valid) {
+        const KR::Pose head = KR::RoomToRest(view.rest, view.head);
+        line += fmt::format(" s={:.5f} rest_p={} rest_q={} head_p={} head_q={} head_rest_p={} "
+                            "head_rest_q={} given_q={} gains={:.4f},{:.4f},{:.4f},{:.4f}",
+                            view.units_per_metre, Csv(view.rest.position),
+                            Csv(view.rest.orientation), Csv(view.head.p), Csv(view.head.q),
+                            Csv(head.p), Csv(head.q), Csv(view.given), view.gain_x, view.gain_y,
+                            view.screen_pitch, view.screen_yaw);
+        if (now.frame_ok) {
+            const KR::Pose head_world = KR::RoomToWorld(now.frame, view.head);
+            line += fmt::format(" head_world={} head_ahead={}", Csv(head_world.p),
+                                Csv(KR::Ahead(head_world.q)));
+        }
+    }
+    const auto& hand = now.sample.hand;
+    line += fmt::format(" hand={}", hand.valid ? 1 : 0);
+    if (hand.valid) {
+        line += fmt::format(" hand_o={} hand_d={} muzzle={}", Csv(hand.origin), Csv(hand.direction),
+                            hand.muzzle ? 1 : 0);
+        if (now.ray.ok) {
+            line += fmt::format(" hand_world_o={} hand_from_eye={} hand_world_d={}",
+                                Csv(now.ray.origin), Csv(now.ray.from_eye),
+                                Csv(now.ray.direction));
+        }
+    }
+    // The game's own aim: the reticle's pixel, its "held" flags, the point it has in the world;
+    // and the pixel first person's aim asks for.
+    if (p.aim != 0) {
+        uint32_t x = 0, y = 0, flags = 0, w = 0, h = 0, cx = 0, cy = 0;
+        KH::Vec3 point;
+        if (mem.Read32(p.aim + 0xA4, x) && mem.Read32(p.aim + 0xA8, y) &&
+            mem.Read32(p.aim + 0x84, flags) && mem.Read32(p.aim + 0xE0, w) &&
+            mem.Read32(p.aim + 0xE8, h) && mem.Read32(p.aim + 0xE4, cx) &&
+            mem.Read32(p.aim + 0xEC, cy) && KH::ReadVec3(mem, p.aim + 0x54, point)) {
+            const KR::ReticleScreen screen{std::bit_cast<float>(w), std::bit_cast<float>(h),
+                                           std::bit_cast<float>(cx), std::bit_cast<float>(cy)};
+            line += fmt::format(" reticle={:.3f},{:.3f} reticle_flags={:X} reticle_screen={:.1f},"
+                                "{:.1f},{:.1f},{:.1f} aim_point={}",
+                                std::bit_cast<float>(x), std::bit_cast<float>(y), flags, screen.w,
+                                screen.h, screen.cx, screen.cy, Csv(point));
+            const Kiu::FirstPerson::AimNow aim =
+                Kiu::FirstPerson::AimThroughCamera(mem, p.aim, screen, now.sample);
+            if (aim.valid) {
+                line += fmt::format(" aim_pixel={:.3f},{:.3f} aim_ahead={} aim_depth={:.3f} "
+                                    "aim_hit={}",
+                                    aim.pixel.x, aim.pixel.y, aim.ahead ? 1 : 0, aim.depth,
+                                    Csv(aim.point));
+            }
+        }
+    }
+    if (mailbox.shot_rotate || mailbox.shot_move) {
+        line += fmt::format(" shot_flags={}{}{}{} shot_q={} shot_offset={} shot_frame={}",
+                            mailbox.shot_rotate ? "r" : "", mailbox.shot_absolute ? "a" : "",
+                            mailbox.shot_move ? "m" : "", mailbox.shot_no_target ? "n" : "",
+                            Csv(mailbox.shot_rotation), Csv(mailbox.shot_offset),
+                            Csv(mailbox.shot_frame));
+    }
+    // The probe: an actor by its address; where it is in the world and where the head's middle
+    // eye sees it (the patched view's axes: -z ahead), as mode 3 draws it.
+    if (const auto text = Switch(kSwitchFpProbe)) {
+        char* end = nullptr;
+        const uint32_t addr = static_cast<uint32_t>(std::strtoul(text->c_str(), &end, 16));
+        uint32_t vtable = 0;
+        KH::Vec3 world;
+        if (end != text->c_str() && addr != 0 && (addr & 3u) == 0 && mem.Read32(addr, vtable) &&
+            vtable == KH::kActorVtable && KH::ReadVec3(mem, addr + KH::kActorWorldPos, world)) {
+            line += fmt::format(" probe={:08X} probe_world={}", addr, Csv(world));
+            if (now.frame_ok) {
+                const KR::Pose in_rest =
+                    KR::WorldToRest(now.scene.camera, now.frame.units_per_metre, {world, {}});
+                const KR::Pose head = KR::RoomToRest(view.rest, view.head);
+                const KH::Vec3 seen =
+                    KH::Rotate(KH::Conj(view.given), in_rest.p - head.p);
+                line += fmt::format(" probe_view={}", Csv(seen * now.frame.units_per_metre));
+            }
+        } else {
+            line += " probe=0";
+        }
+    }
+    LOG_INFO(Frontend, "xr: Kid Icarus first person: {}", line);
+}
+
 void Hook(int64_t ticks) {
     State& s = TheState();
     const int64_t host_now = NowNs();
@@ -218,14 +411,22 @@ void Hook(int64_t ticks) {
         s.process = process.get();
         s.title = title;
     }
-    const bool want_nocull = SwitchIs(kSwitchNoCull, "1");
-    const bool want_keep = SwitchIs(kSwitchBulletKeep, "1");
-    const bool want_eye = SwitchIs(kSwitchEye, "1");
+    // AzaharFrame kiuvr: the first person switch turns on the eye, the culls' and the follow's
+    // switches with it (kiu_first_person.h).
+    const bool first_person = Kiu::FirstPerson::On();
+    const auto fp_trace_text = Switch(kSwitchFpTrace);
+    const int fp_trace = fp_trace_text ? std::atoi(fp_trace_text->c_str()) : 0;
+    const bool shots_6dof = Kiu::FirstPerson::Shots6DofOn();
+    const bool want_aim_hold = Kiu::FirstPerson::AimNoModWanted();
+    const bool want_nocull = first_person || SwitchIs(kSwitchNoCull, "1");
+    const bool want_keep = shots_6dof || SwitchIs(kSwitchBulletKeep, "1");
+    const bool want_eye = first_person || SwitchIs(kSwitchEye, "1");
     const bool want_hide = SwitchIs(kSwitchHide, "1");
     const auto shot_text = Switch(kSwitchShot);
     float shot_values[5] = {};
     const int shot_count = shot_text ? KH::ParseFloats(shot_text->c_str(), shot_values, 5) : 0;
-    const bool want_shot = shot_count == 2 || shot_count == 5;
+    const bool shot_test = shot_count == 2 || shot_count == 5;
+    const bool want_shot = shot_test || shots_6dof;
     // The timed keep replaces the plain one (they share a site).
     float keep_seconds = 0.0f;
     if (const auto text = Switch(kSwitchEnemyKeepS)) {
@@ -237,12 +438,15 @@ void Hook(int64_t ticks) {
     const bool want_keep_timed = keep_seconds > 0.0f;
     const bool want_enemy_keep = !want_keep_timed && SwitchIs(kSwitchEnemyKeep, "1");
     const bool want_group_keep = SwitchIs(kSwitchGroupKeep, "1");
-    const bool want_no_follow = SwitchIs(kSwitchNoFollow, "1");
+    const bool want_no_follow = first_person || SwitchIs(kSwitchNoFollow, "1");
     const auto trace_text = Switch(kSwitchTrace);
     const int trace = trace_text ? std::atoi(trace_text->c_str()) : 0;
     const bool any = want_nocull || want_keep || want_eye || want_hide || want_shot ||
                      want_keep_timed || want_enemy_keep || want_group_keep || want_no_follow ||
-                     trace > 0;
+                     trace > 0 || fp_trace > 0 || want_aim_hold;
+    if (fp_trace <= 0) {
+        VideoCore::Immersive::g_world_view_tap.wanted.store(false, std::memory_order_relaxed);
+    }
 
     if (title != Input::KiuTurn::kTitleEur) {
         if (any) {
@@ -280,6 +484,9 @@ void Hook(int64_t ticks) {
     const KH::Player p = KH::FindPlayer(mem);
     KH::EyeRequest eye;
     eye.on = want_eye;
+    if (first_person && !p.land) {
+        eye.offset = kEyeOffsetAir; // AzaharFrame kiuvr
+    }
     if (const auto text = Switch(kSwitchEyeOffset)) {
         float v[3] = {};
         if (KH::ParseFloats(text->c_str(), v, 3) == 3) {
@@ -287,7 +494,7 @@ void Hook(int64_t ticks) {
         }
     }
     KH::ShotRequest shot;
-    if (want_shot && p.Ok()) {
+    if (shot_test && p.Ok()) {
         // Laid out on the game camera's view direction (the player's body turns as he fires).
         KH::Vec3 eye_at, look_at, view = KH::Rotate(p.world_q, {0.0f, 0.0f, 1.0f});
         if (KH::ReadVec3(mem, KH::kSceneEye, eye_at) && KH::ReadVec3(mem, KH::kSceneLookAt, look_at)) {
@@ -297,6 +504,15 @@ void Hook(int64_t ticks) {
                             {shot_values[2], shot_values[3], shot_values[4]}, shot_count == 5,
                             SwitchIs(kSwitchShotNoLock, "1"));
     }
+    // AzaharFrame kiuvr: first person's transform for this VBlank; with AZAHARFRAME_KIU_SHOTS_6DOF
+    // (and no test shot) the shots come from it.
+    FirstPersonNow fp_now;
+    if (first_person || fp_trace > 0) {
+        fp_now = ReadFirstPerson(mem, host_now);
+        if (shots_6dof && !shot_test && p.Ok()) {
+            shot = ShotFromHand(fp_now, KH::Fill(p, eye, {}, 0));
+        }
+    }
     const KH::Mailbox mailbox = KH::Fill(p, eye, shot, ++s.serial, keep_seconds);
     const uint32_t wanted = (want_nocull ? KH::Bit(KH::Group::NoCull) : 0u) |
                             (want_keep ? KH::Bit(KH::Group::BulletKeep) : 0u) |
@@ -305,9 +521,15 @@ void Hook(int64_t ticks) {
                             (want_enemy_keep ? KH::Bit(KH::Group::EnemyKeep) : 0u) |
                             (want_keep_timed ? KH::Bit(KH::Group::EnemyKeepTimed) : 0u) |
                             (want_group_keep ? KH::Bit(KH::Group::GroupKeep) : 0u) |
-                            (want_no_follow ? KH::Bit(KH::Group::NoFollow) : 0u);
+                            (want_no_follow ? KH::Bit(KH::Group::NoFollow) : 0u) |
+                            (want_aim_hold ? KH::Bit(KH::Group::AimHold) : 0u);
     const KH::SyncResult r = KH::Sync(mem, wanted, mailbox);
     LogChanges(s, r);
+
+    // AzaharFrame kiuvr: first person's trace.
+    if (first_person || fp_trace > 0) {
+        TraceFirstPerson(s, mem, p, mailbox, fp_now, ticks, host_now, fp_trace);
+    }
 
     // The player's model: a data write into his actor, only while every guard holds; put back
     // whenever it is not wanted and the actor is known.
@@ -381,6 +603,12 @@ void OnGameBoot() {
     static std::atomic<bool> installed{false};
     if (!installed.exchange(true)) {
         Common::FrameEmuPoll::SetPatch(Hook);
+    }
+}
+
+void OnGameSettings(uint64_t title_id) {
+    if (title_id == Input::KiuTurn::kTitleEur) {
+        Kiu::FirstPerson::OnGameBoot(); // AzaharFrame kiuvr
     }
 }
 

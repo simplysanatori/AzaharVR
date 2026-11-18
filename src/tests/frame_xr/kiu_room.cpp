@@ -281,3 +281,118 @@ TEST_CASE("kiuvr: what is at a point of the room is drawn at that point", "[fram
     const Rows same = Patched(GameView(f.camera), inv);
     CheckVec(Apply(same, {1, 2, 3}), Apply(GameView(f.camera), {1, 2, 3}), 1e-3f);
 }
+
+TEST_CASE("kiuvr: the reticle pixel of a world point, as the game has it", "[frame_xr][kiuvr]") {
+    // Read back from the running game (Practice Range, land): the scene camera, and the point
+    // the game put in the world for two reticle pixels.
+    const GameCamera cam = CameraFromLookAt({0.0f, 12.41002f, 300.0f},
+                                            {0.0f, 7.17662f, 200.13704f},
+                                            {0.0f, 0.99863f, -0.05233f});
+    const Projection proj{0.785398f, 1.666667f};
+    const ReticleScreen screen{400.0f, 240.0f, 200.0f, 120.0f};
+    REQUIRE(proj.Ok());
+    REQUIRE(screen.Ok());
+    bool ok = false;
+    Pixel p = WorldToReticle(cam, proj, screen, {0.0f, 13.821f, -201.405f}, &ok);
+    CHECK(ok);
+    CHECK(p.x == Approx(200.0f).margin(0.01f));
+    CHECK(p.y == Approx(104.0f).margin(0.05f)); // the land reticle's rest: 16 pixels above the middle
+    CHECK(CameraDepth(cam, {0.0f, 13.821f, -201.405f}) == Approx(500.64f).margin(0.05f));
+    p = WorldToReticle(cam, proj, screen, {103.687f, 46.975f, -203.142f}, &ok);
+    CHECK(p.x == Approx(260.0f).margin(0.05f));
+    // And back: the pixel's direction passes through the point.
+    const Vec3 d = ReticleToDirection(cam, proj, screen, {200.0f, 104.0f});
+    CheckVec(d, Unit(Vec3{0.0f, 13.821f, -201.405f} - cam.eye), 2e-4f);
+    for (const Pixel px : {Pixel{0.5f, 0.5f}, Pixel{399.0f, 239.0f}, Pixel{123.0f, 200.0f}}) {
+        const Vec3 dir = ReticleToDirection(cam, proj, screen, px);
+        const Pixel back = WorldToReticle(cam, proj, screen, cam.eye + dir * 777.0f, &ok);
+        CHECK(ok);
+        CHECK(back.x == Approx(px.x).margin(0.02f));
+        CHECK(back.y == Approx(px.y).margin(0.02f));
+    }
+    // A wider picture (a widescreen build's projection) puts the same point nearer the middle.
+    const Projection wide{0.785398f, 2.333333f};
+    const Pixel w = WorldToReticle(cam, wide, screen, {103.687f, 46.975f, -203.142f});
+    CHECK(w.x == Approx(200.0f + 60.0f * 1.666667f / 2.333333f).margin(0.05f));
+    CHECK(w.y == Approx(p.y).margin(1e-3f));
+    // Behind the camera: said so.
+    WorldToReticle(cam, proj, screen, {0.0f, 12.0f, 400.0f}, &ok);
+    CHECK_FALSE(ok);
+    CHECK_FALSE(Projection{0.0f, 1.6f}.Ok());
+    CHECK_FALSE(ReticleScreen{400.0f, 240.0f, 0.0f, 120.0f}.Ok());
+}
+
+TEST_CASE("kiuvr: the pixel that makes the game aim where the hand points", "[frame_xr][kiuvr]") {
+    const GameCamera cam{{10.0f, 12.0f, -30.0f}, Yaw(40.0f)};
+    const Projection proj{0.785398f, 1.666667f};
+    const ReticleScreen screen{400.0f, 240.0f, 200.0f, 120.0f};
+    const Vec3 ahead = Ahead(cam.q), right = Rotate(cam.q, {1, 0, 0}), up = Rotate(cam.q, {0, 1, 0});
+    // A hand at the eye pointing along the view: the middle, at any depth.
+    bool ok = false;
+    Vec3 hit;
+    Pixel p = AimPixel(cam, proj, screen, cam.eye, ahead, 500.0f, &ok, &hit);
+    CHECK(ok);
+    CHECK(p.x == Approx(200.0f).margin(0.01f));
+    CHECK(p.y == Approx(120.0f).margin(0.01f));
+    CheckVec(hit, cam.eye + ahead * 500.0f, 1e-2f);
+    // A hand 4 units to the right and 3 down, pointing along the view (parallel to it): far
+    // away it is almost the middle, on something near it is clearly to the right and below.
+    const Vec3 hand = cam.eye + right * 4.0f + up * -3.0f + ahead * 2.0f;
+    p = AimPixel(cam, proj, screen, hand, ahead, 1500.0f, &ok, &hit);
+    CHECK(CameraDepth(cam, hit) == Approx(1500.0f).margin(0.05f));
+    CHECK(p.x == Approx(200.0f + 200.0f * 4.0f / (1500.0f * 0.414214f * 1.666667f)).margin(0.01f));
+    CHECK(p.y == Approx(120.0f + 120.0f * 3.0f / (1500.0f * 0.414214f)).margin(0.01f));
+    p = AimPixel(cam, proj, screen, hand, ahead, 40.0f, &ok, &hit);
+    CHECK(p.x == Approx(200.0f + 200.0f * 4.0f / (40.0f * 0.414214f * 1.666667f)).margin(0.01f));
+    CHECK(p.y == Approx(120.0f + 120.0f * 3.0f / (40.0f * 0.414214f)).margin(0.01f));
+    // The point is on the hand's ray: seen from the hand it is where the hand points.
+    CheckVec(Unit(hit - hand), ahead, 1e-5f);
+    // A hand pointing 20 degrees to the left of the view from that place: the point is on its
+    // ray, at the asked depth, and the pixel is left of the middle.
+    const Vec3 left20 = Rotate(Mul(cam.q, Yaw(20.0f)), {0, 0, -1});
+    p = AimPixel(cam, proj, screen, hand, left20, 300.0f, &ok, &hit);
+    CHECK(ok);
+    CheckVec(Unit(hit - hand), left20, 1e-5f);
+    CHECK(CameraDepth(cam, hit) == Approx(300.0f).margin(0.05f));
+    CHECK(p.x < 200.0f);
+    // Through the game's own way back: the pixel's direction from the eye passes through it.
+    CheckVec(ReticleToDirection(cam, proj, screen, p), Unit(hit - cam.eye), 1e-4f);
+    // A hand pointing backwards: no pixel in front, said so; sideways along the plane: a point
+    // along the ray all the same.
+    AimPixel(cam, proj, screen, hand, ahead * -1.0f, 300.0f, &ok, &hit);
+    CHECK_FALSE(ok);
+    AimPixel(cam, proj, screen, hand, right, 300.0f, &ok, &hit);
+    CheckVec(Unit(hit - hand), right, 1e-5f);
+    // A depth that is not usable (the game's aim point at the eye): the least depth.
+    AimPixel(cam, proj, screen, cam.eye, ahead, std::nanf(""), &ok, &hit);
+    CheckVec(hit, cam.eye + ahead * kAimDepthMin, 1e-3f);
+}
+
+TEST_CASE("kiuvr: the game's aim quaternion for a direction", "[frame_xr][kiuvr]") {
+    // +z is the shot's direction.
+    CheckRot(ShotQuat({0, 0, 1}), Quat{});
+    CheckVec(ShotDirection(ShotQuat({0, 0, 5})), {0, 0, 1});
+    for (const Vec3 d : {Vec3{1, 0, 0}, Vec3{-0.3f, 0.2f, -0.9f}, Vec3{0.5f, -0.7f, 0.1f},
+                         Vec3{0, 1, 0}, Vec3{0, -1, 0}}) {
+        const Quat q = ShotQuat(d);
+        CheckVec(ShotDirection(q), Unit(d), 1e-5f);
+        // Its side is level (the world's up kept up), its up never points down.
+        CHECK(Rotate(q, {1, 0, 0}).y == Approx(0.0f).margin(1e-5f));
+        CHECK(Rotate(q, {0, 1, 0}).y >= -1e-5f);
+    }
+    // What the shot stub does with it: q' = wanted * conj(base) * q. A bullet with the game's
+    // aim exactly flies along the hand's ray; one scattered 3 degrees to its own left and 2 up
+    // keeps exactly that from the hand's ray.
+    const Vec3 game_aim = Unit(Vec3{0.2f, 0.05f, -1.0f}), ray = Unit(Vec3{-0.8f, 0.3f, -0.4f});
+    const Quat base = ShotQuat(game_aim), wanted = ShotQuat(ray);
+    CheckVec(ShotDirection(Mul(wanted, Mul(Conj(base), base))), ray, 1e-5f);
+    const Quat scatter = Mul(AxisAngle({0, 1, 0}, 3.0f * kPi / 180.0f),
+                             AxisAngle({1, 0, 0}, -2.0f * kPi / 180.0f));
+    const Quat bullet = Mul(base, scatter);
+    const Quat turned = Mul(wanted, Mul(Conj(base), bullet));
+    CheckRot(turned, Mul(wanted, scatter), 1e-5f);
+    const float off_game = std::acos(Dot(ShotDirection(bullet), game_aim));
+    const float off_ray = std::acos(Dot(ShotDirection(turned), ray));
+    CHECK(off_ray == Approx(off_game).margin(1e-4f));
+    CHECK(off_ray == Approx(std::sqrt(9.0f + 4.0f) * kPi / 180.0f).margin(2e-3f));
+}

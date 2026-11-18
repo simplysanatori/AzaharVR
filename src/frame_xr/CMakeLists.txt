@@ -92,6 +92,8 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     input/kiu_hooks.h
     input/kiu_hooks_stubs.h
     input/kiu_room.h # AzaharFrame kiuvr
+    kiu_first_person.cpp
+    kiu_first_person.h
     input/screen_rig.cpp
     input/screen_rig.h
     input/screen_view.cpp

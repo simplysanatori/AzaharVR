@@ -23,8 +23,8 @@
         .equ    MB_EYE_NODE,       0x0C    @ u32 the camera node handed to the sink for the player's view
         .equ    MB_EYE_FLAGS,      0x10    @ u32 bit 0: replace the eye
         .equ    MB_EYE_OFFSET,     0x14    @ f32 x3, world axes: eye = the player's world position + this
-        .equ    MB_SHOT_FLAGS,     0x20    @ u32 bit 0: rotate, bit 1: move the start, bit 2: no lock target
-        .equ    MB_SHOT_ROTATION,  0x24    @ f32 x4 quaternion x y z w: q' = rotation * q
+        .equ    MB_SHOT_FLAGS,     0x20    @ u32 bit 0: rotate, bit 1: move the start, bit 2: no lock target, bit 3: the rotation is the aim itself
+        .equ    MB_SHOT_ROTATION,  0x24    @ f32 x4 quaternion x y z w: q' = rotation * q (bit 3: rotation * conj(the game's aim) * q)
         .equ    MB_SHOT_FRAME,     0x34    @ f32 x4 quaternion: the player's parent's rotation (identity on land)
         .equ    MB_SHOT_OFFSET,    0x44    @ f32 x3: start = frame * the player's local position + this
         .equ    MB_KEEP_SECONDS,   0x50    @ f32: a passed flier younger than this flies its path again
@@ -34,6 +34,7 @@
         .equ    SHOT_ROTATE,       1
         .equ    SHOT_MOVE,         2
         .equ    SHOT_NO_TARGET,    4
+        .equ    SHOT_ABSOLUTE,     8       @ with SHOT_ROTATE: the rotation replaces the game's own aim
 
 @ ---- The game ----
         .equ    ACTOR_WORLD_POS,   0x54    @ f32 x3
@@ -85,10 +86,14 @@ eye_stub:
 @ argument, [sp+4] = quaternion* (x y z w; forward = it applied to +Z), [sp+8] = position*
 @ (3 floats), [sp+0xC] = the lock target's handle, lr = 0x5043E8. For the local player's shots
 @ only: turns the quaternion by the mailbox rotation (each bullet's own, so scatter and fans
-@ stay), replaces the position by the player's own position in the spawn's space plus the mailbox
+@ stay; with SHOT_ABSOLUTE the game's own aim is taken out first, so the rotation is the aim
+@ itself), replaces the position by the player's own position in the spawn's space plus the mailbox
 @ offset, optionally clears the target; then goes on to 0x485638 with every register, sp and lr
 @ as the game set them. Free here: r12 and the flags only; everything else is saved.
         .equ    SHOT_SAVED,        72      @ push {r4, r5} + vpush {d0-d7}
+        .equ    SHOT_BASE,         0x70    @ the caller's frame (0x503F8C): its aim quaternion before
+                                           @ each bullet's scatter (x y z w; written through the
+                                           @ fourth argument of the shooter's aim call at 0x504014)
 shot_stub:
         ldr     r12, lit_mailbox
         push    {r4, r5}
@@ -106,7 +111,34 @@ shot_stub:
         vldmia  r5, {s0-s3}
         ldr     r5, [sp, #SHOT_SAVED + 4]
         vldmia  r5, {s4-s7}
-        vmul.f32 s8, s3, s4             @ x = aw bx + ax bw + ay bz - az by
+        tst     r4, #SHOT_ABSOLUTE
+        beq     1f
+        @ b := conj(c) * b, c = the game's aim before scatter (s8-s11 = x y z w): what is left
+        @ is the bullet's own scatter and the weapon's tilt, in the aim's axes
+        add     r5, sp, #SHOT_SAVED + SHOT_BASE
+        vldmia  r5, {s8-s11}
+        vmul.f32 s12, s11, s4           @ x = cw bx - cx bw - cy bz + cz by
+        vmls.f32 s12, s8, s7
+        vmls.f32 s12, s9, s6
+        vmla.f32 s12, s10, s5
+        vmul.f32 s13, s11, s5           @ y = cw by + cx bz - cy bw - cz bx
+        vmla.f32 s13, s8, s6
+        vmls.f32 s13, s9, s7
+        vmls.f32 s13, s10, s4
+        vmul.f32 s14, s11, s6           @ z = cw bz - cx by + cy bx - cz bw
+        vmls.f32 s14, s8, s5
+        vmla.f32 s14, s9, s4
+        vmls.f32 s14, s10, s7
+        vmul.f32 s15, s11, s7           @ w = cw bw + cx bx + cy by + cz bz
+        vmla.f32 s15, s8, s4
+        vmla.f32 s15, s9, s5
+        vmla.f32 s15, s10, s6
+        vmov.f32 s4, s12
+        vmov.f32 s5, s13
+        vmov.f32 s6, s14
+        vmov.f32 s7, s15
+        ldr     r5, [sp, #SHOT_SAVED + 4]
+1:      vmul.f32 s8, s3, s4             @ x = aw bx + ax bw + ay bz - az by
         vmla.f32 s8, s0, s7
         vmla.f32 s8, s1, s6
         vmls.f32 s8, s2, s5

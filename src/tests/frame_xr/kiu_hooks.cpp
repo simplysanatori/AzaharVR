@@ -119,7 +119,7 @@ FakeMemory Game() {
 // Every group that can be in at once (the plain enemy keep shares its site with the timed one).
 constexpr uint32_t kAll = Bit(Group::NoCull) | Bit(Group::BulletKeep) | Bit(Group::Eye) |
                           Bit(Group::Shot) | Bit(Group::EnemyKeepTimed) | Bit(Group::GroupKeep) |
-                          Bit(Group::NoFollow);
+                          Bit(Group::NoFollow) | Bit(Group::AimHold);
 constexpr std::size_t kAllWords = kPatches.size() - 1;
 
 bool SiteIs(const FakeMemory& m, Group g, bool patched) {

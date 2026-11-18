@@ -25,12 +25,21 @@
         .endm
 
 @ void call_shot(const struct Regs* in): r0-r11 and s0-s15 from `in`, in->stack[0..3] at
-@ [sp+0..+12], then `bl shot_stub`.
+@ [sp+0..+12], shot_base at [sp+0x70..+0x7C], then `bl shot_stub`.
 call_shot:
         push    {r4-r11, lr}
         vpush   {d8-d15}
-        sub     sp, sp, #16
-        mov     r12, r0
+        sub     sp, sp, #0x80           @ the caller's frame: the four stack arguments, and at
+        mov     r12, r0                 @ +0x70 its aim quaternion before scatter (shot_base)
+        ldr     r0, =shot_base
+        ldr     r1, [r0, #0]
+        str     r1, [sp, #0x70]
+        ldr     r1, [r0, #4]
+        str     r1, [sp, #0x74]
+        ldr     r1, [r0, #8]
+        str     r1, [sp, #0x78]
+        ldr     r1, [r0, #12]
+        str     r1, [sp, #0x7C]
         ldr     r0, [r12, #60]
         str     r0, [sp, #0]
         ldr     r0, [r12, #64]
@@ -46,7 +55,7 @@ call_shot:
         ldm     r12, {r0-r11}
         bl      shot_stub
 shot_return:
-        add     sp, sp, #16
+        add     sp, sp, #0x80
         vpop    {d8-d15}
         pop     {r4-r11, pc}
 

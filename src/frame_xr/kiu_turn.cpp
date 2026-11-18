@@ -17,6 +17,7 @@
 #include "core/hle/kernel/process.h"
 #include "core/memory.h"
 #include "frame_xr/input/kiu_turn.h"
+#include "frame_xr/kiu_first_person.h" // AzaharFrame kiuvr
 #include "frame_xr/kiu_scan.h"
 #include "frame_xr/kiu_turn.h"
 
@@ -47,6 +48,12 @@ int64_t NowNs() {
 bool SwitchIs(const char* name, const char* value) {
     const auto v = Common::FrameTestSwitches::Value(name);
     return v && *v == value;
+}
+
+/// Right Stick mode: its own switch, or the first person switch (AzaharFrame kiuvr), which
+/// turns it on with the rest.
+bool ModeOn() {
+    return SwitchIs(kSwitchOn, "1") || Kiu::FirstPerson::On();
 }
 
 std::mutex g_mutex;
@@ -178,7 +185,7 @@ std::string ReticleText(const KT::Reader& m, const KT::Camera& c) {
 
 void Hook(int64_t ticks, bool vblank) {
     State& s = TheState();
-    const bool on = SwitchIs(kSwitchOn, "1");
+    const bool on = ModeOn();
     const bool trace = SwitchIs(kSwitchTrace, "1");
     if (!trace) {
         s.summary_ns = 0; // the next trace counts from its start
@@ -379,7 +386,7 @@ void Hook(int64_t ticks, bool vblank) {
 } // namespace
 
 bool RightStickOn() {
-    return SwitchIs(kSwitchOn, "1");
+    return ModeOn();
 }
 
 bool Wanted() {

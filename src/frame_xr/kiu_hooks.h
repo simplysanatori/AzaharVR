@@ -43,11 +43,18 @@
 
 #pragma once
 
+#include <cstdint>
+
 namespace FrameXr::Kiu::Hooks {
 
 /// The frontend, when Kid Icarus: Uprising boots: the emulation thread's hook is set (once). It
 /// costs a few reads a VBlank while that game runs and writes nothing unless a switch is on, or
 /// a save state brought our patches back with every switch off (then they are taken out).
 void OnGameBoot();
+
+/// AzaharFrame kiuvr: the frontend, as a game boots, after its own settings and presets are
+/// loaded and before it is loaded: the first person test switch's settings for this run
+/// (kiu_first_person.h), for the European Kid Icarus: Uprising only.
+void OnGameSettings(uint64_t title_id);
 
 } // namespace FrameXr::Kiu::Hooks

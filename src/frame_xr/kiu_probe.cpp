@@ -21,6 +21,8 @@
 #include "core/perf_stats.h"
 #include "core/hle/kernel/process.h"
 #include "core/memory.h"
+#include "frame_xr/input/kiu_turn.h" // AzaharFrame kiuvr: the game's own aim object
+#include "frame_xr/kiu_first_person.h" // AzaharFrame kiuvr
 #include "frame_xr/kiu_probe.h"
 #include "frame_xr/kiu_scan.h"
 #include "input_common/frame_xr.h"
@@ -52,6 +54,11 @@ struct Probe {
     bool scanned = false;
     int64_t last_scan_ns = 0;
     uint32_t object = 0; ///< AzaharFrame kiuaim2: the reticle object of the last good read
+    /// AzaharFrame kiuvr: the reticle is the game's own aim object, found without the mod
+    /// (AZAHARFRAME_KIU_AIM_NO_MOD / _AIM_6DOF); the game's code was checked for it.
+    bool original = false;
+    bool code_checked = false, code_ok = false;
+    Kiu::FirstPerson::AimNow last_aim6; ///< the last 6DoF aim (the trace)
     Input::DirectAim aim; ///< AzaharFrame kiuaim2 (was the relative loop)
     std::string reason;
     int64_t last_stats_ns = 0;
@@ -135,6 +142,39 @@ constexpr uint32_t kModStretchOn = 0x24;
 /// The C-Stick let go for this long before the latches are released (no flick on the lift).
 constexpr int64_t kLatchReleaseAfterNs = 150'000'000;
 
+/// AzaharFrame kiuvr: the game's memory for the pure readers (input/kiu_turn.h): mapped
+/// addresses only.
+class ProbeReader final : public Input::KiuTurn::Reader {
+public:
+    ProbeReader(Memory::MemorySystem& memory, const Kernel::Process& process)
+        : memory_(memory), process_(process) {}
+    bool Read32(uint32_t addr, uint32_t& value) const override {
+        if ((addr & 3u) != 0 || !memory_.IsValidVirtualAddress(process_, addr) ||
+            !memory_.IsValidVirtualAddress(process_, addr + 3)) {
+            return false;
+        }
+        value = memory_.Read32(process_, addr);
+        return true;
+    }
+    bool Read8(uint32_t addr, uint8_t& value) const override {
+        if (!memory_.IsValidVirtualAddress(process_, addr)) {
+            return false;
+        }
+        value = memory_.Read8(process_, addr);
+        return true;
+    }
+
+private:
+    Memory::MemorySystem& memory_;
+    const Kernel::Process& process_;
+};
+
+/// The reticle object's "held" flags (+0x84): what the game itself leaves there after the first
+/// stylus touch of a battle (0x41). With bit 0 or 1 set the game keeps the reticle's pixel as
+/// its aim; with neither it puts the reticle back each frame (the middle on land; where its
+/// point in the world is seen in the air). V on the game without the mod (KIU_HOOKS.md).
+constexpr uint32_t kReticleHeld = 0x41;
+
 Probe& TheProbe() {
     static Probe probe;
     return probe;
@@ -151,7 +191,12 @@ void Note(Probe& p, const std::string& reason) {
         return;
     }
     p.reason = reason;
-    if (reason == "locked") {
+    if (reason == "locked" && p.original) { // AzaharFrame kiuvr
+        LOG_INFO(Frontend,
+                 "xr: Light Gun: reticle found (the game's own aim object 0x{:08X}; no C-Stick & "
+                 "Gyro mod: the app's own route)",
+                 p.object);
+    } else if (reason == "locked") {
         LOG_INFO(Frontend, "xr: Light Gun: reticle found (mod state 0x{:08X}, options 0x{:08X})",
                  p.addr.state, p.addr.options_ptr);
     } else {
@@ -183,6 +228,8 @@ bool ReadReticle(Probe& p, Input::ReticleReading& r, std::string& why) {
         p.title = title;
         p.addr = {};
         p.scanned = false;
+        p.original = false;
+        p.code_checked = p.code_ok = false;
         p.aim.Reset();
         std::scoped_lock lock{g_mutex}; // AzaharFrame kiuaim2: another game's reading goes
         g_last_reading = {};
@@ -202,10 +249,38 @@ bool ReadReticle(Probe& p, Input::ReticleReading& r, std::string& why) {
             p.addr = ScanForMod(bytes.data(), bytes.size(), data.addr);
         }
     }
+    // AzaharFrame kiuvr: without the mod, the game's own aim object (the European game's
+    // original code, checked), behind AZAHARFRAME_KIU_AIM_NO_MOD or _AIM_6DOF. With the mod,
+    // the mod's route below, always: only one of the two ever writes.
+    uint32_t original_object = 0;
     if (!p.addr.found) {
-        why = "the C-Stick & Gyro mod's code was not found";
-        return false;
+        namespace KT = Input::KiuTurn;
+        if (!Kiu::FirstPerson::AimNoModWanted() || title != KT::kTitleEur) {
+            why = "the C-Stick & Gyro mod's code was not found";
+            return false;
+        }
+        const ProbeReader reader(memory, *process);
+        if (!p.code_checked) {
+            p.code_checked = true;
+            p.code_ok = KT::CodeMatches(reader);
+        }
+        uint8_t playing = 0;
+        uint32_t root = 0, next = 0, vt = 0;
+        if (!p.code_ok) {
+            why = "no mod, and the game's code is not the European game's";
+            return false;
+        }
+        if (!reader.Read8(KT::kPlaying, playing) || playing != 1 ||
+            !reader.Read32(KT::kAimRoot, root) || root == 0 ||
+            !reader.Read32(root + KT::kAimRootNext, next) || next < KT::kAimBack ||
+            !reader.Read32(next - KT::kAimBack, vt) ||
+            (vt != KT::kAimVtableLand && vt != KT::kAimVtableAir)) {
+            why = "no mod, and no battle's aim object now";
+            return false;
+        }
+        original_object = next - KT::kAimBack;
     }
+    p.original = original_object != 0;
     const auto read32 = [&](uint32_t a, uint32_t& v) {
         if ((a & 3u) != 0 || !memory.IsValidVirtualAddress(*process, a) ||
             !memory.IsValidVirtualAddress(*process, a + 3)) {
@@ -216,8 +291,8 @@ bool ReadReticle(Probe& p, Input::ReticleReading& r, std::string& why) {
     };
     // AzaharFrame kiufix2: any control scheme. The mod's gyro aims in the C-Stick scheme too
     // (the owner's headset check of 2026-11-14), so the scheme is only logged (kiu_weapon.h).
-    uint32_t object = 0;
-    if (!read32(p.addr.state + kStateReticle, object) || object == 0) {
+    uint32_t object = original_object;
+    if (!p.original && (!read32(p.addr.state + kStateReticle, object) || object == 0)) {
         why = "no reticle";
         return false;
     }
@@ -261,6 +336,12 @@ bool ReadReticle(Probe& p, Input::ReticleReading& r, std::string& why) {
                     ? top
                     : Input::ReticleReading::kBoxTopDefault;
     r.game_places = memory.Read8(*process, object + kReticleGamePlaces) != 0;
+    // AzaharFrame kiuvr: with the "aim hold" patches in, the land box is the whole screen (the
+    // game writes 1 and -1 for its bottom and top): the reticle roams it, as in the air.
+    if (p.original && std::isfinite(bottom) && std::isfinite(top) && bottom >= 0.99f &&
+        top <= -0.99f) {
+        r.ground = false;
+    }
     r.valid = true;
     p.object = object;
     return true;
@@ -342,6 +423,27 @@ void AimPoll(int64_t ticks) {
                     }
                 }
             }
+        }
+    }
+    // AzaharFrame kiuvr: first person's aim (AZAHARFRAME_KIU_AIM_6DOF): not where the ray meets
+    // the top screen but where it points in the game's world, seen through the game's camera.
+    if (Kiu::FirstPerson::Aim6DofOn()) {
+        target = {};
+        for (const std::shared_ptr<Kernel::Process>& process :
+             Core::System::GetInstance().Kernel().GetProcessList()) {
+            if (process.get() != p.process) {
+                continue;
+            }
+            const ProbeReader reader(Core::System::GetInstance().Memory(), *process);
+            p.last_aim6 = Kiu::FirstPerson::AimThroughCamera(
+                reader, p.object, {reading.w, reading.h, reading.cx, reading.cy},
+                Kiu::FirstPerson::Latest(host_now));
+            if (p.last_aim6.valid) {
+                target.valid = true;
+                target.u = std::clamp(p.last_aim6.pixel.x / reading.w, -0.5f, 1.5f);
+                target.v = std::clamp(p.last_aim6.pixel.y / reading.h, -0.5f, 1.5f);
+            }
+            break;
         }
     }
     const int64_t now = static_cast<int64_t>(static_cast<double>(ticks) * 1'000'000'000.0 /
@@ -549,6 +651,19 @@ void AimPoll(int64_t ticks) {
             if (process.get() == p.process) {
                 system.Memory().Write32(*process, p.object + kReticleX, FloatBits(write.x));
                 system.Memory().Write32(*process, p.object + kReticleY, FloatBits(write.y));
+                // AzaharFrame kiuvr: without the mod, the reticle's "held" flags with it, as
+                // the game leaves them after a stylus touch: else its next frame puts the
+                // reticle back where it was.
+                if (p.original &&
+                    system.Memory().IsValidVirtualAddress(*process,
+                                                          p.object + kReticleClampFlags + 3)) {
+                    const uint32_t flags =
+                        system.Memory().Read32(*process, p.object + kReticleClampFlags);
+                    if ((flags & kReticleHeld) != kReticleHeld) {
+                        system.Memory().Write32(*process, p.object + kReticleClampFlags,
+                                                flags | kReticleHeld);
+                    }
+                }
                 p.writes++;
                 break;
             }

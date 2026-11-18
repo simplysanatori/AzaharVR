@@ -51,15 +51,6 @@ using KiuHooks::Quat;
 using KiuHooks::Rotate;
 using KiuHooks::Vec3;
 
-constexpr Vec3 operator+(const Vec3& a, const Vec3& b) {
-    return {a.x + b.x, a.y + b.y, a.z + b.z};
-}
-constexpr Vec3 operator-(const Vec3& a, const Vec3& b) {
-    return {a.x - b.x, a.y - b.y, a.z - b.z};
-}
-constexpr Vec3 operator*(const Vec3& a, float k) {
-    return {a.x * k, a.y * k, a.z * k};
-}
 constexpr float Dot(const Vec3& a, const Vec3& b) {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
@@ -206,6 +197,130 @@ constexpr Vec3 WorldToRail(const Vec3& world, const Vec3& origin) {
 }
 constexpr Vec3 RailToWorld(const Vec3& local, const Vec3& origin) {
     return local + origin;
+}
+
+// ---- the game's own aim (the reticle) ----
+//
+// The game keeps its aim as a reticle pixel (the aim object's +0xA4, +0xA8, in a screen of
+// +0xE0 by +0xE8 pixels with its centre at +0xE4, +0xEC) and, each frame, puts a point in the
+// world on the scene camera's ray through that pixel: at a fixed depth along the camera's view
+// (500.6 units in a land battle, 1500 in the air) or on what is under the reticle. The pixel of
+// a world point is the scene projection's (its angle and shape are read from the game, never
+// assumed: a widescreen build of the game has another shape):
+//     x = cx + (w / 2) * X / (Z tan(fov / 2) aspect),   y = cy - (h / 2) * Y / (Z tan(fov / 2))
+// with X, Y, Z the point from the eye along the camera's right, up and view. (V: read back
+// from the running game, land and air, KIU_HOOKS.md.)
+
+/// The scene camera's projection as the game has it (0xE14BC4 the angle up and down, radians;
+/// 0xE14BC8 the width over the height).
+struct Projection {
+    float fov_y = 0.0f;
+    float aspect = 0.0f;
+    bool Ok() const {
+        return std::isfinite(fov_y) && std::isfinite(aspect) && fov_y > 0.05f && fov_y < 3.0f &&
+               aspect > 0.2f && aspect < 10.0f;
+    }
+};
+/// The reticle's screen (the aim object's +0xE0 w, +0xE8 h, +0xE4 cx, +0xEC cy).
+struct ReticleScreen {
+    float w = 0.0f, h = 0.0f, cx = 0.0f, cy = 0.0f;
+    bool Ok() const {
+        return w > 2.0f && h > 2.0f && w < 4096.0f && h < 4096.0f && cx > 0.0f && cx < w &&
+               cy > 0.0f && cy < h;
+    }
+};
+struct Pixel {
+    float x = 0.0f, y = 0.0f;
+};
+
+/// How far a world point is in front of the camera, along its view (below 0: behind it).
+constexpr float CameraDepth(const GameCamera& camera, const Vec3& world) {
+    return Dot(world - camera.eye, Ahead(camera.q));
+}
+
+/// The reticle pixel of a world point. `ok` false: the point is not in front of the camera
+/// (the pixel then is that of its direction mirrored forward: on the right side of the screen
+/// for a point behind to the right, far outside it).
+inline Pixel WorldToReticle(const GameCamera& camera, const Projection& projection,
+                            const ReticleScreen& screen, const Vec3& world, bool* ok = nullptr) {
+    const Vec3 v = Rotate(Conj(camera.q), world - camera.eye); // camera axes: -z ahead
+    const float t = std::tan(projection.fov_y * 0.5f);
+    const bool ahead = -v.z > 1e-3f;
+    if (ok) {
+        *ok = ahead;
+    }
+    const float depth = ahead ? -v.z : 1e-3f;
+    return {screen.cx + screen.w * 0.5f * v.x / (depth * t * projection.aspect),
+            screen.cy - screen.h * 0.5f * v.y / (depth * t)};
+}
+
+/// The world direction (unit) the camera sees a reticle pixel in.
+inline Vec3 ReticleToDirection(const GameCamera& camera, const Projection& projection,
+                               const ReticleScreen& screen, const Pixel& pixel) {
+    const float t = std::tan(projection.fov_y * 0.5f);
+    const Vec3 v{(pixel.x - screen.cx) / (screen.w * 0.5f) * t * projection.aspect,
+                 -(pixel.y - screen.cy) / (screen.h * 0.5f) * t, -1.0f};
+    return Rotate(camera.q, Unit(v));
+}
+
+/// Where a ray (world; `direction` unit) meets the plane `depth` in front of the camera. A ray
+/// that does not reach that plane going forward (it runs along it or away from it) gives its
+/// point `depth` along itself: a direction to aim in all the same.
+inline Vec3 RayAtCameraDepth(const GameCamera& camera, const Vec3& origin, const Vec3& direction,
+                             float depth) {
+    const Vec3 ahead = Ahead(camera.q);
+    const float along = Dot(direction, ahead);
+    const float have = Dot(origin - camera.eye, ahead);
+    if (along > 1e-3f && depth > have) {
+        return origin + direction * ((depth - have) / along);
+    }
+    return origin + direction * (depth > 1.0f ? depth : 1.0f);
+}
+
+/// The aim through the game's camera: the reticle pixel that makes the game aim where the
+/// hand's ray points. The ray (world) is followed to the depth the game's own aim point has now
+/// (`aim_depth`: its fixed range, or what the reticle is on; at least kAimDepthMin), and that
+/// point is seen through the scene camera. `ok` false: the point is behind the camera (the
+/// hand points out of the game's view to the back).
+inline constexpr float kAimDepthMin = 5.0f;
+inline Pixel AimPixel(const GameCamera& camera, const Projection& projection,
+                      const ReticleScreen& screen, const Vec3& ray_origin,
+                      const Vec3& ray_direction, float aim_depth, bool* ok = nullptr,
+                      Vec3* point = nullptr) {
+    const float depth = std::isfinite(aim_depth) && aim_depth > kAimDepthMin ? aim_depth
+                                                                             : kAimDepthMin;
+    const Vec3 hit = RayAtCameraDepth(camera, ray_origin, Unit(ray_direction), depth);
+    if (point) {
+        *point = hit;
+    }
+    return WorldToReticle(camera, projection, screen, hit, ok);
+}
+
+// ---- the game's shots ----
+//
+// A shot's quaternion applied to +z is its direction. The game makes its aim quaternion from
+// the direction to its aim point with the world's up (its "look" rotation: z the direction, x
+// = up x z, y = z x x), then each bullet adds its own scatter and the weapon's tilt in that
+// quaternion's own axes. The shot stub's "absolute" mode gives a bullet
+//     q' = wanted * conj(base) * q
+// with `base` the game's aim quaternion before scatter (the stub reads it at the spawn) and
+// `wanted` the same kind of quaternion for the hand's ray: every bullet keeps its own scatter
+// and tilt, about the hand's ray instead of the game's aim.
+
+/// The game's aim quaternion for a direction (need not be unit): +z onto it, the world's up
+/// kept up. Straight up or down: any level side.
+inline Quat ShotQuat(const Vec3& direction) {
+    const Vec3 z = Unit(direction, {0.0f, 0.0f, 1.0f});
+    Vec3 x = Cross({0.0f, 1.0f, 0.0f}, z);
+    if (!(Length(x) > 1e-4f)) {
+        x = {1.0f, 0.0f, 0.0f};
+    }
+    x = Unit(x, {1.0f, 0.0f, 0.0f});
+    return FromAxes(x, Cross(z, x), z);
+}
+/// Where a shot's quaternion points.
+constexpr Vec3 ShotDirection(const Quat& q) {
+    return Rotate(q, {0.0f, 0.0f, 1.0f});
 }
 
 // ---- life size ----

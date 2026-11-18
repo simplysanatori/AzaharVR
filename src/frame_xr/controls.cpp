@@ -18,6 +18,7 @@
 #include "common/logging/log.h"
 #include "common/settings.h" // AzaharFrame curve
 #include "frame_xr/controls.h"
+#include "frame_xr/kiu_first_person.h" // AzaharFrame kiuvr
 #include "frame_xr/kiu_probe.h"     // AzaharFrame kiugyro: Light Gun
 #include "frame_xr/kiu_scan.h"      // AzaharFrame kiuguns: IsKidIcarus
 #include "frame_xr/kiu_weapon.h"    // AzaharFrame kiuguns: the weapon in hand, the shots
@@ -1836,6 +1837,28 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                         Input::RayFromPose(ToInput(head_view.head)), panels.top, &panels.bottom);
                 }
             }
+        }
+        // AzaharFrame kiuvr: Kid Icarus: Uprising's first person test switch: the aiming hand's
+        // ray in the room (the same one ray, from the weapon's muzzle along its axis while it is
+        // drawn; the right hand's when no controller aims), for the emulation thread's
+        // room <-> game transform (kiu_first_person.h).
+        if (Kiu::FirstPerson::ForTitle(GameTitleId())) {
+            const int fp_hand = gyro_aim_hand >= 0 ? gyro_aim_hand
+                                                   : Input::HandIndex(Input::Hand::Right);
+            const Input::HandInput& hand = in.hand[static_cast<std::size_t>(fp_hand)];
+            Kiu::FirstPerson::Hand fp;
+            if (hand.active) {
+                const auto muzzle = visuals.WeaponMuzzle(fp_hand);
+                const Input::Ray ray = Input::AngelsAimRay(
+                    hand.aim, muzzle, visuals.WeaponAxis(fp_hand),
+                    Input::AimRayFromSwitch(
+                        Common::FrameTestSwitches::Value(Input::kAimRaySwitch)));
+                fp.valid = true;
+                fp.origin = {ray.origin.x, ray.origin.y, ray.origin.z};
+                fp.direction = {ray.direction.x, ray.direction.y, ray.direction.z};
+                fp.muzzle = muzzle.has_value();
+            }
+            Kiu::FirstPerson::PublishHand(fp);
         }
         // AzaharFrame kiuaim2: Check Aim (input/gyro_aim.h AimMap): the game's own map, read and
         // checked once per game, and its steps (a target over the top screen, the aiming

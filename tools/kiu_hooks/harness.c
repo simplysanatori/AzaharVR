@@ -20,6 +20,7 @@ u32 MAILBOX[0x54 / 4];
 char ACTOR_VTABLE[4];
 
 struct Regs spawn_seen, sink_seen, keep_seen;
+float shot_base[4]; // the caller's aim quaternion before scatter, put at its [sp + 0x70]
 u32 spawn_calls, sink_calls, shot_sp, eye_sp;
 
 enum { MB_PLAYER = 0x08, MB_EYE_NODE = 0x0C, MB_EYE_FLAGS = 0x10, MB_EYE_OFFSET = 0x14,
@@ -91,6 +92,8 @@ static void shot_case(u32 flags, int owner_is_player, const char* name) {
     const float rot[4] = {0.1825742f, 0.3651484f, 0.5477226f, 0.7302967f};
     const float frame[4] = {-0.2672612f, 0.5345225f, 0.0f, 0.8017837f};
     const float offset[3] = {1.5f, -2.25f, 3.0f};
+    const float base[4] = {0.4082483f, -0.4082483f, 0.0f, 0.8164966f};
+    for (int i = 0; i < 4; i++) shot_base[i] = base[i];
     float quat[4] = {0.5f, -0.5f, 0.5f, 0.5f};
     float pos[3] = {7.0f, 8.0f, 9.0f};
     const float quat0[4] = {quat[0], quat[1], quat[2], quat[3]};
@@ -127,7 +130,17 @@ static void shot_case(u32 flags, int owner_is_player, const char* name) {
     float want_q[4] = {quat0[0], quat0[1], quat0[2], quat0[3]};
     float want_p[3] = {pos0[0], pos0[1], pos0[2]};
     u32 want_target = in.stack[3];
-    if (active && (flags & 1)) qmul(rot, quat0, want_q);
+    if (active && (flags & 1)) {
+        if (flags & 8) { // the rotation is the aim itself: rot * conj(base) * q
+            const float cb[4] = {-base[0], -base[1], -base[2], base[3]};
+            float t[4];
+            qmul(cb, quat0, t);
+            qmul(rot, t, want_q);
+        } else {
+            qmul(rot, quat0, want_q);
+        }
+    }
+    check(shot_base[0] == base[0] && shot_base[3] == base[3], "the caller's aim untouched");
     if (active && (flags & 2)) {
         qrot(frame, local, want_p);
         for (int i = 0; i < 3; i++) want_p[i] += offset[i];
@@ -211,6 +224,10 @@ void _start(void) {
     shot_case(4, 1, "shot: no lock target");
     shot_case(3, 1, "shot: rotate and move");
     shot_case(7, 1, "shot: rotate, move, no lock target");
+    shot_case(9, 1, "shot: the aim replaced");
+    shot_case(8, 1, "shot: the aim flag without rotate");
+    shot_case(15, 1, "shot: the aim replaced, move, no lock target");
+    shot_case(15, 0, "shot: another owner's shot, everything armed");
     eye_case(0, 1, 1, 1, "eye: off");
     eye_case(1, 0, 1, 1, "eye: another camera node");
     eye_case(1, 1, 0, 1, "eye: the actor is gone");

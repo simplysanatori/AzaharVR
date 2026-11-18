@@ -3637,6 +3637,9 @@ void GMainWindow::BootGame(const QString& filename) {
             FrameXr::ApplyPresetSettings(*preset); // AzaharFrame presets
         }
 #endif
+#ifdef ENABLE_FRAME_XR // AzaharFrame kiuvr: a first person test switch's mode and registers
+        FrameXr::Kiu::Hooks::OnGameSettings(title_id);
+#endif
 #ifdef ENABLE_FRAME_XR // AzaharFrame reticle: Controls presets (controls_presets.h)
         // AzaharFrame kiu: starting values only: never over the game's own value, a global one
         // the player set, or a value the preset gave the game before (ApplyControlsPreset).

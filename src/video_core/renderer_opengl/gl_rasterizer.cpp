@@ -10,6 +10,7 @@
 #include "common/microprofile.h"
 #include "core/loader/loader.h"
 #include "video_core/pica/pica_core.h"
+#include "video_core/kiu_view_tap.h" // AzaharFrame kiuvr
 #include "video_core/vr_immersive.h" // AzaharFrame oot
 #include "video_core/renderer_opengl/gl_rasterizer.h"
 #include "video_core/renderer_opengl/pica_to_gl.h"
@@ -641,6 +642,10 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                                           vr_world_far_valid, vr_world_far_ndc,
                                           vr_world_near_k, vr_world_across, vr_world_eye,
                                           vr_world_p00);
+        // AzaharFrame kiuvr: the same rows for Kid Icarus: Uprising's first person trace.
+        if (VideoCore::Immersive::g_world_view_tap.wanted.load(std::memory_order_relaxed)) {
+            VideoCore::Immersive::g_world_view_tap.Store(vr_world_eye);
+        }
     }
 
     // Draw the vertex batch

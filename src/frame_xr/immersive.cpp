@@ -33,6 +33,7 @@
 #include "frame_xr/immersive_layout.h"
 #include "frame_xr/immersive_names.h" // AzaharFrame kiu
 #include "frame_xr/ipd_smoother.h" // AzaharFrame ipd
+#include "frame_xr/kiu_first_person.h" // AzaharFrame kiuvr
 #include "frame_xr/input/input_frame.h"
 #include "frame_xr/presets.h" // AzaharFrame immersive: preset screen sizes
 #include "frame_xr/render_margin.h" // AzaharFrame fovaxis
@@ -743,6 +744,38 @@ void UpdateMeasuredCamera() {
     }
 }
 
+// AzaharFrame kiuvr: Kid Icarus: Uprising's first person test switch is on for the game on view
+// (kiu_first_person.h).
+bool KiuFirstPerson() {
+    return Kiu::FirstPerson::ForTitle(g_title_id.load(std::memory_order_relaxed));
+}
+
+// AzaharFrame kiuvr: what mode 3 draws with this frame (the rest pose, the head, the rotation
+// given to the game, the leaning scale), for the first person switch's room <-> game transform.
+void KiuFirstPersonFrame(u32 mode) {
+    if (!KiuFirstPerson() || !g.engaged || !IsViewMode(mode) || !g.view.valid) {
+        return;
+    }
+    const auto in = [](const XrPosef& p) {
+        return Input::KiuRoom::Pose{
+            {p.position.x, p.position.y, p.position.z},
+            {p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w}};
+    };
+    const XrQuaternionf rel = Normalized(Mul(Conj(g.ref.orientation), g.view.head.orientation));
+    const Input::Quatf given = L::GameCameraRotation({rel.x, rel.y, rel.z, rel.w}, g.solved);
+    Kiu::FirstPerson::View view;
+    view.valid = true;
+    view.rest = {in(g.ref).p, in(g.ref).q};
+    view.head = in(g.view.head);
+    view.given = {given.x, given.y, given.z, given.w};
+    view.units_per_metre = std::max(g.leaning, 0.0f) * g.tuning.position_scale;
+    view.gain_x = g.solved.gain_x;
+    view.gain_y = g.solved.gain;
+    view.screen_pitch = g.solved.pitch_rad;
+    view.screen_yaw = g.solved.yaw_rad;
+    Kiu::FirstPerson::PublishView(view);
+}
+
 // AzaharFrame immersive: the immersive mode in use, the setting's (every game can turn it on).
 u32 ModeInUse() {
     return Settings::values.vr_immersive_mode.GetValue();
@@ -1081,7 +1114,10 @@ void UpdateNatural(u32 mode) {
     Settings::frame_vr_stereo_cap.store(-1.0f, std::memory_order_relaxed); // replaced by this
     const u32 depth = NaturalDepth();
     const float f = static_cast<float>(depth) / 100.0f;
-    const float leaning = NaturalLeaningNow();
+    // AzaharFrame kiuvr: first person leans by its own scale (life size); the game's K is
+    // neither read nor saved meanwhile.
+    const float leaning =
+        KiuFirstPerson() ? Kiu::FirstPerson::UnitsPerMetre() : NaturalLeaningNow();
     g.leaning = leaning;
     const int source = static_cast<int>(g.eye_k.From());
     if (mode == 2) {
@@ -1524,7 +1560,9 @@ void OnFrame(const FrameInfo& info) {
         // AzaharFrame natural: World Scale is the screen's distance at the angle as set (eased),
         // so the game's own 3D, its natural limit and the leaning all follow it.
         if (info.screens_live) {
-            MigrateWorldScale(mode);
+            if (!KiuFirstPerson()) { // AzaharFrame kiuvr: its own scale, nothing saved
+                MigrateWorldScale(mode);
+            }
             g.solved.distance = FullScreenDistance(mode);
         }
     }
@@ -1595,6 +1633,7 @@ void OnFrame(const FrameInfo& info) {
         }
     }
     VideoCore::Immersive::Publish(data);
+    KiuFirstPersonFrame(mode); // AzaharFrame kiuvr
 
     // AzaharFrame doubling: the per-second picture age line (Full modes, engaged).
     if (g.engaged && IsViewMode(mode) && g.view.valid) {
