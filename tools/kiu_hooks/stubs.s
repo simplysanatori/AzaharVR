@@ -41,8 +41,9 @@
         .equ    ACTOR_LOCAL_POS,   0x74    @ f32 x3, in the parent's frame
         .equ    TRANSFORM_POS,     0x14    @ the camera hand-over's transform: f32 x3
         .equ    PATH_STATE_TIME,   0x34    @ a flier's path state: f32 seconds since it entered it
+        .equ    SHADOW_ACTOR,      0x30    @ the round shadow's caller (a movement state): its actor
 
-        .global image_start, eye_stub, shot_stub, keep_stub, image_end
+        .global image_start, eye_stub, shot_stub, keep_stub, shadow_stub, image_end
 image_start:
         .ascii  "KIUH"                  @ the image's tag
         .word   IMAGE_VERSION
@@ -211,6 +212,25 @@ keep_stub:
         ldrmi   pc, lit_path_restart    @ less than the limit (not for a NaN): 0x3E8CDC
         ldr     pc, lit_path_vanish     @ 0x3E8D00
 
+@ ---- The player's round shadow: entered by `b shadow_stub` at 0x57B054, the first instruction of
+@ the function that puts an actor's round shadow on the ground for this frame (r0 = the actor's
+@ movement state, the actor at [r0+0x30]; r1 = a mode; entered by `bl` from the movement
+@ states, lr = their return address). For the local player's actor it returns at once, so his
+@ shadow is not drawn this frame; for everyone else it runs the replaced push and goes on at
+@ 0x57B058. No player in the mailbox (0): everyone's shadow, as the game. Uses r2, r12 and the
+@ flags (the function writes r2 before it reads it and never reads r12; its own early exit
+@ leaves r2 and the flags changed too); r0, r1, r3-r11, sp and lr are kept.
+shadow_stub:
+        ldr     r12, lit_mailbox
+        ldr     r12, [r12, #MB_PLAYER]
+        cmp     r12, #0
+        beq     1f
+        ldr     r2, [r0, #SHADOW_ACTOR]
+        cmp     r2, r12
+        bxeq    lr                      @ the player's: no shadow this frame
+1:      push    {r4, r5, lr}            @ the instruction replaced at 0x57B054
+        ldr     pc, lit_shadow_continue @ 0x57B058, the function's second instruction
+
 @ ---- Literals (the only words that name an address) ----
 lit_mailbox:        .word   MAILBOX
 lit_actor_vtable:   .word   ACTOR_VTABLE
@@ -219,4 +239,5 @@ lit_spawn:          .word   SPAWN
 lit_no_target:      .word   0xFFFFFE00
 lit_path_restart:   .word   PATH_RESTART
 lit_path_vanish:    .word   PATH_VANISH
+lit_shadow_continue: .word  SHADOW_CONTINUE
 image_end:

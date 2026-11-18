@@ -6,7 +6,7 @@
         .fpu    vfpv2
         .arm
         .text
-        .global call_shot, call_eye, call_keep, SPAWN, SINK_CONTINUE, PATH_RESTART, PATH_VANISH
+        .global call_shot, call_eye, call_keep, call_shadow, SPAWN, SINK_CONTINUE, PATH_RESTART, PATH_VANISH, SHADOW_CONTINUE
 
 @ struct Regs { u32 r[13]; u32 sp; u32 lr; u32 stack[4]; float s[16]; }   (r at 0, sp 52, lr 56, stack 60, s 76)
         .macro  capture reg
@@ -140,6 +140,56 @@ PATH_VANISH:
         capture r12
         mov     r0, #2
         bx      lr
+
+@ void call_shadow(const struct Regs* in): r0-r11 from `in`, then `bl` to the patched site's
+@ stand-in, the stub itself (the site holds `b shadow_stub`); shadow_back gets r0-r11 and sp as
+@ they come back to the caller (either way).
+call_shadow:
+        push    {r4-r11, lr}
+        mov     r12, r0
+        ldr     r0, =shadow_sp
+        str     sp, [r0]
+        ldm     r12, {r0-r11}
+        bl      shadow_stub
+        ldr     r12, =shadow_back
+        capture r12
+        str     sp, [r12, #52]
+        pop     {r4-r11, pc}
+
+@ The rest of the round shadow (0x57B058 on): records, then returns as the function would (the
+@ stub ran its first instruction, push {r4, r5, lr}), r0-r3 as they arrived.
+SHADOW_CONTINUE:
+        push    {r0}
+        ldr     r0, =shadow_seen
+        str     r1, [r0, #4]
+        str     r2, [r0, #8]
+        str     r3, [r0, #12]
+        str     r4, [r0, #16]
+        str     r5, [r0, #20]
+        str     r6, [r0, #24]
+        str     r7, [r0, #28]
+        str     r8, [r0, #32]
+        str     r9, [r0, #36]
+        str     r10, [r0, #40]
+        str     r11, [r0, #44]
+        add     r1, sp, #4
+        str     r1, [r0, #52]
+        ldr     r1, [sp, #4]            @ the pushed r4, r5, lr
+        str     r1, [r0, #60]
+        ldr     r1, [sp, #8]
+        str     r1, [r0, #64]
+        ldr     r1, [sp, #12]
+        str     r1, [r0, #68]
+        pop     {r1}
+        str     r1, [r0, #0]
+        ldr     r1, =shadow_calls
+        ldr     r2, [r1]
+        add     r2, r2, #1
+        str     r2, [r1]
+        ldr     r1, [r0, #4]
+        ldr     r2, [r0, #8]
+        ldr     r0, [r0, #0]
+        pop     {r4, r5, pc}
 
         .global shot_return
         .ltorg

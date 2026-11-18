@@ -642,7 +642,7 @@ TEST_CASE("Kid Icarus hooks: the mailbox's layout", "[frame_xr][kiuhook]") {
     };
     CHECK(loads(Stubs::kMbEyeFlags) == 1);
     CHECK(loads(Stubs::kMbEyeNode) == 1);
-    CHECK(loads(Stubs::kMbPlayer) == 2); // both stubs
+    CHECK(loads(Stubs::kMbPlayer) == 3); // the eye, shot and shadow stubs
     CHECK(loads(Stubs::kMbShotFlags) == 1);
     // and the float blocks through add rX, r12, #imm = 0xE28C?0imm.
     const auto adds = [](uint32_t offset) {

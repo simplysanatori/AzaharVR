@@ -13,15 +13,16 @@ struct Regs {
 extern void call_shot(const struct Regs* in);
 extern void call_eye(const struct Regs* in);
 extern u32 call_keep(const struct Regs* in);
+extern void call_shadow(const struct Regs* in);
 extern char shot_return[];
 
 // What the stubs' literals name (stubs.s without stubs-eur.inc).
 u32 MAILBOX[0x54 / 4];
 char ACTOR_VTABLE[4];
 
-struct Regs spawn_seen, sink_seen, keep_seen;
+struct Regs spawn_seen, sink_seen, keep_seen, shadow_seen, shadow_back;
 float shot_base[4]; // the caller's aim quaternion before scatter, put at its [sp + 0x70]
-u32 spawn_calls, sink_calls, shot_sp, eye_sp;
+u32 spawn_calls, sink_calls, shot_sp, eye_sp, shadow_calls, shadow_sp;
 
 enum { MB_PLAYER = 0x08, MB_EYE_NODE = 0x0C, MB_EYE_FLAGS = 0x10, MB_EYE_OFFSET = 0x14,
        MB_SHOT_FLAGS = 0x20, MB_SHOT_ROTATION = 0x24, MB_SHOT_FRAME = 0x34, MB_SHOT_OFFSET = 0x44,
@@ -214,6 +215,37 @@ static void keep_case(float age, float limit, u32 want, const char* name) {
     check(same_regs(&in, &keep_seen, 0, 11), "r0-r11 as the function had them");
 }
 
+static void shadow_case(int has_player, int owner_is_player, const char* name) {
+    static u32 state[0x40 / 4];
+    state[0x30 / 4] = owner_is_player ? (u32)actor : (u32)other_actor;
+    for (int i = 0; i < 0x54 / 4; i++) MAILBOX[i] = 0;
+    MAILBOX[MB_PLAYER / 4] = has_player ? (u32)actor : 0;
+    struct Regs in;
+    fill(&in);
+    in.r[0] = (u32)state;
+    const u32 calls = shadow_calls;
+    call_shadow(&in);
+    say(name);
+    say("\n");
+    const int skip = has_player && owner_is_player;
+    check(shadow_back.sp == shadow_sp, "sp back as at the call");
+    check(shadow_back.r[0] == in.r[0] && shadow_back.r[1] == in.r[1] && shadow_back.r[3] == in.r[3],
+          "r0, r1, r3 back as the caller set them");
+    check(same_regs(&in, &shadow_back, 4, 11), "r4-r11 back as the caller set them");
+    if (skip) {
+        check(shadow_calls == calls, "the player's: the function is not run");
+    } else {
+        check(shadow_calls == calls + 1, "anyone else's: the function goes on once");
+        check(shadow_seen.r[0] == in.r[0] && shadow_seen.r[1] == in.r[1] &&
+                  shadow_seen.r[3] == in.r[3],
+              "r0, r1, r3 reach it as the caller set them");
+        check(same_regs(&in, &shadow_seen, 4, 11), "r4-r11 reach it as the caller set them");
+        check(shadow_seen.sp == shadow_sp - 12, "sp after the function's own push");
+        check(shadow_seen.stack[0] == in.r[4] && shadow_seen.stack[1] == in.r[5],
+              "the pushed r4, r5 are the caller's");
+    }
+}
+
 void _start(void) {
     actor[0] = (u32)ACTOR_VTABLE;
     other_actor[0] = (u32)ACTOR_VTABLE;
@@ -238,6 +270,10 @@ void _start(void) {
     keep_case(31.0f, 20.0f, 2, "keep: older: vanish");
     keep_case(3.5f, 0.0f, 2, "keep: a zero limit: vanish (the game's own)");
     keep_case(0.0f / 0.0f * 0.0f + (float)__builtin_nanf(""), 20.0f, 2, "keep: a NaN age: vanish");
+    shadow_case(1, 1, "shadow: the player's: none");
+    shadow_case(1, 0, "shadow: another actor's: drawn");
+    shadow_case(0, 1, "shadow: no player: drawn");
+    shadow_case(0, 0, "shadow: no player, another actor: drawn");
     say(failures ? "stubs: FAILED\n" : "stubs: all checks passed\n");
     sys(1, failures ? 1 : 0, 0, 0);
     for (;;) {
