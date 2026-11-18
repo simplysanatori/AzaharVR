@@ -2,18 +2,25 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
+#include <atomic>
 #include <bit>
 #include <chrono>
 #include <cmath>
 #include <mutex>
 #include <string>
+#include "common/frame_flat.h" // AzaharFrame kiumode: frame_flat_mono
 #include "common/frame_test_switches.h"
 #include "common/logging/log.h"
 #include "common/settings.h"
+#include "frame_xr/immersive_layout.h" // AzaharFrame kiufov
 #include "frame_xr/input/kiu_hooks.h"
 #include "frame_xr/input/kiu_turn.h"
-#include "frame_xr/immersive_layout.h" // AzaharFrame kiufov
 #include "frame_xr/kiu_first_person.h"
+
+namespace FrameXr {
+uint64_t GameTitleId(); // frame_xr.h (AzaharFrame kiumode: the running game)
+bool IsStarted();       // frame_xr.h (AzaharFrame kiumode: an XR runtime)
+} // namespace FrameXr
 
 // AzaharFrame kiuvr (kiu_first_person.h)
 namespace FrameXr::Kiu::FirstPerson {
@@ -49,22 +56,75 @@ int64_t NowNs() {
         .count();
 }
 
+// AzaharFrame kiumode: the title whose code the hooks found to be the mapped one (0: none).
+std::atomic<uint64_t> g_code_title{0};
+std::atomic<bool> g_registers{false};
+// What the renderer is given for this run (constants: they outlive every reader).
+const int32_t kViewRegisterValue = kViewRegister;
+const std::string kEyeIndicatorValue = kEyeIndicator;
+
+uint32_t StoredMode() {
+    return Settings::values.vr_immersive_mode.GetValue();
+}
+
+/// The game is on view in VR: an XR runtime with a session (in Flat the window shows one eye).
+bool InVr() {
+    return IsStarted() && !Settings::frame_flat_mono.load(std::memory_order_relaxed);
+}
+
+/// Aiming is Direct Aim (vr_gyro_aim 2, Light Gun).
+bool DirectAim() {
+    return Settings::values.vr_gyro_aim.GetValue() == 2;
+}
+
 } // namespace
 
+bool AngelsAim() {
+    const uint64_t title = GameTitleId();
+    return AngelsAimFor(StoredMode(), title,
+                        title != 0 && g_code_title.load(std::memory_order_relaxed) == title,
+                        InVr());
+}
+
 bool On() {
-    return SwitchOn(kSwitch);
+    return SwitchOn(kSwitch) || AngelsAim();
+}
+
+bool Wanted() {
+    return WantedFor(SwitchOn(kSwitch), StoredMode(), GameTitleId());
+}
+
+void SetGameCode(uint64_t title, bool code_ok) {
+    g_code_title.store(code_ok ? title : 0, std::memory_order_relaxed);
+}
+
+void SupplyRegisters(bool on) {
+    if (g_registers.exchange(on, std::memory_order_relaxed) == on) {
+        return;
+    }
+    auto& v = Settings::values;
+    v.vr_si_mode_register_offset.Supply(on ? &kViewRegisterValue : nullptr);
+    v.vr_immersive_eye_indicator.Supply(on ? &kEyeIndicatorValue : nullptr);
+    if (on) {
+        LOG_INFO(Frontend,
+                 "xr: Kid Icarus first person: View Matrix Register {} and Eye Indicator "
+                 "Register {} for this run (in memory only, never saved)",
+                 kViewRegister, kEyeIndicator);
+    } else {
+        LOG_INFO(Frontend, "xr: Kid Icarus first person: the registers are the settings' again");
+    }
 }
 
 bool AimNoModWanted() {
-    return SwitchOn(kSwitchAimNoMod) || SwitchOn(kSwitchAim6Dof);
+    return SwitchOn(kSwitchAimNoMod) || SwitchOn(kSwitchAim6Dof) || (AngelsAim() && DirectAim());
 }
 
 bool Aim6DofOn() {
-    return SwitchOn(kSwitchAim6Dof) && On();
+    return (SwitchOn(kSwitchAim6Dof) && On()) || (AngelsAim() && DirectAim());
 }
 
 bool Shots6DofOn() {
-    return SwitchOn(kSwitchShots6Dof) && On();
+    return (SwitchOn(kSwitchShots6Dof) && On()) || AngelsAim();
 }
 
 Scene ReadScene(const Input::KiuHooks::Reader& mem) {
@@ -205,23 +265,10 @@ void PublishHand(const Hand& hand) {
 }
 
 void OnGameBoot() {
-    if (!On()) {
-        return;
-    }
-    // For this run, as a preset gives them (frame_xr/presets.cpp), but whatever the game's own
-    // values are: the switch asks for exactly this. In memory only; they reach the game's file
-    // only if its settings are saved during the run.
-    auto& v = Settings::values;
-    v.vr_immersive_mode.SetGlobal(false);
-    v.vr_immersive_mode.SetValue(3);
-    v.vr_si_mode_register_offset.SetGlobal(false);
-    v.vr_si_mode_register_offset.SetValue(kViewRegister);
-    v.vr_immersive_eye_indicator.SetGlobal(false);
-    v.vr_immersive_eye_indicator.SetValue(kEyeIndicator);
-    LOG_INFO(Frontend,
-             "xr: Kid Icarus first person: this run plays in Immersive Mode 3 with View Matrix "
-             "Register {} and Eye Indicator Register {} (the test switch, read as the game boots)",
-             kViewRegister, kEyeIndicator);
+    // AzaharFrame kiumode: a new run: its code is checked afresh and nothing is supplied until
+    // then (before the presets, which read the registers).
+    SetGameCode(0, false);
+    SupplyRegisters(false);
 }
 
 Sample Latest(int64_t host_now_ns) {

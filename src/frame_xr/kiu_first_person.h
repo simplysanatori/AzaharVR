@@ -2,25 +2,28 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
-// AzaharFrame kiuvr: Kid Icarus: Uprising in first person in the Full (6DoF) view, a test build
-// behind test switches only (no setting, no row, no text in the app). European game only (the
-// game-code hooks it stands on, kiu_hooks.h, are mapped for that one):
+// AzaharFrame kiuvr: Kid Icarus: Uprising in first person in the Full (6DoF) view. European game
+// only (the game-code hooks it stands on, kiu_hooks.h, are mapped for that one).
 //
-//   AZAHARFRAME_KIU_FIRST_PERSON=1    together: the scene's eye at the character's (the eye
-//                                     hook); the world at life size (the leaning scale below);
-//                                     the render culls off, the land camera's follow off and
-//                                     Right Stick turning on (the switches AZAHARFRAME_KIU_EYE,
-//                                     _NOCULL, _NO_FOLLOW and _RIGHT_STICK_TURN, as if set):
-//                                     all live. And, read once as the game boots: the run plays
-//                                     in mode 3 ("Full (6DoF): Other Games") with this game's
-//                                     registers (view 90, eye indicator 87,2), whatever its
-//                                     settings say. That is set in memory only, as a preset
-//                                     sets it: it reaches the game's own settings file only if
-//                                     they are saved during the run (the in-game menu saves
-//                                     them when a row is changed); then Immersive Mode has to
-//                                     be turned Off for the game again by hand. With the switch
-//                                     turned off while the game runs, the run stays in mode 3
-//                                     (the game's own third person camera, head tracked).
+// AzaharFrame kiumode: first person is Immersive Mode's "Full (6DoF): Angel's Aim" (stored 4,
+// shown only while Kid Icarus: Uprising runs; Settings::kImmersiveModeAngelsAim). It is drawn as
+// mode 3 (Settings::ImmersiveRenderMode, for every reader) and is in effect in VR for the
+// European game whose code the hooks checked (OnFor below); elsewhere it plays as Full (6DoF): Other
+// Games and the hooks' log says why. In effect, it turns on with first person (On) the eye hook,
+// the culls off, the follow off, Right Stick turning, the land aim box, the aim from the hand
+// (with Direct Aim), the shots from the hand and the bullet keep, the timed enemy keep
+// (kAngelsAimEnemyKeepS) and the screen at true size; and it supplies this game's registers
+// (view 90, eye indicator 87,2) in memory only (Settings::RunSuppliedSetting): none of it is
+// written into the settings, so a save during play stores mode 4 and nothing else. Another mode
+// chosen during play turns all of it off at the next VBlank (live).
+//
+//   AZAHARFRAME_KIU_FIRST_PERSON=1    the developer override: first person on (On) in whatever
+//                                     mode the game runs (choose a Full mode), with the eye
+//                                     hook, the culls off, the follow off, Right Stick turning
+//                                     and life size as above, and the registers supplied on the
+//                                     European game; the aim, shots and enemy keep keep their
+//                                     own switches. It no longer sets a mode or writes a
+//                                     setting (it set mode 3 and the registers in memory).
 //   AZAHARFRAME_KIU_WORLD_SCALE=<u>   the leaning scale in game units per metre, over life size
 //                                     (0.5 to 100).
 //   AZAHARFRAME_KIU_PLAYER_EYE_M=<m>  the player's eye height in metres for life size (default
@@ -60,19 +63,53 @@
 
 #include <cstdint>
 #include "frame_xr/input/kiu_room.h"
+#include "frame_xr/input/kiu_turn.h"
+#include "frame_xr/kiu_scan.h"
 
 namespace FrameXr::Kiu::FirstPerson {
 
-/// The switch is on (live). Any thread.
+/// AzaharFrame kiumode: Immersive Mode's Angel's Aim (Settings::kImmersiveModeAngelsAim).
+inline constexpr uint32_t kModeAngelsAim = 4;
+/// The timed enemy keep's seconds with Angel's Aim (AZAHARFRAME_KIU_ENEMY_KEEP_S wins).
+inline constexpr float kAngelsAimEnemyKeepS = 12.0f;
+
+/// AzaharFrame kiumode: Angel's Aim is asked for: the stored mode is 4 and the game is Kid
+/// Icarus: Uprising (any region), or the developer switch. The hooks log why it is not in effect.
+constexpr bool WantedFor(bool dev_switch, uint32_t stored_mode, uint64_t title) {
+    return dev_switch || (stored_mode == kModeAngelsAim && IsKidIcarus(title));
+}
+/// Angel's Aim is in effect: the stored mode is 4, the game is the European one, its code is the
+/// one the hooks are mapped for (checked by the hooks: SetGameCode) and the game is on view in
+/// VR (`in_vr`: in Flat no Immersive Mode does anything, nor does this one).
+constexpr bool AngelsAimFor(uint32_t stored_mode, uint64_t title, bool code_ok, bool in_vr) {
+    return stored_mode == kModeAngelsAim && title == Input::KiuTurn::kTitleEur && code_ok && in_vr;
+}
+/// First person is on: Angel's Aim in effect, or the developer switch.
+constexpr bool OnFor(bool dev_switch, uint32_t stored_mode, uint64_t title, bool code_ok,
+                     bool in_vr) {
+    return dev_switch || AngelsAimFor(stored_mode, title, code_ok, in_vr);
+}
+
+/// First person is on (live): Angel's Aim in effect, or AZAHARFRAME_KIU_FIRST_PERSON. Any thread.
 bool On();
-/// The switch is on and `title` is the game it is for: mode 3 is used for it. Any thread.
+/// AzaharFrame kiumode: Angel's Aim in effect (live): everything first person needs. Any thread.
+bool AngelsAim();
+/// AzaharFrame kiumode: Angel's Aim asked for (WantedFor; live). Any thread.
+bool Wanted();
+/// First person is on and `title` is the game it is for (the European game). Any thread.
 bool ForTitle(uint64_t title);
 /// Mode 3's registers for this game (the settings' View Matrix Register and Eye Indicator
 /// Register), found to be right for it on the desktop (KIU_HOOKS.md).
 inline constexpr int kViewRegister = 90;
 inline constexpr const char* kEyeIndicator = "87,2";
-/// The frontend, when Kid Icarus: Uprising boots (after its settings are loaded, before it
-/// runs) with the switch on: Immersive Mode 3 and the two registers for this run.
+/// AzaharFrame kiumode: the hooks, each VBlank: the running game and whether its code is the
+/// one they are mapped for (false: not checked, or not that code).
+void SetGameCode(uint64_t title, bool code_ok);
+/// AzaharFrame kiumode: the hooks, each VBlank: the two registers supplied to the renderer for
+/// this run (in memory only; Settings::RunSuppliedSetting), or the settings' own again.
+void SupplyRegisters(bool on);
+/// The frontend, when a game boots, before its presets are applied: forgets the last run's code
+/// check and registers. Writes no setting (AzaharFrame kiumode).
 void OnGameBoot();
 /// The leaning scale in use, game units per metre: life size, or the override. Any thread.
 float UnitsPerMetre();
@@ -125,11 +162,13 @@ struct Sample {
 /// Any thread: the latest of both (not valid when older than 250 ms).
 Sample Latest(int64_t host_now_ns);
 
-/// AZAHARFRAME_KIU_AIM_NO_MOD, or AZAHARFRAME_KIU_AIM_6DOF (live). Any thread.
+/// AZAHARFRAME_KIU_AIM_NO_MOD, or AZAHARFRAME_KIU_AIM_6DOF, or Angel's Aim with Direct Aim
+/// (live). Any thread.
 bool AimNoModWanted();
-/// AZAHARFRAME_KIU_AIM_6DOF with first person on (live). Any thread.
+/// AZAHARFRAME_KIU_AIM_6DOF with first person on, or Angel's Aim with Direct Aim (live). Any
+/// thread.
 bool Aim6DofOn();
-/// AZAHARFRAME_KIU_SHOTS_6DOF with first person on (live). Any thread.
+/// AZAHARFRAME_KIU_SHOTS_6DOF with first person on, or Angel's Aim (live). Any thread.
 bool Shots6DofOn();
 
 /// The scene camera and its projection as the game's memory has them now (the camera of the

@@ -325,3 +325,122 @@ TEST_CASE("Per-Game: Trigger Layout's key, Original by default", "[frame_xr][kiu
           std::vector<std::string>{"vr_kiu_trigger_layout"});
     CHECK(Settings::values.vr_kiu_trigger_layout.GetDefault() == 0u);
 }
+
+// AzaharFrame kiumode: Angel's Aim (Immersive Mode 4) supplies Kid Icarus: Uprising's two
+// registers in memory only (Settings::RunSuppliedSetting). A save during play (the in-game menu's
+// FrameMenuRequest: the game's file read, the menu's keys put back, everything written with
+// QtConfig::WriteGlobalSetting, which writes GetValue(false) for a game's file) stores mode 4
+// and neither register, nor a mode 3.
+namespace {
+/// QtConfig::WriteGlobalSetting for a game's file, as it is (GetValue(global) with global false).
+template <typename T, bool R>
+void WriteGameAsQtConfig(QSettings& ini, const Settings::SwitchableSetting<T, R>& s) {
+    const QString name = QString::fromStdString(s.GetLabel());
+    if (s.UsingGlobal()) {
+        ini.remove(name);
+        ini.setValue(name + QStringLiteral("/use_global"), true);
+        return;
+    }
+    ini.setValue(name + QStringLiteral("/use_global"), false);
+    if constexpr (std::is_same_v<T, std::string>) {
+        ini.setValue(name, QString::fromStdString(s.GetValue(false)));
+    } else {
+        ini.setValue(name, ToVariant(s.GetValue(false)));
+    }
+}
+/// QtConfig::ReadGlobalSetting for a game's file, strings too.
+template <typename T, bool R>
+void ReadGameAny(QSettings& ini, Settings::SwitchableSetting<T, R>& s) {
+    if constexpr (std::is_same_v<T, std::string>) {
+        const QString name = QString::fromStdString(s.GetLabel());
+        const bool use_global = ini.value(name + QStringLiteral("/use_global"), true).toBool();
+        s.SetGlobal(use_global);
+        if (!use_global) {
+            s.SetValue(ini.value(name).toString().toStdString());
+        }
+    } else {
+        ReadGame(ini, s);
+    }
+}
+} // namespace
+
+TEST_CASE("Per-Game: a save during Angel's Aim stores mode 4 and no registers",
+          "[frame_xr][kiumode]") {
+    AllGlobal reset;
+    auto& v = Settings::values;
+    auto& reg = v.vr_si_mode_register_offset;
+    auto& eye = v.vr_immersive_eye_indicator;
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("0004000000030200.ini"));
+    static const int32_t kReg = 90;
+    static const std::string kEye = "87,2";
+    for (const bool own_register : {false, true}) {
+        INFO("the game has its own View Matrix Register: " << own_register);
+        QFile::remove(path);
+        reg.SetGlobal(true);
+        eye.SetGlobal(true);
+        // The game's file before the run: Angel's Aim chosen, maybe a register of its own.
+        {
+            QSettings ini(path, QSettings::IniFormat);
+            ini.beginGroup(QStringLiteral("VR"));
+            v.vr_immersive_mode.SetGlobal(false);
+            v.vr_immersive_mode.SetValue(4);
+            WriteAll(ini);
+            if (own_register) {
+                reg.SetGlobal(false);
+                reg.SetValue(12);
+            }
+            WriteGameAsQtConfig(ini, reg);
+            WriteGameAsQtConfig(ini, eye);
+        }
+        // The run: first person supplies the registers.
+        reg.Supply(&kReg);
+        eye.Supply(&kEye);
+        REQUIRE(reg.GetValue() == 90);
+        REQUIRE(eye.GetValue() == "87,2");
+        // A row changed in the in-game menu (Per-Game), then the save.
+        v.vr_immersive_world_scale.SetGlobal(false);
+        v.vr_immersive_world_scale.SetValue(150.0f);
+        {
+            QSettings ini(path, QSettings::IniFormat);
+            ini.beginGroup(QStringLiteral("VR"));
+            {
+                FrameXr::PerGame::KeepMenuKeys keep;
+                ReadAll(ini);
+                ReadGameAny(ini, reg);
+                ReadGameAny(ini, eye);
+            }
+            WriteAll(ini);
+            WriteGameAsQtConfig(ini, reg);
+            WriteGameAsQtConfig(ini, eye);
+        }
+        CHECK(reg.GetValue() == 90); // still supplied for the run
+        {
+            QSettings ini(path, QSettings::IniFormat);
+            ini.beginGroup(QStringLiteral("VR"));
+            CHECK(ini.value(QStringLiteral("vr_immersive_mode")).toUInt() == 4u);
+            CHECK(!ini.value(QStringLiteral("vr_immersive_mode/use_global")).toBool());
+            if (own_register) {
+                CHECK(ini.value(QStringLiteral("vr_si_mode_register_offset")).toInt() == 12);
+            } else {
+                CHECK(ini.value(QStringLiteral("vr_si_mode_register_offset/use_global")).toBool());
+                CHECK(!ini.contains(QStringLiteral("vr_si_mode_register_offset")));
+            }
+            CHECK(ini.value(QStringLiteral("vr_immersive_eye_indicator/use_global")).toBool());
+            CHECK(!ini.contains(QStringLiteral("vr_immersive_eye_indicator")));
+            for (const QString& key : ini.allKeys()) {
+                INFO(key.toStdString());
+                CHECK(ini.value(key).toString() != QStringLiteral("87,2"));
+                if (!key.contains(QStringLiteral("use_global"))) {
+                    CHECK(!(key.contains(QStringLiteral("register")) &&
+                            ini.value(key).toInt() == 90));
+                }
+            }
+        }
+        reg.Supply(nullptr);
+        eye.Supply(nullptr);
+        reg.SetGlobal(true);
+        eye.SetGlobal(true);
+    }
+}

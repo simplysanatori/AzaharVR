@@ -9,6 +9,7 @@
 
 #include <QGroupBox>
 #include "citra_qt/configuration/configuration_shared.h"
+#include "common/common_types.h"
 
 class QCheckBox;
 class QComboBox;
@@ -23,7 +24,9 @@ class ConfigureFrameVr : public QGroupBox {
     Q_OBJECT
 
 public:
-    explicit ConfigureFrameVr(QWidget* parent = nullptr);
+    /// AzaharFrame kiumode: `title_id` the game whose Properties these are (0: the global
+    /// settings): Immersive Mode lists Angel's Aim for Kid Icarus: Uprising.
+    explicit ConfigureFrameVr(QWidget* parent = nullptr, u64 title_id = 0);
     ~ConfigureFrameVr() override;
 
     void SetConfiguration();
@@ -37,6 +40,10 @@ private:
     /// from what the rows show now.
     void UpdateWarpNotes();
 
+    /// AzaharFrame kiumode: Immersive Mode lists Angel's Aim (Kid Icarus: Uprising's
+    /// Properties), and the stored mode the row was loaded with (kept while its choice stays).
+    bool mode_kiu = false;
+    u32 mode_loaded = 0;
     QCheckBox* hide_bottom_check;
     /// Per application: the tristate tracker (Use global / on / off).
     ConfigurationShared::CheckState hide_bottom_state = ConfigurationShared::CheckState::Global;

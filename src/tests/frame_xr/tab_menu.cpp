@@ -4515,3 +4515,50 @@ TEST_CASE("Tab menu: Render Margin with Stretch only, and Fill View",
           std::vector<Id>(stretch.order.begin(), stretch.order.begin() + above + 1));
     // Their values are the settings' (BuildModel reads them each frame); hiding writes nothing.
 }
+
+// AzaharFrame kiumode: Immersive Mode lists Angel's Aim (stored 4) above Other Games while Kid
+// Icarus: Uprising runs, and only then; the open menu's items and the row show the stored value
+// by its place in the list shown.
+TEST_CASE("Tab menu: Immersive Mode lists Angel's Aim with Kid Icarus only",
+          "[frame_xr][tabmenu][kiumode]") {
+    namespace N = FrameXr::Immersive::Names;
+    MenuModel m = Sample();
+    CHECK(OptionsFor(Id::ImmersiveMode, m) == OptionsFor(Id::ImmersiveMode));
+    REQUIRE(OptionsFor(Id::ImmersiveMode).size() == 4);
+    CHECK(OptionsFor(Id::ImmersiveMode)[3] == N::kModeOtherGames);
+    for (const std::string& o : OptionsFor(Id::ImmersiveMode)) {
+        CHECK(o.find("Angel") == std::string::npos);
+    }
+    MenuModel kiu = m;
+    kiu.mods.angels_aim.shown = true;
+    const std::vector<std::string> want{"Off", "Wide (3DoF)",
+                                        "Full (6DoF): Ocarina of Time, Majora's Mask",
+                                        "Full (6DoF): Angel's Aim", "Full (6DoF): Other Games"};
+    CHECK(OptionsFor(Id::ImmersiveMode, kiu) == want);
+    // Other rows are the same either way
+    CHECK(OptionsFor(Id::ScreenShape, kiu) == OptionsFor(Id::ScreenShape));
+
+    // The open menu: five items with Kid Icarus, four without.
+    Drawn d;
+    MenuView v;
+    v.tab = Tab::Settings;
+    v.section = SettingsSection::Immersive;
+    v.open_menu = Id::ImmersiveMode;
+    const auto items = [&](const MenuModel& model) {
+        d.Draw(model, v);
+        int n = 0;
+        for (const auto& h : d.menu.Hits()) {
+            n += h.t.id == Id::ImmersiveMode && h.t.index >= 0 ? 1 : 0;
+        }
+        return n;
+    };
+    CHECK(items(kiu) == 5);
+    CHECK(items(m) == 4);
+    // The row shows the stored value by its place: 4 is the fourth item with Kid Icarus and
+    // Other Games without; 3 is Other Games either way.
+    CHECK(N::ModeIndexOf(4, true) == 3);
+    CHECK(OptionsFor(Id::ImmersiveMode, kiu)[N::ModeIndexOf(4, true)] == N::kModeAngelsAim);
+    CHECK(OptionsFor(Id::ImmersiveMode, kiu)[N::ModeIndexOf(3, true)] == N::kModeOtherGames);
+    CHECK(OptionsFor(Id::ImmersiveMode, m)[N::ModeIndexOf(4, false)] == N::kModeOtherGames);
+    CHECK(OptionsFor(Id::ImmersiveMode, m)[N::ModeIndexOf(3, false)] == N::kModeOtherGames);
+}

@@ -783,3 +783,22 @@ TEST_CASE("FrameXr presets: World Scale and 3D Depth only where unset", "[frame_
     }
     ResetPresetSettings();
 }
+
+// AzaharFrame kiumode: Angel's Aim (stored 4) is drawn as mode 3 in every game, so a stored 4 in
+// a game with a mode 3 preset gets the preset's values as a 3 does (it never shows in that
+// game's list: only an older file or a hand edit has it).
+TEST_CASE("Presets: a stored 4 fits a mode 3 preset as a 3 does", "[frame_xr][kiumode]") {
+    ResetPresetSettings();
+    const FrameXr::ImmersivePreset* asphalt = FrameXr::FindImmersivePreset(0x0004000000034C00);
+    REQUIRE(asphalt);
+    REQUIRE(asphalt->mode == 3);
+    REQUIRE(asphalt->register_offset != -1);
+    auto& v = Settings::values;
+    v.vr_immersive_mode.SetGlobal(false);
+    v.vr_immersive_mode.SetValue(4);
+    FrameXr::ApplyPresetSettings(*asphalt);
+    CHECK(v.vr_immersive_mode.GetValue() == 4u); // the game's own value, kept
+    CHECK(!v.vr_si_mode_register_offset.UsingGlobal());
+    CHECK(v.vr_si_mode_register_offset.GetValue() == asphalt->register_offset);
+    ResetPresetSettings();
+}

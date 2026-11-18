@@ -1188,7 +1188,8 @@ void MenuPanel::BuildModel(const Host& host) {
                 .count() /
             66);
     }
-    m.immersive_mode = static_cast<int>(std::min<u32>(v.vr_immersive_mode.GetValue(), 3));
+    // AzaharFrame kiumode: the stored value (4 Angel's Aim; the row shows it by ModeIndexOf)
+    m.immersive_mode = static_cast<int>(std::min<u32>(v.vr_immersive_mode.GetValue(), 4));
     // AzaharFrame fovaxis: Render Margin per axis (the level each one shows: render_margin.h)
     m.margin_x = static_cast<int>(Immersive::Margin::Level(Immersive::Margin::Axis::Horizontal));
     m.margin_y = static_cast<int>(Immersive::Margin::Level(Immersive::Margin::Axis::Vertical));
@@ -1551,10 +1552,14 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         Apply(v.vr_window_scale, static_cast<u32>(r.value), false);
         r.setting = MenuSetting::WindowScale;
         break;
-    case Id::ImmersiveMode:
-        Apply(v.vr_immersive_mode, u, per_game);
+    case Id::ImmersiveMode: { // AzaharFrame kiumode: the shown index; Angel's Aim with Kid Icarus
+        const u32 stored = Immersive::Names::ModeValueAt(value, model.mods.angels_aim.shown,
+                                                         v.vr_immersive_mode.GetValue());
+        r.value = static_cast<int>(stored);
+        Apply(v.vr_immersive_mode, stored, per_game);
         r.setting = MenuSetting::ImmersiveMode;
         break;
+    }
     case Id::MarginX: // AzaharFrame fovaxis: Render Margin per axis (render_margin.h)
     case Id::MarginY: {
         const auto axis = id == Id::MarginX ? Immersive::Margin::Axis::Horizontal

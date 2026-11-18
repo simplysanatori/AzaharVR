@@ -514,6 +514,42 @@ protected:
     Type custom{};         ///< The custom value of the setting
 };
 
+/**
+ * AzaharFrame kiumode: a per-game setting that a running game can be given a value for, in memory
+ * only. While a value is supplied, GetValue() (no argument: what the emulation reads) returns it;
+ * everything that stores or shows the setting reads GetValue(bool), UsingGlobal() and the stored
+ * value, which never change, so the supplied value is never saved (the config writer uses
+ * GetValue(bool): citra_qt QtConfig::WriteGlobalSetting). Kid Icarus: Uprising's Angel's Aim
+ * supplies Full (6DoF)'s two registers this way (frame_xr/kiu_first_person.h).
+ *
+ * Any thread: the supplied value is a pointer to a value that outlives every reader (a constant).
+ */
+template <typename Type>
+class RunSuppliedSetting final : public SwitchableSetting<Type> {
+public:
+    explicit RunSuppliedSetting(const Type& default_val, const std::string_view& name)
+        : Setting<Type>{default_val, name}, SwitchableSetting<Type>{default_val, name} {}
+
+    using SwitchableSetting<Type>::GetValue;
+    [[nodiscard]] const Type& GetValue() const override {
+        if (const Type* run = supplied.load(std::memory_order_acquire)) {
+            return *run;
+        }
+        return SwitchableSetting<Type>::GetValue();
+    }
+
+    /// Supplies `value` for the running game (nullptr: none; the stored value again).
+    void Supply(const Type* value) {
+        supplied.store(value, std::memory_order_release);
+    }
+    [[nodiscard]] const Type* Supplied() const {
+        return supplied.load(std::memory_order_acquire);
+    }
+
+private:
+    std::atomic<const Type*> supplied{nullptr};
+};
+
 struct InputProfile {
     std::string name;
     std::array<std::string, NativeButton::NumButtons> buttons;
@@ -786,11 +822,17 @@ struct Values {
     // doubled less than lag 1 with the hold (frame_xr/image_lag.h kDefaultLag).
     Setting<u32, true> vr_xr_image_lag{0, 0, 1, "vr_xr_image_lag"};
     // AzaharFrame: switchable, so the Qt window can set them per game (same keys as CitraVR).
+    // AzaharFrame kiumode: 0 Off, 1 Wide (3DoF), 2 Full (6DoF): Ocarina of Time, Majora's Mask,
+    // 3 Full (6DoF): Other Games, 4 Full (6DoF): Angel's Aim (Kid Icarus: Uprising's first
+    // person; drawn as 3: ImmersiveRenderMode). Not ranged: an older build reads a 4 as its own
+    // default branch (no head tracking), never a clamp.
     SwitchableSetting<u32> vr_immersive_mode{0, "vr_immersive_mode"};
-    SwitchableSetting<int32_t> vr_si_mode_register_offset{-1, "vr_si_mode_register_offset"};
+    // AzaharFrame kiumode: the two registers can be supplied by a running game (Angel's Aim),
+    // never saved: RunSuppliedSetting.
+    RunSuppliedSetting<int32_t> vr_si_mode_register_offset{-1, "vr_si_mode_register_offset"};
     SwitchableSetting<u32> vr_immersive_positional_game_scaler{
         0, "vr_immersive_positional_game_scaler"};
-    SwitchableSetting<std::string> vr_immersive_eye_indicator{"", "vr_immersive_eye_indicator"};
+    RunSuppliedSetting<std::string> vr_immersive_eye_indicator{"", "vr_immersive_eye_indicator"};
     // AzaharFrame natural: in the Full modes, 3D Depth (percent of the natural 3D: 100 puts the
     // farthest scenery at infinity for the screen's size, distance and the IPD; 0 flat), World
     // Scale (percent; 100 Automatic: the screen at 3 m, the world true to the game's own 3D; the
@@ -1113,6 +1155,20 @@ static inline void ResetTemporaryFrameLimit() {
 }
 static inline double GetFrameLimit() {
     return is_temporary_frame_limit ? temporary_frame_limit : values.frame_limit.GetValue();
+}
+
+/// AzaharFrame kiumode: Immersive Mode's stored values (values.vr_immersive_mode).
+inline constexpr u32 kImmersiveModeOtherGames = 3;
+inline constexpr u32 kImmersiveModeAngelsAim = 4;
+/// AzaharFrame kiumode: the mode a stored Immersive Mode is drawn in: Angel's Aim (4) is drawn as
+/// Full (6DoF): Other Games (3) in every game; its first person (Kid Icarus: Uprising only) is
+/// frame_xr's (kiu_first_person.h). Every reader that means "which Full mode is drawn" uses this.
+constexpr u32 ImmersiveRenderModeOf(u32 stored) {
+    return stored == kImmersiveModeAngelsAim ? kImmersiveModeOtherGames : stored;
+}
+/// The running game's (values.vr_immersive_mode), as drawn. Any thread.
+inline u32 ImmersiveRenderMode() {
+    return ImmersiveRenderModeOf(values.vr_immersive_mode.GetValue());
 }
 
 } // namespace Settings

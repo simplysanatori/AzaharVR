@@ -406,6 +406,8 @@ void Hook(int64_t ticks) {
     }
     if (!process) {
         s.process = nullptr;
+        Kiu::FirstPerson::SetGameCode(0, false); // AzaharFrame kiumode
+        Kiu::FirstPerson::SupplyRegisters(false);
         return;
     }
     const uint64_t title = process->codeset->program_id;
@@ -416,9 +418,22 @@ void Hook(int64_t ticks) {
         s.process = process.get();
         s.title = title;
     }
-    // AzaharFrame kiuvr: the first person switch turns on the eye, the culls' and the follow's
-    // switches with it (kiu_first_person.h).
+    Memory::MemorySystem& memory = system.Memory();
+    GuestMemory mem(system, memory, *process);
+    // AzaharFrame kiumode: the game's code first: Angel's Aim (Immersive Mode 4) is in effect only
+    // where it is the mapped one (kiu_first_person.h).
+    const bool mapped = title == Input::KiuTurn::kTitleEur;
+    if (mapped && !s.checked) {
+        s.checked = true;
+        s.code_ok = KH::GameCodeMatches(mem);
+    }
+    Kiu::FirstPerson::SetGameCode(title, mapped && s.code_ok);
+    // AzaharFrame kiuvr: first person turns on the eye, the culls' and the follow's switches
+    // with it (kiu_first_person.h). AzaharFrame kiumode: Angel's Aim, or the developer switch.
     const bool first_person = Kiu::FirstPerson::On();
+    Kiu::FirstPerson::SupplyRegisters(first_person && mapped && s.code_ok);
+    const bool fp_wanted = Kiu::FirstPerson::Wanted();
+    const bool angels_aim = Kiu::FirstPerson::AngelsAim();
     const auto fp_trace_text = Switch(kSwitchFpTrace);
     const int fp_trace = fp_trace_text ? std::atoi(fp_trace_text->c_str()) : 0;
     const bool shots_6dof = Kiu::FirstPerson::Shots6DofOn();
@@ -436,8 +451,9 @@ void Hook(int64_t ticks) {
     const int shot_count = shot_text ? KH::ParseFloats(shot_text->c_str(), shot_values, 5) : 0;
     const bool shot_test = shot_count == 2 || shot_count == 5;
     const bool want_shot = shot_test || shots_6dof;
-    // The timed keep replaces the plain one (they share a site).
-    float keep_seconds = 0.0f;
+    // The timed keep replaces the plain one (they share a site). AzaharFrame kiumode: Angel's
+    // Aim's own (12 s) unless the switch gives one.
+    float keep_seconds = angels_aim ? Kiu::FirstPerson::kAngelsAimEnemyKeepS : 0.0f;
     if (const auto text = Switch(kSwitchEnemyKeepS)) {
         float v = 0.0f;
         if (KH::ParseFloats(text->c_str(), &v, 1) == 1 && v > 0.0f) {
@@ -455,30 +471,28 @@ void Hook(int64_t ticks) {
     const int trace = trace_text ? std::atoi(trace_text->c_str()) : 0;
     const bool any = want_nocull || want_keep || want_eye || want_hide || want_shot ||
                      want_keep_timed || want_enemy_keep || want_group_keep || want_no_follow ||
-                     trace > 0 || fp_trace > 0 || want_aim_hold || want_aim_box ||
+                     trace > 0 || fp_trace > 0 || want_aim_hold || want_aim_box || fp_wanted ||
                      want_player_shadow;
     if (fp_trace <= 0) {
         VideoCore::Immersive::g_world_view_tap.wanted.store(false, std::memory_order_relaxed);
     }
+    // AzaharFrame kiumode: why Angel's Aim plays as Full (6DoF): Other Games here.
+    const char* const as_other =
+        fp_wanted && !first_person ? "; Angel's Aim plays as Full (6DoF): Other Games" : "";
 
-    if (title != Input::KiuTurn::kTitleEur) {
+    if (!mapped) {
         if (any) {
             Note(s, fmt::format("off: only the European game (0004000000030200) is mapped, this "
-                                "is {:016X}",
-                                title));
+                                "is {:016X}{}",
+                                title, as_other));
         }
         return;
     }
-    Memory::MemorySystem& memory = system.Memory();
-    GuestMemory mem(system, memory, *process);
-    if (!s.checked) {
-        s.checked = true;
-        s.code_ok = KH::GameCodeMatches(mem);
-    }
     if (!s.code_ok) {
         if (any) {
-            Note(s, "off: the game's code differs from the European game's (0x704178, 0x703894, "
-                    "0x703D4C)");
+            Note(s, fmt::format("off: the game's code differs from the European game's "
+                                "(0x704178, 0x703894, 0x703D4C){}",
+                                as_other));
         }
         return;
     }
@@ -491,7 +505,8 @@ void Hook(int64_t ticks) {
         }
     } else {
         s.idle_vblanks = 0;
-        Note(s, "the game's code matches (European game)");
+        Note(s, fmt::format("the game's code matches (European game){}",
+                            angels_aim ? "; Angel's Aim: first person" : ""));
     }
 
     const KH::Player p = KH::FindPlayer(mem);
@@ -631,10 +646,10 @@ void OnGameBoot() {
     }
 }
 
-void OnGameSettings(uint64_t title_id) {
-    if (title_id == Input::KiuTurn::kTitleEur) {
-        Kiu::FirstPerson::OnGameBoot(); // AzaharFrame kiuvr
-    }
+void OnGameSettings(uint64_t /*title_id*/) {
+    // AzaharFrame kiumode: every game, before its presets: the last run's code check and
+    // registers are forgotten (no setting is written).
+    Kiu::FirstPerson::OnGameBoot();
 }
 
 } // namespace FrameXr::Kiu::Hooks

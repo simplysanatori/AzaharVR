@@ -52,9 +52,9 @@ namespace FrameXr::Kiu::Hooks {
 /// a save state brought our patches back with every switch off (then they are taken out).
 void OnGameBoot();
 
-/// AzaharFrame kiuvr: the frontend, as a game boots, after its own settings and presets are
-/// loaded and before it is loaded: the first person test switch's settings for this run
-/// (kiu_first_person.h), for the European Kid Icarus: Uprising only.
+/// AzaharFrame kiuvr: the frontend, as a game boots, after its own settings are loaded.
+/// AzaharFrame kiumode: every game, before its presets: forgets the last run's first person
+/// state (kiu_first_person.h OnGameBoot); writes no setting.
 void OnGameSettings(uint64_t title_id);
 
 } // namespace FrameXr::Kiu::Hooks

@@ -213,7 +213,10 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
             }
             return rows;
         }
-        rows.push_back(row(Id::ImmersiveMode, RowKind::MenuButton, m.immersive_mode));
+        rows.push_back(
+            row(Id::ImmersiveMode, RowKind::MenuButton, // AzaharFrame kiumode
+                Immersive::Names::ModeIndexOf(static_cast<std::uint32_t>(m.immersive_mode),
+                                              m.mods.angels_aim.shown)));
         Row fov = full(row(Id::GameFov, RowKind::Slider));
         const SliderRange fr = SliderFor(Id::GameFov);
         fov.t = (static_cast<float>(m.game_fov) - fr.min) / (fr.max - fr.min);
@@ -477,9 +480,9 @@ const std::vector<std::string>& OptionsFor(Id id) {
     // AzaharFrame kiugyro: Aiming, in the shown order (AimingValueAt gives the stored value)
     static const std::vector<std::string> kGyroAim{"Off", "Direct Aim", "Gyro Aim"};
     static const std::vector<std::string> kScale{"100%", "150%", "200%"};
-    static const std::vector<std::string> kMode{"Off", "Wide (3DoF)",
-                                                "Full (6DoF): Ocarina of Time, Majora's Mask",
-                                                "Full (6DoF): Other Games"};
+    // AzaharFrame kiumode: the names' list (OptionsFor(id, model) adds Angel's Aim)
+    static const std::vector<std::string> kMode{Immersive::Names::kModeChoices.begin(),
+                                                Immersive::Names::kModeChoices.end()};
     static const std::vector<std::string> kWider{"Off", "1.1x", "1.2x", "1.3x", "1.4x"};
     // AzaharFrame menuux
     static const std::vector<std::string> kResolution{
@@ -574,6 +577,16 @@ const std::vector<std::string>& OptionsFor(Id id) {
     default:
         return kNone;
     }
+}
+
+const std::vector<std::string>& OptionsFor(Id id, const MenuModel& model) {
+    // AzaharFrame kiumode: Immersive Mode with Angel's Aim, while Kid Icarus: Uprising runs
+    if (id == Id::ImmersiveMode && model.mods.angels_aim.shown) {
+        static const std::vector<std::string> kModeKiu{Immersive::Names::kModeChoicesKiu.begin(),
+                                                       Immersive::Names::kModeChoicesKiu.end()};
+        return kModeKiu;
+    }
+    return OptionsFor(id);
 }
 
 std::string LabelFor(Id id) {
@@ -2641,7 +2654,7 @@ void TabMenu::DrawRows(Kit& kit, const MenuModel& model, const MenuView& view, c
             break;
         }
         case RowKind::MenuButton: {
-            const auto& opts = OptionsFor(r.id);
+            const auto& opts = OptionsFor(r.id, model); // AzaharFrame kiumode
             const Rect mb{std::max(ctl.x0, ctl.x1 - 420.0f), ctl.y0, ctl.x1, ctl.y1};
             const std::size_t sel =
                 std::min(static_cast<std::size_t>(std::max(r.selected, 0)), opts.size() - 1);
@@ -2688,7 +2701,7 @@ void TabMenu::DrawRows(Kit& kit, const MenuModel& model, const MenuView& view, c
     DrawScrollbar(kit, view, list, pane.x1, content_h, max_scroll, scroll); // AzaharFrame scroll
     // An open menu goes over everything, its items before the rest in hit testing.
     if (view.open_menu != Id::None && open_anchor.W() > 0.0f) {
-        const std::vector<std::string>& opts = OptionsFor(view.open_menu);
+        const std::vector<std::string>& opts = OptionsFor(view.open_menu, model); // kiumode
         const float item = Kit::MenuItemHeight();
         const float h = item * static_cast<float>(opts.size()) + 16.0f;
         float y0 = open_anchor.y1 + 4.0f;
