@@ -40,6 +40,7 @@ constexpr int64_t kStaleNs = 250'000'000;
 std::mutex g_mutex;
 Sample g_sample; ///< under g_mutex
 float g_scene_fov_deg = 0.0f; ///< under g_mutex (AzaharFrame kiufov)
+float g_scene_aspect = 0.0f;
 int64_t g_scene_fov_ns = 0;
 
 int64_t NowNs() {
@@ -176,13 +177,19 @@ void PublishProjection(const Input::KiuRoom::Projection& projection) {
     }
     std::scoped_lock lock{g_mutex};
     g_scene_fov_deg = projection.fov_y * 180.0f / 3.14159265358979f;
+    g_scene_aspect = projection.aspect;
     g_scene_fov_ns = NowNs();
 }
 
-float SceneFovYDeg() {
+bool SceneProjection(float& fov_y_deg, float& aspect) {
     const int64_t now = NowNs();
     std::scoped_lock lock{g_mutex};
-    return now - g_scene_fov_ns > kStaleNs ? 0.0f : g_scene_fov_deg;
+    if (g_scene_fov_ns == 0 || now - g_scene_fov_ns > kStaleNs) {
+        return false;
+    }
+    fov_y_deg = g_scene_fov_deg;
+    aspect = g_scene_aspect;
+    return true;
 }
 
 void PublishView(const View& view) {

@@ -74,6 +74,8 @@ private:
 /// GUI thread, when a game boots: the aspect its catalog mods give (0: none), the shape a new
 /// game starts at with Automatic until it is measured otherwise.
 void SetHint(float aspect);
+/// AzaharFrame kiufov: the hint SetHint gave (0: none).
+float Hint();
 /// XR thread, each frame: measures while a game runs with Automatic (`screens_live`, the
 /// setting), resets for a new game. Logs each change.
 void Frame(bool screens_live, bool automatic);

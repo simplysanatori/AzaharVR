@@ -1584,15 +1584,26 @@ void OnFrame(const FrameInfo& info) {
         if (KiuFirstPerson()) {
             // AzaharFrame kiufov: first person's own screen, at true size whatever this game's
             // screen settings are (they stay saved for the normal view), the game drawing what
-            // fills the view (Layout::SolveKiuFirstPerson). Sized with the angle the game draws
-            // its world with right now: the scene projection's as read at the last VBlank, else
-            // the live angle as above.
-            const float scene_fov = Kiu::FirstPerson::SceneFovYDeg();
-            const float fp_fov = scene_fov > 0.0f ? scene_fov : options.live_fov_y_deg;
+            // fills the view (Layout::SolveKiuFirstPerson). Sized with the angle and shape the
+            // game draws its world with right now: the scene projection's as read at the last
+            // VBlank (the camera measured from the draws takes other draws too: 1.333 and
+            // 2.333 wide were seen without a mod), its shape the mod's when a widescreen build
+            // of the mod is installed (AutoShape's hint: the projection's field stays 5:3
+            // there); else the live angle and the shape as above.
+            float fp_fov = options.live_fov_y_deg, fp_aspect = cam.aspect;
+            const bool scene = Kiu::FirstPerson::SceneProjection(fp_fov, fp_aspect);
+            if (!scene) {
+                fp_fov = options.live_fov_y_deg;
+                fp_aspect = cam.aspect;
+            } else if (AutoShape::Hint() > 0.0f) {
+                fp_aspect = AutoShape::Hint();
+            } else if (g.shape != AutoShape::kAutomatic) {
+                fp_aspect = TopAspect(); // a Screen Shape chosen for the game
+            }
             const float fp_max = Kiu::FirstPerson::FactorMax();
-            g.solved = L::SolveKiuFirstPerson(fp_fov, cam.aspect, g.view_fov, eye_shift, fp_max,
+            g.solved = L::SolveKiuFirstPerson(fp_fov, fp_aspect, g.view_fov, eye_shift, fp_max,
                                               g.head_place.distance);
-            LogKiuFirstPersonScreen(fp_fov, scene_fov > 0.0f, cam.aspect, fp_max);
+            LogKiuFirstPersonScreen(fp_fov, scene, fp_aspect, fp_max);
         } else {
             g.solved = L::SolveHeadLocked(g.head_place, screen_fov, cam.aspect, g.view_fov,
                                           eye_shift, options, g.offset);

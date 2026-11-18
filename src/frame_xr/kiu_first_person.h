@@ -79,11 +79,13 @@ float UnitsPerMetre();
 
 /// AzaharFrame kiufov: AZAHARFRAME_KIU_FP_FACTOR (live), or Layout::kKiuFpFactorMax. Any thread.
 float FactorMax();
-/// AzaharFrame kiufov: the scene projection's vertical angle (degrees) and shape as the first
-/// person pass read them at the last VBlank (the angle the game draws its world with), published
-/// by the emulation thread; 0 when none was read in the last 250 ms. Any thread.
+/// AzaharFrame kiufov: the scene projection's vertical angle and shape as the first person pass
+/// read them at the last VBlank (what the game draws its world with), published by the
+/// emulation thread. Any thread: false when none was read in the last 250 ms. The shape is the
+/// projection's field (5:3; a widescreen build of the C-Stick & Gyro mod leaves 5:3 there and
+/// draws wider: the caller takes the mod's shape where it is known).
 void PublishProjection(const Input::KiuRoom::Projection& projection);
-float SceneFovYDeg();
+bool SceneProjection(float& fov_y_deg, float& aspect);
 
 /// What mode 3 draws with this display frame, in the room (OpenXR's LOCAL space).
 struct View {

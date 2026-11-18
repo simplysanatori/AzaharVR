@@ -131,6 +131,10 @@ State& S() {
 }
 } // namespace
 
+float Hint() {
+    return g_hint.load(std::memory_order_relaxed);
+}
+
 void SetHint(float aspect) {
     g_hint.store(aspect > 0.0f ? aspect : 0.0f, std::memory_order_relaxed);
 }
