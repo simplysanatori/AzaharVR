@@ -4703,7 +4703,7 @@ TEST_CASE("Tab menu: Angel's Aim is Recommended only in Kid Icarus: Uprising", "
     CHECK(in);
     CHECK(!out);
     // Global and another game: no badge at all
-    const auto g = differs(base, shoot(true, 0, 2), base.item);
+    const auto g = differs(shoot(false, 0, 2), shoot(true, 0, 2), base.item); // the same scope
     CHECK(!g.first);
     CHECK(!g.second);
     const auto o = differs(base, shoot(false, 1, 2), base.item);

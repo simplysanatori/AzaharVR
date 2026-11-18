@@ -732,7 +732,8 @@ TEST_CASE("VR group: Angel's Aim is Recommended only in Kid Icarus: Uprising's P
         auto* mode = In<QComboBox>(w, "frame_vr_mode_row");
         REQUIRE(mode);
         REQUIRE(mode->count() == 5 + off);
-        CHECK(mode->itemText(3 + off) == QStringLiteral("Full (6DoF): Angel's Aim (Recommended)"));
+        CHECK(mode->itemText(3 + off) == QString::fromUtf8(FrameXr::Immersive::Names::kModeAngelsAim) +
+                                                     QStringLiteral(" (Recommended)"));
         for (const int i : {0, 1, 2, 4}) { // no other choice has it
             CHECK(!mode->itemText(i + off).contains(QStringLiteral("Recommended")));
         }
@@ -751,6 +752,6 @@ TEST_CASE("VR group: Angel's Aim is Recommended only in Kid Icarus: Uprising's P
         ConfigureFrameVr w;
         auto* mode = In<QComboBox>(w, "frame_vr_mode_row");
         REQUIRE(mode);
-        CHECK(mode->itemText(3) == QStringLiteral("Full (6DoF): Angel's Aim"));
+        CHECK(mode->itemText(3) == QString::fromUtf8(FrameXr::Immersive::Names::kModeAngelsAim));
     }
 }
