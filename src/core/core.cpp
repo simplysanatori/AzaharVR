@@ -1382,6 +1382,11 @@ void System::serialize(Archive& ar, const unsigned int file_version) {
     }
     ar&* service_manager.get();
     ar&* archive_manager.get();
+    // AzaharFrame romfsload: the state keeps where the RomFS sat in the ROM file it was made
+    // with; the running ROM may hold the game elsewhere (FileSys::UseRunningRomFS)
+    if (Archive::is_loading::value && app_loader) {
+        archive_manager->UseRunningRomFS(*app_loader);
+    }
 
     // NOTE: DSP doesn't like being destroyed and recreated. So instead we do an inline
     // serialization; this means that the DSP Settings need to match for loading to work.

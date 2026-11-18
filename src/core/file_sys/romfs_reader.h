@@ -59,6 +59,9 @@ public:
 
     bool CacheReady(std::size_t file_offset, std::size_t length) override;
 
+    /// AzaharFrame romfsload: reads from `other`'s file from now on (UseRunningRomFS).
+    void TakeFileFrom(DirectRomFSReader& other);
+
 private:
     std::unique_ptr<FileUtil::IOFileBase> file;
 
@@ -86,6 +89,17 @@ private:
     }
     friend class boost::serialization::access;
 };
+
+/**
+ * AzaharFrame romfsload: a save state keeps where each RomFS sits in the ROM file (the
+ * SubIOFile offsets of the reader's file) and swaps only the ROM's path for the running ROM's.
+ * A state made with the game in another container (the NCCH at the start of the file, as an
+ * installed .app or a .cxi) loaded with a .3ds (the NCCH a partition 0x4000 in) then reads every
+ * RomFS file 0x4000 bytes early: the game gets other bytes for every file it opens after the load.
+ * When `restored` does not read what `running` (a reader just made from the running ROM) reads,
+ * `restored` takes `running`'s file. Returns whether it did.
+ */
+bool UseRunningRomFS(RomFSReader& restored, RomFSReader& running);
 
 /**
  * A RomFS reader that reads from an artic base server.

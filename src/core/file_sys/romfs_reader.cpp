@@ -60,6 +60,37 @@ std::size_t DirectRomFSReader::ReadFile(std::size_t offset, std::size_t length, 
     return read_progress;
 }
 
+void DirectRomFSReader::TakeFileFrom(DirectRomFSReader& other) {
+    file = std::move(other.file);
+    cache.clear(); // its lines are the old file's bytes
+}
+
+bool UseRunningRomFS(RomFSReader& restored, RomFSReader& running) {
+    // The start of the RomFS (the level 3 header and the directory and file tables after it)
+    // differs between two places in one ROM file; the size is checked too.
+    constexpr std::size_t kProbe = 0x1000;
+    const std::size_t size = running.GetSize();
+    bool same = restored.GetSize() == size;
+    if (same && size > 0) {
+        const std::size_t n = std::min(kProbe, size);
+        std::vector<u8> a(n), b(n);
+        same = restored.ReadFile(0, n, a.data()) == n && running.ReadFile(0, n, b.data()) == n &&
+               a == b;
+    }
+    if (same) {
+        return false;
+    }
+    auto* const restored_direct = dynamic_cast<DirectRomFSReader*>(&restored);
+    auto* const running_direct = dynamic_cast<DirectRomFSReader*>(&running);
+    if (!restored_direct || !running_direct) {
+        LOG_WARNING(Service_FS, "RomFS from the save state differs from the running ROM's and "
+                                "could not be replaced (mods or another reader)");
+        return false;
+    }
+    restored_direct->TakeFileFrom(*running_direct);
+    return true;
+}
+
 bool DirectRomFSReader::AllowsCachedReads() const {
     return true;
 }

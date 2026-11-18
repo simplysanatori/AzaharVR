@@ -292,6 +292,30 @@ void ArchiveFactory_SelfNCCH::Register(Loader::AppLoader& app_loader) {
         data.banner = std::make_shared<std::vector<u8>>(std::move(buffer));
 }
 
+bool ArchiveFactory_SelfNCCH::UseRunningRomFS(Loader::AppLoader& app_loader) {
+    u64 program_id = 0;
+    if (app_loader.ReadProgramId(program_id) != Loader::ResultStatus::Success) {
+        return false;
+    }
+    const auto it = ncch_data.find(program_id);
+    if (it == ncch_data.end() || !it->second.romfs_file) {
+        return false;
+    }
+    // Only the RomFS read from the ROM file: the update's is an installed .app (its NCCH at the
+    // start of the file wherever the state was made), and a system without the update reads the
+    // base RomFS in its place (AppLoader_NCCH::ReadUpdateRomFS).
+    std::shared_ptr<RomFSReader> running;
+    if (app_loader.ReadRomFS(running) != Loader::ResultStatus::Success || !running ||
+        !FileSys::UseRunningRomFS(*it->second.romfs_file, *running)) {
+        return false;
+    }
+    LOG_WARNING(Service_FS,
+                "RomFS of {:016X}: the save state's file layout is not the running "
+                "ROM's, now read from the running ROM",
+                program_id);
+    return true;
+}
+
 ResultVal<std::unique_ptr<ArchiveBackend>> ArchiveFactory_SelfNCCH::Open(const Path& path,
                                                                          u64 program_id) {
     return std::make_unique<SelfNCCHArchive>(ncch_data[program_id]);

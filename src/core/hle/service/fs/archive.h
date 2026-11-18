@@ -302,6 +302,10 @@ public:
     /// Registers a new NCCH file with the SelfNCCH archive factory
     void RegisterSelfNCCH(Loader::AppLoader& app_loader);
 
+    /// AzaharFrame romfsload: after a save state is loaded, the running application's RomFS is
+    /// read from the running ROM (ArchiveFactory_SelfNCCH::UseRunningRomFS)
+    void UseRunningRomFS(Loader::AppLoader& app_loader);
+
     void RegisterArticSaveDataSource(std::shared_ptr<Network::ArticBase::Client>& client);
 
     void RegisterArticExtData(std::shared_ptr<Network::ArticBase::Client>& client);
