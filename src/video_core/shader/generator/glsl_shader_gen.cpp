@@ -65,7 +65,8 @@ vec2 VrFactor(vec4 pos) {
         f = mix(f / vec2(vr_hud_up_down, vr_hud_across), vec2(1.0),
                 greaterThanEqual(abs(pos.xy), vec2(0.999)));
     } else if (vr_hud_far_plane != 0.0 && abs(pos.w - pos.z) < 0.5) {
-        f /= vec2(vr_hud_up_down, vr_hud_across);
+        f = mix(f / vec2(vr_hud_up_down, vr_hud_across), f,
+                greaterThanEqual(abs(pos.xy), vec2(0.999 * abs(pos.w))));
     }
     return f;
 }

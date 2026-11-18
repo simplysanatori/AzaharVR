@@ -156,10 +156,13 @@ TEST_CASE("FrameXr hudmove: which vertices move", "[frame_xr][hudmove]") {
         REQUIRE(a.y == Approx(b.y * 0.8f));
         REQUIRE(a.x == Approx(b.x * 0.9f));
         REQUIRE(a.w == hud.w); // only x and y: it stays on the far plane
-        // Past the edge too: its whole quad moves (no edge rule here).
-        const Clip past = ApplyVertex({1600.0f, -1600.0f, 1525.0f, 1524.95f}, 1.0f, 1.0f, far);
-        REQUIRE(past.x == Approx(1600.0f * 0.9f));
-        REQUIRE(past.y == Approx(-1600.0f * 0.8f));
+        // On or past an edge (|x| or |y| >= 0.999 w) it keeps the world's factor on that axis,
+        // so a full-screen pass at the far plane stays whole.
+        const Clip past = ApplyVertex({1600.0f, -700.0f, 1525.0f, 1524.95f}, factor, factor_y, far);
+        REQUIRE(past.x == Approx(1600.0f / factor_y));
+        REQUIRE(past.y == Approx(-700.0f / factor * 0.8f));
+        const Clip edge = ApplyVertex({1523.5f, 0.0f, 1525.0f, 1524.95f}, 1.0f, 1.0f, far);
+        REQUIRE(edge.x == 1523.5f);
         // At 100 % nothing moves, rule or not.
         const Clip same = ApplyVertex(hud, factor, factor_y, {1.0f, 1.0f, true});
         REQUIRE(same.x == b.x);
@@ -225,6 +228,8 @@ TEST_CASE("FrameXr hudmove: the vertex shader reads the scales", "[frame_xr][hud
             std::string::npos);
     REQUIRE(vs.find("float vr_hud_far_plane;") > vs.find(across));
     REQUIRE(vs.find("} else if (vr_hud_far_plane != 0.0 && abs(pos.w - pos.z) < 0.5) {") !=
+            std::string::npos);
+    REQUIRE(vs.find("greaterThanEqual(abs(pos.xy), vec2(0.999 * abs(pos.w))));") !=
             std::string::npos);
     REQUIRE(vs.find("gl_Position.xy /= VrFactor(gl_Position);") != std::string::npos);
 

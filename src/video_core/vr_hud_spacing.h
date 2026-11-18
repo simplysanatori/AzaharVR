@@ -21,8 +21,10 @@
 // about 1525), every vertex at the far end of the depth range: w - z = 0.049 (clip z after the
 // shader's flip; 0 is the far plane), where its world's vertices keep w - z = 2.4 to 3 (desktop
 // census of a 50 s race, 80 million vertices: none below 2.41). Its preset turns on a second rule
-// (ImmersivePreset::hud_far_plane): a vertex with w - z below 0.5 is scaled the same way. Off for
-// every other game, so their world can never meet it.
+// (ImmersivePreset::hud_far_plane): a vertex with w - z below 0.5 is scaled the same way (one
+// on or past an edge of the view, |x| or |y| >= 0.999 w, keeps the world's factor, so a
+// full-screen pass there stays whole). Off for every other game, so their world can never meet
+// it. Its menus draw the same way and move too.
 //
 // The 3DS's bottom screen is drawn with the same 2D vertices; a draw into its 240 x 320 viewport
 // gets no HUD scale (the rasterizer checks it per draw, ForDraw).
@@ -122,15 +124,15 @@ inline bool OnFarPlane(float z, float w) {
 
 /// The divisor of one clip component in the vertex shader (VrFactor with the HUD scale): the
 /// periphery `factor` of that axis for every vertex; for a 2D vertex (w = 1) on or past the edge
-/// 1, inside the view `factor / hud_scale`; with `far_plane`, a vertex on the far plane
-/// `factor / hud_scale` too.
+/// 1, inside the view `factor / hud_scale`; with `far_plane`, a vertex at the far plane inside
+/// the view `factor / hud_scale` too (on or past the edge `factor`).
 inline float ClipDivisor(float clip, float z, float w, float factor, float hud_scale,
                          bool far_plane) {
     if (std::abs(w - 1.0f) < kFlatW) {
         return std::abs(clip) >= kEdge ? 1.0f : factor / hud_scale;
     }
     if (far_plane && OnFarPlane(z, w)) {
-        return factor / hud_scale;
+        return std::abs(clip) >= kEdge * std::abs(w) ? factor : factor / hud_scale;
     }
     return factor;
 }
