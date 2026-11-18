@@ -79,7 +79,12 @@
 //     off), and nothing of it runs with Dynamic Resolution off: it is the setting's rule;
 //   - the screen's ceiling (ScreenFactor, CeilingHold): no factor whose picture has more than
 //     1.25 times the display pixels the top screen covers, from its live size and distance and
-//     the eye's image; its moves are no step, and it is never under the floor.
+//     the eye's image; its moves are no step, and it is never under the floor. With Dynamic
+//     Resolution on it holds in every Full mode, Black Frame Insertion or not (the owner,
+//     2026-11-17); with it off the factor is the setting's, with no cap;
+//   - two remembered levels a game (the owner, 2026-11-17): one with Black Frame Insertion asked
+//     for (Second::bfi_asked), one without. A step taken for it is its own level only, so
+//     turning it off goes back to the other level (or the setting) at once.
 
 #pragma once
 
@@ -119,6 +124,11 @@ struct Second {
     /// AzaharFrame bfidr: the most the top screen can show, unrounded (ScreenCoverage, the
     /// second's average; 0: not known).
     double screen_factor = 0.0;
+    /// AzaharFrame bfidr: the setting asks for Black Frame Insertion where the game is on view
+    /// for most of this second (the mode's row, at a rate it runs at: MotionClarity::RateGate):
+    /// which of the game's two remembered levels is in use (the owner, 2026-11-17: a step taken
+    /// for it never lowers the level without it).
+    bool bfi_asked = false;
 };
 
 /// AzaharFrame bfidr: while Black Frame Insertion flashes in a Full mode, a picture late is lit
@@ -432,25 +442,31 @@ constexpr int StartDrop(int base, int remembered, int max_drop) {
 }
 
 /// AzaharFrame fixd: the remembered levels, one line per game: "<title ID, 16 hex> <factor>".
-/// Lines this build cannot read are left out; a title ID of 0 is never kept.
+/// Lines this build cannot read are left out; a title ID of 0 is never kept. AzaharFrame bfidr:
+/// a game's level with Black Frame Insertion asked for is a line of its own, "<title ID>
+/// <factor> bfi" (builds before it skip such a line: a third word was never read).
 inline constexpr const char* kStoreFile = "dynamic-resolution.txt";
 /// AzaharFrame fixd: judged seconds at one level before it is remembered for the game (a level
 /// it steps down to is remembered at once).
 inline constexpr int kRememberAfter = 60;
-std::string FormatStore(const std::vector<std::pair<uint64_t, int>>& levels);
-std::vector<std::pair<uint64_t, int>> ParseStore(const std::string& text);
+/// AzaharFrame bfidr: a remembered level's key: the game's title ID, and whether it is the level
+/// with Black Frame Insertion asked for.
+using LevelKey = std::pair<uint64_t, bool>;
+using LevelList = std::vector<std::pair<LevelKey, int>>;
+std::string FormatStore(const LevelList& levels);
+LevelList ParseStore(const std::string& text);
 
 /// AzaharFrame fixd: where the remembered levels live (the file under the user folder by
 /// default; a test sets its own). `load` gives the whole list, `save` writes it (it may run on
 /// another thread).
 struct LevelStore {
-    std::function<std::vector<std::pair<uint64_t, int>>()> load;
-    std::function<void(std::vector<std::pair<uint64_t, int>>)> save;
+    std::function<LevelList()> load;
+    std::function<void(LevelList)> save;
     std::function<uint64_t()> title; ///< the running game's title ID (0: none)
 };
 void SetLevelStore(LevelStore store);
-/// The factor remembered for `title` (0: none).
-int RememberedFactor(uint64_t title);
+/// The factor remembered for `title` (0: none), without or (`bfi`) with Black Frame Insertion.
+int RememberedFactor(uint64_t title, bool bfi = false);
 
 /// Frame loop side: the controller for the running session, fed by Runtime::LogSummary.
 void Install();

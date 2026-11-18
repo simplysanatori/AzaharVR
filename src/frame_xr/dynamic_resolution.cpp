@@ -437,35 +437,40 @@ void Controller::Resume() { // AzaharFrame ui2
     measure_from = 0; // AzaharFrame fixd: the seconds before are not this scene's
 }
 
-// AzaharFrame fixd: the remembered levels' file.
-std::string FormatStore(const std::vector<std::pair<uint64_t, int>>& levels) {
-    std::map<uint64_t, int> sorted(levels.begin(), levels.end());
+// AzaharFrame fixd: the remembered levels' file. AzaharFrame bfidr: "<title> <factor> bfi" for
+// the level with Black Frame Insertion.
+std::string FormatStore(const LevelList& levels) {
+    std::map<LevelKey, int> sorted(levels.begin(), levels.end());
     std::string out;
-    for (const auto& [title, factor] : sorted) {
-        if (title != 0 && factor >= 1) {
+    for (const auto& [key, factor] : sorted) {
+        if (key.first != 0 && factor >= 1) {
             char line[48];
-            std::snprintf(line, sizeof(line), "%016" PRIX64 " %d\n", title, factor);
+            std::snprintf(line, sizeof(line), "%016" PRIX64 " %d%s\n", key.first, factor,
+                          key.second ? " bfi" : "");
             out += line;
         }
     }
     return out;
 }
 
-std::vector<std::pair<uint64_t, int>> ParseStore(const std::string& text) {
-    std::map<uint64_t, int> levels;
+LevelList ParseStore(const std::string& text) {
+    std::map<LevelKey, int> levels;
     std::istringstream in(text);
     std::string line;
     while (std::getline(in, line)) {
         char hex[17] = {};
         int factor = 0;
+        char word[8] = {};
         char extra = 0;
-        if (std::sscanf(line.c_str(), "%16[0-9A-Fa-f] %d %c", hex, &factor, &extra) != 2 ||
-            std::string_view(hex).size() != 16 || factor < 1 || factor > 16) {
+        const int n = std::sscanf(line.c_str(), "%16[0-9A-Fa-f] %d %7s %c", hex, &factor, word,
+                                  &extra);
+        const bool bfi = n == 3 && std::string_view(word) == "bfi";
+        if ((n != 2 && !bfi) || std::string_view(hex).size() != 16 || factor < 1 || factor > 16) {
             continue; // not a line this build reads
         }
         const uint64_t title = std::strtoull(hex, nullptr, 16);
         if (title != 0) {
-            levels[title] = factor;
+            levels[{title, bfi}] = factor;
         }
     }
     return {levels.begin(), levels.end()};
@@ -480,7 +485,7 @@ bool g_installed = false;
 // remembered level waiting for the renderer's factor (VR started in a game).
 LevelStore g_store;
 bool g_store_set = false;
-std::map<uint64_t, int> g_levels;
+std::map<LevelKey, int> g_levels;
 bool g_levels_loaded = false;
 bool g_pending_start = false;
 constexpr const char* kScreensOff = "the game's screens are off: a start, a stop or a Load";
@@ -497,7 +502,7 @@ LevelStore FileStore() {
         FileUtil::ReadFileToString(true, StorePath(), text);
         return ParseStore(text);
     };
-    s.save = [](std::vector<std::pair<uint64_t, int>> levels) {
+    s.save = [](LevelList levels) {
         // Off the XR thread (an fsync), the newest list last.
         static std::mutex write_mutex;
         static std::atomic<uint64_t> issued{0};
@@ -532,8 +537,8 @@ void LoadLevels() {
     }
     g_levels_loaded = true;
     if (Store().load) {
-        for (const auto& [title, factor] : Store().load()) {
-            g_levels[title] = factor;
+        for (const auto& [key, factor] : Store().load()) {
+            g_levels[key] = factor;
         }
     }
 }
@@ -542,17 +547,17 @@ uint64_t Title() {
     return Store().title ? Store().title() : 0;
 }
 
-int RememberedLocked(uint64_t title) {
+int RememberedLocked(uint64_t title, bool bfi) {
     if (title == 0) {
         return 0; // no game (or homebrew without a title ID): nothing to read
     }
     LoadLevels();
-    const auto it = g_levels.find(title);
-    return title != 0 && it != g_levels.end() ? it->second : 0;
+    const auto it = g_levels.find({title, bfi});
+    return it != g_levels.end() ? it->second : 0;
 }
 
-void Remember(uint64_t title, int factor) {
-    g_levels[title] = factor;
+void Remember(uint64_t title, bool bfi, int factor) {
+    g_levels[{title, bfi}] = factor;
     if (Store().save) {
         Store().save({g_levels.begin(), g_levels.end()});
     }
@@ -563,8 +568,10 @@ Controller g_saved;
 uint64_t g_measured_title = 0; ///< AzaharFrame fixd: the game g_controller has measured
 bool g_have_saved = false;
 bool g_was_on = false;
-CeilingHold g_ceiling; ///< AzaharFrame bfidr: the screen's ceiling (while it flashes)
+CeilingHold g_ceiling; ///< AzaharFrame bfidr: the screen's ceiling (the Full modes)
 bool g_bfi_logged = false; ///< AzaharFrame bfidr: Black Frame Insertion's rules last logged on
+/// AzaharFrame bfidr: the level in use is the one with Black Frame Insertion (Second::bfi_asked)
+bool g_bfi_level = false;
 
 void Publish(int drop) {
     VideoCore::DynamicResolution::g_drop.store(static_cast<u32>(std::max(0, drop)),
@@ -627,7 +634,12 @@ void ResetLocked(const char* why) {
 void StartLocked(int base, int max_drop, const char* when) {
     const int before = g_controller.Drop();
     const uint64_t title = Title();
-    const int remembered = RememberedLocked(title);
+    // AzaharFrame bfidr: the level of the mode in use; with Black Frame Insertion and none of
+    // its own yet, the one without it (a step for it only ever goes lower).
+    int remembered = RememberedLocked(title, g_bfi_level);
+    if (remembered == 0 && g_bfi_level) {
+        remembered = RememberedLocked(title, false);
+    }
     const int steps = StartDrop(base, remembered, max_drop);
     // A Load or a Restart keeps what this game measured; another game starts from nothing.
     g_controller.Start(steps, title != 0 && title == g_measured_title);
@@ -656,15 +668,16 @@ void SetLevelStore(LevelStore store) { // AzaharFrame fixd
     g_levels_loaded = false;
 }
 
-int RememberedFactor(uint64_t title) { // AzaharFrame fixd
+int RememberedFactor(uint64_t title, bool bfi) { // AzaharFrame fixd
     std::scoped_lock lock{g_mutex};
-    return RememberedLocked(title);
+    return RememberedLocked(title, bfi);
 }
 
 void Install() {
     std::scoped_lock lock{g_mutex};
     ResetLocked("VR started");
     g_installed = true;
+    g_bfi_level = false; // AzaharFrame bfidr: the first second with a game says which
     g_was_on = Settings::values.vr_dynamic_resolution.GetValue();
     g_pending_start = true; // AzaharFrame fixd: a game running already starts at its level
     g_pending_why = "VR started in a game";
@@ -716,9 +729,15 @@ void NoteSecond(const Second& s) {
         StartLocked(static_cast<int>(base), max_drop, kScreensOff);
         return;
     }
-    if (g_pending_start && base > 0) {
+    // AzaharFrame bfidr: Black Frame Insertion asked for or not: that mode's level, at once.
+    const bool level_switch = s.bfi_asked != g_bfi_level;
+    g_bfi_level = s.bfi_asked;
+    if ((g_pending_start || level_switch) && base > 0) {
+        StartLocked(static_cast<int>(base), max_drop,
+                    g_pending_start  ? g_pending_why
+                    : g_bfi_level ? "Black Frame Insertion on: its own level for this game"
+                                  : "Black Frame Insertion off: the level without it");
         g_pending_start = false;
-        StartLocked(static_cast<int>(base), max_drop, g_pending_why);
     }
     if (s.bfi != g_bfi_logged && max_drop > 0) { // AzaharFrame bfidr
         g_bfi_logged = s.bfi;
@@ -726,8 +745,7 @@ void NoteSecond(const Second& s) {
             LOG_INFO(Frontend,
                      "xr: Dynamic Resolution: Black Frame Insertion's rules on (down after {} "
                      "seconds with GPU behind at {:.1f} ms or more, late pictures or compositor "
-                     "misses, up under {:.1f} ms predicted, no factor over what the screen can "
-                     "show)",
+                     "misses, up under {:.1f} ms predicted)",
                      BfiRules::kDownAfter, BfiRules::kLine * s.period_ms,
                      Controller::kUpBudget * BfiRules::kLine * s.period_ms);
         } else {
@@ -740,9 +758,10 @@ void NoteSecond(const Second& s) {
     // AzaharFrame fixd: the prediction and the ratio it used, before the step (for the log)
     const double predicted = g_controller.PredictUp(s.gpu_ms, judged.factor);
     const std::string ratio_why = g_controller.RatioWhy(judged.factor);
-    // AzaharFrame bfidr: while Black Frame Insertion flashes, no factor over what the screen can
-    // show (ScreenFactor, held CeilingHold::kCeilingSeconds); never under the floor (the setting).
-    const int ceiling = g_ceiling.Next(s.bfi ? s.screen_factor : 0);
+    // AzaharFrame bfidr: no factor over what the screen can show (ScreenFactor, held
+    // CeilingHold::kCeilingSeconds; in every Full mode, the owner, 2026-11-17); never under the
+    // floor (the setting).
+    const int ceiling = g_ceiling.Next(s.screen_factor);
     int min_drop = 0;
     if (ceiling > 0 && base > 0) {
         const int top = std::max(FloorFactor(static_cast<int>(base), setting),
@@ -772,8 +791,7 @@ void NoteSecond(const Second& s) {
             why = fmt::format("{} good seconds in a row, predicted {:.1f} ms at the new factor ({})",
                               Controller::kUpAfter, predicted, ratio_why);
         } else if (g_controller.Ceilinged()) { // AzaharFrame bfidr
-            why = fmt::format("the screen shows no more than {}x with Black Frame Insertion",
-                              ceiling);
+            why = fmt::format("the screen shows no more than {}x", ceiling);
         } else {
             why = "the ceiling or the floor moved (Internal Resolution, the immersive mode or the "
                   "screen's size)";
@@ -792,14 +810,15 @@ void NoteSecond(const Second& s) {
     if (title != 0 && max_drop > 0 &&
         (stepped_down || (g_controller.Held() >= kRememberAfter && !g_controller.Ceilinged()))) {
         const int factor = at(g_controller.OwnDrop());
-        if (RememberedLocked(title) != factor) {
-            Remember(title, factor);
+        if (RememberedLocked(title, g_bfi_level) != factor) {
+            Remember(title, g_bfi_level, factor);
+            const char* mode = g_bfi_level ? " with Black Frame Insertion" : ""; // bfidr
             if (stepped_down) {
-                LOG_INFO(Frontend, "xr: Dynamic Resolution: {}x remembered for this game (stepped down to it)",
-                         factor);
+                LOG_INFO(Frontend, "xr: Dynamic Resolution: {}x remembered for this game{} (stepped down to it)",
+                         factor, mode);
             } else {
-                LOG_INFO(Frontend, "xr: Dynamic Resolution: {}x remembered for this game (held {} s)",
-                         factor, g_controller.Held());
+                LOG_INFO(Frontend, "xr: Dynamic Resolution: {}x remembered for this game{} (held {} s)",
+                         factor, mode, g_controller.Held());
             }
         }
     }

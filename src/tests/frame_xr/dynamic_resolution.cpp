@@ -689,17 +689,19 @@ TEST_CASE("Dynamic Resolution: the start from a remembered level", "[frame_xr][f
 }
 
 TEST_CASE("Dynamic Resolution: the remembered levels' file", "[frame_xr][fixd]") {
-    const std::vector<std::pair<uint64_t, int>> levels{{0x0004000000030800ULL, 4},
-                                                       {0x0004000000125600ULL, 5}};
+    const LevelList levels{{{0x0004000000030800ULL, false}, 4},
+                           {{0x0004000000030800ULL, true}, 3},
+                           {{0x0004000000125600ULL, false}, 5}};
     const std::string text = FormatStore(levels);
-    CHECK(text == "0004000000030800 4\n0004000000125600 5\n");
+    CHECK(text == "0004000000030800 4\n0004000000030800 3 bfi\n0004000000125600 5\n");
     CHECK(ParseStore(text) == levels);
     // lines this build cannot read are left out; the last line for a game wins
     const auto parsed = ParseStore("# a comment\n0004000000030800 4\nzz 3\n0004000000030800 5\n"
                                    "0000000000000000 4\n0004000000054000 0\n0004000000054000 99\n"
-                                   "0004000000054000 4 extra\n000400000003080 4\n\n");
-    CHECK(parsed == std::vector<std::pair<uint64_t, int>>{{0x0004000000030800ULL, 5}});
-    CHECK(FormatStore({{0, 4}}).empty());
+                                   "0004000000054000 4 extra\n000400000003080 4\n"
+                                   "0004000000054000 4 bfi more\n\n");
+    CHECK(parsed == LevelList{{{0x0004000000030800ULL, false}, 5}});
+    CHECK(FormatStore({{{0, false}, 4}}).empty());
 }
 
 // AzaharFrame fixd: through the frame loop's side: a level stepped down to is remembered for the
@@ -713,14 +715,14 @@ TEST_CASE("Dynamic Resolution: the level remembered per game", "[frame_xr][fixd]
     const auto was_factor = factor.GetValue();
     setting.SetValue(true);
     factor.SetValue(4);
-    std::map<uint64_t, int> disk;
+    std::map<LevelKey, int> disk;
     int saves = 0;
     uint64_t title = 0x0004000000030800ULL;
     const auto store = [&] {
         LevelStore s;
-        s.load = [&] { return std::vector<std::pair<uint64_t, int>>(disk.begin(), disk.end()); };
-        s.save = [&](std::vector<std::pair<uint64_t, int>> levels) {
-            disk = std::map<uint64_t, int>(levels.begin(), levels.end());
+        s.load = [&] { return LevelList(disk.begin(), disk.end()); };
+        s.save = [&](LevelList levels) {
+            disk = std::map<LevelKey, int>(levels.begin(), levels.end());
             saves++;
         };
         s.title = [&] { return title; };
@@ -739,10 +741,10 @@ TEST_CASE("Dynamic Resolution: the level remembered per game", "[frame_xr][fixd]
     run(GpuBehind(), Controller::kDownAfter);
     CHECK(Drop() == 1);
     CHECK(RememberedFactor(title) == 5); // stepped down to it: remembered at once
-    CHECK(disk[title] == 5);
+    CHECK(disk[{title, false}] == 5);
     run(GpuBehind(), Controller::kSettle + Controller::kDownAfter);
     CHECK(Drop() == 2);
-    CHECK(disk[title] == 4);
+    CHECK(disk[{title, false}] == 4);
     // A Load: the screens go off. It starts at 4x again, not at 6x.
     run(off, 3);
     CHECK(Drop() == 2);
@@ -815,6 +817,7 @@ Second Bfi(double gpu_ms, uint32_t late = 0, uint32_t lit = 0, double end_ms = 1
            double period = kPeriod) {
     Second s{1.0, static_cast<uint32_t>(1000.0 / period + 0.5), period, 60, 60, gpu_ms, true};
     s.bfi = true;
+    s.bfi_asked = true;
     s.late_releases = late;
     s.late_lit = lit;
     s.end_frame_max_ms = end_ms;
@@ -1230,12 +1233,12 @@ TEST_CASE("Dynamic Resolution: the screen's ceiling through the frame loop's sid
     const auto was_factor = factor.GetValue();
     setting.SetValue(true);
     factor.SetValue(4);
-    std::map<uint64_t, int> disk;
+    std::map<LevelKey, int> disk;
     const uint64_t title = 0x0004000000030800ULL;
     LevelStore store;
-    store.load = [&] { return std::vector<std::pair<uint64_t, int>>(disk.begin(), disk.end()); };
-    store.save = [&](std::vector<std::pair<uint64_t, int>> levels) {
-        disk = std::map<uint64_t, int>(levels.begin(), levels.end());
+    store.load = [&] { return LevelList(disk.begin(), disk.end()); };
+    store.save = [&](LevelList levels) {
+        disk = std::map<LevelKey, int>(levels.begin(), levels.end());
     };
     store.title = [&] { return title; };
     SetLevelStore(store);
@@ -1254,19 +1257,29 @@ TEST_CASE("Dynamic Resolution: the screen's ceiling through the frame loop's sid
     for (int i = 0; i < kRememberAfter + 10; i++) {
         NoteSecond(s);
     }
-    CHECK(disk.count(title) == 0);
+    CHECK(disk.empty());
     // Under the floor: the setting (4x) is the most it takes off.
     s.screen_factor = 2;
     for (int i = 0; i < CeilingHold::kCeilingSeconds; i++) {
         NoteSecond(s);
     }
     CHECK(V::Apply(6) == 4);
-    // Black Frame Insertion off: no ceiling (after the hold), the full factor again.
+    // Black Frame Insertion off: the ceiling holds all the same (the owner, 2026-11-17: whenever
+    // Dynamic Resolution runs).
     s.bfi = false;
+    s.bfi_asked = false;
+    for (int i = 0; i < CeilingHold::kCeilingSeconds + 2; i++) {
+        NoteSecond(s);
+    }
+    CHECK(V::Apply(6) == 4);
+    s.screen_factor = 5.5; // up: past the margin
     for (int i = 0; i < CeilingHold::kCeilingSeconds; i++) {
         NoteSecond(s);
     }
-    CHECK(Drop() == 0);
+    CHECK(V::Apply(6) == 5);
+    // Dynamic Resolution off: the setting's factor, no cap.
+    setting.SetValue(false);
+    NoteSecond(s);
     CHECK(V::Apply(6) == 6);
     Uninstall();
     SetLevelStore({});
@@ -1304,10 +1317,10 @@ TEST_CASE("Dynamic Resolution: with Black Frame Insertion, a Load's own burst",
     CHECK(Run(line, Bfi(8.0), Controller::kDownAfter, 2) == 1);
 }
 
-// AzaharFrame bfidr: a step taken for Black Frame Insertion is the game's level (remembered at
-// once, as every step down), and it stays with Black Frame Insertion off: fixd's up rule decides
-// there, and the next start begins at it. One level for both (an owner question in report 84).
-TEST_CASE("Dynamic Resolution: a step for Black Frame Insertion is the game's level",
+// AzaharFrame bfidr: two remembered levels a game (the owner, 2026-11-17): a step taken for
+// Black Frame Insertion is its own level, remembered at once; turning it off goes back to the
+// level without it (here none: the full factor) at once, and turning it on again to its own.
+TEST_CASE("Dynamic Resolution: a step for Black Frame Insertion is its own level",
           "[frame_xr][bfidr]") {
     namespace V = VideoCore::DynamicResolution;
     auto& setting = Settings::values.vr_dynamic_resolution;
@@ -1316,12 +1329,12 @@ TEST_CASE("Dynamic Resolution: a step for Black Frame Insertion is the game's le
     const auto was_factor = factor.GetValue();
     setting.SetValue(true);
     factor.SetValue(4);
-    std::map<uint64_t, int> disk;
-    const uint64_t title = 0x0004000000030800ULL;
+    std::map<LevelKey, int> disk;
+    uint64_t title = 0x0004000000030800ULL;
     LevelStore store;
-    store.load = [&] { return std::vector<std::pair<uint64_t, int>>(disk.begin(), disk.end()); };
-    store.save = [&](std::vector<std::pair<uint64_t, int>> levels) {
-        disk = std::map<uint64_t, int>(levels.begin(), levels.end());
+    store.load = [&] { return LevelList(disk.begin(), disk.end()); };
+    store.save = [&](LevelList levels) {
+        disk = std::map<LevelKey, int>(levels.begin(), levels.end());
     };
     store.title = [&] { return title; };
     SetLevelStore(store);
@@ -1336,18 +1349,41 @@ TEST_CASE("Dynamic Resolution: a step for Black Frame Insertion is the game's le
     // after the start, then three seconds.
     run(Bfi(7.2), BfiRules::kAfterStart + BfiRules::kDownAfter);
     CHECK(Drop() == 1);
-    CHECK(disk[title] == 5);
-    // Black Frame Insertion off, the same load: fixd's rules, no step either way.
+    CHECK(disk[{title, true}] == 5);
+    CHECK(disk.count({title, false}) == 0);
+    // Turned off (the setting no longer asks for it): the full factor at the next second.
     Second off = Bfi(7.2);
     off.bfi = false;
+    off.bfi_asked = false;
+    run(off, 1);
+    CHECK(Drop() == 0);
+    CHECK(V::Apply(6) == 6);
+    // The same load without it: fixd's rules, no step; held long, 6x is its level.
     run(off, kRememberAfter + 1);
+    CHECK(Drop() == 0);
+    CHECK(disk[{title, false}] == 6);
+    CHECK(disk[{title, true}] == 5);
+    // On again: its own level at once.
+    run(Bfi(3.0), 1);
     CHECK(Drop() == 1);
-    CHECK(disk[title] == 5);
     Uninstall();
-    // The next start of the game, Black Frame Insertion on or off: 5x.
+    // The next start of the game: each mode's level.
     SetLevelStore(store);
+    CHECK(RememberedFactor(title, true) == 5);
+    CHECK(RememberedFactor(title, false) == 6);
     Install();
     run(off, 1);
+    CHECK(Drop() == 0);
+    run(Bfi(3.0), 1);
+    CHECK(Drop() == 1);
+    Uninstall();
+    // A game with a level without it only: with it, from that level (a step for it only ever
+    // goes lower).
+    title = 0x0004000000054000ULL;
+    disk[{title, false}] = 5;
+    SetLevelStore(store);
+    Install();
+    run(Bfi(3.0), 1);
     CHECK(Drop() == 1);
     Uninstall();
 

@@ -547,6 +547,7 @@ void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
     dr_second.end_frame_max_ms = bfi_second.end_max_ms;
     dr_second.screen_factor =
         bfi_second.screen_n ? bfi_second.screen_sum / bfi_second.screen_n : 0.0;
+    dr_second.bfi_asked = frames > 0 && bfi_second.asked * 2 >= frames;
     // AzaharFrame bfidr: the perf line's window, from the values taken above.
     const bool flashed = dr_second.bfi;
     const uint32_t late_lit = bfi_second.late_lit;
@@ -1115,7 +1116,7 @@ void Runtime::FrameLoop() {
             // Immersive mode (immersive.cpp) may move the top screen and hide the bottom one.
             const Immersive::ScreenLayers shown = Immersive::Screens(local_space, view_space, place);
             // AzaharFrame bfidr: what the head-driven top screen can show (Dynamic Resolution's
-            // ceiling with Black Frame Insertion): its size over its distance from the left eye,
+            // ceiling in the Full modes): its size over its distance from the left eye,
             // against the eye's field of view and recommended image, averaged over the second.
             if (shown.full_mode && shown.head_driven && shown.show_top) {
                 if (eye_px_w == 0) {
@@ -1195,6 +1196,9 @@ void Runtime::FrameLoop() {
                 const MotionClarity::RateGate::Out rate =
                     clarity_rate.Next(asked, fs.predictedDisplayPeriod);
                 const bool wanted = rate.on;
+                if (wanted && shown.full_mode) { // bfidr: Dynamic Resolution's level in use
+                    bfi_second.asked++;
+                }
                 if (rate.say == MotionClarity::RateGate::Say::Held) {
                     LOG_INFO(Frontend,
                              "xr: Black Frame Insertion not in effect: the display runs at {:.0f} "

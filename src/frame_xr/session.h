@@ -298,6 +298,7 @@ public:
         double end_max_ms = 0.0;
         double screen_sum = 0.0; ///< ScreenCoverage over the second's frames
         uint32_t screen_n = 0;
+        uint32_t asked = 0; ///< frames the setting asked for it in a Full mode (RateGate on)
     } bfi_second;
     /// AzaharFrame bfidr: the runtime's recommended eye image (0: not asked yet).
     uint32_t eye_px_w = 0, eye_px_h = 0;
