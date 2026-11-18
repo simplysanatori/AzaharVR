@@ -3120,6 +3120,68 @@ TEST_CASE("FrameXr immersive: Kid Icarus first person is at true size and fills 
     }
 }
 
+// AzaharFrame kiuwide: the game's own camera widened to the view (KiuWideCamera): sized with
+// it, SolveKiuFirstPerson's screen is the game's own frame (factor 1 both ways), at true size.
+TEST_CASE("FrameXr immersive: Kid Icarus first person with the game's camera as wide as the view",
+          "[frame_xr][kiuwide]") {
+    const EyeFov l{Rad(-59.1f), Rad(50.4f), Rad(49.5f), Rad(-60.0f)};
+    const EyeFov r{Rad(-50.3f), Rad(59.1f), Rad(49.0f), Rad(-59.6f)};
+    const ViewFov frame = BothEyes(l, r);
+    const ViewFov mock = Symmetric(48.1f);
+    const ViewFov mock_frame = BothEyes(l, l); // the desktop's MOCK_XR_FOV=-59.1,50.4,49.5,-60.0
+    for (const ViewFov& view : {frame, mock, mock_frame}) {
+        const Cover cover = DefaultCover(view, ViewMiddlePitch(view), 0.0f);
+        const KiuWide w = KiuWideCamera(view);
+        REQUIRE(w.ok);
+        // The view's shape, its height: what the solve fills.
+        REQUIRE(std::tan(Rad(w.fov_y_deg) / 2.0f) == Approx(cover.tan_y).epsilon(2e-4));
+        REQUIRE(w.aspect == Approx(cover.tan_x / cover.tan_y).epsilon(2e-4));
+        const HeadLocked s = SolveKiuFirstPerson(w.fov_y_deg, w.aspect, view);
+        REQUIRE(s.factor == Approx(1.0f).margin(1e-3));
+        REQUIRE(s.factor_y == Approx(1.0f).margin(1e-3));
+        REQUIRE(s.gain == 1.0f);
+        REQUIRE(s.gain_x == 1.0f);
+        REQUIRE(s.tan_half_y == Approx(cover.tan_y).epsilon(1e-3));
+        REQUIRE(s.tan_half_y * s.aspect == Approx(cover.tan_x).epsilon(1e-3));
+        // A view whose numbers move by a hair asks for the same camera.
+        ViewFov nudged = view;
+        nudged.left += 1e-6f;
+        const KiuWide again = KiuWideCamera(nudged);
+        REQUIRE(again.fov_y_deg == w.fov_y_deg);
+        REQUIRE(again.aspect == w.aspect);
+        // Square pixels (the game's own shape kept): the frame covers the view on both axes,
+        // factor 1 still (the solve never goes under the game's own frame).
+        const KiuWide sq = KiuWideCamera(view, 0.0f, kAspect3ds);
+        REQUIRE(sq.ok);
+        REQUIRE(sq.aspect == Approx(kAspect3ds).epsilon(1e-4));
+        const float t = std::tan(Rad(sq.fov_y_deg) / 2.0f);
+        REQUIRE(t >= cover.tan_y * 0.9999f);
+        REQUIRE(t * sq.aspect >= cover.tan_x * 0.9999f);
+        const HeadLocked q = SolveKiuFirstPerson(sq.fov_y_deg, sq.aspect, view);
+        REQUIRE(q.factor == kFactorMin);
+        REQUIRE(q.factor_y == Approx(1.0f).margin(1e-3));
+        REQUIRE(q.gain == 1.0f);
+    }
+    SECTION("the Frame's view: about 112 degrees up and down, 1.3 wide (126 across)") {
+        const KiuWide w = KiuWideCamera(frame);
+        REQUIRE(w.fov_y_deg == Approx(112.0f).margin(2.0f));
+        REQUIRE(w.aspect == Approx(1.32f).margin(0.05f));
+        const float across = 2.0f * std::atan(std::tan(Rad(w.fov_y_deg) / 2.0f) * w.aspect);
+        REQUIRE(across / Rad(1.0f) == Approx(126.0f).margin(2.0f));
+        // Within what the hooks may give the game.
+        REQUIRE(Rad(w.fov_y_deg) < 2.8f);
+    }
+    SECTION("the C-Stick & Gyro mod's 21:9 build: the field is the view's shape over its widening") {
+        const KiuWide w = KiuWideCamera(frame);
+        const float widen = (7.0f / 3.0f) / kAspect3ds;
+        const float field = w.aspect / widen;
+        // The screen is solved with the shape drawn, the field times the widening.
+        const HeadLocked s = SolveKiuFirstPerson(w.fov_y_deg, field * widen, frame);
+        REQUIRE(s.factor == Approx(1.0f).margin(1e-3));
+        REQUIRE(field == Approx(0.94f).margin(0.05f));
+    }
+}
+
 // AzaharFrame kiufov: what the owner's own Kid Icarus screen settings give in the normal view
 // (the headset run of 2026-11-18: Field of View, Horizontal Scale 25 %, Vertical Scale 100 %,
 // Render Margin 1.4x, size 1.59, 5.9 degrees down): gains well under 1, which first person does

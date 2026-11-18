@@ -727,6 +727,25 @@ HeadLocked SolveKiuFirstPerson(float game_fov_y_deg, float aspect, const ViewFov
     return s;
 }
 
+KiuWide KiuWideCamera(const ViewFov& view, float eye_shift, float keep_aspect) {
+    KiuWide w;
+    const Cover cover = DefaultCover(view, ViewMiddlePitch(view), eye_shift);
+    if (!(cover.tan_x > 0.0f) || !(cover.tan_y > 0.0f) || !std::isfinite(cover.tan_x) ||
+        !std::isfinite(cover.tan_y)) {
+        return w;
+    }
+    float tan_y = cover.tan_y;
+    float aspect = cover.tan_x / cover.tan_y;
+    if (std::isfinite(keep_aspect) && keep_aspect > 0.1f) {
+        aspect = keep_aspect;
+        tan_y = std::max(cover.tan_y, cover.tan_x / keep_aspect);
+    }
+    w.fov_y_deg = std::ceil(2.0f * std::atan(tan_y) / kDegToRad * 100.0f) / 100.0f; // never short
+    w.aspect = std::round(aspect * 10000.0f) / 10000.0f;
+    w.ok = w.fov_y_deg > 0.0f && w.fov_y_deg < 180.0f && w.aspect > 0.0f;
+    return w;
+}
+
 Filled FillView(const Placement& placement, float game_fov_y_deg, float aspect,
                 const ViewFov& view, float eye_shift, int scale_y, const Options& options,
                 const LensOffset& offset) {
