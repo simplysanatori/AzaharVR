@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <map>
 #include <numbers>
+#include <string_view>
 #include <utility>
 #include <vector>
 #include <catch2/catch_approx.hpp>
@@ -119,7 +120,8 @@ FakeMemory Game() {
 // Every group that can be in at once (the plain enemy keep shares its site with the timed one).
 constexpr uint32_t kAll = Bit(Group::NoCull) | Bit(Group::BulletKeep) | Bit(Group::Eye) |
                           Bit(Group::Shot) | Bit(Group::EnemyKeepTimed) | Bit(Group::GroupKeep) |
-                          Bit(Group::NoFollow) | Bit(Group::AimHold) | Bit(Group::AimBox);
+                          Bit(Group::NoFollow) | Bit(Group::AimHold) | Bit(Group::AimBox) |
+                          Bit(Group::PlayerShadow);
 constexpr std::size_t kAllWords = kPatches.size() - 1;
 
 bool SiteIs(const FakeMemory& m, Group g, bool patched) {
@@ -431,6 +433,135 @@ TEST_CASE("Kid Icarus hooks: a word that differs keeps its group out", "[frame_x
     SECTION("another region or build: the code check fails before anything") {
         m.Set32(0x704178, kInvented);
         CHECK_FALSE(GameCodeMatches(m));
+    }
+}
+
+// AzaharFrame kiushadow: the player's round shadow (one stub group, in only with first person).
+TEST_CASE("Kid Icarus hooks: the player's shadow", "[frame_xr][kiuhook]") {
+    // The words: the site is the shadow function's first instruction, push {r4, r5, lr}; ours
+    // branches into the cave, to the stub.
+    const Patch* site = nullptr;
+    for (const Patch& p : kPatches) {
+        if (p.group == Group::PlayerShadow) {
+            CHECK(site == nullptr); // one word only
+            site = &p;
+        }
+    }
+    REQUIRE(site != nullptr);
+    CHECK(site->addr == 0x57B054);
+    CHECK(site->addr == kSiteShadow);
+    CHECK(site->original == 0xE92D4030);
+    CHECK(site->patched == 0xEA1C6949); // b 0xC95580
+    CHECK(site->patched == B(kSiteShadow, kShadowStub));
+    CHECK(kShadowStub == 0xC95580);
+    const int32_t off = static_cast<int32_t>(site->patched << 8) >> 6;
+    CHECK(kSiteShadow + 8u + static_cast<uint32_t>(off) == kShadowStub);
+    CHECK(UsesStubs(Group::PlayerShadow));
+    CHECK(std::string_view(GroupName(Group::PlayerShadow)) == "player shadow");
+    // The stub: inside the image, after the others; it reads the mailbox's player and the
+    // state's actor (+0x30), returns (bx lr) when they match, else runs the site's instruction
+    // and loads pc with the function's second instruction.
+    CHECK(kShadowStub > kKeepStub);
+    CHECK(kShadowStub < kImageBase + kImageBytes);
+    const uint32_t at = Stubs::kShadowStub / 4;
+    CHECK(Stubs::kImage[at] == 0xE59FC000u + (Stubs::kLitMailbox - Stubs::kShadowStub - 8)); // ldr r12, lit_mailbox
+    CHECK(Stubs::kImage[at + 1] == (0xE59CC000u | Stubs::kMbPlayer)); // ldr r12, [r12, #player]
+    CHECK(Stubs::kImage[at + 4] == 0xE5902030u);                     // ldr r2, [r0, #0x30]
+    CHECK(Stubs::kImage[at + 6] == 0x012FFF1Eu);                     // bxeq lr
+    CHECK(Stubs::kImage[at + 7] == site->original);                  // push {r4, r5, lr}
+    CHECK((Stubs::kImage[at + 8] & 0xFFFFF000u) == 0xE59FF000u);     // ldr pc, [pc, #n]
+    CHECK(Stubs::kImage[Stubs::kLitShadowContinue / 4] == 0x57B058);
+    // Its context: the function after the push as the stub assumes it, and the two ways into
+    // the shadow list.
+    std::map<uint32_t, uint32_t> ctx;
+    for (const Context& c : kContext) {
+        if (c.group == Group::PlayerShadow) {
+            ctx[c.addr] = c.word;
+        }
+    }
+    CHECK(ctx.size() == 9);
+    CHECK(ctx[0x57B058] == 0xE1A04000); // mov r4, r0
+    CHECK(ctx[0x57B064] == 0xE59020AC); // ldr r2, [r0, #0xAC]: r2 written before it is read
+    CHECK(ctx[0x57B08C] == 0xE5945030); // ldr r5, [r4, #0x30]: the actor
+    CHECK(ctx[0x57B0D4] == B(0x57B0D4, 0x5B26AC));
+    CHECK(ctx[0x57B190] == Bl(0x57B190, 0x50533C));
+    CHECK(ctx[0x57B19C] == 0xE8BD8030); // pop {r4, r5, pc}
+
+    FakeMemory m = Game();
+    Mailbox mb;
+    mb.player = 0x141DB1E0;
+
+    SECTION("in: the image, the mailbox with the player, the site last; out again") {
+        SyncResult r = Sync(m, Bit(Group::PlayerShadow), mb);
+        CHECK(r.Of(Group::PlayerShadow) == GroupState::In);
+        CHECK(r.in_mask == Bit(Group::PlayerShadow));
+        CHECK(r.cave == Cave::Ours);
+        CHECK(r.code_writes == Stubs::kImage.size() + 1);
+        CHECK(ImageInPlace(m));
+        CHECK(m.Get32(kMailbox + Stubs::kMbPlayer) == 0x141DB1E0);
+        CHECK(m.Get32(kSiteShadow) == B(kSiteShadow, kShadowStub));
+        REQUIRE_FALSE(m.writes.empty());
+        CHECK(m.writes.back().addr == kSiteShadow);
+        CHECK(m.writes.back().code);
+        // The other groups' sites untouched.
+        for (const Patch& p : kPatches) {
+            if (p.group != Group::PlayerShadow) {
+                CHECK(m.Get32(p.addr) == p.original);
+            }
+        }
+        // Again: the mailbox only.
+        m.writes.clear();
+        r = Sync(m, Bit(Group::PlayerShadow), mb);
+        CHECK(r.code_writes == 0);
+        CHECK(m.writes.size() == kMailboxWords);
+        // Out (first person off): the game's word is back, the image stays.
+        m.writes.clear();
+        r = Sync(m, 0, Mailbox{});
+        CHECK(r.Of(Group::PlayerShadow) == GroupState::Out);
+        CHECK(r.code_writes == 1);
+        CHECK(m.Get32(kSiteShadow) == 0xE92D4030);
+        CHECK(ImageInPlace(m));
+        CHECK_FALSE(AnyOurs(m));
+    }
+
+    SECTION("no player: the group is in, the stub passes every shadow through") {
+        const SyncResult r = Sync(m, Bit(Group::PlayerShadow), Mailbox{});
+        CHECK(r.Of(Group::PlayerShadow) == GroupState::In);
+        CHECK(m.Get32(kMailbox + Stubs::kMbPlayer) == 0);
+    }
+
+    SECTION("a context word differs: the site stays the game's") {
+        m.Set32(0x57B08C, kInvented);
+        const SyncResult r = Sync(m, Bit(Group::PlayerShadow) | Bit(Group::NoCull), mb);
+        CHECK(r.Of(Group::PlayerShadow) == GroupState::Different);
+        CHECK(r.different_addr == 0x57B08C);
+        CHECK(m.Get32(kSiteShadow) == 0xE92D4030);
+        CHECK(r.Of(Group::NoCull) == GroupState::In);
+    }
+
+    SECTION("the site holds something else: never written") {
+        m.Set32(kSiteShadow, kInvented);
+        SyncResult r = Sync(m, Bit(Group::PlayerShadow), mb);
+        CHECK(r.Of(Group::PlayerShadow) == GroupState::Different);
+        CHECK(m.Get32(kSiteShadow) == kInvented);
+        r = Sync(m, 0, Mailbox{});
+        CHECK(m.Get32(kSiteShadow) == kInvented);
+    }
+
+    SECTION("the cave is someone else's: out") {
+        m.Set32(kCaveEnd - 0x40, kInvented);
+        const SyncResult r = Sync(m, Bit(Group::PlayerShadow), mb);
+        CHECK(r.Of(Group::PlayerShadow) == GroupState::NoCave);
+        CHECK(m.Get32(kSiteShadow) == 0xE92D4030);
+    }
+
+    SECTION("a save state with it in, first person off: the game's word back") {
+        REQUIRE(Sync(m, Bit(Group::PlayerShadow), mb).Of(Group::PlayerShadow) == GroupState::In);
+        FakeMemory loaded = m;
+        REQUIRE(AnyOurs(loaded));
+        const SyncResult r = Sync(loaded, 0, Mailbox{});
+        CHECK(r.code_writes == 1);
+        CHECK(loaded.Get32(kSiteShadow) == 0xE92D4030);
     }
 }
 

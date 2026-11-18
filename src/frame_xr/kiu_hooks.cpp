@@ -448,11 +448,15 @@ void Hook(int64_t ticks) {
     const bool want_enemy_keep = !want_keep_timed && SwitchIs(kSwitchEnemyKeep, "1");
     const bool want_group_keep = SwitchIs(kSwitchGroupKeep, "1");
     const bool want_no_follow = first_person || SwitchIs(kSwitchNoFollow, "1");
+    // AzaharFrame kiushadow: in first person the player's own round shadow lies right under the
+    // eye: only his is left out (everyone else's stays).
+    const bool want_player_shadow = first_person;
     const auto trace_text = Switch(kSwitchTrace);
     const int trace = trace_text ? std::atoi(trace_text->c_str()) : 0;
     const bool any = want_nocull || want_keep || want_eye || want_hide || want_shot ||
                      want_keep_timed || want_enemy_keep || want_group_keep || want_no_follow ||
-                     trace > 0 || fp_trace > 0 || want_aim_hold || want_aim_box;
+                     trace > 0 || fp_trace > 0 || want_aim_hold || want_aim_box ||
+                     want_player_shadow;
     if (fp_trace <= 0) {
         VideoCore::Immersive::g_world_view_tap.wanted.store(false, std::memory_order_relaxed);
     }
@@ -542,7 +546,8 @@ void Hook(int64_t ticks) {
                             (want_group_keep ? KH::Bit(KH::Group::GroupKeep) : 0u) |
                             (want_no_follow ? KH::Bit(KH::Group::NoFollow) : 0u) |
                             (want_aim_hold ? KH::Bit(KH::Group::AimHold) : 0u) |
-                            (want_aim_box ? KH::Bit(KH::Group::AimBox) : 0u);
+                            (want_aim_box ? KH::Bit(KH::Group::AimBox) : 0u) |
+                            (want_player_shadow ? KH::Bit(KH::Group::PlayerShadow) : 0u);
     const KH::SyncResult r = KH::Sync(mem, wanted, mailbox);
     LogChanges(s, r);
 

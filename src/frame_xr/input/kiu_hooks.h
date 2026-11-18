@@ -17,7 +17,7 @@
 //     something else (another build, a mod, a cheat). Ours while unwanted is put back;
 //     something else leaves the whole group out (said once in the log) and is never written.
 //     So a save state loaded with or without patches ends up right one VBlank later.
-//   - two groups reach a stub in the code cave (the text segment's unused tail,
+//   - some groups reach a stub in the code cave (the text segment's unused tail,
 //     0xC95370-0xC96000, all zero in the game): the image of kiu_hooks_stubs.h, written once
 //     before the first site that jumps to it and never changed or cleared after (a guest thread
 //     may be stopped inside it). The stubs read the mailbox, the cave's last bytes, which the
@@ -83,9 +83,11 @@ inline constexpr uint32_t kSiteReticleEase = 0x6D215C;  ///< the land reticle's 
 inline constexpr uint32_t kReticleEaseNone = 0x6D216C;  ///< its own "none" exit
 inline constexpr uint32_t kSiteReticleBox = 0x6D1680;   ///< the aim box: ground or not
 inline constexpr uint32_t kReticleBoxWhole = 0x6D1704;  ///< its own whole-screen box (the air's)
+inline constexpr uint32_t kSiteShadow = 0x57B054;       ///< an actor's round shadow: its entry
 inline constexpr uint32_t kEyeStub = kImageBase + Stubs::kEyeStub;
 inline constexpr uint32_t kKeepStub = kImageBase + Stubs::kKeepStub;
 inline constexpr uint32_t kShotStub = kImageBase + Stubs::kShotStub;
+inline constexpr uint32_t kShadowStub = kImageBase + Stubs::kShadowStub;
 
 inline constexpr uint32_t kSceneEye = 0xE14B90;    ///< the scene camera's eye, 3 floats
 inline constexpr uint32_t kSceneLookAt = 0xE14B9C; ///< and its look-at point
@@ -116,6 +118,8 @@ static_assert(Stubs::kImage[Stubs::kLitSinkContinue / 4] == kSiteCameraSink + 4)
 static_assert(Stubs::kImage[Stubs::kLitSpawn / 4] == 0x485638);
 static_assert(Stubs::kImage[Stubs::kEyeStub / 4] == 0xE92D4070,
               "the eye stub starts with the instruction it replaces");
+static_assert(Stubs::kImage[Stubs::kLitShadowContinue / 4] == kSiteShadow + 4);
+static_assert(Stubs::kShadowContinue == kSiteShadow + 4);
 // The encoders give the game's own words back.
 static_assert(Bl(kSiteShotSpawn, 0x485638) == 0xEBFE0493);
 static_assert(Bl(kSiteBulletView, 0x4EC640) == 0xEB0331C7);
@@ -127,6 +131,8 @@ static_assert(Beq(kSiteReticleEase, kReticleEaseNone) == 0x0A000002);
 static_assert(Beq(kSiteReticleBox, kReticleBoxWhole) == 0x0A00001F);
 static_assert(Beq(kSitePathEnd, Stubs::kPathVanish) == 0x0A000017);
 static_assert(Beq(kSitePathEnd, Stubs::kPathRestart) == 0x0A00000E);
+static_assert(B(0x57B0D4, 0x5B26AC) == 0xEA00DD74);  // AzaharFrame kiushadow: its context words
+static_assert(Bl(0x57B190, 0x50533C) == 0xEBFE2869);
 static_assert(Stubs::kImage[Stubs::kLitPathRestart / 4] == Stubs::kPathRestart);
 static_assert(Stubs::kImage[Stubs::kLitPathVanish / 4] == Stubs::kPathVanish);
 
@@ -151,14 +157,18 @@ enum class Group : uint8_t {
     /// person) and with AimHold. Its words are the same in the C-Stick & Gyro mod's v172 EUR
     /// builds, so it goes in with the mod too.
     AimBox,
+    /// AzaharFrame kiushadow: the player's own round shadow is not drawn (first person: it lies
+    /// right under the eye); everyone else's is, as in the game (a stub).
+    PlayerShadow,
 };
-inline constexpr std::size_t kGroupCount = 10;
+inline constexpr std::size_t kGroupCount = 11;
 
 constexpr uint32_t Bit(Group g) {
     return 1u << static_cast<uint32_t>(g);
 }
 constexpr bool UsesStubs(Group g) {
-    return g == Group::Eye || g == Group::Shot || g == Group::EnemyKeepTimed;
+    return g == Group::Eye || g == Group::Shot || g == Group::EnemyKeepTimed ||
+           g == Group::PlayerShadow;
 }
 inline const char* GroupName(Group g) {
     switch (g) {
@@ -182,6 +192,8 @@ inline const char* GroupName(Group g) {
         return "aim hold";
     case Group::AimBox:
         return "aim box";
+    case Group::PlayerShadow:
+        return "player shadow";
     }
     return "?";
 }
@@ -193,7 +205,7 @@ struct Patch {
     uint32_t original; ///< the game's word: anything else there and the group stays out
     uint32_t patched;
 };
-inline constexpr std::array<Patch, 12> kPatches{{
+inline constexpr std::array<Patch, 13> kPatches{{
     // and r0, r1, #0xFF (the top of the sphere-against-six-planes loop) -> b 0x77DC4C, the
     // function's own "wholly inside" exit (the same stack: sub sp, #0xC before, add after).
     {Group::NoCull, kSiteSceneCull, 0xE20100FF, B(kSiteSceneCull, kSceneCullInside)},
@@ -231,6 +243,11 @@ inline constexpr std::array<Patch, 12> kPatches{{
     // reticle past the box and never turns the camera for it.
     // (AzaharFrame kiufov: its own group, AimBox, so it goes in with the mod too.)
     {Group::AimBox, kSiteReticleBox, 0x0A00001F, B(kSiteReticleBox, kReticleBoxWhole)},
+    // AzaharFrame kiushadow. push {r4, r5, lr} (the first instruction of the function that puts
+    // an actor's round shadow in the frame's shadow list; r0 = its movement state, the actor at
+    // +0x30) -> b shadow_stub, which returns at once for the player's actor and otherwise runs
+    // the push and goes on.
+    {Group::PlayerShadow, kSiteShadow, 0xE92D4030, B(kSiteShadow, kShadowStub)},
 }};
 
 /// Words a group relies on without changing them (where it jumps to, what the stub assumes of the
@@ -240,7 +257,7 @@ struct Context {
     uint32_t addr;
     uint32_t word;
 };
-inline constexpr std::array<Context, 55> kContext{{
+inline constexpr std::array<Context, 64> kContext{{
     {Group::NoCull, 0x77DB24, 0xE24DD00C},   // sub sp, sp, #0xC (the frame the exit undoes)
     {Group::NoCull, 0x77DC4C, 0xE1C401D8},   // ldrd r0, r1, [r4, #0x18]
     {Group::NoCull, 0x77DC50, 0xE28DD00C},   // add sp, sp, #0xC
@@ -309,6 +326,18 @@ inline constexpr std::array<Context, 55> kContext{{
     {Group::AimHold, 0x6D219C, 0xEB05512B},        // bl 0x826650
     {Group::AimHold, 0x6D280C, 0xEB10FF21},        // bl 0xB12498
     {Group::AimHold, 0x6D2F7C, 0xE594008C},        // ldr r0, [r4, #0x8C]
+    // AzaharFrame kiushadow: the round shadow after its push, as the stub assumes it: r2 is
+    // written before it is read, the actor is [r0 + 0x30]; its two ways into the shadow list
+    // (0x5B26AC and 0x50533C, which append to the list at [0xD49490]) and its own exit.
+    {Group::PlayerShadow, 0x57B058, 0xE1A04000},   // mov r4, r0
+    {Group::PlayerShadow, 0x57B05C, 0xED2D8B02},   // vpush {d8}
+    {Group::PlayerShadow, 0x57B060, 0xE24DD02C},   // sub sp, sp, #0x2C
+    {Group::PlayerShadow, 0x57B064, 0xE59020AC},   // ldr r2, [r0, #0xAC]
+    {Group::PlayerShadow, 0x57B08C, 0xE5945030},   // ldr r5, [r4, #0x30] (the actor)
+    {Group::PlayerShadow, 0x57B0D4, 0xEA00DD74},   // b 0x5B26AC (the shadow under the actor)
+    {Group::PlayerShadow, 0x57B190, 0xEBFE2869},   // bl 0x50533C (the shadow, the other way)
+    {Group::PlayerShadow, 0x57B198, 0xECBD8B02},   // vpop {d8}
+    {Group::PlayerShadow, 0x57B19C, 0xE8BD8030},   // pop {r4, r5, pc}
 }};
 
 // ---- Small maths (float, as the game's) ----
