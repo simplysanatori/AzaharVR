@@ -1742,6 +1742,10 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     Input::LightGunTarget aim_hit; // AzaharFrame kiuaim2: Direct Aim's ray on the top screen
     {
         gyro_aim_frame.mode = Input::GyroAimModeFrom(Settings::values.vr_gyro_aim.GetValue());
+        // AzaharFrame kiufire: Trigger Layout, Kid Icarus: Uprising only.
+        gyro_aim_frame.kiu_fire_and_power =
+            Settings::values.vr_kiu_trigger_layout.GetValue() == Input::KiuTriggers::kFireAndPower &&
+            Kiu::IsKidIcarus(GameTitleId());
         const uint32_t aim_source =
             Input::GyroAimSource(Settings::values.vr_motion_controls.GetValue());
         const bool on = gyro_aim_frame.mode != Input::GyroAimMode::Off;

@@ -5,6 +5,7 @@
 #pragma once
 
 #include "frame_xr/input/gyro_aim.h" // AzaharFrame kiugyro
+#include "frame_xr/input/kiu_trigger_layout.h" // AzaharFrame kiufire
 #include "frame_xr/input/mapper.h"
 #include "frame_xr/input/motion.h"
 #include "frame_xr/input/mouse.h"
@@ -25,6 +26,9 @@ struct GyroAimFrame {
     /// with (Input::AimRay), through the game's Check Aim map (controls.cpp).
     LightGunTarget target;
     bool checking = false; ///< AzaharFrame kiuaim2: Check Aim runs (no Turn Zone meanwhile)
+    /// AzaharFrame kiufire: Trigger Layout is Fire and Power and Kid Icarus: Uprising is running
+    /// (controls.cpp; kiu_trigger_layout.h).
+    bool kiu_fire_and_power = false;
 };
 
 class InputBridge {
@@ -80,6 +84,7 @@ private:
     bool light_gun_on_ = false;
     bool kiu_turn_on_ = false; ///< AzaharFrame kiuturn: Right Stick turning's stick published
     bool gyro_fire_ = false;
+    KiuTriggers::Layout kiu_triggers_; ///< AzaharFrame kiufire: Trigger Layout's Fire and Power
     TouchpadTouch touchpad_;
     TouchpadCursor touchpad_cursor_;
     Vec2f edge_stick_; ///< AzaharFrame kiu

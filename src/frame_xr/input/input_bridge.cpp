@@ -150,10 +150,25 @@ const MapperOutput& InputBridge::Process(const InputFrame& frame, const PanelGeo
     // with L, so point and pull fires with either hand. The mod passes ZL/ZR on as well (it
     // writes ir:rst's ZL/ZR into the game's held buttons).
     gyro_fire_ = false;
-    if (gyro_aim && gyro_aim->mode != GyroAimMode::Off &&
-        (last_.controls.Get(Control::TriggerL) || last_.controls.Get(Control::TriggerR))) {
-        last_.controls.Set(Control::BumperL, true);
-        gyro_fire_ = true;
+    // AzaharFrame kiufire: Trigger Layout's Fire and Power (Kid Icarus, Aiming on) instead: the
+    // aiming hand's trigger is L only, the other uses the power, the bumpers pick it
+    // (kiu_trigger_layout.h). Original, or any other game: as before.
+    KiuTriggers::Frame layout;
+    if (gyro_aim) {
+        layout.fire_and_power = gyro_aim->kiu_fire_and_power;
+        layout.mode = gyro_aim->mode;
+        layout.aiming = KiuTriggers::AimingHand(Settings::values.vr_motion_controls.GetValue());
+        layout.time_ns = frame.time_ns;
+    }
+    if (layout.Active()) {
+        gyro_fire_ = kiu_triggers_.Apply(last_.controls, layout);
+    } else {
+        kiu_triggers_.Reset();
+        if (gyro_aim && gyro_aim->mode != GyroAimMode::Off &&
+            (last_.controls.Get(Control::TriggerL) || last_.controls.Get(Control::TriggerR))) {
+            last_.controls.Set(Control::BumperL, true);
+            gyro_fire_ = true;
+        }
     }
     InputCommon::FrameXr::GetPad().SetControls(last_.controls);
     for (int i = 0; i < result.event_count; ++i) {
@@ -181,6 +196,7 @@ void InputBridge::Release() {
     touchpad_cursor_ = {};
     edge_stick_ = {}; // AzaharFrame kiu
     gyro_fire_ = false; // AzaharFrame kiugyro
+    kiu_triggers_.Reset(); // AzaharFrame kiufire
     InputCommon::FrameXr::GetPad().ReleaseAll();
     Devices::Hub().Release(); // AzaharFrame pads: what is held stays away until let go
     motion_.Reset();
