@@ -65,6 +65,6 @@ TEST_CASE("Black Frame Insertion's helpers: the toast", "[frame_xr][bfidr]") {
     CHECK(Names::BfiHelpersToast(true, true, true) ==
           "Dynamic Resolution and Primary Screen as Panel On for Black Frame Insertion");
     CHECK(Names::BfiHelpersToast(true, false, true) == "Dynamic Resolution On for Black Frame Insertion");
-    CHECK(Names::BfiHelpersToast(false, true, false) == "Primary Screen as Panel Off Again");
+    CHECK(Names::BfiHelpersToast(false, true, false).empty()); // putting them back: no toast
     CHECK(Names::BfiHelpersToast(false, false, true).empty());
 }

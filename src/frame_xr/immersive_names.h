@@ -209,10 +209,14 @@ inline constexpr const char* kMotionClarityNormalWindowTip =
     "Primary screen for clearer motion. May flicker. Games that run under 60 fps show as before. "
     "Needs a 120 Hz display.";
 /// AzaharFrame bfidr: the toast when turning Black Frame Insertion on turned its helpers on
-/// (frame_xr/bfi_helpers.h), or turning it off put them back; it takes the place of "May
-/// Flicker" then (one toast at a time). Unapproved wording.
+/// (frame_xr/bfi_helpers.h); it takes the place of "May Flicker" then (one toast at a time).
+/// Putting them back when it goes off shows nothing (the rows show it). The owner's wording,
+/// 2026-11-18.
 inline std::string BfiHelpersToast(bool dynamic_resolution, bool panel, bool on) {
     std::string what;
+    if (!on) {
+        return {};
+    }
     if (dynamic_resolution && panel) {
         what = "Dynamic Resolution and Primary Screen as Panel";
     } else if (dynamic_resolution) {
@@ -222,7 +226,7 @@ inline std::string BfiHelpersToast(bool dynamic_resolution, bool panel, bool on)
     } else {
         return {};
     }
-    return what + (on ? " On for Black Frame Insertion" : " Off Again");
+    return what + " On for Black Frame Insertion";
 }
 /// AzaharFrame bfidr: the note on both Black Frame Insertion rows (VR menu) and boxes (Azahar's
 /// window) while the display runs at a rate it does not flash at (MotionClarity::EvenRate): a

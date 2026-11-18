@@ -1660,7 +1660,7 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
             send(MenuSetting::ScreensInProjection, c.state.panel ? 0 : 1, per_game);
         }
         set_marks(c.state, per_game);
-        if (dr || panel) {
+        if ((dr || panel) && on) {
             ShowToastText(Immersive::Names::BfiHelpersToast(dr, panel, on), ToastTime::Long);
         } else if (on && !was) {
             ShowToastText(Immersive::Names::kMotionClarityImmersiveToast, ToastTime::Long);
