@@ -18,8 +18,11 @@
 #include "citra_qt/configuration/configuration_shared.h"
 #include "citra_qt/configuration/configure_frame_vr.h"
 #include "common/settings.h"
+#include "frame_xr/immersive_names.h"
 
 namespace {
+
+namespace Names = FrameXr::Immersive::Names;
 
 QApplication& App() {
     static int argc = 1;
@@ -664,7 +667,7 @@ TEST_CASE("VR group: Immersive Mode lists Angel's Aim everywhere",
         REQUIRE(mode);
         REQUIRE(mode->count() == 5 + off);
         const char* want[5] = {"Off", "Wide (3DoF)", "Full (6DoF): Ocarina of Time, Majora's Mask",
-                               "Full (6DoF): Angel's Aim", "Full (6DoF): Other Games"};
+                               Names::kModeAngelsAim, "Full (6DoF): Other Games"};
         for (int i = 0; i < 5; i++) {
             CHECK(mode->itemText(i + off) == QString::fromUtf8(want[i]));
         }
@@ -688,7 +691,7 @@ TEST_CASE("VR group: Immersive Mode lists Angel's Aim everywhere",
         auto* mode = In<QComboBox>(w, "frame_vr_mode_row");
         REQUIRE(mode);
         REQUIRE(mode->count() == 5 + off);
-        CHECK(mode->itemText(3 + off) == QStringLiteral("Full (6DoF): Angel's Aim"));
+        CHECK(mode->itemText(3 + off) == QString::fromUtf8(Names::kModeAngelsAim));
         CHECK(mode->itemText(4 + off) == QStringLiteral("Full (6DoF): Other Games"));
         CHECK(mode->currentIndex() == 3 + off);
         w.ApplyConfiguration();
@@ -709,7 +712,7 @@ TEST_CASE("VR group: Immersive Mode lists Angel's Aim everywhere",
         auto* mode = In<QComboBox>(w, "frame_vr_mode_row");
         REQUIRE(mode);
         REQUIRE(mode->count() == 5);
-        CHECK(mode->itemText(3) == QStringLiteral("Full (6DoF): Angel's Aim"));
+        CHECK(mode->itemText(3) == QString::fromUtf8(Names::kModeAngelsAim));
         CHECK(mode->itemText(4) == QStringLiteral("Full (6DoF): Other Games"));
     }
 }

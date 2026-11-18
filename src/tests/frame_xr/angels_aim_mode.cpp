@@ -133,7 +133,7 @@ TEST_CASE("Angel's Aim: the list's order, labels and stored values", "[frame_xr]
     CHECK(std::string(N::kModeChoices[0]) == "Off");
     CHECK(std::string(N::kModeChoices[1]) == "Wide (3DoF)");
     CHECK(std::string(N::kModeChoices[2]) == "Full (6DoF): Ocarina of Time, Majora's Mask");
-    CHECK(std::string(N::kModeChoices[3]) == "Full (6DoF): Angel's Aim");
+    CHECK(std::string(N::kModeChoices[3]) == "Full (6DoF): Kid Icarus: Uprising / Angel's Aim");
     CHECK(std::string(N::kModeChoices[4]) == "Full (6DoF): Other Games");
     CHECK(N::kModeChoices.size() == static_cast<std::size_t>(N::kModeChoiceCount));
     // index <-> stored, both ways
