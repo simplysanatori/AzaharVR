@@ -15,4 +15,5 @@ clang $CF -c -o "$T/hasm.o" harness_asm.s
 clang $CF -O1 -ffreestanding -fno-builtin -fno-stack-protector -c -o "$T/h.o" harness.c
 ld.lld -static -e _start -o "$T/harness" "$T/h.o" "$T/hasm.o" "$T/stubs.o"
 Q=$(command -v qemu-arm-static || command -v qemu-arm)
+cd "$T" # a crash's core file lands in the temporary folder, never in the tree
 "$Q" "$T/harness"
