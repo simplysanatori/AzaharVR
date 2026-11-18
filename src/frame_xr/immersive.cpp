@@ -773,6 +773,7 @@ void KiuFirstPersonFrame(u32 mode) {
     view.gain_y = g.solved.gain;
     view.screen_pitch = g.solved.pitch_rad;
     view.screen_yaw = g.solved.yaw_rad;
+    view.measured_aspect = g.camera.ScreenFovDeg() > 0.0f ? g.camera.ScreenAspect() : 0.0f;
     Kiu::FirstPerson::PublishView(view);
 }
 

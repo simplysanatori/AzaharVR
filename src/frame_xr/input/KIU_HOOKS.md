@@ -70,16 +70,16 @@ V on land (Practice Range) and in the air (Chapter 1).
 | 0x0C | u32 the camera node of the player's view | the framework |
 | 0x10 | u32 eye flags, bit 0: replace the eye | the eye switch |
 | 0x14 | f32 ×3 eye offset, world axes, from the player's world position | the eye switch (the offset in the actor's axes, turned by his quaternion) |
-| 0x20 | u32 shot flags: bit 0 rotate, bit 1 move the start, bit 2 no lock target | **the VR lane** (today the test switch) |
-| 0x24 | f32 ×4 shot rotation (quaternion x y z w, spawn space): each bullet's `q` becomes `rotation × q` | **the VR lane** |
+| 0x20 | u32 shot flags: bit 0 rotate, bit 1 move the start, bit 2 no lock target, bit 3 the rotation is the aim itself (with bit 0) | the shot test switch, or first person's shots |
+| 0x24 | f32 ×4 shot rotation (quaternion x y z w, spawn space): each bullet's `q` becomes `rotation × q`; with bit 3 `rotation × conj(the game's aim before scatter) × q` | the same |
 | 0x34 | f32 ×4 shot frame: the rotation of the player's parent (`world q × conj(local q)`; identity on land) | the framework |
-| 0x44 | f32 ×3 shot offset from the player's position, in the spawn's space (world axes on land; the rail's axes in the air, which were the world's in Chapter 1) | **the VR lane** |
+| 0x44 | f32 ×3 shot offset from the player's position, in the spawn's space (world axes on land; the rail's axes in the air, which were the world's in Chapter 1) | the same |
 | 0x50 | f32 seconds: a passed flier younger than this flies its path again | the timed enemy keep |
 
-In code: `Mailbox`, `EyeRequest`, `ShotRequest`, `Fill`. A later lane that aims with the
-controller fills a `ShotRequest` (rotation, offset, the flags) instead of `ShotTest`; the framework
-does the rest. What it must know to fill the rotation is the game's own aim at that moment (the
-rotation is applied on top of it); where that is in memory is not mapped yet.
+In code: `Mailbox`, `EyeRequest`, `ShotRequest`, `Fill`. First person's shots
+(`AZAHARFRAME_KIU_SHOTS_6DOF`, below) fill a `ShotRequest` with `absolute`: the rotation is the
+aim wanted, and the stub takes the game's own aim out of each bullet's quaternion itself, at the
+spawn, so the app does not have to know the game's aim beforehand.
 
 ## The patches
 
@@ -95,6 +95,13 @@ rotation is applied on top of it); where that is in memory is not mapped yet.
 | `AZAHARFRAME_KIU_ENEMY_KEEP_S=<s>` | 0x3E8C9C | `0A000017` | beq keep_stub | the same, by the enemy's age (replaces the plain keep; they share the site) |
 | `AZAHARFRAME_KIU_GROUP_KEEP=1` | 0xA430FC | `E92D4FF8` push {r3-r11, lr} | `E12FFF1E` bx lr | a land spawner group's despawn does nothing |
 | `AZAHARFRAME_KIU_NO_FOLLOW=1` | 0x70401C | `EB031897` bl 0x7CA280 | `E1A00000` mov r0, r0 | the land camera's eased follow no longer turns the camera while the player runs (what the call computes: I) |
+| `AZAHARFRAME_KIU_AIM_NO_MOD=1`, `AZAHARFRAME_KIU_AIM_6DOF=1` ("aim hold") | 0x6D215C | `0A000002` beq 0x6D216C | `EA000002` b 0x6D216C | the land reticle's eased moves (back to its rest height after a touch, the flick's glide) do nothing, as in the air |
+| | 0x6D1680 | `0A00001F` beq 0x6D1704 | `EA00001F` b 0x6D1704 | the aim box is the whole screen on the ground too (the air's box), so the game's clamp never turns the camera for the reticle |
+
+"Aim hold" is for the game **without** the C-Stick & Gyro mod only: its context holds three words
+of the reticle's code where the mod has its hooks (0x6D219C, 0x6D280C, 0x6D2F7C), so with the mod
+the group stays out (`aim hold: off: the game's code differs (0x006D219C holds …)`, once) and the
+mod's own route aims (below, "The game's aim").
 
 The words at these sites, their context words and the cave are the same in the C-Stick & Gyro
 mod's v172 EUR base and 21:9 builds (V by comparing the files; the 16:9 build was not at hand: I),
@@ -128,7 +135,11 @@ mailbox's player (so other players' and enemies' shots pass untouched): the quat
 `rotation × q` (each bullet's own, so scatter and fans stay); the position becomes
 **frame applied to the player's local position (read then) + the offset**; the target handle
 becomes "none" (0xFFFFFE00) if asked. Then `0x485638` with every register, sp and lr as the game
-set them (all it uses is saved: r4, r5, d0–d7). The start is taken from the player in the stub for
+set them (all it uses is saved: r4, r5, d0–d7). With flag bit 3 ("absolute") the quaternion becomes
+`rotation × conj(base) × q`, `base` being the caller's own aim quaternion before each bullet's
+scatter: the four floats at the caller's `sp + 0x70` (0x503F8C's frame: the fourth argument of the
+shooter's aim call at 0x504014, which 0x7019A0 fills with the result of 0x4C14B0 before it adds
+the weapon's tilt and the scatter; V in the code, and by the result: below). The start is taken from the player in the stub for
 the same reason as the eye: in the air his local position moves about 3 units forward as he fires
 (V: the start matches his position of the spawn's frame to 0.0000; a sample from before the shot
 is 3.0 away).
@@ -219,7 +230,7 @@ brought our words back.
 - Other regions and game versions: no table (the title and code checks leave everything off).
 - Multiplayer: not run. The shot stub compares the owner with the local player's actor (found
   through the local aim object), so other players' shots should pass untouched (I).
-- The game's own aim quaternion at the moment of a shot is not mapped: a lane that aims with the
-  controller needs it to turn the game's aim onto the controller's ray.
+- (Settled, "Shots from the hand" below: the game's own aim quaternion at a shot is read by the
+  stub from the caller's frame.)
 - Shots outside the one spawn call (dash shots, melee, powers) are not hooked.
 - Whether the rail's axes always are the world's (they were in Chapter 1's air section).

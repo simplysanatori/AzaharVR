@@ -59,6 +59,7 @@ struct Probe {
     bool original = false;
     bool code_checked = false, code_ok = false;
     Kiu::FirstPerson::AimNow last_aim6; ///< the last 6DoF aim (the trace)
+    uint64_t held_writes = 0; ///< times the reticle's "held" flags were put back
     Input::DirectAim aim; ///< AzaharFrame kiuaim2 (was the relative loop)
     std::string reason;
     int64_t last_stats_ns = 0;
@@ -651,22 +652,34 @@ void AimPoll(int64_t ticks) {
             if (process.get() == p.process) {
                 system.Memory().Write32(*process, p.object + kReticleX, FloatBits(write.x));
                 system.Memory().Write32(*process, p.object + kReticleY, FloatBits(write.y));
-                // AzaharFrame kiuvr: without the mod, the reticle's "held" flags with it, as
-                // the game leaves them after a stylus touch: else its next frame puts the
-                // reticle back where it was.
-                if (p.original &&
-                    system.Memory().IsValidVirtualAddress(*process,
-                                                          p.object + kReticleClampFlags + 3)) {
-                    const uint32_t flags =
-                        system.Memory().Read32(*process, p.object + kReticleClampFlags);
-                    if ((flags & kReticleHeld) != kReticleHeld) {
-                        system.Memory().Write32(*process, p.object + kReticleClampFlags,
-                                                flags | kReticleHeld);
-                    }
-                }
                 p.writes++;
                 break;
             }
+        }
+    }
+    // AzaharFrame kiuvr: without the mod, the reticle's "held" flags while Direct Aim has the
+    // reticle (at every poll, whether or not the pixel changed: the game takes them down again
+    // in its own frame when no stylus touched): with neither bit 0 nor bit 1 the game's next
+    // frame puts the reticle back (the middle on land; where its point in the world is seen in
+    // the air), and aims from there.
+    if (p.original && write.write) {
+        Core::System& system = Core::System::GetInstance();
+        for (const std::shared_ptr<Kernel::Process>& process : system.Kernel().GetProcessList()) {
+            if (process.get() != p.process) {
+                continue;
+            }
+            if (system.Memory().IsValidVirtualAddress(*process, p.object + kReticleClampFlags) &&
+                system.Memory().IsValidVirtualAddress(*process,
+                                                      p.object + kReticleClampFlags + 3)) {
+                const uint32_t flags =
+                    system.Memory().Read32(*process, p.object + kReticleClampFlags);
+                if ((flags & kReticleHeld) != kReticleHeld) {
+                    system.Memory().Write32(*process, p.object + kReticleClampFlags,
+                                            flags | kReticleHeld);
+                    p.held_writes++;
+                }
+            }
+            break;
         }
     }
     p.push_right = direct_turn ? 0.0f : out.right_dps;

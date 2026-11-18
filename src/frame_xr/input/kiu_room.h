@@ -233,6 +233,60 @@ struct Pixel {
     float x = 0.0f, y = 0.0f;
 };
 
+/// The shape (width over height) the game AIMS with, measured from the game's own aim: the
+/// scene projection's field is not it on every build of the game (the C-Stick & Gyro mod's
+/// widescreen builds leave 5:3 there and aim, and draw, 16:9 or 21:9 wide: V on the 21:9 build).
+/// Each reading is the reticle's pixel and the point the game has put in the world for it: the
+/// point's X / (Z tan(fov / 2)) over the pixel's share of the half width is the shape. Only
+/// readings with the reticle well off the middle and not moving count (the point is the game
+/// frame's, the pixel may be newer); they are eased, so one odd reading does little.
+class AimShape {
+public:
+    static constexpr float kMinOffPx = 16.0f;    ///< the reticle at least this far from the middle
+    static constexpr float kMaxMoveShare = 0.005f; ///< and moved less than this share of that
+    static constexpr float kMin = 0.8f, kMax = 4.0f;
+    static constexpr float kEase = 0.2f;
+
+    void Update(const GameCamera& camera, float fov_y, const ReticleScreen& screen,
+                const Pixel& pixel, const Vec3& aim_point) {
+        const float off = pixel.x - screen.cx;
+        const bool moved = have_last_ && std::abs(pixel.x - last_x_) > kMaxMoveShare * std::abs(off);
+        last_x_ = pixel.x;
+        have_last_ = true;
+        if (moved || !(std::abs(off) >= kMinOffPx) || !screen.Ok() || !(fov_y > 0.05f) ||
+            !(fov_y < 3.0f)) {
+            return;
+        }
+        const Vec3 v = Rotate(Conj(camera.q), aim_point - camera.eye);
+        if (!(-v.z > 1.0f)) {
+            return;
+        }
+        const float sample =
+            (v.x / (-v.z * std::tan(fov_y * 0.5f))) / (off / (screen.w * 0.5f));
+        if (!std::isfinite(sample) || sample < kMin || sample > kMax) {
+            return;
+        }
+        value_ = count_ == 0 ? sample : value_ + kEase * (sample - value_);
+        ++count_;
+    }
+    /// The shape to aim with: the measured one, else `fallback`.
+    float Get(float fallback) const {
+        return count_ > 0 ? value_ : fallback;
+    }
+    int Count() const {
+        return count_;
+    }
+    void Reset() {
+        *this = {};
+    }
+
+private:
+    float value_ = 0.0f;
+    int count_ = 0;
+    float last_x_ = 0.0f;
+    bool have_last_ = false;
+};
+
 /// How far a world point is in front of the camera, along its view (below 0: behind it).
 constexpr float CameraDepth(const GameCamera& camera, const Vec3& world) {
     return Dot(world - camera.eye, Ahead(camera.q));

@@ -304,11 +304,12 @@ void TraceFirstPerson(State& s, const KH::GameMemory& mem, const KH::Player& p,
     if (view.valid) {
         const KR::Pose head = KR::RoomToRest(view.rest, view.head);
         line += fmt::format(" s={:.5f} rest_p={} rest_q={} head_p={} head_q={} head_rest_p={} "
-                            "head_rest_q={} given_q={} gains={:.4f},{:.4f},{:.4f},{:.4f}",
+                            "head_rest_q={} given_q={} gains={:.4f},{:.4f},{:.4f},{:.4f} "
+                            "measured_aspect={:.5f}",
                             view.units_per_metre, Csv(view.rest.position),
                             Csv(view.rest.orientation), Csv(view.head.p), Csv(view.head.q),
                             Csv(head.p), Csv(head.q), Csv(view.given), view.gain_x, view.gain_y,
-                            view.screen_pitch, view.screen_yaw);
+                            view.screen_pitch, view.screen_yaw, view.measured_aspect);
         if (now.frame_ok) {
             const KR::Pose head_world = KR::RoomToWorld(now.frame, view.head);
             line += fmt::format(" head_world={} head_ahead={}", Csv(head_world.p),
@@ -345,9 +346,9 @@ void TraceFirstPerson(State& s, const KH::GameMemory& mem, const KH::Player& p,
                 Kiu::FirstPerson::AimThroughCamera(mem, p.aim, screen, now.sample);
             if (aim.valid) {
                 line += fmt::format(" aim_pixel={:.3f},{:.3f} aim_ahead={} aim_depth={:.3f} "
-                                    "aim_hit={}",
+                                    "aim_hit={} aim_aspect={:.5f} aim_aspect_n={}",
                                     aim.pixel.x, aim.pixel.y, aim.ahead ? 1 : 0, aim.depth,
-                                    Csv(aim.point));
+                                    Csv(aim.point), aim.aspect, aim.aspect_readings);
             }
         }
     }

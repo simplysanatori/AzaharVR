@@ -396,3 +396,52 @@ TEST_CASE("kiuvr: the game's aim quaternion for a direction", "[frame_xr][kiuvr]
     CHECK(off_ray == Approx(off_game).margin(1e-4f));
     CHECK(off_ray == Approx(std::sqrt(9.0f + 4.0f) * kPi / 180.0f).margin(2e-3f));
 }
+
+TEST_CASE("kiuvr: the shape the game aims with, from its own aim point", "[frame_xr][kiuvr]") {
+    const ReticleScreen screen{400.0f, 240.0f, 200.0f, 120.0f};
+    const float fov = 0.785398f, t = std::tan(fov * 0.5f);
+    const GameCamera cam{{4.7f, 14.2f, 333.7f}, Pitch(-3.0f)};
+    // A point the game would put in the world for a pixel when it aims `shape` wide.
+    const auto point_for = [&](const Pixel& px, float shape, float depth) {
+        const Vec3 v{(px.x - 200.0f) / 200.0f * t * shape * depth,
+                     -(px.y - 120.0f) / 120.0f * t * depth, -depth};
+        return cam.eye + Rotate(cam.q, v);
+    };
+    AimShape shape;
+    CHECK(shape.Get(1.6667f) == Approx(1.6667f)); // nothing measured: the fallback
+    // The reticle in the middle says nothing.
+    shape.Update(cam, fov, screen, {200.0f, 104.0f}, point_for({200.0f, 104.0f}, 2.3333f, 500.0f));
+    shape.Update(cam, fov, screen, {205.0f, 104.0f}, point_for({205.0f, 104.0f}, 2.3333f, 500.0f));
+    CHECK(shape.Count() == 0);
+    // The original game: 5:3 (as read back from it: pixel 260 and its point).
+    {
+        AimShape s;
+        const GameCamera c = CameraFromLookAt({0.0f, 12.41002f, 300.0f},
+                                              {0.0f, 7.17662f, 200.13704f},
+                                              {0.0f, 0.99863f, -0.05233f});
+        s.Update(c, fov, screen, {260.0f, 84.8f}, {103.687f, 46.975f, -203.142f});
+        s.Update(c, fov, screen, {260.0f, 84.8f}, {103.687f, 46.975f, -203.142f});
+        CHECK(s.Get(9.0f) == Approx(1.6667f).margin(2e-3f));
+    }
+    // A 21:9 build: the first still reading gives it at once, from any depth.
+    shape.Update(cam, fov, screen, {250.0f, 92.8f}, point_for({250.0f, 92.8f}, 2.3333f, 534.4f));
+    shape.Update(cam, fov, screen, {250.0f, 92.8f}, point_for({250.0f, 92.8f}, 2.3333f, 534.4f));
+    CHECK(shape.Get(1.6667f) == Approx(2.3333f).margin(1e-3f));
+    shape.Update(cam, fov, screen, {150.0f, 130.0f}, point_for({150.0f, 130.0f}, 2.3333f, 196.7f));
+    shape.Update(cam, fov, screen, {150.0f, 130.0f}, point_for({150.0f, 130.0f}, 2.3333f, 196.7f));
+    CHECK(shape.Get(1.6667f) == Approx(2.3333f).margin(1e-3f));
+    // A reticle on the move (the point is the frame before's): not counted.
+    const int before = shape.Count();
+    shape.Update(cam, fov, screen, {300.0f, 100.0f}, point_for({150.0f, 130.0f}, 2.3333f, 196.7f));
+    CHECK(shape.Count() == before);
+    // Readings that cannot be a shape: a point behind the camera, a pixel that makes it absurd.
+    shape.Update(cam, fov, screen, {300.0f, 100.0f}, cam.eye + Rotate(cam.q, {5, 0, 30}));
+    shape.Update(cam, fov, screen, {300.0f, 100.0f}, point_for({300.0f, 100.0f}, 9.0f, 300.0f));
+    CHECK(shape.Count() == before);
+    CHECK(shape.Get(1.6667f) == Approx(2.3333f).margin(1e-3f));
+    // One odd reading in range moves it a fifth of the way only.
+    shape.Update(cam, fov, screen, {300.0f, 100.0f}, point_for({300.0f, 100.0f}, 1.8333f, 300.0f));
+    CHECK(shape.Get(1.6667f) == Approx(2.2333f).margin(2e-3f));
+    shape.Reset();
+    CHECK(shape.Count() == 0);
+}

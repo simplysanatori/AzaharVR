@@ -83,6 +83,10 @@ struct View {
     /// The screen's gains and turn (Layout::HeadLocked): 1, 1, 0, 0 while the Full view's
     /// screen has its default size and place, the only case the room lines up with the picture.
     float gain_x = 1.0f, gain_y = 1.0f, screen_pitch = 0.0f, screen_yaw = 0.0f;
+    /// The game camera's shape as the immersive code measured it from the game's draws (Match
+    /// Game Camera; 0: not measured): what the aim uses until the game's own aim has shown its
+    /// shape (KiuRoom::AimShape).
+    float measured_aspect = 0.0f;
 };
 /// The aiming hand's ray this display frame, in the room: from the weapon's muzzle (or the aim
 /// pose) along the weapon's axis (or the pose's), as Direct Aim's and the laser's.
@@ -140,6 +144,8 @@ struct AimNow {
     float depth = 0.0f;              ///< the game's aim point's depth, as used
     Input::KiuRoom::Vec3 point;      ///< where the ray is at that depth (world)
     Input::KiuRoom::Vec3 game_point; ///< the game's own aim point (world), as read
+    float aspect = 0.0f;             ///< the shape aimed with (KiuRoom::AimShape, or its fallback)
+    int aspect_readings = 0;         ///< how many readings of the game's own aim made it
 };
 AimNow AimThroughCamera(const Input::KiuHooks::Reader& mem, uint32_t aim,
                         const Input::KiuRoom::ReticleScreen& screen, const Sample& sample);

@@ -108,8 +108,25 @@ AimNow AimThroughCamera(const Input::KiuHooks::Reader& mem, uint32_t aim,
         !KH::ReadVec3(mem, aim + kAimWorldPos, now.game_point)) {
         return now;
     }
+    // The shape the game aims with, from its own aim: the reticle's pixel and its point.
+    static KR::AimShape shape; // emulation thread only
+    static uint32_t shape_aim = 0;
+    if (aim != shape_aim) {
+        shape_aim = aim;
+        shape.Reset();
+    }
+    uint32_t px = 0, py = 0;
+    if (mem.Read32(aim + 0xA4, px) && mem.Read32(aim + 0xA8, py)) {
+        shape.Update(scene.camera, scene.projection.fov_y, screen,
+                     {std::bit_cast<float>(px), std::bit_cast<float>(py)}, now.game_point);
+    }
+    KR::Projection projection = scene.projection;
+    projection.aspect = shape.Get(sample.view.measured_aspect > 0.5f ? sample.view.measured_aspect
+                                                                      : scene.projection.aspect);
+    now.aspect = projection.aspect;
+    now.aspect_readings = shape.Count();
     now.depth = KR::CameraDepth(scene.camera, now.game_point);
-    now.pixel = KR::AimPixel(scene.camera, scene.projection, screen, ray.origin, ray.direction,
+    now.pixel = KR::AimPixel(scene.camera, projection, screen, ray.origin, ray.direction,
                              now.depth, &now.ahead, &now.point);
     now.valid = std::isfinite(now.pixel.x) && std::isfinite(now.pixel.y);
     return now;
