@@ -411,7 +411,7 @@ clip x up and down: the top screen is drawn turned). 90 % across moves an elemen
 400 pixel picture 20 pixels in; above 100 % spreads it out. No register of any game is read, so a
 HUD that is not drawn with w = 1 does not move (nothing goes wrong, nothing changes). Mario Kart
 7 draws its race HUD through a perspective projection instead, every vertex at the far plane (w -
-z = 0.049 after the shader's z flip; its world stays at 2.4 or more); its preset (`hud_far_plane`)
+z = 0.049 after the shader's z flip; its world stays at 2.1 or more); its preset (`hud_far_plane`)
 has the shader scale vertices with w - z below 0.5 too, for that game only. A draw into the bottom screen's viewport (240 x 320)
 gets no scale (the rasterizer sets the uniforms per draw), so the Secondary screen's own 2D stays
 put. The scales

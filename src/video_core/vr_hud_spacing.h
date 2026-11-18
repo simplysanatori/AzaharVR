@@ -19,8 +19,9 @@
 //
 // Mario Kart 7 draws its race HUD (rank, item box) through a perspective projection instead (w
 // about 1525), every vertex at the far end of the depth range: w - z = 0.049 (clip z after the
-// shader's flip; 0 is the far plane), where its world's vertices keep w - z = 2.4 to 3 (desktop
-// census of a 50 s race, 80 million vertices: none below 2.41). Its preset turns on a second rule
+// shader's flip; 0 is the far plane), where its world's vertices keep w - z = 2.1 to 3 (desktop
+// census from boot through the menus, a race and the first-person view, 476 million vertices:
+// none below 2.10). Its preset turns on a second rule
 // (ImmersivePreset::hud_far_plane): a vertex with w - z below 0.5 is scaled the same way (one
 // on or past an edge of the view, |x| or |y| >= 0.999 w, keeps the world's factor, so a
 // full-screen pass there stays whole). Off for every other game, so their world can never meet
