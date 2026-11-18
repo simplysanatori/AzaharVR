@@ -1281,6 +1281,8 @@ void OnFrame(const FrameInfo& info) {
             VideoCore::Immersive::g_stereo_far_per_slider_recent.store(-1.0f,
                                                                        std::memory_order_relaxed);
             VideoCore::Immersive::g_stereo_far_drawn.store(-1.0f, std::memory_order_relaxed);
+            // AzaharFrame mk7flat: and the far scenery's width, which mode 3's eye quads use.
+            VideoCore::Immersive::g_stereo_far_width.store(-1.0f, std::memory_order_relaxed);
             StopStereoCap();
             // AzaharFrame natural: the game's eyes are measured afresh, the slider and leaning too.
             VideoCore::Immersive::g_stereo_eye_per_far.store(-1.0f, std::memory_order_relaxed);

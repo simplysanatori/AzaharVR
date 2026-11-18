@@ -1398,8 +1398,12 @@ GMainWindow::GMainWindow(Core::System& system_)
                             // and down with Field of View).
                             FrameKeepSetting keep_depth{Settings::values.vr_immersive_depth};
                             FrameKeepControls keep_controls; // AzaharFrame reticle
+                            // AzaharFrame mk7flat: and every key the menu's save keeps (a
+                            // preset's mode 3 registers among them, per_game_keys.h).
+                            FrameXr::PerGame::KeepMenuKeys keep_menu;
                             QtConfig game_config(g_frame_game_config_name,
                                                  QtConfig::ConfigType::PerGameConfig);
+                            keep_menu.Restore();
                             keep_controls.Restore();
                             keep_wider.Restore();
                             keep_margin_x.Restore();
@@ -9044,7 +9048,11 @@ void GMainWindow::FrameSetAutosaveSetting(int which, u32 value) {
         FrameKeepSetting keep_every{v.autosave_every};
         FrameKeepSetting keep_keep{v.autosave_keep};
         FrameKeepControls keep_controls; // AzaharFrame reticle
+        // AzaharFrame mk7flat: and every key the menu's save keeps (a preset's mode 3
+        // registers among them, per_game_keys.h).
+        FrameXr::PerGame::KeepMenuKeys keep_menu;
         QtConfig game_config(g_frame_game_config_name, QtConfig::ConfigType::PerGameConfig);
+        keep_menu.Restore();
         keep_controls.Restore();
         keep_on.Restore();
         keep_every.Restore();

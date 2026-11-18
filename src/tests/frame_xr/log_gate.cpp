@@ -5,6 +5,7 @@
 // AzaharFrame integ8: the Full modes' per-second stereo and world-pose lines are written on a
 // meaningful change, else as a summary at most every 10 s.
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include "common/frame_log_gate.h"
 #include "video_core/vr_immersive.h"
@@ -75,4 +76,51 @@ TEST_CASE("Log gate: the stereo and world-pose lines' changes", "[frame_xr][inte
     CHECK(lg.WorldChanged(true, false, true));
     CHECK(lg.WorldChanged(false, true, true));
     CHECK(lg.WorldChanged(false, false, false));
+}
+
+// AzaharFrame mk7flat: another game's far scenery is measured afresh from its first latch, with a
+// swap or not. Mario Kart 7, booted after another game, got that game's far scenery (4.35 % of
+// the picture's width apart) for its eye quads from its first latch, which had no swap.
+TEST_CASE("Frame trace: the game before's far scenery goes with the next game's first latch",
+          "[frame_xr][mk7flat]") {
+    namespace VI = VideoCore::Immersive;
+    VI::FrameTrace trace;
+    const VI::ContentTrack track;
+    const auto two_eyes = [&trace] {
+        for (int i = 0; i < 10; ++i) {
+            trace.Far(0.0f);
+            trace.Far(0.087f);
+        }
+    };
+    // The game before: two eyes 0.087 NDC apart (4.35 % of the width), over a second.
+    two_eyes();
+    trace.Latch(true, track, false, 1000);
+    two_eyes();
+    trace.Latch(true, track, false, 1500);
+    two_eyes();
+    trace.Latch(true, track, false, 2050);
+    CHECK(VI::g_stereo_far_width.load() > 0.043f);
+    CHECK(VI::g_stereo_far_width.load() < 0.044f);
+    // Its last frame, after that second's line: a sample of the next second.
+    two_eyes();
+    trace.Latch(true, track, false, 2300);
+    // Another game starts (the XR thread's title change), its first latches without a swap, the
+    // first of them more than a second after the game before's last line.
+    VI::g_stereo_generation.fetch_add(1);
+    VI::g_stereo_far_width.store(-1.0f);
+    trace.Latch(false, track, false, 3100);
+    CHECK(VI::g_stereo_far_width.load() == -1.0f);
+    trace.Latch(false, track, false, 3600);
+    trace.Latch(false, track, false, 4150);
+    CHECK(VI::g_stereo_far_width.load() == -1.0f);
+    // Its own two eyes, nearly together (Mario Kart 7 at mode 3's slider).
+    for (int t = 4400; t <= 5600; t += 400) {
+        for (int i = 0; i < 10; ++i) {
+            trace.Far(0.0f);
+            trace.Far(0.001f);
+        }
+        trace.Latch(true, track, false, t);
+    }
+    CHECK(VI::g_stereo_far_width.load() == Catch::Approx(0.0005f).margin(1e-5));
+    VI::g_stereo_far_width.store(-1.0f);
 }

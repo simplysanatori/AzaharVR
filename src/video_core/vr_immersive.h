@@ -570,18 +570,23 @@ public:
     /// `shown_3d`: the swap's framebuffer is in the 3DS's stereoscopic format.
     void Latch(bool swap, const ContentTrack& track, bool full_mode, int64_t now_ms,
                bool shown_3d = false) {
+        // AzaharFrame stereo: another game (g_stereo_generation) is measured afresh. AzaharFrame
+        // mk7flat: at its first latch, with a swap or not, and this second's samples too: the
+        // game before's far scenery and lines went out with the next game's first latch without a
+        // swap (Mario Kart 7 had the game before's 4.35 % and its eyes in its first lines).
+        const u32 gen = g_stereo_generation.load(std::memory_order_relaxed);
+        if (gen != generation_) {
+            const StereoFrame keep_stereo = stereo_;
+            const u32 keep_lg_generation = lg_generation_;
+            *this = FrameTrace{};
+            stereo_ = keep_stereo;
+            lg_generation_ = keep_lg_generation;
+            generation_ = gen;
+        }
         if (swap) {
             ++swaps_;
             // AzaharFrame stereo: the game's eyes in this frame (its world draws' far points).
             const StereoFrame::Result st = stereo_.End();
-            const u32 gen = g_stereo_generation.load(std::memory_order_relaxed);
-            if (gen != generation_) {
-                generation_ = gen;
-                far_per_slider_.Reset();
-                eye_per_far_.Reset();
-                world_once_.Reset();
-                zero_.Reset();
-            }
             const float slider = Settings::frame_vr_slider_shown.load(std::memory_order_relaxed);
             far_per_slider_.Swap(st.eyes, st.far_ndc / 2.0f, slider);
             g_stereo_far_per_slider.store(far_per_slider_.Value(), std::memory_order_relaxed);
