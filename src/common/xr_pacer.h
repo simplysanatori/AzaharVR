@@ -230,11 +230,14 @@ struct Gate {
     /// Ended frames the next release has to wait for: 0 for a repeat (`next_new` false: the
     /// picture on view stays) or once the picture released last (`released_picture`) has been on
     /// view in 2 x `cadence` of them; all of them while it is not on view yet.
-    uint32_t PictureNeeded(uint64_t released_picture, bool next_new, uint32_t cadence) const {
+    /// AzaharFrame cheaprender: `realign` (Realign): max(2, `cadence`) of them this once.
+    uint32_t PictureNeeded(uint64_t released_picture, bool next_new, uint32_t cadence,
+                           bool realign = false) const {
         if (!next_new || released_picture == 0 || released_picture < shown_picture) {
             return 0;
         }
-        const uint32_t want = 2 * std::max<uint32_t>(cadence, 1);
+        const uint32_t want = realign ? std::max<uint32_t>(cadence, 2)
+                                      : 2 * std::max<uint32_t>(cadence, 1);
         if (released_picture == shown_picture) {
             return want - std::min(picture_count, want);
         }
@@ -248,6 +251,44 @@ struct Gate {
         std::copy(picture_runs, picture_runs + 6, out);
         std::fill(picture_runs, picture_runs + 6, 0u);
     }
+};
+
+/// AzaharFrame cheaprender: the gate back on the game's pictures after a late one
+/// (AZAHARFRAME_XR_PACE_REALIGN, off by default). At 30 or 20 pictures a second the gate keeps
+/// each picture for 4 or 6 ended frames, so a late picture moves every window after it a refresh
+/// or two later than the game's pictures; then each new picture is held 2 refreshes or more
+/// (that much more lag) and every repeat after it finds the swapchain images still held, so it is
+/// drawn aside and copied in (the summary line's `late 30/30/30`). The lock moves the game later
+/// only at its own pace (its samples are taken as at most a refresh early), a few seconds for 2
+/// refreshes: session 651 had 49 such seconds in Kid Icarus: Uprising, at the lock's "-0.79 ms
+/// from the target". With the switch, once kRuns new pictures in a row would be held 2 or more
+/// ended frames, the next goes once the picture on view has been in max(2, cadence) of them: one
+/// picture is shown shorter once (never for one refresh), and the windows are on the game's
+/// pictures again. Only at cadence 2 or 3 (at 60 a picture is never held 2 frames for long).
+class Realign {
+public:
+    static constexpr uint32_t kRuns = 3;
+
+    /// Once per new picture while the gate is on, before it waits: `needed` the ended frames the
+    /// gate would hold it for. True: this one goes with Gate::PictureNeeded's `realign`.
+    bool Note(bool enabled, uint32_t needed, uint32_t cadence) {
+        if (cadence < 2 || needed < 2) {
+            run = 0;
+            return false;
+        }
+        run = std::min(run + 1, kRuns);
+        if (!enabled || run < kRuns) {
+            return false;
+        }
+        run = 0;
+        return true;
+    }
+    void Reset() {
+        run = 0;
+    }
+
+private:
+    uint32_t run = 0;
 };
 
 /// AzaharFrame pacing2: how many releases (VBlanks) each of the game's pictures spans, from the

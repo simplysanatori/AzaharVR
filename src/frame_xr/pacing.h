@@ -8,6 +8,8 @@
 // frame (the parity gate) and reports when it was ready (the phase the frame limiter's lock
 // steers). Once a second a "xr: pacing" log line, and the user folder's xr_pace_off file is looked
 // for: while it exists the gate and the lock are both off (a runtime A/B in one session).
+// AzaharFrame cheaprender: and the live test switch AZAHARFRAME_XR_PACE_REALIGN (xr_pacer.h
+// Realign) is read.
 
 #pragma once
 
@@ -53,11 +55,12 @@ private:
     bool GateActive(int64_t now_ns) const; ///< under `mutex`
     /// Under `mutex`; a phase sample for the lock and the log only for a new picture.
     void NotePhase(uint64_t released, uint64_t released_picture, bool is_new,
-                   uint32_t cadence_now, int64_t ready_ns);
+                   uint32_t cadence_now, int64_t ready_ns, bool realign);
     uint64_t PictureOf(uint64_t serial) const; ///< under `mutex` (0: none, or too old)
     /// Under `mutex`: ended frames the next release still has to wait for (0: it may go).
+    /// AzaharFrame cheaprender: `realign`, this picture goes after max(2, cadence) (Realign).
     uint32_t Needed(uint64_t released, uint64_t released_picture, bool is_new,
-                    uint32_t cadence_now) const;
+                    uint32_t cadence_now, bool realign = false) const;
 
     bool set_release = true;
     bool gate_switch = true;
@@ -90,6 +93,11 @@ private:
     std::vector<float> to_latch_ms; ///< each game frame: ready how long before it goes up
     uint32_t gate_waits = 0, gate_timeouts = 0, holds_prevented = 0;
     double gate_wait_max_ms = 0;
+
+    // AzaharFrame cheaprender: AZAHARFRAME_XR_PACE_REALIGN (under `mutex`; read once a second).
+    bool realign_switch = false;
+    Common::XrPacer::Realign realigner;
+    uint32_t realigns = 0; ///< per second
 
     Common::XrPacer::PhaseFilter filter; ///< for the log line (the lock keeps its own)
     double mean_ms = 0;

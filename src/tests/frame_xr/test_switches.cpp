@@ -10,6 +10,7 @@
 #include <fstream>
 #include <map>
 #include <string>
+#include <thread>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <catch2/catch_approx.hpp>
@@ -28,7 +29,12 @@ std::map<std::string, std::string>& FakeEnv() {
     static std::map<std::string, std::string> env;
     return env;
 }
+int& FakeEnvReads() { // AzaharFrame cheaprender: how often the environment was searched
+    static int reads = 0;
+    return reads;
+}
 const char* GetFakeEnv(const char* name) {
+    FakeEnvReads()++;
     const auto it = FakeEnv().find(name);
     return it == FakeEnv().end() ? nullptr : it->second.c_str();
 }
@@ -254,4 +260,64 @@ TEST_CASE("Test switches: FLASH_BACKING is on unless 0, live", "[frame_xr][test_
     CHECK(TS::ApplyFor("AZAHARFRAME_XR_POSE_GUARD") == TS::Apply::Live); // ctrlglitch
     CHECK(TS::ApplyFor("AZAHARFRAME_XR_CANVAS") == TS::Apply::Live);
     CHECK(TS::ApplyFor("AZAHARFRAME_XR_SINGLE_FLASH") == TS::Apply::Live);
+}
+
+// AzaharFrame cheaprender: each thread keeps the values it looked up until the file is read again.
+TEST_CASE("Test switches: lookups are cached until the file is read again",
+          "[frame_xr][test_switches]") {
+    FakeEnv().clear();
+    FakeEnv()["AZAHARFRAME_IMMERSIVE_FOV"] = "60";
+    FakeEnv()["AZAHARFRAME_IMMERSIVE_LOCAL"] = "1"; // in both: the environment wins
+    SwitchFile file;
+    file.Write("AZAHARFRAME_IMMERSIVE_TAG_OFFSET=-1\nAZAHARFRAME_IMMERSIVE_LOCAL=0\n");
+    FTS::LiveFile live(std::string(), &GetFakeEnv);
+    {
+        std::ifstream in(file.path);
+        live.Start(file.path, FTS::Parse(in), {"AZAHARFRAME_IMMERSIVE_LOCAL"});
+    }
+
+    // The environment is searched once per name, then never again while nothing changes.
+    FakeEnvReads() = 0;
+    for (int i = 0; i < 100; i++) {
+        CHECK(live.Value("AZAHARFRAME_IMMERSIVE_FOV") == std::optional<std::string>("60"));
+        CHECK(live.Value(std::string("AZAHARFRAME_IMMERSIVE_LOCAL")) ==
+              std::optional<std::string>("1"));
+        CHECK_FALSE(live.Value(std::string_view("AZAHARFRAME_IMMERSIVE_HOLD")).has_value());
+        CHECK(live.Value("AZAHARFRAME_IMMERSIVE_TAG_OFFSET") == std::optional<std::string>("-1"));
+    }
+    CHECK(FakeEnvReads() == 3); // FOV, LOCAL and HOLD; TAG_OFFSET is the file's
+    CHECK(live.Poll().empty()); // the file unchanged: the cache stays
+    CHECK(live.Value("AZAHARFRAME_IMMERSIVE_FOV") == std::optional<std::string>("60"));
+    CHECK(FakeEnvReads() == 3);
+
+    // Another thread saw the old value; after the file changed, both threads see the new one.
+    std::optional<std::string> other_before, other_after;
+    std::thread([&] { other_before = live.Value("AZAHARFRAME_IMMERSIVE_TAG_OFFSET"); }).join();
+    CHECK(other_before == std::optional<std::string>("-1"));
+    file.Write("AZAHARFRAME_IMMERSIVE_TAG_OFFSET=+1\nAZAHARFRAME_IMMERSIVE_LOCAL=0\n"
+               "AZAHARFRAME_IMMERSIVE_HOLD=rigid\nAZAHARFRAME_IMMERSIVE_FOV=90\n");
+    const auto changes = live.Poll();
+    CHECK(changes.size() == 3);
+    CHECK(live.Value("AZAHARFRAME_IMMERSIVE_TAG_OFFSET") == std::optional<std::string>("+1"));
+    CHECK(live.Value("AZAHARFRAME_IMMERSIVE_HOLD") == std::optional<std::string>("rigid"));
+    CHECK(live.Value("AZAHARFRAME_IMMERSIVE_FOV") == std::optional<std::string>("60")); // env wins
+    CHECK(live.Value("AZAHARFRAME_IMMERSIVE_LOCAL") == std::optional<std::string>("1"));
+    std::thread([&] { other_after = live.Value("AZAHARFRAME_IMMERSIVE_TAG_OFFSET"); }).join();
+    CHECK(other_after == std::optional<std::string>("+1"));
+
+    // A secret's change returns nothing from Poll but is still seen.
+    file.Write("AZAHARFRAME_IMMERSIVE_TAG_OFFSET=+1\nAZAHARFRAME_IMMERSIVE_LOCAL=0\n"
+               "AZAHARFRAME_IMMERSIVE_HOLD=rigid\nAZAHARFRAME_IMMERSIVE_FOV=90\n"
+               "AZAHARFRAME_SENTRY_DSN=https://x@y/2\n");
+    CHECK(live.Poll().empty());
+    CHECK(live.Value("AZAHARFRAME_SENTRY_DSN") == std::optional<std::string>("https://x@y/2"));
+
+    // A second LiveFile with the same names never gets the first one's cached values.
+    FTS::LiveFile other(std::string(), &GetFakeEnv);
+    other.Start(std::string(), FTS::ParseText("AZAHARFRAME_IMMERSIVE_TAG_OFFSET=0\n"), {});
+    CHECK(other.Value("AZAHARFRAME_IMMERSIVE_TAG_OFFSET") == std::optional<std::string>("0"));
+    CHECK(live.Value("AZAHARFRAME_IMMERSIVE_TAG_OFFSET") == std::optional<std::string>("+1"));
+    CHECK_FALSE(other.Value("AZAHARFRAME_IMMERSIVE_HOLD").has_value());
+    FakeEnv().clear();
+    CHECK(TS::ApplyFor("AZAHARFRAME_XR_PACE_REALIGN") == TS::Apply::Live); // pacing.cpp
 }

@@ -15,11 +15,19 @@
 // from the start) and are applied at once; the others log that they need a restart
 // (frame_xr/test_switches.h). Nothing calls setenv after Load. A switch set in the environment
 // still wins over the file, live too.
+//
+// AzaharFrame cheaprender: Value() is called about 40 times a display refresh (120 a second),
+// and each call took the lock, made a std::string and searched the environment. Now each thread
+// keeps the answers it got (LiveFile::Value), valid until the file is read again (Start, or a Poll
+// that found the file changed): a lookup is a search in a small map, no lock, no getenv. The
+// values are the same as before, the file's live and the environment's winning.
 
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <istream>
@@ -29,6 +37,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 #include <sys/stat.h>
@@ -67,8 +76,8 @@ inline std::string Trim(const std::string& s) {
     return s.substr(a, b - a + 1);
 }
 
-/// NAME -> value, as a file holds them.
-using Values = std::map<std::string, std::string>;
+/// NAME -> value, as a file holds them. (AzaharFrame cheaprender: looked up by string_view too.)
+using Values = std::map<std::string, std::string, std::less<>>;
 
 /// AzaharFrame integ9: one NAME=value a line, '#' starts a comment; only AZAHARFRAME_ names; the
 /// last line for a name wins. Pure.
@@ -133,12 +142,15 @@ public:
     explicit LiveFile(std::string path = std::string(), GetEnv get_env = nullptr)
         : path_(std::move(path)), get_env_(get_env) {}
 
+    LiveFile(const LiveFile&) = delete;
+    LiveFile& operator=(const LiveFile&) = delete;
+
     /// At the start (Load): the file as read then. Its names already in the environment stay the
     /// environment's (`env_names`); the rest are the file's from now on.
     void Start(std::string path, const Values& file, const std::set<std::string>& env_names) {
         std::scoped_lock lock{mutex_};
         path_ = std::move(path);
-        env_names_ = env_names;
+        env_names_ = Names(env_names.begin(), env_names.end());
         values_.clear();
         for (const auto& [name, value] : file) {
             if (env_names_.count(name) == 0) {
@@ -148,17 +160,31 @@ public:
         }
         file_seen_ = file;
         stamp_ = StampOf(path_);
+        generation_.fetch_add(1, std::memory_order_release); // AzaharFrame cheaprender
     }
 
     /// The switch's value now: the file's (live) for a name the file set, else the environment's.
-    std::optional<std::string> Value(const std::string& name) const {
-        std::scoped_lock lock{mutex_};
-        if (ever_file_.count(name) != 0 && env_names_.count(name) == 0) {
-            const auto it = values_.find(name);
-            return it == values_.end() ? std::nullopt : std::optional<std::string>(it->second);
+    /// AzaharFrame cheaprender: from this thread's cache while the file was not read again since
+    /// (the generation is read before the lookup, so a read racing with a Poll is looked up again
+    /// on the next call). The environment is not watched: nothing calls setenv after Load.
+    std::optional<std::string> Value(std::string_view name) const {
+        struct Entry {
+            uint64_t owner = 0;
+            uint64_t generation = 0;
+            std::optional<std::string> value;
+        };
+        thread_local std::map<std::string, Entry, std::less<>> cache;
+        const uint64_t generation = generation_.load(std::memory_order_acquire);
+        auto it = cache.find(name);
+        if (it != cache.end() && it->second.owner == id_ && it->second.generation == generation) {
+            return it->second.value;
         }
-        const char* v = Env(name);
-        return v ? std::optional<std::string>(v) : std::nullopt;
+        std::optional<std::string> value = Lookup(name);
+        if (it == cache.end()) {
+            it = cache.emplace(std::string(name), Entry{}).first;
+        }
+        it->second = Entry{id_, generation, value};
+        return value;
     }
 
     /// XR thread, once a second: reads the file again if it changed (its time or size, or it came
@@ -189,6 +215,14 @@ public:
         }
         std::scoped_lock lock{mutex_};
         stamp_ = now;
+        // AzaharFrame cheaprender: the threads' cached values are looked up again (after the
+        // changes below: the lock is held until they are all in).
+        struct Bump {
+            std::atomic<uint64_t>& generation;
+            ~Bump() {
+                generation.fetch_add(1, std::memory_order_release);
+            }
+        } bump{generation_};
         std::vector<Change> changes = Diff(file_seen_, after);
         file_seen_ = after;
         for (Change& c : changes) {
@@ -214,6 +248,23 @@ public:
     static constexpr std::size_t kMaxBytes = 64 * 1024;
 
 private:
+    using Names = std::set<std::string, std::less<>>;
+
+    /// The value as the file and the environment hold it now (the slow path).
+    std::optional<std::string> Lookup(std::string_view name) const {
+        std::scoped_lock lock{mutex_};
+        if (ever_file_.count(name) != 0 && env_names_.count(name) == 0) {
+            const auto it = values_.find(name);
+            return it == values_.end() ? std::nullopt : std::optional<std::string>(it->second);
+        }
+        const char* v = Env(std::string(name));
+        return v ? std::optional<std::string>(v) : std::nullopt;
+    }
+    static uint64_t NextId() {
+        static std::atomic<uint64_t> next{1};
+        return next.fetch_add(1, std::memory_order_relaxed);
+    }
+
     struct Stamp {
         bool exists = false;
         long long mtime_ns = 0;
@@ -242,9 +293,13 @@ private:
     GetEnv get_env_;
     Values values_;    ///< the file's values now, for the names it owns
     Values file_seen_; ///< the file as last read (all its names)
-    std::set<std::string> ever_file_; ///< names the file set (Value reads them from values_)
-    std::set<std::string> env_names_; ///< names the environment set (it wins)
+    Names ever_file_; ///< names the file set (Value reads them from values_)
+    Names env_names_; ///< names the environment set (it wins)
     Stamp stamp_;
+    // AzaharFrame cheaprender: bumped each time the file is read (Start, a changed Poll); each
+    // LiveFile's own id keeps one's cached values from another's (the tests make several).
+    std::atomic<uint64_t> generation_{1};
+    const uint64_t id_ = NextId();
 };
 
 inline LiveFile& Live() {
@@ -253,7 +308,7 @@ inline LiveFile& Live() {
 }
 
 /// A switch's value now (live for the file's names); nullopt when unset.
-inline std::optional<std::string> Value(const std::string& name) {
+inline std::optional<std::string> Value(std::string_view name) {
     return Live().Value(name);
 }
 

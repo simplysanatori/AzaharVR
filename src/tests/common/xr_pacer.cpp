@@ -633,3 +633,175 @@ TEST_CASE("XrPacer: a 30-a-second game's slow pictures keep four frames each", "
         CHECK(off(after) * 4 < off(before));
     }
 }
+
+// AzaharFrame cheaprender: the gate back on the game's pictures after a late one (Realign).
+
+TEST_CASE("XrPacer: realign counts pictures held two frames or more", "[xr_pacer]") {
+    P::Realign r;
+    // Off: never, however long it lasts.
+    for (int i = 0; i < 10; i++) {
+        CHECK_FALSE(r.Note(false, 2, 2));
+    }
+    r.Reset();
+    // On: the third in a row, then counted afresh.
+    CHECK_FALSE(r.Note(true, 2, 2));
+    CHECK_FALSE(r.Note(true, 3, 2));
+    CHECK(r.Note(true, 2, 2));
+    CHECK_FALSE(r.Note(true, 2, 2));
+    // A picture held less (or not at all) breaks the run; so does 60 pictures a second.
+    CHECK_FALSE(r.Note(true, 2, 2));
+    CHECK_FALSE(r.Note(true, 1, 2));
+    CHECK_FALSE(r.Note(true, 2, 2));
+    CHECK_FALSE(r.Note(true, 2, 2));
+    CHECK_FALSE(r.Note(true, 2, 1));
+    CHECK_FALSE(r.Note(true, 2, 2));
+    CHECK_FALSE(r.Note(true, 2, 2));
+    CHECK(r.Note(true, 4, 3)); // 20 a second too
+
+    // Realigned, the picture on view needs max(2, cadence) frames, never fewer.
+    P::Gate g;
+    g.Latch(1, 1);
+    CHECK(g.PictureNeeded(1, true, 2) == 3);
+    CHECK(g.PictureNeeded(1, true, 2, true) == 1);
+    g.Latch(1, 1);
+    CHECK(g.PictureNeeded(1, true, 2, true) == 0);
+    CHECK(g.PictureNeeded(1, true, 3, true) == 1);
+    CHECK(g.PictureNeeded(2, true, 2, true) == 2); // not on view yet: two
+    CHECK(g.PictureNeeded(1, false, 2, true) == 0); // a repeat never waits
+}
+
+namespace {
+
+struct ParityResult {
+    int held2_after = 0;  ///< new pictures held 2 frames or more from 1 s after the late one
+    int short_pictures = 0; ///< pictures on view fewer than 4 frames (after the first second)
+    int one_frame = 0;    ///< pictures on view for one frame
+    int realigns = 0;
+    double lag_after_ms = 0; ///< ready to on view, average over 1 to 4 s after the late one
+};
+
+/// AzaharFrame cheaprender: the closed loop at 30 pictures a second (every other 3DS frame a new
+/// picture, the one between the same again), with the lock, the gate and its samples as
+/// frame_xr/pacing.cpp feeds them, and one new picture `late_us` late at 5 s. Pictures are
+/// released in order at the first latch the gate allows.
+ParityResult SimulateParity(bool realign_on, double late_us, unsigned seed) {
+    std::mt19937 rng{seed};
+    std::uniform_real_distribution<double> jitter{-1000, 1000};
+    P::Shared s;
+    s.session = true;
+    s.period_ns = kPeriodNs;
+    s.latch_ns = 1'000'000'000;
+    P::LimiterLock lock;
+    P::Gate gate;
+    P::Realign realign;
+    constexpr uint32_t kCadence = 2;
+    const double work_us = 9000;
+    const int late_frame = 60 * 5;
+    struct Frame {
+        double ready;
+        bool is_new;
+        uint64_t picture;
+        bool noted = false;
+        bool realigned = false;
+    };
+    std::vector<Frame> queue;
+    std::vector<uint64_t> picture_of{0};
+    uint64_t picture_seq = 0;
+    double wake = 0;
+    double next_latch = kPeriodUs;
+    double last_latch = 0;
+    int frame = 0;
+    int lag_n = 0;
+    ParityResult r;
+    const double after_us = late_frame * P::kEmuFrameUs + 1e6;
+    std::vector<std::pair<uint64_t, uint32_t>> runs; // picture, frames on view
+    while (wake < 20e6) {
+        if (wake < next_latch) {
+            const auto step = lock.Frame(s, false, 100, 1'000'000'000);
+            REQUIRE(step.off == P::Off::None);
+            const bool is_new = frame % kCadence == 0;
+            picture_seq += is_new ? 1 : 0;
+            queue.push_back({wake + work_us + jitter(rng) + (frame == late_frame ? late_us : 0),
+                             is_new, picture_seq});
+            frame++;
+            wake += P::kEmuFrameUs / step.speed + static_cast<double>(step.correction_us);
+            continue;
+        }
+        while (!queue.empty() && queue.front().ready < next_latch) {
+            Frame& f = queue.front();
+            const uint64_t released_picture = picture_of.back();
+            if (!f.noted && f.is_new) {
+                f.noted = true;
+                const uint32_t normal = gate.PictureNeeded(released_picture, true, kCadence);
+                f.realigned = realign.Note(realign_on, normal, kCadence);
+                r.realigns += f.realigned;
+                const uint32_t needed =
+                    gate.PictureNeeded(released_picture, true, kCadence, f.realigned);
+                s.phase_error_ns = static_cast<int64_t>(
+                    P::SampleErrorUs(f.ready - last_latch, needed, kPeriodUs) * 1000);
+                s.phase_gated = true;
+                s.phase_seq++;
+                if (f.ready > after_us && needed >= 2) {
+                    r.held2_after++;
+                }
+            }
+            if (gate.PictureNeeded(released_picture, f.is_new, kCadence, f.realigned) != 0) {
+                break;
+            }
+            if (f.is_new && f.ready > after_us && f.ready < after_us + 3e6) {
+                r.lag_after_ms += (next_latch - f.ready) / 1000;
+                lag_n++;
+            }
+            picture_of.push_back(f.picture);
+            queue.erase(queue.begin());
+        }
+        const uint64_t shown = picture_of.size() - 1;
+        gate.Latch(shown, picture_of.back());
+        if (runs.empty() || runs.back().first != picture_of.back()) {
+            runs.push_back({picture_of.back(), 0});
+        }
+        runs.back().second++;
+        last_latch = next_latch;
+        next_latch += kPeriodUs;
+    }
+    for (std::size_t i = 60; i + 1 < runs.size(); i++) { // from 2 s in, the last one unfinished
+        r.short_pictures += runs[i].second < 4;
+        r.one_frame += runs[i].second == 1;
+    }
+    r.lag_after_ms = lag_n ? r.lag_after_ms / lag_n : 0;
+    return r;
+}
+
+} // namespace
+
+TEST_CASE("XrPacer: at 30 a second the gate realigns after a late picture", "[xr_pacer]") {
+    // Session 651 (Kid Icarus: Uprising): after a late picture each new one was held 20 to 30 ms
+    // for 5 to 15 s, with the lock 0.79 ms from its target. Here a picture 20 ms late at 5 s:
+    // without the switch every new picture is held two frames or more for seconds; with it the
+    // gate realigns after three, one picture is shown shorter once (never for one frame), and
+    // the lag is back to under a refresh.
+    for (unsigned seed = 1; seed <= 3; seed++) {
+        const ParityResult off = SimulateParity(false, 20000, seed);
+        const ParityResult on = SimulateParity(true, 20000, seed);
+        INFO("seed " << seed << ": off held2 " << off.held2_after << " lag " << off.lag_after_ms
+                     << " ms short " << off.short_pictures << "; on held2 " << on.held2_after
+                     << " lag " << on.lag_after_ms << " ms short " << on.short_pictures
+                     << " realigns " << on.realigns);
+        CHECK(off.held2_after > 60); // over two seconds of pictures held two frames
+        CHECK(off.realigns == 0);
+        CHECK(on.realigns >= 1);
+        CHECK(on.realigns <= 2);
+        CHECK(on.held2_after == 0);
+        CHECK(on.short_pictures <= 2);
+        CHECK(on.one_frame == 0);
+        CHECK(off.one_frame == 0);
+        CHECK(on.lag_after_ms < off.lag_after_ms - 4);
+        CHECK(on.lag_after_ms < kPeriodUs / 1000 + 1);
+    }
+    // No late picture: the switch changes nothing.
+    for (unsigned seed = 1; seed <= 3; seed++) {
+        const ParityResult on = SimulateParity(true, 0, seed);
+        CHECK(on.realigns == 0);
+        CHECK(on.short_pictures == 0);
+    }
+}
