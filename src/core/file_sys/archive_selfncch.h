@@ -46,6 +46,10 @@ public:
     /// Registers a loaded application so that we can open its SelfNCCH archive when requested.
     void Register(Loader::AppLoader& app_loader);
 
+    /// AzaharFrame romfsload: after a save state is loaded, the running application's RomFS
+    /// reader reads from the running ROM (FileSys::UseRunningRomFS). Returns whether it changed.
+    bool UseRunningRomFS(Loader::AppLoader& app_loader);
+
     std::string GetName() const override {
         return "SelfNCCH";
     }

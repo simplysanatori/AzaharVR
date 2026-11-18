@@ -457,6 +457,14 @@ void ArchiveManager::RegisterSelfNCCH(Loader::AppLoader& app_loader) {
     factory->Register(app_loader);
 }
 
+void ArchiveManager::UseRunningRomFS(Loader::AppLoader& app_loader) {
+    auto itr = id_code_map.find(ArchiveIdCode::SelfNCCH);
+    if (itr == id_code_map.end()) {
+        return;
+    }
+    static_cast<FileSys::ArchiveFactory_SelfNCCH*>(itr->second.get())->UseRunningRomFS(app_loader);
+}
+
 void ArchiveManager::RegisterArticSaveDataSource(
     std::shared_ptr<Network::ArticBase::Client>& client) {
     if (!sd_savedata_source.get()) {

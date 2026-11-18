@@ -141,6 +141,7 @@ add_executable(tests
     ../frame_xr/auto_shape.cpp # AzaharFrame fixes7
     frame_xr/auto_shape.cpp # AzaharFrame fixes7
     core/file_sys/path_parser.cpp
+    core/file_sys/romfs_load.cpp # AzaharFrame romfsload
     core/hle/kernel/hle_ipc.cpp
     core/memory/memory.cpp
     core/memory/vm_manager.cpp
