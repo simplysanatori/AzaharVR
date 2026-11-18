@@ -2950,7 +2950,8 @@ TEST_CASE("Tab menu: the Per-Game count and Use Global Values for All, per tab",
                           Id::MuzzleFlash, Id::MuzzleFlashSize, Id::Projectiles,
                           Id::ProjectileOpacity, Id::ProjectileSize, Id::ProjectileSpeed,
                           Id::LaserSight, Id::TurnZone, Id::TurnSpeed, Id::TurnSpeedVertical,
-                          Id::KeepOnScreen, Id::GripFreesAim, Id::TurnZoneFrom});
+                          Id::KeepOnScreen, Id::GripFreesAim, Id::TurnZoneFrom,
+                          Id::TriggerLayout}); // AzaharFrame kiufire
     MenuModel m = Sample();
     m.scope = 1;
     for (const Tab t : {Tab::Settings, Tab::Controls, Tab::Position}) {
@@ -3218,6 +3219,60 @@ TEST_CASE("Tab menu: Direct Aim's lock, grip and Turn Zone basis", "[frame_xr][t
             CHECK(a.Drew("Keep Reticle on Screen"));
             CHECK(a.Drew("Grip Frees Aim"));
             CHECK(a.Drew("Turn Zone From"));
+        }
+    }
+}
+
+// AzaharFrame kiufire: Trigger Layout, per game, in Aiming's group with Aiming on, and only while
+// Kid Icarus: Uprising is open (the Angel's Aim segment's flag). Shown Fire and Power, Original;
+// stored 1, 0 (Original, the default).
+TEST_CASE("Tab menu: Trigger Layout, Kid Icarus only", "[frame_xr][tabmenu][kiufire]") {
+    CHECK(LabelFor(Id::TriggerLayout) == "Trigger Layout");
+    CHECK(OptionsFor(Id::TriggerLayout) == std::vector<std::string>{"Fire and Power", "Original"});
+    CHECK(PerGameSetting(Id::TriggerLayout));
+    CHECK(HasOptionTips(Id::TriggerLayout));
+    CHECK(ExplainOption(Id::TriggerLayout, 0) ==
+          "Your aiming hand's trigger only fires. The other trigger uses your power, and the "
+          "bumpers pick it.");
+    CHECK(ExplainOption(Id::TriggerLayout, 1) ==
+          "Both triggers fire and also press the game's own buttons, as before.");
+    CHECK(TriggerLayoutIndexOf(0) == 1);
+    CHECK(TriggerLayoutIndexOf(1) == 0);
+    CHECK(TriggerLayoutValueAt(0) == 1);
+    CHECK(TriggerLayoutValueAt(1) == 0);
+    CHECK(MenuModel{}.trigger_layout == 0); // Original
+    Drawn d;
+    MenuModel m = Sample();
+    MenuView v;
+    v.tab = Tab::Controls;
+    for (const bool kiu : {false, true}) {
+        for (const int aiming : {0, 1, 2}) {
+            INFO("kiu " << kiu << ", aiming " << aiming);
+            m.mods.angels_aim.shown = kiu;
+            m.gyro_aim = aiming;
+            bool row = false;
+            for (float scroll = 0.0f; scroll <= 3000.0f && !row; scroll += kRowH) {
+                v.scroll[static_cast<int>(Tab::Controls)] = scroll;
+                d.Draw(m, v);
+                row = FindHit(d, Id::TriggerLayout, -1) != nullptr;
+                if (scroll >= d.menu.MaxScroll()) {
+                    break;
+                }
+            }
+            CHECK(row == (kiu && aiming != 0));
+            if (row) {
+                // Never locked: both choices take a press.
+                CHECK(FindHit(d, Id::TriggerLayout, 0) != nullptr);
+                CHECK(FindHit(d, Id::TriggerLayout, 1) != nullptr);
+                const MenuLayout::Hit* sens = FindHit(d, Id::GyroSensitivity, -1);
+                const MenuLayout::Hit* layout = FindHit(d, Id::TriggerLayout, -1);
+                REQUIRE(sens != nullptr);
+                CHECK(layout->r.y0 >= sens->r.y1 - 0.01f); // under Gyro Sensitivity
+                Audit a;
+                a.Draw(m, v);
+                a.Check("Controls, Trigger Layout");
+                CHECK(a.Drew("Trigger Layout"));
+            }
         }
     }
 }

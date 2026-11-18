@@ -83,6 +83,16 @@ inline constexpr const char* kAngelsIntroBody =
     "Here's what's on. Change any of it under Aiming.";
 inline constexpr const char* kAngelsIntroControls = "Show Aiming";
 inline constexpr const char* kAngelsIntroOk = "OK";
+/// AzaharFrame kiufire: Trigger Layout (the Controls tab's Aiming rows, Kid Icarus only, with
+/// Aiming on; vr_kiu_trigger_layout). DRAFT strings, for the owner: all of them are here.
+inline constexpr const char* kTriggerLayoutRow = "Trigger Layout";
+inline constexpr const char* kTriggerLayoutFireAndPower = "Fire and Power";
+inline constexpr const char* kTriggerLayoutOriginal = "Original";
+inline constexpr const char* kTriggerLayoutFireAndPowerTip =
+    "Your aiming hand's trigger only fires. The other trigger uses your power, and the bumpers "
+    "pick it.";
+inline constexpr const char* kTriggerLayoutOriginalTip =
+    "Both triggers fire and also press the game's own buttons, as before.";
 inline constexpr const char* kAngelsAimNotSent = "Couldn't Send Report";
 inline constexpr const char* kAngelsAimNotSentHint = "Try Again, or Use Report an Issue.";
 /// Report an Issue's page: a new issue, titled and labelled for Angel's Aim (GitHub ignores a

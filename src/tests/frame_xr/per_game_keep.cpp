@@ -315,3 +315,13 @@ TEST_CASE("Defaults: Internal Resolution is 4x, rollback-safe", "[fixa]") {
     CHECK_FALSE(ini.value(QStringLiteral("resolution_factor/default")).toBool());
     CHECK(ReadGlobalFile(ini, res) == 0u);
 }
+
+// AzaharFrame kiufire: Trigger Layout is a per-game key (Original by default), kept like the
+// others (the test above writes and reads it back with every key of ForEachMenuKey).
+TEST_CASE("Per-Game: Trigger Layout's key, Original by default", "[frame_xr][kiufire]") {
+    const std::vector<std::string> labels = Labels();
+    CHECK(std::find(labels.begin(), labels.end(), "vr_kiu_trigger_layout") != labels.end());
+    CHECK(FrameXr::PerGame::KeysOf(Id::TriggerLayout) ==
+          std::vector<std::string>{"vr_kiu_trigger_layout"});
+    CHECK(Settings::values.vr_kiu_trigger_layout.GetDefault() == 0u);
+}

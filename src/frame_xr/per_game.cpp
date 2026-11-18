@@ -191,6 +191,9 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::MuzzleFlashSize: // AzaharFrame kiuweap2
         f(v.vr_light_gun_muzzle_flash_size);
         return true;
+    case Id::TriggerLayout: // AzaharFrame kiufire
+        f(v.vr_kiu_trigger_layout);
+        return true;
     default:
         return false;
     }

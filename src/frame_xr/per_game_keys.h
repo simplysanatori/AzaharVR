@@ -96,6 +96,7 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_light_gun_weapon_opacity); // AzaharFrame kiuopacity
     f(v.vr_light_gun_projectile_opacity);
     f(v.vr_light_gun_muzzle_flash_size); // AzaharFrame kiuweap2
+    f(v.vr_kiu_trigger_layout);          // AzaharFrame kiufire
     f(v.vr_controls_preset_done);
 }
 

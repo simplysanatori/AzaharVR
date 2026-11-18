@@ -533,6 +533,7 @@ struct FrameKeepControls {
           weapon_opacity{Settings::values.vr_light_gun_weapon_opacity}, // AzaharFrame kiuopacity
           projectile_opacity{Settings::values.vr_light_gun_projectile_opacity},
           flash_size{Settings::values.vr_light_gun_muzzle_flash_size}, // AzaharFrame kiuweap2
+          trigger_layout{Settings::values.vr_kiu_trigger_layout},      // AzaharFrame kiufire
           preset_done{Settings::values.vr_controls_preset_done} {}
     void Restore() {
         touchpad.Restore();
@@ -565,6 +566,7 @@ struct FrameKeepControls {
         weapon_opacity.Restore(); // AzaharFrame kiuopacity
         projectile_opacity.Restore();
         flash_size.Restore(); // AzaharFrame kiuweap2
+        trigger_layout.Restore(); // AzaharFrame kiufire
         preset_done.Restore();
     }
     FrameKeepSetting<u32, true> touchpad;
@@ -597,6 +599,7 @@ struct FrameKeepControls {
     FrameKeepSetting<u32, true> weapon_opacity; // AzaharFrame kiuopacity
     FrameKeepSetting<u32, true> projectile_opacity;
     FrameKeepSetting<u32, true> flash_size; // AzaharFrame kiuweap2
+    FrameKeepSetting<u32, true> trigger_layout; // AzaharFrame kiufire
     FrameKeepSetting<u32, false> preset_done;
 };
 // Fast forward (View, then the Right Trigger): Azahar's turbo speed on or off, with the
@@ -5672,6 +5675,9 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         break;
     case S::MuzzleFlashSize: // AzaharFrame kiuweap2: percent
         set(v.vr_light_gun_muzzle_flash_size, std::clamp<u32>(u, 50, 300));
+        break;
+    case S::TriggerLayout: // AzaharFrame kiufire: 0 Original, 1 Fire and Power
+        set(v.vr_kiu_trigger_layout, std::min<u32>(u, 1));
         break;
     case S::AngelsAimIntroShown: // AzaharFrame kiuweap2: a plain global key
         v.vr_angels_aim_intro_shown.SetValue(r.value != 0);

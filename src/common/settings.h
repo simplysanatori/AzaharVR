@@ -1061,6 +1061,11 @@ struct Values {
     // older builds ignore it.
     SwitchableSetting<u32, true> vr_light_gun_muzzle_flash_size{100, 50, 300,
                                                                 "vr_light_gun_muzzle_flash_size"};
+    // AzaharFrame kiufire: Trigger Layout (Kid Icarus: Uprising only, per game too): 0 Original
+    // (both triggers fire and keep their own buttons, ZL/ZR), 1 Fire and Power (the aiming hand's
+    // trigger only fires, the other uses the selected power, the bumpers pick it;
+    // input/kiu_trigger_layout.h). A plain new key: older builds ignore it.
+    SwitchableSetting<u32, true> vr_kiu_trigger_layout{0, 0, 1, "vr_kiu_trigger_layout"};
     // AzaharFrame kiu: in a game's own file only: the Controls preset's values already decided
     // for this game (FrameXr::ControlsPresetField bits). A value the preset gave, or the game
     // already had, is never given again, so a later choice (Use Global Value too) stays.

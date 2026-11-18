@@ -282,6 +282,8 @@ enum class Id : int {
     ProjectileOpacity, ///< a slider, 20 to 100 (percent), with Projectiles on
     // AzaharFrame kiuweap2
     MuzzleFlashSize, ///< a slider, 50 to 300 (percent), with Muzzle Flash on
+    // AzaharFrame kiufire
+    TriggerLayout, ///< index: 0 Original, 1 Fire and Power (vr_kiu_trigger_layout), Kid Icarus only
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -347,6 +349,14 @@ constexpr int AimingIndexOf(int stored) {
 constexpr int AimingValueAt(int index) {
     return index == 1 ? 2 : (index == 2 ? 1 : 0);
 }
+/// AzaharFrame kiufire: Trigger Layout's choices are shown Fire and Power, Original, but stored
+/// 1 and 0 (vr_kiu_trigger_layout: 0, the default, is Original), so the two trade places.
+constexpr int TriggerLayoutIndexOf(int stored) {
+    return stored == 1 ? 0 : 1;
+}
+constexpr int TriggerLayoutValueAt(int index) {
+    return index == 0 ? 1 : 0;
+}
 
 /// AzaharFrame kiuweap2: Aiming turned on: from Off (`stored_before`, vr_gyro_aim's 0) to Direct
 /// Aim or Gyro Aim (`index_after`, the shown index 1 or 2), while Kid Icarus: Uprising is open
@@ -410,6 +420,7 @@ struct MenuModel {
     int weapon_opacity = 100;     ///< AzaharFrame kiuopacity: percent (20 to 100)
     int projectile_opacity = 100; ///< percent (20 to 100)
     int flash_size = 100;         ///< AzaharFrame kiuweap2: Muzzle Flash Size, percent (50 to 300)
+    int trigger_layout = 0;       ///< AzaharFrame kiufire: 0 Original, 1 Fire and Power
     bool angels_intro_shown = false; ///< AzaharFrame kiuweap2: vr_angels_aim_intro_shown
     bool aim_calibrated = false; ///< the running game has a Check Aim map of its own
     bool aim_calibration_ok = false; ///< Check Aim can start (Direct Aim, the reticle read)

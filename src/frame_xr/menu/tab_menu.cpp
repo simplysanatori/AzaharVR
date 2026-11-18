@@ -378,6 +378,7 @@ bool PerGameSetting(Id id) {
     case Id::WeaponOpacity: // AzaharFrame kiuopacity
     case Id::ProjectileOpacity:
     case Id::MuzzleFlashSize: // AzaharFrame kiuweap2
+    case Id::TriggerLayout:   // AzaharFrame kiufire
         return true;
     default:
         return false;
@@ -412,7 +413,8 @@ const std::vector<Id>& ControlsScopeRows() {
         Id::MuzzleFlashSize, Id::Projectiles,       Id::ProjectileOpacity, Id::ProjectileSize,
         Id::ProjectileSpeed, Id::LaserSight,        Id::TurnZone,      Id::TurnSpeed,
         Id::TurnSpeedVertical, // AzaharFrame fixa
-        Id::KeepOnScreen,  Id::GripFreesAim,        Id::TurnZoneFrom};
+        Id::KeepOnScreen,  Id::GripFreesAim,        Id::TurnZoneFrom,
+        Id::TriggerLayout}; // AzaharFrame kiufire
     // fixes7; AzaharFrame kiuflash: Muzzle Flash, Projectiles and theirs; kiuopacity: the
     // opacities, each first under its switch; kiuweap2: Muzzle Flash Size under its switch;
     // kiuaim3: the last three
@@ -557,6 +559,11 @@ const std::vector<std::string>& OptionsFor(Id id) {
         static const std::vector<std::string> kFrom{"Screen Edge", "Aim Box"};
         return kFrom;
     }
+    case Id::TriggerLayout: { // AzaharFrame kiufire: shown Fire and Power, Original (stored 1, 0)
+        static const std::vector<std::string> kTrigger{kTriggerLayoutFireAndPower,
+                                                       kTriggerLayoutOriginal};
+        return kTrigger;
+    }
     case Id::WindowScale:
         return kScale;
     case Id::ImmersiveMode:
@@ -697,6 +704,8 @@ std::string LabelFor(Id id) {
         return "Projectile Opacity";
     case Id::MuzzleFlashSize: // AzaharFrame kiuweap2
         return "Muzzle Flash Size";
+    case Id::TriggerLayout: // AzaharFrame kiufire
+        return kTriggerLayoutRow;
     case Id::CalibrateAimReset:
         return "Reset";
     case Id::AngelsAimSettings:
@@ -899,6 +908,10 @@ std::string ExplainOption(Id id, int index) {
             break;
         }
     }
+    if (id == Id::TriggerLayout) { // AzaharFrame kiufire: by the shown order (TriggerLayoutIndexOf)
+        return index == 0 ? kTriggerLayoutFireAndPowerTip
+                          : (index == 1 ? kTriggerLayoutOriginalTip : "");
+    }
     if (id == Id::AccurateImageCopies) { // AzaharFrame xfergpu: the owner's words
         switch (index) {
         case 0:
@@ -917,7 +930,8 @@ std::string ExplainOption(Id id, int index) {
 bool HasOptionTips(Id id) {
     return id == Id::AccurateImageCopies || id == Id::MatchCamera ||
            id == Id::ScaleMode || // AzaharFrame fovscale
-           id == Id::ControllersInFront; // AzaharFrame ctrlfront
+           id == Id::ControllersInFront || // AzaharFrame ctrlfront
+           id == Id::TriggerLayout;          // AzaharFrame kiufire
 }
 
 std::string ExplainFor(Id id) {
@@ -2067,6 +2081,9 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
     // Aim (stored 2).
     std::vector<Id> aim_rows{Id::GyroAim, Id::GyroSensitivity};
     if (model.gyro_aim != 0) {
+        if (model.mods.angels_aim.shown) { // AzaharFrame kiufire: Kid Icarus: Uprising only
+            aim_rows.push_back(Id::TriggerLayout);
+        }
         aim_rows.push_back(Id::Recoil);
         if (model.recoil) {
             aim_rows.push_back(Id::RecoilCharged);
@@ -2138,7 +2155,9 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
         const bool enabled = lock == Lock::None;
         AddHit(row, {id, kLabelIndex}, list);
         if (visible(row)) {
-            anchors.push_back({id, c.x0, row.y0 + 6.0f, lock});
+            // AzaharFrame kiufire: Trigger Layout's label says what the chosen layout does.
+            anchors.push_back({id, c.x0, row.y0 + 6.0f, lock, -1, -1.0f,
+                               id == Id::TriggerLayout ? ExplainOption(id, value) : std::string()});
         }
         kit.TextMid(c.x0, row.Cy(), Type::Body, Tok::kOnSurface, LabelFor(id), 0,
                     enabled ? 1.0f : kDisabledContent);
@@ -2260,6 +2279,9 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
             break;
         case Id::TurnZoneFrom:
             choice_row(id, y, std::clamp(model.turn_zone_from, 0, 1));
+            break;
+        case Id::TriggerLayout: // AzaharFrame kiufire: shown Fire and Power, Original
+            choice_row(id, y, TriggerLayoutIndexOf(model.trigger_layout));
             break;
         case Id::KeepOnScreen:
             switch_row(id, model.keep_on_screen);

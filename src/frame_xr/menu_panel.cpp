@@ -339,6 +339,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::KeepOnScreen;
     case Id::GripFreesAim:
         return MenuSetting::GripFreesAim;
+    case Id::TriggerLayout: // AzaharFrame kiufire
+        return MenuSetting::TriggerLayout;
     case Id::WeaponScale:
         return MenuSetting::WeaponScale;
     case Id::WeaponOpacity: // AzaharFrame kiuopacity
@@ -1065,6 +1067,8 @@ void MenuPanel::BuildModel(const Host& host) {
         static_cast<int>(std::clamp<u32>(v.vr_light_gun_projectile_opacity.GetValue(), 20, 100));
     m.flash_size = // AzaharFrame kiuweap2
         static_cast<int>(std::clamp<u32>(v.vr_light_gun_muzzle_flash_size.GetValue(), 50, 300));
+    m.trigger_layout = // AzaharFrame kiufire
+        static_cast<int>(std::min<u32>(v.vr_kiu_trigger_layout.GetValue(), 1));
     m.angels_intro_shown = v.vr_angels_aim_intro_shown.GetValue();
     m.show_controllers = v.vr_show_controllers.GetValue();
     m.controllers_in_front = // AzaharFrame ctrlfront
@@ -1528,6 +1532,11 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = std::clamp(value, 50, 300);
         Apply(v.vr_light_gun_muzzle_flash_size, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::MuzzleFlashSize;
+        break;
+    case Id::TriggerLayout: // AzaharFrame kiufire: the shown index (Fire and Power, Original)
+        r.value = Menu::TriggerLayoutValueAt(std::clamp(value, 0, 1));
+        Apply(v.vr_kiu_trigger_layout, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::TriggerLayout;
         break;
     case Id::ShowControllers:
         Apply(v.vr_show_controllers, value != 0, false);
@@ -2441,6 +2450,7 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::WeaponSize: // AzaharFrame kiufix
     case Id::GripFreesAim: // AzaharFrame kiuaim3
     case Id::TurnZoneFrom:
+    case Id::TriggerLayout: // AzaharFrame kiufire
     case Id::WindowScale:
     case Id::MarginX: // AzaharFrame fovaxis
     case Id::MarginY:
