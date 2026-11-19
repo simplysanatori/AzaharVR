@@ -171,4 +171,10 @@ constexpr bool IsKidIcarus(uint64_t title_id) {
            title_id == 0x0004000000030200ull || title_id == 0x0004000000030300ull;
 }
 
+/// The one title Angel's Aim is mapped for (the European game, 0004000000030200): its preset
+/// and the Recommended badge go to this title only. The other regions keep their list entry.
+constexpr bool IsAngelsAimTitle(uint64_t title_id) {
+    return title_id == 0x0004000000030200ull;
+}
+
 } // namespace FrameXr::Kiu

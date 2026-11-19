@@ -120,7 +120,8 @@ constexpr ImmersivePreset kAsphalt3D{
 // the reticle stays on the screen: they come apart whenever the head turns. Full (6DoF): Angel's
 // Aim (Immersive::Names::kModeAngelsAim, stored 4) is the mode that keeps them together: it
 // brings first person, the aim from the hand and its own registers in memory. So (the owner's
-// decision, 2026-11-18) the game starts in it, for a player with no Immersive Mode of their own
+// decision, 2026-11-18) the European game starts in it (the only region it is mapped for; the
+// others keep the normal view), for a player with no Immersive Mode of their own
 // for the game (ApplyPresetSettings); a mode the player chose, Off included, stays. Registers:
 // none (-1); Angel's Aim supplies its own.
 // 1.2.0 RC2 (the owner): the owner's own settings of 2026-11-15, from the game's file
@@ -140,6 +141,14 @@ constexpr ImmersivePreset kKidIcarusUprising{.name = "Kid Icarus: Uprising",
                                              .motion_clarity_normal = 1,
                                              .motion_clarity_match_bottom = 1,
                                              .show_controllers = 1};
+
+// AzaharFrame kiufix2: Angel's Aim is mapped for the European game only, so the other regions
+// keep the preset they had before it (the same starting values, Immersive Mode left alone).
+constexpr ImmersivePreset kKidIcarusUprisingOtherRegion = [] {
+    ImmersivePreset p = kKidIcarusUprising;
+    p.mode = 0;
+    return p;
+}();
 
 // Title ids: Azahar's compatibility list (every release of the game it knows) and, for Super
 // Mario 3D Land, src/common/hacks/hack_list.cpp. Other regions of Asphalt 3D are not confirmed.
@@ -172,10 +181,10 @@ constexpr ImmersivePresetTitle kTitles[] = {
     // Kid Icarus: Uprising: Japan (compatibility list), the USA (the owner's copy) and Europe
     // (not in the compatibility list). AzaharFrame kiu: and 0004000000030000, Japan as the
     // C-Stick & Gyro mod lists it.
-    {0x0004000000030000, &kKidIcarusUprising},
-    {0x0004000000030100, &kKidIcarusUprising},
-    {0x0004000000030200, &kKidIcarusUprising},
-    {0x0004000000030300, &kKidIcarusUprising},
+    {0x0004000000030000, &kKidIcarusUprisingOtherRegion},
+    {0x0004000000030100, &kKidIcarusUprisingOtherRegion},
+    {0x0004000000030200, &kKidIcarusUprising}, // Europe: the only region Angel's Aim is mapped for
+    {0x0004000000030300, &kKidIcarusUprisingOtherRegion},
 };
 
 } // namespace

@@ -124,7 +124,8 @@ TEST_CASE("Angel's Aim: Kid Icarus: Uprising's preset starts in Angel's Aim",
     for (uint64_t t : {kJpnMod, kUsa, kEur, uint64_t{0x0004000000030300ull}}) {
         const FrameXr::ImmersivePreset* p = FrameXr::FindImmersivePreset(t);
         REQUIRE(p);
-        CHECK(p->mode == N::kModeStoredAngelsAim);
+        // AzaharFrame kiufix2: only the European game, the one region Angel's Aim is mapped for
+        CHECK(p->mode == (t == kEur ? N::kModeStoredAngelsAim : 0));
         CHECK(p->register_offset == -1);
         CHECK(p->eye_indicator == nullptr);
     }

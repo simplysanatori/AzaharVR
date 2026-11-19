@@ -692,6 +692,7 @@ void FrameMods::RefreshAngelsAim() {
         [tid, game] {
             Menu::AngelsAimModel m;
             m.shown = true;
+            m.recommended = FrameXr::Kiu::IsAngelsAimTitle(tid); // kiufix2: Europe only
             m.mod_installed = FrameXr::CStickModInstalled(tid);
             m.textures_pack = AngelsAimPackOn(tid);
             m.report_url = Menu::AngelsAimReportUrl(AppVersion(), game, m.mod_installed);

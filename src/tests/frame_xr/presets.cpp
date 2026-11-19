@@ -140,7 +140,7 @@ TEST_CASE("FrameXr presets: other games have none, ids are unique", "[frame_xr]"
         // kiurec: 4 (Angel's Aim) only for Kid Icarus: Uprising.
         REQUIRE((titles[i].preset->mode == 0 || titles[i].preset->mode == 2 ||
                  titles[i].preset->mode == 3 ||
-                 (titles[i].preset->mode == 4 && FrameXr::Kiu::IsKidIcarus(titles[i].title_id))));
+                 (titles[i].preset->mode == 4 && FrameXr::Kiu::IsAngelsAimTitle(titles[i].title_id))));
     }
 }
 
@@ -152,7 +152,8 @@ TEST_CASE("FrameXr presets: Kid Icarus: Uprising starts in Angel's Aim", "[frame
                               0x0004000000030300ull}) {
         const auto* kiu = FindImmersivePreset(id);
         REQUIRE(kiu != nullptr);
-        REQUIRE(kiu->mode == 4);
+        // AzaharFrame kiufix2: mode 4 only for Europe, the only region Angel's Aim is mapped for
+        REQUIRE(kiu->mode == (FrameXr::Kiu::IsAngelsAimTitle(id) ? 4 : 0));
         REQUIRE(kiu->depth_multiplier == 0);
         REQUIRE(kiu->game_fov == 0);
         REQUIRE(kiu->wider_level == -1);
@@ -160,6 +161,8 @@ TEST_CASE("FrameXr presets: Kid Icarus: Uprising starts in Angel's Aim", "[frame
         REQUIRE(kiu->match_camera == -1);
         // Graphics only; Immersive stays the player's to turn on.
         REQUIRE(kiu->resolution == 4);
+        // the other regions still get the graphics values, and no Immersive Mode
+        REQUIRE(kiu->name == FindImmersivePreset(0x0004000000030200ull)->name);
         REQUIRE(kiu->texture_filter == 2);
         // 1.2.0 RC2 (the owner): their own settings of 2026-11-15.
         REQUIRE(kiu->factor_3d == 100);
@@ -314,10 +317,9 @@ TEST_CASE("FrameXr presets: Kid Icarus: Uprising (Japan, 30000) gives starting v
     CHECK(!v.resolution_factor.UsingGlobal()); // the game's, the global value untouched
     CHECK(v.resolution_factor.GetValue(true) == v.resolution_factor.GetDefault());
     CHECK(static_cast<int>(v.texture_filter.GetValue()) == 2);
-    // AzaharFrame kiurec: the mode is the game's own 4 (Angel's Aim), the global value untouched.
-    CHECK(!v.vr_immersive_mode.UsingGlobal());
-    CHECK(v.vr_immersive_mode.GetValue() == 4u);
-    CHECK(v.vr_immersive_mode.GetValue(true) == 0u);
+    // AzaharFrame kiufix2: Japan's copy gets no mode (Angel's Aim is mapped for Europe only).
+    CHECK(v.vr_immersive_mode.UsingGlobal());
+    CHECK(v.vr_immersive_mode.GetValue() == 0u);
     CHECK(v.vr_si_mode_register_offset.UsingGlobal()); // registers: none
     // 1.2.0 RC2 (the owner): 3D Depth 100, Async Shader Compilation, Motion Clarity in the Off
     // and Wide modes with Match Bottom Screen Brightness, Show Controllers: the game's own.
@@ -367,8 +369,14 @@ TEST_CASE("FrameXr presets: Kid Icarus: Uprising's Angel's Aim goes to players w
         const ImmersivePreset& kiu = *FindImmersivePreset(id);
         ResetPresetSettings(); // a fresh game: no value of its own
         ApplyPresetSettings(kiu);
-        CHECK(v.vr_immersive_mode.GetValue() == 4u);
-        CHECK(!v.vr_immersive_mode.UsingGlobal());
+        // AzaharFrame kiufix2: Europe only; the other regions set no mode (the normal view)
+        if (FrameXr::Kiu::IsAngelsAimTitle(id)) {
+            CHECK(v.vr_immersive_mode.GetValue() == 4u);
+            CHECK(!v.vr_immersive_mode.UsingGlobal());
+        } else {
+            CHECK(v.vr_immersive_mode.GetValue() == 0u);
+            CHECK(v.vr_immersive_mode.UsingGlobal());
+        }
         // the saved Off of a player who chose it for this game stays Off
         ResetPresetSettings();
         v.vr_immersive_mode.SetGlobal(false);

@@ -720,7 +720,7 @@ TEST_CASE("VR group: Immersive Mode lists Angel's Aim everywhere",
 }
 
 // AzaharFrame kiurec: the Recommended suffix "(Recommended)" (kRecommendedChip) after Angel's Aim,
-// in Kid Icarus: Uprising's own Properties only (any region): not in another game, not in Global.
+// in the European Kid Icarus: Uprising's own Properties only: not in another game, not in Global.
 TEST_CASE("VR group: Angel's Aim is Recommended only in Kid Icarus: Uprising's Properties",
           "[frame_xr][kiurec]") {
     App();
@@ -732,8 +732,12 @@ TEST_CASE("VR group: Angel's Aim is Recommended only in Kid Icarus: Uprising's P
         auto* mode = In<QComboBox>(w, "frame_vr_mode_row");
         REQUIRE(mode);
         REQUIRE(mode->count() == 5 + off);
-        CHECK(mode->itemText(3 + off) == QString::fromUtf8(FrameXr::Immersive::Names::kModeAngelsAim) +
-                                                     QStringLiteral(" (Recommended)"));
+        // AzaharFrame kiufix2: the badge only for the European game (the one Angel's Aim is
+        // mapped for); the item is in every region's list
+        const bool eur = kiu == 0x0004000000030200ull;
+        CHECK(mode->itemText(3 + off) ==
+              QString::fromUtf8(FrameXr::Immersive::Names::kModeAngelsAim) +
+                  (eur ? QStringLiteral(" (Recommended)") : QString()));
         for (const int i : {0, 1, 2, 4}) { // no other choice has it
             CHECK(!mode->itemText(i + off).contains(QStringLiteral("Recommended")));
         }
