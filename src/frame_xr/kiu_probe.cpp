@@ -51,6 +51,7 @@ int64_t NowNs() {
 struct Probe {
     const Kernel::Process* process = nullptr;
     uint64_t title = 0;
+    uint32_t run = 0; ///< AzaharFrame kiufix2: Kiu::FirstPerson::RunCount() when this began
     ModAddresses addr;
     bool scanned = false;
     int64_t last_scan_ns = 0;
@@ -226,9 +227,10 @@ bool ReadReticle(Probe& p, Input::ReticleReading& r, std::string& why) {
         return false;
     }
     const uint64_t title = process->codeset->program_id;
-    if (process.get() != p.process || title != p.title) {
+    if (process.get() != p.process || title != p.title || p.run != Kiu::FirstPerson::RunCount()) {
         p.process = process.get();
         p.title = title;
+        p.run = Kiu::FirstPerson::RunCount();
         p.addr = {};
         p.scanned = false;
         p.original = false;

@@ -131,6 +131,9 @@ float FactorMax();
 /// read them at the last VBlank (what the game draws its world with), published by the
 /// emulation thread. Any thread: false when none was read in the last 250 ms. The shape is the
 /// projection's field (5:3; a widescreen build of the C-Stick & Gyro mod leaves 5:3 there and
+/// AzaharFrame kiufix2: counts the runs (OnGameBoot bumps it). The hook, turning and probe state
+/// resets when it changes: a Process address can be reused by the next run of the same title.
+uint32_t RunCount();
 /// draws wider: the caller takes the mod's shape where it is known).
 void PublishProjection(const Input::KiuRoom::Projection& projection);
 bool SceneProjection(float& fov_y_deg, float& aspect);

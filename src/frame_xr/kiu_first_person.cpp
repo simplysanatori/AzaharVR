@@ -357,7 +357,16 @@ void PublishHand(const Hand& hand) {
 }
 
 void OnGameBoot() {
+namespace {
+std::atomic<uint32_t> g_run_count{0};
+} // namespace
+
+uint32_t RunCount() {
+    return g_run_count.load(std::memory_order_relaxed);
+}
+
     // AzaharFrame kiumode: a new run: its code is checked afresh and nothing is supplied until
+    g_run_count.fetch_add(1, std::memory_order_relaxed);
     // then (before the presets, which read the registers).
     SetGameCode(0, false);
     SupplyRegisters(false);

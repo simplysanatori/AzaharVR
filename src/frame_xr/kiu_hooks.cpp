@@ -122,6 +122,7 @@ struct State {
     const Kernel::Process* process = nullptr;
     uint64_t title = 0;
     bool checked = false;
+    uint32_t run = 0; ///< Kiu::FirstPerson::RunCount() when this state began
     bool code_ok = false;
     std::string note;
     uint32_t serial = 0;
@@ -420,7 +421,7 @@ void Hook(int64_t ticks) {
         return;
     }
     const uint64_t title = process->codeset->program_id;
-    if (process.get() != s.process || title != s.title) {
+    if (process.get() != s.process || title != s.title || s.run != Kiu::FirstPerson::RunCount()) {
         const int64_t poll_ns = s.poll_ns;
         s = State{};
         s.poll_ns = poll_ns;
@@ -428,6 +429,7 @@ void Hook(int64_t ticks) {
         s.title = title;
     }
     Memory::MemorySystem& memory = system.Memory();
+        s.run = Kiu::FirstPerson::RunCount(); // AzaharFrame kiufix2: a new run, same address
     GuestMemory mem(system, memory, *process);
     // AzaharFrame kiumode: the game's code first: Angel's Aim (Immersive Mode 4) is in effect only
     // where it is the mapped one (kiu_first_person.h).
