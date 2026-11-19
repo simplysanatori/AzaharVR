@@ -9,9 +9,10 @@
 // Angel's Aim" (stored 4, listed in every Immersive Mode list; Settings::kImmersiveModeAngelsAim).
 // It is drawn as mode 3 (Settings::ImmersiveRenderMode, for every reader) and is in effect in
 // VR for the European game whose code the hooks checked (OnFor below); elsewhere it plays as
-// Full (6DoF): Other Games and the hooks' log says why. In effect, it turns on with first person (On) the eye hook,
-// the culls off, the follow off, Right Stick turning, the land aim box, the aim from the hand
-// (with Direct Aim), the shots from the hand and the bullet keep, the timed enemy keep
+// Full (6DoF): Other Games and the hooks' log says why. In effect, it turns on with first
+// person (On) the eye hook, the culls off, the follow off, Right Stick turning, the land aim
+// box, the aim and the shots from the hand (both with Aiming = Direct Aim only) and the bullet
+// keep, the timed enemy keep
 // (kAngelsAimEnemyKeepS) and the screen at true size; and it supplies this game's registers
 // (view 90, eye indicator 87,2) in memory only (Settings::RunSuppliedSetting): none of it is
 // written into the settings, so a save during play stores mode 4 and nothing else. Another mode
@@ -99,6 +100,14 @@ constexpr bool AngelsAimFor(uint32_t stored_mode, uint64_t title, bool code_ok, 
 constexpr bool OnFor(bool dev_switch, uint32_t stored_mode, uint64_t title, bool code_ok,
                      bool in_vr) {
     return dev_switch || AngelsAimFor(stored_mode, title, code_ok, in_vr);
+}
+
+/// AzaharFrame kiufix2: the shots fly along the hand: the test switch (with first person on), or
+/// Angel's Aim in effect with Aiming = Direct Aim (with Off or Gyro the reticle is the game's own
+/// and the shots stay on it).
+constexpr bool ShotsFrom6DofFor(bool switch_on, bool first_person_on, bool angels_aim,
+                                bool direct_aim) {
+    return (switch_on && first_person_on) || (angels_aim && direct_aim);
 }
 
 /// First person is on (live): Angel's Aim in effect, or AZAHARFRAME_KIU_FIRST_PERSON. Any thread.

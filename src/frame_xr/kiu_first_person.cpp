@@ -137,7 +137,7 @@ bool Aim6DofOn() {
 }
 
 bool Shots6DofOn() {
-    return (SwitchOn(kSwitchShots6Dof) && On()) || AngelsAim();
+    return ShotsFrom6DofFor(SwitchOn(kSwitchShots6Dof), On(), AngelsAim(), DirectAim());
 }
 
 Scene ReadScene(const Input::KiuHooks::Reader& mem) {
