@@ -35,6 +35,14 @@
 //                                     player runs (its eased follow gets no movement input).
 //   AZAHARFRAME_KIU_HOOK_TRACE=1|2    a status line a second (2: one a VBlank): the groups, the
 //                                     player, the scene eye.
+//   AZAHARFRAME_KIU_NO_PLAYER_SHADOW=1
+//                                     the player's own round shadow is not drawn (first person
+//                                     puts it in by itself).
+//
+// AzaharFrame kiuperf: in first person (Angel's Aim) NOCULL, NO_PLAYER_SHADOW and the enemy keep
+// go in by themselves; each switch at 0 keeps its group out, for an A/B of what it costs
+// (ENEMY_KEEP=0: no enemy keep at all; ENEMY_KEEP_S=0: not the timed one). The wide camera's
+// is AZAHARFRAME_KIU_FP_WIDE=0 (kiu_first_person.h).
 //
 // The pure part (the patch table, the stubs' image, the mailbox, the rules) is
 // input/kiu_hooks.h; the addresses and the stubs' source are in input/KIU_HOOKS.md and

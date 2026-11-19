@@ -867,6 +867,46 @@ inline int ParseFloats(const char* text, float* out, int max) {
     return n;
 }
 
+/// AzaharFrame kiuperf: a group that first person (Angel's Aim) puts in by itself, with its test
+/// switch: "1" puts it in in any mode, "0" keeps it out even in first person (an A/B), anything
+/// else (or no line) leaves the mode's choice `by_mode`.
+inline bool GroupWanted(bool by_mode, const char* value) {
+    if (value && value[0] == '1' && value[1] == '\0') {
+        return true;
+    }
+    if (value && value[0] == '0' && value[1] == '\0') {
+        return false;
+    }
+    return by_mode;
+}
+
+/// AzaharFrame kiuperf: which enemy keep goes in. The timed one (`seconds` > 0) and the plain one
+/// share a site, so at most one of them.
+struct EnemyKeepChoice {
+    float seconds = 0.0f; ///< > 0: the timed keep (EnemyKeepTimed), that many seconds
+    bool plain = false;   ///< the keep for good (EnemyKeep)
+};
+/// `mode_seconds`: the mode's own (Angel's Aim's 12 s, else 0). AZAHARFRAME_KIU_ENEMY_KEEP_S
+/// (`timed`): seconds > 0 replace it, "0" takes the timed keep out. AZAHARFRAME_KIU_ENEMY_KEEP
+/// (`plain`): "1" the keep for good when no timed one is in, "0" no enemy keep at all.
+inline EnemyKeepChoice ChooseEnemyKeep(float mode_seconds, const char* plain, const char* timed) {
+    EnemyKeepChoice c;
+    c.seconds = mode_seconds > 0.0f ? mode_seconds : 0.0f;
+    float v = 0.0f;
+    if (timed && ParseFloats(timed, &v, 1) == 1) {
+        if (v > 0.0f) {
+            c.seconds = v;
+        } else if (v == 0.0f) {
+            c.seconds = 0.0f;
+        }
+    }
+    if (plain && plain[0] == '0' && plain[1] == '\0') {
+        return EnemyKeepChoice{};
+    }
+    c.plain = !(c.seconds > 0.0f) && plain && plain[0] == '1' && plain[1] == '\0';
+    return c;
+}
+
 // ---- Putting the patches in and taking them out ----
 
 /// The game's memory with writes (the emulation thread's; a fake one in the tests).

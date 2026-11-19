@@ -1229,3 +1229,83 @@ TEST_CASE("Kid Icarus hooks: hiding the player and the switch values", "[frame_x
     CHECK(ParseFloats("1,2,3,4,5,6", v, 5) == 0); // too many
     CHECK(ParseFloats("1,nan", v, 5) == 0);
 }
+
+// AzaharFrame kiuperf: inside Angel's Aim each group it puts in by itself can be kept out for an
+// A/B (AZAHARFRAME_KIU_NOCULL=0, _NO_PLAYER_SHADOW=0, _ENEMY_KEEP=0 or _ENEMY_KEEP_S=0).
+TEST_CASE("Kid Icarus hooks: switches at 0 keep Angel's Aim's groups out", "[frame_xr][kiuhook]") {
+    // No line, or a value that means nothing: the mode's choice.
+    CHECK(GroupWanted(true, nullptr));
+    CHECK_FALSE(GroupWanted(false, nullptr));
+    CHECK(GroupWanted(true, ""));
+    CHECK(GroupWanted(true, "2"));
+    CHECK(GroupWanted(true, "01"));
+    CHECK(GroupWanted(true, "10"));
+    CHECK_FALSE(GroupWanted(false, "yes"));
+    // "1" puts it in in any mode (as before); "0" keeps it out even in first person.
+    CHECK(GroupWanted(false, "1"));
+    CHECK(GroupWanted(true, "1"));
+    CHECK_FALSE(GroupWanted(true, "0"));
+    CHECK_FALSE(GroupWanted(false, "0"));
+
+    const float aa = 12.0f; // Angel's Aim's own
+    // Angel's Aim, no switch: the timed keep, 12 s.
+    EnemyKeepChoice c = ChooseEnemyKeep(aa, nullptr, nullptr);
+    CHECK(c.seconds == 12.0f);
+    CHECK_FALSE(c.plain);
+    // Another mode, no switch: none.
+    c = ChooseEnemyKeep(0.0f, nullptr, nullptr);
+    CHECK(c.seconds == 0.0f);
+    CHECK_FALSE(c.plain);
+    // ENEMY_KEEP_S=<s> replaces the mode's seconds, in any mode.
+    c = ChooseEnemyKeep(aa, nullptr, "6");
+    CHECK(c.seconds == 6.0f);
+    c = ChooseEnemyKeep(0.0f, nullptr, "25");
+    CHECK(c.seconds == 25.0f);
+    // ENEMY_KEEP_S=0 takes the timed keep out (before, a 0 was ignored and 12 s stayed).
+    c = ChooseEnemyKeep(aa, nullptr, "0");
+    CHECK(c.seconds == 0.0f);
+    CHECK_FALSE(c.plain);
+    // Negative or malformed: ignored, the mode's stays.
+    CHECK(ChooseEnemyKeep(aa, nullptr, "-3").seconds == 12.0f);
+    CHECK(ChooseEnemyKeep(aa, nullptr, "x").seconds == 12.0f);
+    CHECK(ChooseEnemyKeep(aa, nullptr, "").seconds == 12.0f);
+    // ENEMY_KEEP=1: the keep for good only when no timed one is in (they share a site).
+    c = ChooseEnemyKeep(0.0f, "1", nullptr);
+    CHECK(c.plain);
+    CHECK(c.seconds == 0.0f);
+    c = ChooseEnemyKeep(aa, "1", nullptr);
+    CHECK_FALSE(c.plain);
+    CHECK(c.seconds == 12.0f);
+    c = ChooseEnemyKeep(aa, "1", "0");
+    CHECK(c.plain);
+    CHECK(c.seconds == 0.0f);
+    // ENEMY_KEEP=0: no enemy keep at all, whatever ENEMY_KEEP_S says.
+    for (const char* timed : {static_cast<const char*>(nullptr), "0", "6", "x"}) {
+        c = ChooseEnemyKeep(aa, "0", timed);
+        CHECK(c.seconds == 0.0f);
+        CHECK_FALSE(c.plain);
+    }
+    // Only an exact 0 or 1 counts for ENEMY_KEEP.
+    c = ChooseEnemyKeep(aa, "00", nullptr);
+    CHECK(c.seconds == 12.0f);
+    CHECK_FALSE(c.plain);
+
+    // What the masks do on the game's words (plain groups, no cave): first person's no cull and a
+    // keep for good, then NOCULL=0: only the no cull's words go back.
+    FakeMemory m = Game();
+    REQUIRE(GameCodeMatches(m));
+    const auto mask = [](bool nocull, const EnemyKeepChoice& k) {
+        return (nocull ? Bit(Group::NoCull) : 0u) | (k.plain ? Bit(Group::EnemyKeep) : 0u);
+    };
+    const EnemyKeepChoice keep = ChooseEnemyKeep(0.0f, "1", nullptr);
+    SyncResult r = Sync(m, mask(GroupWanted(true, nullptr), keep), Mailbox{});
+    CHECK(r.Of(Group::NoCull) == GroupState::In);
+    CHECK(r.Of(Group::EnemyKeep) == GroupState::In);
+    r = Sync(m, mask(GroupWanted(true, "0"), keep), Mailbox{});
+    CHECK(r.Of(Group::NoCull) == GroupState::Out);
+    CHECK(SiteIs(m, Group::NoCull, false)); // the game's words back
+    CHECK(r.Of(Group::EnemyKeep) == GroupState::In);
+    r = Sync(m, mask(GroupWanted(true, "0"), ChooseEnemyKeep(0.0f, "0", nullptr)), Mailbox{});
+    CHECK(r.Of(Group::EnemyKeep) == GroupState::Out);
+    CHECK_FALSE(AnyOurs(m));
+}
