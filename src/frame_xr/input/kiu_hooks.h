@@ -7,7 +7,8 @@
 // code cave's stubs and their mailbox, and the rules for putting them in and taking them out.
 // No emulator or OpenXR types here, so tests/frame_xr/kiu_hooks.cpp checks it over a fake memory.
 // frame_xr/kiu_hooks.h runs it on the emulation thread at each VBlank; KIU_HOOKS.md beside this
-// file has every address and why. Test switches only (no setting, no row, no text in the app).
+// file has every address and why. Angel's Aim (the stored mode 4) turns these groups on for the European game; the
+// test switches add to them (no setting, no row, no text in the app).
 //
 // Everything is for the European game (title 0004000000030200, code.bin md5 b107c9b1), checked
 // word by word before anything is written:
@@ -19,8 +20,10 @@
 //     So a save state loaded with or without patches ends up right one VBlank later.
 //   - some groups reach a stub in the code cave (the text segment's unused tail,
 //     0xC95370-0xC96000, all zero in the game): the image of kiu_hooks_stubs.h, written once
-//     before the first site that jumps to it and never changed or cleared after (a guest thread
-//     may be stopped inside it). The stubs read the mailbox, the cave's last bytes, which the
+//     before the first site that jumps to it and not cleared after (a guest thread may be stopped
+//     inside it). An image of an older version (a save state from another build) is rewritten,
+//     and first every site that still branches into the cave with a word that is not ours goes
+//     back to the game's word (BranchesIntoImage), so no site jumps into a moved entry. The stubs read the mailbox, the cave's last bytes, which the
 //     app writes at each VBlank; the cave is read-only and executable for the game, so nothing
 //     of the game can spoil it, and the stubs never write there.
 //   - every code word written is followed by a code cache drop for it (the emulator part).
@@ -963,6 +966,18 @@ inline Cave LookAtCave(const Reader& m) {
     return Cave::Empty;
 }
 
+/// True when `word`, placed at `addr`, is a b or bl into the image's area (from the first image
+/// word up to the mailbox): the word of a patch of an older image version.
+constexpr bool BranchesIntoImage(uint32_t addr, uint32_t word) {
+    if ((word & 0x0E000000u) != 0x0A000000u) {
+        return false;
+    }
+    const uint32_t imm = word & 0x00FFFFFFu;
+    const uint32_t offset = (imm << 2) | ((imm & 0x00800000u) != 0 ? 0xFC000000u : 0u);
+    const uint32_t target = addr + 8u + offset;
+    return target >= kImageBase && target < kMailbox;
+}
+
 /// One VBlank's pass: reads every site, puts the wanted groups in (the image first, then the
 /// mailbox, the site words last) and the others out. `wanted` is a mask of Bit(group). Writes
 /// nothing when everything already is as wanted (apart from the mailbox while a stub group is
@@ -990,6 +1005,15 @@ inline SyncResult Sync(GameMemory& m, uint32_t wanted, const Mailbox& mailbox) {
         }
         return kOther;
     };
+    // A site that jumps into the image but is none of our words is a patch of an older image
+    // version (a state made by another build): its stub entry may have moved, so before the
+    // image is rewritten it goes back to the game's word and goes in again as this build's.
+    for (const Patch& p : kPatches) {
+        uint32_t v = 0;
+        if (look(p, v) == kOther && BranchesIntoImage(p.addr, v)) {
+            r.code_writes += m.WriteCode(p.addr, p.original) ? 1 : 0;
+        }
+    }
     std::array<bool, kGroupCount> usable{};
     usable.fill(true);
     std::array<bool, kGroupCount> readable{};

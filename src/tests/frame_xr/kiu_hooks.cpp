@@ -842,6 +842,44 @@ TEST_CASE("Kid Icarus hooks: the cave", "[frame_xr][kiuhook]") {
         CHECK(r.Of(Group::Eye) == GroupState::In);
     }
 
+    SECTION("a site patched by an older image goes back to the game's word, then in again") {
+        // an older build's state: its image, and the camera sink's branch to an entry that has
+        // since moved (not our word, but a branch into the image's area)
+        m.Set32(kImageBase, Stubs::kImageTag);
+        m.Set32(kImageBase + 4, Stubs::kImageVersion + 7);
+        m.Set32(kImageBase + 8, kInvented);
+        const uint32_t old_branch = B(kSiteCameraSink, kImageBase + 0x40);
+        REQUIRE(old_branch != 0xE92D4070);
+        m.Set32(kSiteCameraSink, old_branch);
+        CHECK(BranchesIntoImage(kSiteCameraSink, old_branch));
+        CHECK_FALSE(BranchesIntoImage(kSiteCameraSink, 0xE92D4070));
+        CHECK_FALSE(BranchesIntoImage(kSiteCameraSink, B(kSiteCameraSink, kMailbox + 0x10)));
+        m.writes.clear();
+        SyncResult r = Sync(m, Bit(Group::Eye), Mailbox{});
+        CHECK(r.cave == Cave::Ours);
+        CHECK(ImageInPlace(m));
+        CHECK(r.Of(Group::Eye) == GroupState::In);
+        // the site was put back before the image was rewritten
+        std::size_t restore = m.writes.size(), first_image = m.writes.size();
+        for (std::size_t i = 0; i < m.writes.size(); ++i) {
+            if (m.writes[i].addr == kSiteCameraSink && restore == m.writes.size()) {
+                restore = i;
+            }
+            if (m.writes[i].addr == kImageBase && first_image == m.writes.size()) {
+                first_image = i;
+            }
+        }
+        CHECK(restore < first_image);
+        CHECK(m.writes[restore].value == 0xE92D4070);
+    }
+
+    SECTION("an older image's site with every switch off: out, back to the game's word") {
+        m.Set32(kSiteCameraSink, B(kSiteCameraSink, kImageBase + 0x40));
+        const SyncResult r = Sync(m, 0, Mailbox{});
+        CHECK(m.Get32(kSiteCameraSink) == 0xE92D4070);
+        CHECK(r.in_mask == 0);
+    }
+
     SECTION("the cave is not mapped") {
         m.Unmap32(kImageBase + 0x10);
         SyncResult r = Sync(m, Bit(Group::Eye), Mailbox{});
