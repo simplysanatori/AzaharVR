@@ -95,7 +95,8 @@ public:
             return false;
         }
         memory_.Write32(process_, addr, value);
-        system_.InvalidateCacheRange(addr, sizeof(uint32_t));
+        // The hooks' own patches only: every page table's JIT may hold the game's old block.
+        system_.InvalidateCacheRangeAllContexts(addr, sizeof(uint32_t));
         return true;
     }
     bool WriteData(uint32_t addr, uint32_t value) override {

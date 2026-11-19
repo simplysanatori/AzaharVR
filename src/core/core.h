@@ -309,6 +309,14 @@ public:
         }
     }
 
+    /// Only for the Kid Icarus: Uprising hooks' code patches (frame_xr/kiu_hooks.cpp), on install
+    /// and removal: invalidates in every page table's JIT of every core.
+    void InvalidateCacheRangeAllContexts(u32 start_address, std::size_t length) {
+        for (const auto& cpu : cpu_cores) {
+            cpu->InvalidateCacheRangeAllContexts(start_address, length);
+        }
+    }
+
     /**
      * Gets a reference to the emulated DSP.
      * @returns A reference to the emulated DSP.

@@ -85,6 +85,12 @@ public:
      */
     virtual void InvalidateCacheRange(u32 start_address, std::size_t length) = 0;
 
+    /// Like InvalidateCacheRange, in every page table's cache of this core, not only the current
+    /// one. Used only by the Kid Icarus: Uprising hooks when a patch is installed or removed.
+    virtual void InvalidateCacheRangeAllContexts(u32 start_address, std::size_t length) {
+        InvalidateCacheRange(start_address, length);
+    }
+
     /// Clears the exclusive monitor's state.
     virtual void ClearExclusiveState() = 0;
 

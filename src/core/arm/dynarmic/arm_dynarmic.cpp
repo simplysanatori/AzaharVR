@@ -323,6 +323,12 @@ void ARM_Dynarmic::InvalidateCacheRange(u32 start_address, std::size_t length) {
     jit->InvalidateCacheRange(start_address, length);
 }
 
+void ARM_Dynarmic::InvalidateCacheRangeAllContexts(u32 start_address, std::size_t length) {
+    for (const auto& j : jits) {
+        j.second->InvalidateCacheRange(start_address, length);
+    }
+}
+
 void ARM_Dynarmic::ClearExclusiveState() {
     jit->ClearExclusiveState();
 }
