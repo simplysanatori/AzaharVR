@@ -122,8 +122,8 @@ private:
 struct State {
     const Kernel::Process* process = nullptr;
     uint64_t title = 0;
-    bool checked = false;
     uint32_t run = 0; ///< Kiu::FirstPerson::RunCount() when this state began
+    bool checked = false;
     bool code_ok = false;
     std::string note;
     uint32_t serial = 0;
@@ -354,7 +354,8 @@ void TraceFirstPerson(State& s, const KH::GameMemory& mem, const KH::Player& p,
                                 std::bit_cast<float>(x), std::bit_cast<float>(y), flags, screen.w,
                                 screen.h, screen.cx, screen.cy, Csv(point));
             const Kiu::FirstPerson::AimNow aim =
-                Kiu::FirstPerson::AimThroughCamera(mem, p.aim, screen, now.sample);
+                Kiu::FirstPerson::AimThroughCamera(mem, p.aim, screen, now.sample,
+                                                 false); // AzaharFrame kiufix2: tracing only reads
             if (aim.valid) {
                 line += fmt::format(" aim_pixel={:.3f},{:.3f} aim_ahead={} aim_depth={:.3f} "
                                     "aim_hit={} aim_aspect={:.5f} aim_aspect_n={}",
@@ -428,9 +429,9 @@ void Hook(int64_t ticks) {
         s.poll_ns = poll_ns;
         s.process = process.get();
         s.title = title;
+        s.run = Kiu::FirstPerson::RunCount(); // AzaharFrame kiufix2: a new run, same address
     }
     Memory::MemorySystem& memory = system.Memory();
-        s.run = Kiu::FirstPerson::RunCount(); // AzaharFrame kiufix2: a new run, same address
     GuestMemory mem(system, memory, *process);
     // AzaharFrame kiumode: the game's code first: Angel's Aim (Immersive Mode 4) is in effect only
     // where it is the mapped one (kiu_first_person.h).
@@ -615,10 +616,10 @@ void Hook(int64_t ticks) {
                             (mailbox.wide_node != 0 ? KH::Bit(KH::Group::WideCamera) : 0u);
     const KH::SyncResult r = KH::Sync(mem, wanted, mailbox);
     LogChanges(s, r);
-
     if ((r.in_mask & KH::Bit(KH::Group::WideCamera)) != 0) {
         AutoShape::HoldWhileWide(); // AzaharFrame kiufix2: Screen Shape Automatic does not measure
     }
+
     // AzaharFrame kiuvr: first person's trace.
     if (first_person || fp_trace > 0) {
         TraceFirstPerson(s, mem, p, mailbox, fp_now, ticks, host_now, fp_trace);

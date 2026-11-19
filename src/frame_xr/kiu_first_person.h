@@ -131,6 +131,9 @@ void SupplyRegisters(bool on);
 /// The frontend, when a game boots, before its presets are applied: forgets the last run's code
 /// check and registers. Writes no setting (AzaharFrame kiumode).
 void OnGameBoot();
+/// AzaharFrame kiufix2: counts the runs (OnGameBoot bumps it). The hook, turning and probe state
+/// resets when it changes: a Process address can be reused by the next run of the same title.
+uint32_t RunCount();
 /// The leaning scale in use, game units per metre: life size, or the override. Any thread.
 float UnitsPerMetre();
 
@@ -140,9 +143,6 @@ float FactorMax();
 /// read them at the last VBlank (what the game draws its world with), published by the
 /// emulation thread. Any thread: false when none was read in the last 250 ms. The shape is the
 /// projection's field (5:3; a widescreen build of the C-Stick & Gyro mod leaves 5:3 there and
-/// AzaharFrame kiufix2: counts the runs (OnGameBoot bumps it). The hook, turning and probe state
-/// resets when it changes: a Process address can be reused by the next run of the same title.
-uint32_t RunCount();
 /// draws wider: the caller takes the mod's shape where it is known).
 void PublishProjection(const Input::KiuRoom::Projection& projection);
 bool SceneProjection(float& fov_y_deg, float& aspect);
@@ -248,6 +248,9 @@ struct AimNow {
     int aspect_readings = 0;         ///< how many readings of the game's own aim made it
 };
 AimNow AimThroughCamera(const Input::KiuHooks::Reader& mem, uint32_t aim,
-                        const Input::KiuRoom::ReticleScreen& screen, const Sample& sample);
+                        const Input::KiuRoom::ReticleScreen& screen, const Sample& sample,
+                        bool feeds_shape = true);
+/// `feeds_shape` false (the trace): the shared measured shape is read, never updated or reset,
+/// so tracing does not change the aim.
 
 } // namespace FrameXr::Kiu::FirstPerson

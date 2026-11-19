@@ -176,7 +176,8 @@ WorldRay HandRay(const Sample& sample, const Scene& scene) {
 }
 
 AimNow AimThroughCamera(const Input::KiuHooks::Reader& mem, uint32_t aim,
-                        const Input::KiuRoom::ReticleScreen& screen, const Sample& sample) {
+                        const Input::KiuRoom::ReticleScreen& screen, const Sample& sample,
+                        bool feeds_shape) {
     namespace KH = Input::KiuHooks;
     namespace KR = Input::KiuRoom;
     AimNow now;
@@ -189,19 +190,19 @@ AimNow AimThroughCamera(const Input::KiuHooks::Reader& mem, uint32_t aim,
     // The shape the game aims with, from its own aim: the reticle's pixel and its point.
     static KR::AimShape shape; // emulation thread only
     static uint32_t shape_aim = 0;
-    if (aim != shape_aim) {
+    if (feeds_shape && aim != shape_aim) {
         shape_aim = aim;
         shape.Reset();
     }
     uint32_t px = 0, py = 0;
-    if (mem.Read32(aim + 0xA4, px) && mem.Read32(aim + 0xA8, py)) {
+    if (feeds_shape && mem.Read32(aim + 0xA4, px) && mem.Read32(aim + 0xA8, py)) {
         shape.Update(scene.camera, scene.projection.fov_y, screen,
                      {std::bit_cast<float>(px), std::bit_cast<float>(py)}, now.game_point);
     }
     // AzaharFrame kiuwide: a new field (the camera widened, or back) is a new shape: measured
     // afresh, from the shape the screen solve takes as drawn.
     static float shape_field = 0.0f;
-    if (std::abs(scene.projection.aspect - shape_field) > 0.001f * shape_field) {
+    if (feeds_shape && std::abs(scene.projection.aspect - shape_field) > 0.001f * shape_field) {
         shape_field = scene.projection.aspect;
         shape.Reset();
     }
@@ -356,7 +357,6 @@ void PublishHand(const Hand& hand) {
     g_sample.hand.host_ns = NowNs();
 }
 
-void OnGameBoot() {
 namespace {
 std::atomic<uint32_t> g_run_count{0};
 } // namespace
@@ -365,8 +365,9 @@ uint32_t RunCount() {
     return g_run_count.load(std::memory_order_relaxed);
 }
 
-    // AzaharFrame kiumode: a new run: its code is checked afresh and nothing is supplied until
+void OnGameBoot() {
     g_run_count.fetch_add(1, std::memory_order_relaxed);
+    // AzaharFrame kiumode: a new run: its code is checked afresh and nothing is supplied until
     // then (before the presets, which read the registers).
     SetGameCode(0, false);
     SupplyRegisters(false);

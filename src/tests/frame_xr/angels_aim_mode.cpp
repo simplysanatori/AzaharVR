@@ -44,6 +44,16 @@ TEST_CASE("Angel's Aim: stored values and the 4 to 3 mapping", "[frame_xr][kiumo
     mode.SetGlobal(global);
 }
 
+// AzaharFrame kiufix2: the shots follow the hand only with Aiming = Direct Aim (Off and Gyro keep
+// the game's own reticle, so the shots stay on it); the test switch still works alone.
+TEST_CASE("Angel's Aim: shots follow the hand only with Direct Aim", "[frame_xr][kiufix2]") {
+    CHECK(FP::ShotsFrom6DofFor(false, true, true, true));
+    CHECK(!FP::ShotsFrom6DofFor(false, true, true, false)); // Aiming Off or Gyro
+    CHECK(!FP::ShotsFrom6DofFor(false, true, false, true)); // Angel's Aim not in effect
+    CHECK(FP::ShotsFrom6DofFor(true, true, false, false));  // the switch, first person on
+    CHECK(!FP::ShotsFrom6DofFor(true, false, false, false));
+}
+
 TEST_CASE("Angel's Aim: first person's truth table", "[frame_xr][kiumode]") {
     // In effect: mode 4, the European game, its code the mapped one.
     CHECK(FP::AngelsAimFor(4, kEur, true, true));
