@@ -109,6 +109,7 @@ float Decider::AspectAt(std::int64_t now_ms) const {
 namespace {
 std::atomic<float> g_aspect{kAspect3ds};
 std::atomic<float> g_hint{0.0f};
+std::atomic<std::int64_t> g_hold_ms{-1'000'000'000}; // AzaharFrame kiufix2: the wide camera's
 struct State {
     Decider decider;
     bool live = false;
@@ -130,6 +131,14 @@ State& S() {
     return s;
 }
 } // namespace
+
+void HoldWhileWide(std::int64_t now_ms) {
+    g_hold_ms.store(now_ms, std::memory_order_relaxed);
+}
+
+void HoldWhileWide() {
+    HoldWhileWide(VideoCore::Immersive::SteadyMs());
+}
 
 float Hint() {
     return g_hint.load(std::memory_order_relaxed);
@@ -167,7 +176,10 @@ void Frame(bool screens_live, bool automatic) {
                      hint_aspect > 0.0f ? " (a mod's aspect)" : "");
         }
     }
-    if (on) {
+    // AzaharFrame kiufix2: nothing is measured while the app's wide camera is in the game, nor
+    // just after it (the shape stays what it was).
+    const bool held = now - g_hold_ms.load(std::memory_order_relaxed) < kHoldSettleMs;
+    if (on && !held) {
         float tan_half_y = 0.0f, aspect = 0.0f;
         std::int64_t stamp = 0;
         if (VI::g_measured_shape.Read(std::max(now - 1000, s.start_ms), tan_half_y, aspect,

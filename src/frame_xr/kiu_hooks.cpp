@@ -16,6 +16,7 @@
 #include "core/core_timing.h"
 #include "core/hle/kernel/process.h"
 #include "core/memory.h"
+#include "frame_xr/auto_shape.h" // AzaharFrame kiufix2
 #include "frame_xr/frame_xr.h"
 #include "frame_xr/input/kiu_hooks.h"
 #include "frame_xr/input/kiu_room.h" // AzaharFrame kiuvr
@@ -615,6 +616,9 @@ void Hook(int64_t ticks) {
     const KH::SyncResult r = KH::Sync(mem, wanted, mailbox);
     LogChanges(s, r);
 
+    if ((r.in_mask & KH::Bit(KH::Group::WideCamera)) != 0) {
+        AutoShape::HoldWhileWide(); // AzaharFrame kiufix2: Screen Shape Automatic does not measure
+    }
     // AzaharFrame kiuvr: first person's trace.
     if (first_person || fp_trace > 0) {
         TraceFirstPerson(s, mem, p, mailbox, fp_now, ticks, host_now, fp_trace);
