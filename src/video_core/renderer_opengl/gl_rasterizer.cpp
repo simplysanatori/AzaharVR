@@ -549,6 +549,7 @@ bool RasterizerOpenGL::AccelerateDrawBatchInternal(bool is_indexed) {
 void RasterizerOpenGL::DrawTriangles() {
     if (vertex_batch.empty())
         return;
+    TurnSoftwareVertices(); // AzaharFrame kiu2d
     Draw(false, false);
 }
 

@@ -10,6 +10,7 @@
 #include "video_core/pica/pica_core.h"
 #include "video_core/rasterizer_accelerated.h"
 #include "video_core/vr_auto_shape.h" // AzaharFrame fixes7
+#include "video_core/kiu_view_tap.h" // AzaharFrame kiu2d
 #include "video_core/vr_immersive.h" // AzaharFrame depth
 #include "video_core/vr_view_matrix.h" // AzaharFrame
 
@@ -304,6 +305,12 @@ void RasterizerAccelerated::SetVRData(const int32_t &vrImmersiveMode, const floa
     }
 
     vr_uoffset = uoffset;
+    // AzaharFrame kiu2d: the world's turn is mode 3's alone (also when stored as 33 etc.).
+    if ((vrImmersiveMode > 9 ? vrImmersiveMode % 10 : vrImmersiveMode) != 3) {
+        for (auto& c : vr_soft_clip) {
+            c.valid = false;
+        }
+    }
     vr_immersive_mode = vrImmersiveMode;
     vr_game_pos_scaler = gamePosScaler;
     std::memcpy(vr_inv_view, inv_view, sizeof(float) * 16);
@@ -329,6 +336,28 @@ void RasterizerAccelerated::SetVRFactorY(float factor_y) {
     if (vs_data.vr_immersive_mode_factor_y != factor_y) {
         vs_data.vr_immersive_mode_factor_y = factor_y;
         vs_data_dirty = true;
+    }
+}
+
+void RasterizerAccelerated::TurnSoftwareVertices() {
+    if (vertex_batch.empty() ||
+        !VideoCore::Immersive::g_soft_draw_turn.load(std::memory_order_relaxed)) {
+        return;
+    }
+    const u32 buffer = regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress();
+    const SoftClip* clip = nullptr;
+    for (const auto& c : vr_soft_clip) {
+        if (c.valid && c.buffer == buffer) {
+            clip = &c;
+        }
+    }
+    if (!clip) {
+        return;
+    }
+    for (auto& v : vertex_batch) {
+        float pos[4] = {v.position.x, v.position.y, v.position.z, v.position.w};
+        VideoCore::Immersive::ApplyClipCorrection(clip->h, pos);
+        v.position = Common::Vec4f{pos[0], pos[1], pos[2], pos[3]};
     }
 }
 
@@ -766,6 +795,36 @@ void RasterizerAccelerated::ApplyVRDataToPicaVSUniforms(Pica::Shader::Generator:
             // shears each eye's projection), so the XR thread can tell how far apart the two
             // eyes' far scenery is on the screen (vr_view_matrix.h StereoFrame).
             vr_world_uniforms = true;
+            // AzaharFrame kiu2d: the same turn in clip space, for the CPU-shaded draws that
+            // follow into this buffer (vr_view_matrix.h ClipCorrection).
+            if (matrixMode == 3 && viewMatrixIndex >= 4 &&
+                VideoCore::Immersive::g_soft_draw_turn.load(std::memory_order_relaxed)) {
+                float proj[4][4], patched[3][4];
+                for (int i = 0; i < 4; ++i) {
+                    for (int j = 0; j < 4; ++j) {
+                        proj[i][j] = f[viewMatrixIndex - 4 + i][j];
+                        if (i < 3) {
+                            patched[i][j] = f[viewMatrixIndex + i][j];
+                        }
+                    }
+                }
+                // Per colour buffer: each eye's sprites can come after the other eye's world.
+                const u32 buffer = regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress();
+                SoftClip* slot = &vr_soft_clip[0];
+                for (auto& c : vr_soft_clip) {
+                    if (c.valid && c.buffer == buffer) {
+                        slot = &c;
+                        break;
+                    }
+                    if (!c.valid || c.serial < slot->serial) {
+                        slot = &c;
+                    }
+                }
+                slot->valid =
+                    VideoCore::Immersive::ClipCorrection(proj, vr_world_eye, patched, slot->h);
+                slot->buffer = buffer;
+                slot->serial = ++vr_soft_clip_serial;
+            }
             vr_world_tan_half_y = 0.0f;
             vr_world_aspect = 0.0f;
             vr_world_far_valid = false;

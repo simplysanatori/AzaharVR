@@ -96,6 +96,16 @@ protected:
     float vr_world_across = 0.0f;    ///< AzaharFrame dbl: its horizontal scale
     float vr_world_p00 = 0.0f;       ///< AzaharFrame natural: the projection's scale across
     float vr_world_eye[3][4]{};      ///< AzaharFrame natural: the eye's camera before the patch
+    /// AzaharFrame kiu2d: the clip-space turn (ClipCorrection) of the last patched world draw
+    /// into each colour buffer (each eye's); the CPU-shaded draws into a buffer get its turn.
+    struct SoftClip {
+        float h[4][4]{};
+        u32 buffer = 0;
+        u32 serial = 0;
+        bool valid = false;
+    };
+    std::array<SoftClip, 4> vr_soft_clip{};
+    u32 vr_soft_clip_serial = 0;
 
     struct HeuristicResult {
         int32_t view_matrixregister = -1;
@@ -105,6 +115,10 @@ protected:
 
 public:
     void ApplyVRDataToPicaVSUniforms(Pica::Shader::Generator::VSPicaUniformData& vs_uniforms);
+    /// AzaharFrame kiu2d: turns the CPU-shaded vertices about to be drawn (vertex_batch) with
+    /// mode 3's world (vr_soft_clip), when g_soft_draw_turn is on and they go to the buffer the
+    /// world went to. The backends call it before drawing them.
+    void TurnSoftwareVertices();
 };
 
 } // namespace VideoCore
