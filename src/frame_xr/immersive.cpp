@@ -2531,6 +2531,13 @@ bool OnResetPanels(bool stick_hold) {
     // Position also puts the Immersive Offset back to the middle: everything to the defaults.
     g.rest.Recentre(0);
     g.poses.Clear(); // AzaharFrame heldquad
+    // AzaharFrame aa6dof2: Angel's Aim draws the screen at true size whatever its placement and
+    // offset are, so Reset Position only re-centres there; the game's saved placement and
+    // Immersive Offset stay for the other modes (as the grip and the D-pad leave them).
+    if (KiuFirstPerson()) {
+        LOG_INFO(Frontend, "xr: immersive: Reset Position in Angel's Aim re-centres only");
+        return false;
+    }
     bool offset_changed = false;
     if (!stick_hold && !(g.offset == L::LensOffset{})) {
         g.offset = {};
