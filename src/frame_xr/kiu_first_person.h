@@ -9,9 +9,10 @@
 // Angel's Aim" (stored 4, listed in every Immersive Mode list; Settings::kImmersiveModeAngelsAim).
 // It is drawn as mode 3 (Settings::ImmersiveRenderMode, for every reader) and is in effect in
 // VR for the European game whose code the hooks checked (OnFor below); elsewhere it plays as
-// Full (6DoF): Other Games and the hooks' log says why. In effect, it turns on with first person (On) the eye hook,
-// the culls off, the follow off, Right Stick turning, the land aim box, the aim from the hand
-// (with Direct Aim), the shots from the hand and the bullet keep, the timed enemy keep
+// Full (6DoF): Other Games and the hooks' log says why. In effect, it turns on with first
+// person (On) the eye hook, the culls off, the follow off, Right Stick turning, the land aim
+// box, the aim and the shots from the hand (both with Aiming = Direct Aim only) and the bullet
+// keep, the timed enemy keep
 // (kAngelsAimEnemyKeepS) and the screen at true size; and it supplies this game's registers
 // (view 90, eye indicator 87,2) in memory only (Settings::RunSuppliedSetting): none of it is
 // written into the settings, so a save during play stores mode 4 and nothing else. Another mode
@@ -38,7 +39,9 @@
 //                                     the game without the mod it turns on _AIM_NO_MOD's parts.
 //   AZAHARFRAME_KIU_SHOTS_6DOF=1      with first person: the game's own shots start at the
 //                                     hand's ray's origin (the weapon's muzzle) and fly along
-//                                     the ray, each with its own scatter, the lock target kept;
+//                                     the ray, each with its own scatter, with no lock target
+//                                     (AzaharFrame aa6dof2; AZAHARFRAME_KIU_SHOT_LOCK=1 keeps
+//                                     the game's: kiu_hooks.h);
 //                                     bullets out of the game camera's view live on (as
 //                                     AZAHARFRAME_KIU_BULLET_KEEP).
 //   AZAHARFRAME_KIU_FP_FACTOR=<f>     AzaharFrame kiufov: the most the game draws past its own
@@ -101,6 +104,14 @@ constexpr bool OnFor(bool dev_switch, uint32_t stored_mode, uint64_t title, bool
     return dev_switch || AngelsAimFor(stored_mode, title, code_ok, in_vr);
 }
 
+/// AzaharFrame kiufix2: the shots fly along the hand: the test switch (with first person on), or
+/// Angel's Aim in effect with Aiming = Direct Aim (with Off or Gyro the reticle is the game's own
+/// and the shots stay on it).
+constexpr bool ShotsFrom6DofFor(bool switch_on, bool first_person_on, bool angels_aim,
+                                bool direct_aim) {
+    return (switch_on && first_person_on) || (angels_aim && direct_aim);
+}
+
 /// First person is on (live): Angel's Aim in effect, or AZAHARFRAME_KIU_FIRST_PERSON. Any thread.
 bool On();
 /// AzaharFrame kiumode: Angel's Aim in effect (live): everything first person needs. Any thread.
@@ -122,6 +133,9 @@ void SupplyRegisters(bool on);
 /// The frontend, when a game boots, before its presets are applied: forgets the last run's code
 /// check and registers. Writes no setting (AzaharFrame kiumode).
 void OnGameBoot();
+/// AzaharFrame kiufix2: counts the runs (OnGameBoot bumps it). The hook, turning and probe state
+/// resets when it changes: a Process address can be reused by the next run of the same title.
+uint32_t RunCount();
 /// The leaning scale in use, game units per metre: life size, or the override. Any thread.
 float UnitsPerMetre();
 
@@ -236,6 +250,9 @@ struct AimNow {
     int aspect_readings = 0;         ///< how many readings of the game's own aim made it
 };
 AimNow AimThroughCamera(const Input::KiuHooks::Reader& mem, uint32_t aim,
-                        const Input::KiuRoom::ReticleScreen& screen, const Sample& sample);
+                        const Input::KiuRoom::ReticleScreen& screen, const Sample& sample,
+                        bool feeds_shape = true);
+/// `feeds_shape` false (the trace): the shared measured shape is read, never updated or reset,
+/// so tracing does not change the aim.
 
 } // namespace FrameXr::Kiu::FirstPerson

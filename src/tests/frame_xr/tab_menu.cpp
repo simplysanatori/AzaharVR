@@ -4696,6 +4696,11 @@ TEST_CASE("Tab menu: Angel's Aim is Recommended only in Kid Icarus: Uprising", "
     MenuModel m = Sample();
     CHECK(RecommendedModeIndex(m) == -1); // another game
     m.mods.angels_aim.shown = true;
+    m.scope = 1;
+    // AzaharFrame kiufix2: the list and the tab are in every region; the badge only where Angel's
+    // Aim is mapped (the European game)
+    CHECK(RecommendedModeIndex(m) == -1);
+    m.mods.angels_aim.recommended = true;
     m.scope = 0;
     CHECK(RecommendedModeIndex(m) == -1); // Global
     m.scope = 1;
@@ -4712,6 +4717,7 @@ TEST_CASE("Tab menu: Angel's Aim is Recommended only in Kid Icarus: Uprising", "
         Drawn d;
         MenuModel model = Sample();
         model.mods.angels_aim.shown = kiu;
+        model.mods.angels_aim.recommended = kiu; // kiufix2: the badge's own flag
         model.scope = scope;
         model.immersive_mode = mode;
         MenuView v;

@@ -79,6 +79,14 @@ float Hint();
 /// XR thread, each frame: measures while a game runs with Automatic (`screens_live`, the
 /// setting), resets for a new game. Logs each change.
 void Frame(bool screens_live, bool automatic);
+/// AzaharFrame kiufix2: Kid Icarus: Uprising's wide camera is in (Angel's Aim; emulation thread,
+/// each VBlank it is in): the game camera is the app's own then, so Automatic measures nothing
+/// while this is asked, and for kHoldSettleMs after the last time (the camera is back to the
+/// game's, and the window the XR thread reads is a second long). `now_ms` is VI::SteadyMs's time.
+void HoldWhileWide(std::int64_t now_ms);
+/// The same, now.
+void HoldWhileWide();
+inline constexpr std::int64_t kHoldSettleMs = 1500;
 /// The aspect Automatic draws with now (5:3 until a game measured otherwise). Any thread.
 float Aspect();
 /// The shape Automatic decided for the game running now (XR thread: the log and tests).

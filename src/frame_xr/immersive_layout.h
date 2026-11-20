@@ -152,6 +152,53 @@ struct ScaleChord {
     }
 };
 
+/// AzaharFrame aa6dof2: what a grip on the immersive screen does. Angel's Aim (Kid Icarus's first
+/// person, `first_person`) shows its screen at true size whatever the screen settings are
+/// (SolveKiuFirstPerson), so there the screen is Fixed: a grip holds nothing (the place, Screen
+/// Size and World Scale are neither changed nor saved) and the D-pad under it changes nothing
+/// (Horizontal and Vertical Scale, Render Margin, 3D Depth, the Immersive Offset); a toast says
+/// so instead (FixedScreenGrip). Every other mode and game: Holds, as always. `engaged`: the
+/// immersive screen is on view (else None).
+enum class GripOnScreen { None, Holds, Fixed };
+constexpr GripOnScreen GripOnScreenFor(bool engaged, bool first_person) {
+    return !engaged ? GripOnScreen::None
+                    : first_person ? GripOnScreen::Fixed : GripOnScreen::Holds;
+}
+
+/// AzaharFrame aa6dof2: the grips while the screen is Fixed, with the Adjuster's hysteresis. A
+/// grip alone shows nothing (in Angel's Aim it can be Grip Frees Aim's); the resize gesture, a
+/// stick pushed past kStickThreshold under a grip that is down, shows the toast once a grab.
+struct FixedScreenGrip {
+    bool down[2]{};
+    bool toasted = false;
+    /// This frame's grips and sticks (left, right; a stick's larger axis): true when the toast
+    /// is due.
+    bool Update(float grip_left, float grip_right, float stick_left, float stick_right) {
+        const float grips[2]{grip_left, grip_right};
+        const float sticks[2]{stick_left, stick_right};
+        bool used = false;
+        for (int h = 0; h < 2; ++h) {
+            down[h] = down[h] ? grips[h] > kGripRelease : grips[h] > kGripPress;
+            used = used || (down[h] && sticks[h] > kStickThreshold);
+        }
+        if (!Any()) {
+            toasted = false; // the grab is over
+        }
+        if (used && !toasted) {
+            toasted = true;
+            return true;
+        }
+        return false;
+    }
+    bool Any() const {
+        return down[0] || down[1];
+    }
+    void Reset() {
+        down[0] = down[1] = false;
+        toasted = false;
+    }
+};
+
 inline constexpr float kDegToRad = 3.14159265f / 180.0f;
 inline constexpr float kRadToDeg = 180.0f / 3.14159265f; ///< AzaharFrame stereo
 

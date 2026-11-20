@@ -16,6 +16,7 @@
 #include "core/core_timing.h"
 #include "core/hle/kernel/process.h"
 #include "core/memory.h"
+#include "frame_xr/auto_shape.h" // AzaharFrame kiufix2
 #include "frame_xr/frame_xr.h"
 #include "frame_xr/input/kiu_hooks.h"
 #include "frame_xr/input/kiu_room.h" // AzaharFrame kiuvr
@@ -40,10 +41,12 @@ constexpr const char* kSwitchEyeOffset = "AZAHARFRAME_KIU_EYE_OFFSET";
 constexpr const char* kSwitchHide = "AZAHARFRAME_KIU_HIDE_PLAYER";
 constexpr const char* kSwitchShot = "AZAHARFRAME_KIU_SHOT_TEST";
 constexpr const char* kSwitchShotNoLock = "AZAHARFRAME_KIU_SHOT_NO_LOCK";
+constexpr const char* kSwitchShotLock = "AZAHARFRAME_KIU_SHOT_LOCK"; // AzaharFrame aa6dof2
 constexpr const char* kSwitchEnemyKeep = "AZAHARFRAME_KIU_ENEMY_KEEP";
 constexpr const char* kSwitchEnemyKeepS = "AZAHARFRAME_KIU_ENEMY_KEEP_S";
 constexpr const char* kSwitchGroupKeep = "AZAHARFRAME_KIU_GROUP_KEEP";
 constexpr const char* kSwitchNoFollow = "AZAHARFRAME_KIU_NO_FOLLOW";
+constexpr const char* kSwitchNoPlayerShadow = "AZAHARFRAME_KIU_NO_PLAYER_SHADOW"; // kiuperf
 constexpr const char* kSwitchTrace = "AZAHARFRAME_KIU_HOOK_TRACE";
 // AzaharFrame kiuvr (kiu_first_person.h)
 constexpr const char* kSwitchFpTrace = "AZAHARFRAME_KIU_FP_TRACE";
@@ -95,7 +98,8 @@ public:
             return false;
         }
         memory_.Write32(process_, addr, value);
-        system_.InvalidateCacheRange(addr, sizeof(uint32_t));
+        // The hooks' own patches only: every page table's JIT may hold the game's old block.
+        system_.InvalidateCacheRangeAllContexts(addr, sizeof(uint32_t));
         return true;
     }
     bool WriteData(uint32_t addr, uint32_t value) override {
@@ -120,6 +124,7 @@ private:
 struct State {
     const Kernel::Process* process = nullptr;
     uint64_t title = 0;
+    uint32_t run = 0; ///< Kiu::FirstPerson::RunCount() when this state began
     bool checked = false;
     bool code_ok = false;
     std::string note;
@@ -243,18 +248,16 @@ FirstPersonNow ReadFirstPerson(const KH::GameMemory& mem, int64_t host_now) {
 /// the ray's origin (the eye offset plus the origin's place from the eye: no absolute position,
 /// so nothing of it is a game frame old but the camera's turn) and gets the game's kind of aim
 /// quaternion for the ray's direction in place of the game's own aim (the stub keeps each
-/// bullet's scatter). The lock target stays. Without a hand or a view: nothing (the game's own).
+/// bullet's scatter). AzaharFrame aa6dof2: no lock target, so no shot bends off the ray to an
+/// enemy beside it; AZAHARFRAME_KIU_SHOT_LOCK=1 keeps the game's lock (KH::ShotAlongRay).
+/// Without a hand or a view: nothing (the game's own).
 KH::ShotRequest ShotFromHand(const FirstPersonNow& now, const KH::Mailbox& eye_mailbox) {
-    KH::ShotRequest shot;
     if (!now.ray.ok || !eye_mailbox.eye_on) {
-        return shot;
+        return {};
     }
-    shot.rotate = true;
-    shot.absolute = true;
-    shot.rotation = KR::ShotQuat(now.ray.direction);
-    shot.move = true;
-    shot.offset = eye_mailbox.eye_offset + now.ray.from_eye;
-    return shot;
+    return KH::ShotAlongRay(KR::ShotQuat(now.ray.direction),
+                            eye_mailbox.eye_offset + now.ray.from_eye,
+                            SwitchIs(kSwitchShotLock, "1"));
 }
 
 /// AZAHARFRAME_KIU_FP_TRACE: one line of key=value words (the proof scripts read them).
@@ -351,7 +354,8 @@ void TraceFirstPerson(State& s, const KH::GameMemory& mem, const KH::Player& p,
                                 std::bit_cast<float>(x), std::bit_cast<float>(y), flags, screen.w,
                                 screen.h, screen.cx, screen.cy, Csv(point));
             const Kiu::FirstPerson::AimNow aim =
-                Kiu::FirstPerson::AimThroughCamera(mem, p.aim, screen, now.sample);
+                Kiu::FirstPerson::AimThroughCamera(mem, p.aim, screen, now.sample,
+                                                 false); // AzaharFrame kiufix2: tracing only reads
             if (aim.valid) {
                 line += fmt::format(" aim_pixel={:.3f},{:.3f} aim_ahead={} aim_depth={:.3f} "
                                     "aim_hit={} aim_aspect={:.5f} aim_aspect_n={}",
@@ -419,12 +423,13 @@ void Hook(int64_t ticks) {
         return;
     }
     const uint64_t title = process->codeset->program_id;
-    if (process.get() != s.process || title != s.title) {
+    if (process.get() != s.process || title != s.title || s.run != Kiu::FirstPerson::RunCount()) {
         const int64_t poll_ns = s.poll_ns;
         s = State{};
         s.poll_ns = poll_ns;
         s.process = process.get();
         s.title = title;
+        s.run = Kiu::FirstPerson::RunCount(); // AzaharFrame kiufix2: a new run, same address
     }
     Memory::MemorySystem& memory = system.Memory();
     GuestMemory mem(system, memory, *process);
@@ -450,7 +455,11 @@ void Hook(int64_t ticks) {
     // turns the land camera and the reticle never does: the land aim box is the whole screen,
     // with the mod or without it.
     const bool want_aim_box = want_aim_hold || Kiu::Turn::RightStickOn();
-    const bool want_nocull = first_person || SwitchIs(kSwitchNoCull, "1");
+    // AzaharFrame kiuperf: a group first person puts in by itself is kept out with its switch at
+    // "0" (an A/B for the cost of each; KH::GroupWanted).
+    const auto nocull_text = Switch(kSwitchNoCull);
+    const bool want_nocull =
+        KH::GroupWanted(first_person, nocull_text ? nocull_text->c_str() : nullptr);
     const bool want_keep = shots_6dof || SwitchIs(kSwitchBulletKeep, "1");
     const bool want_eye = first_person || SwitchIs(kSwitchEye, "1");
     const bool want_hide = SwitchIs(kSwitchHide, "1");
@@ -460,21 +469,25 @@ void Hook(int64_t ticks) {
     const bool shot_test = shot_count == 2 || shot_count == 5;
     const bool want_shot = shot_test || shots_6dof;
     // The timed keep replaces the plain one (they share a site). AzaharFrame kiumode: Angel's
-    // Aim's own (12 s) unless the switch gives one.
-    float keep_seconds = angels_aim ? Kiu::FirstPerson::kAngelsAimEnemyKeepS : 0.0f;
-    if (const auto text = Switch(kSwitchEnemyKeepS)) {
-        float v = 0.0f;
-        if (KH::ParseFloats(text->c_str(), &v, 1) == 1 && v > 0.0f) {
-            keep_seconds = v;
-        }
-    }
+    // Aim's own (12 s) unless the switch gives one. AzaharFrame kiuperf: ENEMY_KEEP_S=0 or
+    // ENEMY_KEEP=0 keeps it out (KH::ChooseEnemyKeep).
+    const auto keep_plain_text = Switch(kSwitchEnemyKeep);
+    const auto keep_timed_text = Switch(kSwitchEnemyKeepS);
+    const KH::EnemyKeepChoice keep_choice = KH::ChooseEnemyKeep(
+        angels_aim ? Kiu::FirstPerson::kAngelsAimEnemyKeepS : 0.0f,
+        keep_plain_text ? keep_plain_text->c_str() : nullptr,
+        keep_timed_text ? keep_timed_text->c_str() : nullptr);
+    const float keep_seconds = keep_choice.seconds;
     const bool want_keep_timed = keep_seconds > 0.0f;
-    const bool want_enemy_keep = !want_keep_timed && SwitchIs(kSwitchEnemyKeep, "1");
+    const bool want_enemy_keep = keep_choice.plain;
     const bool want_group_keep = SwitchIs(kSwitchGroupKeep, "1");
     const bool want_no_follow = first_person || SwitchIs(kSwitchNoFollow, "1");
     // AzaharFrame kiushadow: in first person the player's own round shadow lies right under the
     // eye: only his is left out (everyone else's stays).
-    const bool want_player_shadow = first_person;
+    // AzaharFrame kiuperf: AZAHARFRAME_KIU_NO_PLAYER_SHADOW=0 keeps his shadow (the group out).
+    const auto shadow_text = Switch(kSwitchNoPlayerShadow);
+    const bool want_player_shadow =
+        KH::GroupWanted(first_person, shadow_text ? shadow_text->c_str() : nullptr);
     const auto trace_text = Switch(kSwitchTrace);
     const int trace = trace_text ? std::atoi(trace_text->c_str()) : 0;
     const bool any = want_nocull || want_keep || want_eye || want_hide || want_shot ||
@@ -611,6 +624,9 @@ void Hook(int64_t ticks) {
                             (mailbox.wide_node != 0 ? KH::Bit(KH::Group::WideCamera) : 0u);
     const KH::SyncResult r = KH::Sync(mem, wanted, mailbox);
     LogChanges(s, r);
+    if ((r.in_mask & KH::Bit(KH::Group::WideCamera)) != 0) {
+        AutoShape::HoldWhileWide(); // AzaharFrame kiufix2: Screen Shape Automatic does not measure
+    }
 
     // AzaharFrame kiuvr: first person's trace.
     if (first_person || fp_trace > 0) {

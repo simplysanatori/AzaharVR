@@ -476,6 +476,9 @@ struct State {
     float view_worst_deg = 1e9f;
     int view_frames = 0, view_past = 0;
     L::Adjuster adjuster;
+    /// AzaharFrame aa6dof2: the grips while Angel's Aim keeps the screen fixed (OnGameInput).
+    L::FixedScreenGrip fixed_grip;
+    bool grip_on_fixed = false; ///< a grip is down on the fixed screen (GripOnFixedScreen)
     /// The global Immersive Offset (vr_immersive_offset_x, _y), read every frame.
     L::LensOffset offset;
     bool offset_logged = false;
@@ -2302,7 +2305,30 @@ bool HoldingScreen() {
     return g.adjuster.Active();
 }
 
+// AzaharFrame aa6dof2: Angel's Aim keeps its screen at true size (Layout::GripOnScreen): what was
+// asked, in the log, and the toast; nothing is changed or saved.
+bool ScreenFixedNow() {
+    return L::GripOnScreenFor(g.engaged && g.view.valid, KiuFirstPerson()) ==
+           L::GripOnScreen::Fixed;
+}
+
+void NoteScreenFixed(const char* what) {
+    ShowToastText(Names::kAngelsAimScreenFixed);
+    LOG_INFO(Frontend,
+             "xr: immersive: {} in Angel's Aim: the screen stays at true size, nothing changed "
+             "or saved",
+             what);
+}
+
+bool GripOnFixedScreen() {
+    return g.grip_on_fixed;
+}
+
 bool NudgeOffset(int right_steps, int up_steps) {
+    if (g.grip_on_fixed && (right_steps != 0 || up_steps != 0)) { // AzaharFrame aa6dof2
+        NoteScreenFixed("grip + D-pad (Immersive Offset)");
+        return false;
+    }
     if (!g.adjuster.Active() || !g.engaged || (right_steps == 0 && up_steps == 0)) {
         return false;
     }
@@ -2326,6 +2352,10 @@ bool TakeIpdSaved() { // AzaharFrame ipd
 }
 
 WiderStep StepWiderView(int dir) {
+    if (g.grip_on_fixed && dir != 0) { // AzaharFrame aa6dof2
+        NoteScreenFixed("grip + D-pad (Render Margin)");
+        return WiderStep::None;
+    }
     if (!g.adjuster.Active() || !g.engaged || dir == 0) {
         return WiderStep::None;
     }
@@ -2350,6 +2380,10 @@ WiderStep StepWiderView(int dir) {
 
 WiderStep StepScale(int wider_steps, int taller_steps) {
     if (wider_steps == 0 && taller_steps == 0) {
+        return WiderStep::None;
+    }
+    if (ScreenFixedNow()) { // AzaharFrame aa6dof2: before "Hold the Screen First" (none can)
+        NoteScreenFixed("both grips + D-pad (Horizontal or Vertical Scale)");
         return WiderStep::None;
     }
     // 1.2.0 fix lane B (triage item 6): never a silent drop. The chord is latched until both
@@ -2414,6 +2448,10 @@ bool GripUpDownSteps3dDepth() {
 // one row step each, per game as the in-game menu writes it (it opens on Per-Game), live
 // (OnFrame reads it every frame).
 WiderStep StepDepth3d(int steps) {
+    if (g.grip_on_fixed && steps != 0) { // AzaharFrame aa6dof2
+        NoteScreenFixed("grip + D-pad (3D Depth)");
+        return WiderStep::None;
+    }
     if (!g.adjuster.Active() || !g.engaged || steps == 0) {
         return WiderStep::None;
     }
@@ -2441,6 +2479,10 @@ WiderStep StepDepth3d(int steps) {
 // distance, the margins and the mode as they are now. Per game, like the grip + stick and the
 // D-pad. Nothing re-applies it: the values are ordinary from then on.
 bool FillView() {
+    if (ScreenFixedNow()) { // AzaharFrame aa6dof2
+        NoteScreenFixed("Fill View");
+        return false;
+    }
     const std::string full_only = std::string(Names::kFillView) + ": Full Modes Only";
     if (!IsViewMode(g.mode) || !g.fill.valid) {
         ShowToastText(full_only, ToastTime::Long);
@@ -2511,6 +2553,13 @@ bool OnResetPanels(bool stick_hold) {
     // Position also puts the Immersive Offset back to the middle: everything to the defaults.
     g.rest.Recentre(0);
     g.poses.Clear(); // AzaharFrame heldquad
+    // AzaharFrame aa6dof2: Angel's Aim draws the screen at true size whatever its placement and
+    // offset are, so Reset Position only re-centres there; the game's saved placement and
+    // Immersive Offset stay for the other modes (as the grip and the D-pad leave them).
+    if (KiuFirstPerson()) {
+        LOG_INFO(Frontend, "xr: immersive: Reset Position in Angel's Aim re-centres only");
+        return false;
+    }
     bool offset_changed = false;
     if (!stick_hold && !(g.offset == L::LensOffset{})) {
         g.offset = {};
@@ -2550,8 +2599,23 @@ void OnGameInput(Input::InputFrame& in) {
     // AzaharFrame natural: in the Full modes the stick forward/back is World Scale (the screen's
     // distance at the same angle, and the world's size with it).
     float world_ratio = 1.0f;
-    const L::Adjuster::Result r =
-        g.adjuster.Update(in, frame, dt, enabled, place, wide ? nullptr : &world_ratio);
+    // AzaharFrame aa6dof2: in Angel's Aim the screen is at true size whatever its settings are,
+    // so a grip holds nothing there: nothing is moved, resized, scaled or saved (the Adjuster
+    // runs disabled), and the stick under it shows a toast instead (Layout::GripOnScreen).
+    const bool fixed = L::GripOnScreenFor(enabled, KiuFirstPerson()) == L::GripOnScreen::Fixed;
+    if (fixed) {
+        const auto push = [&](std::size_t h) {
+            return std::max(std::abs(in.hand[h].stick.x), std::abs(in.hand[h].stick.y));
+        };
+        if (g.fixed_grip.Update(in.hand[0].grip, in.hand[1].grip, push(0), push(1))) {
+            NoteScreenFixed("grip + stick (Screen Size, World Scale)");
+        }
+    } else {
+        g.fixed_grip.Reset();
+    }
+    g.grip_on_fixed = fixed && g.fixed_grip.Any();
+    const L::Adjuster::Result r = g.adjuster.Update(in, frame, dt, enabled && !fixed, place,
+                                                    wide ? nullptr : &world_ratio);
     if (!wide && r.active && world_ratio != 1.0f) {
         const L::Placement saved = L::Clamped(place);
         const float before =
@@ -2628,6 +2692,13 @@ void OnGameInput(Input::InputFrame& in) {
         }
         if (r.active) {
             in.hand[static_cast<std::size_t>(r.hand)].stick = {};
+        }
+        // AzaharFrame aa6dof2: a grip on the fixed screen keeps its stick from the game too (the
+        // gesture that would resize it does nothing, and turns nothing either).
+        for (int h = 0; h < 2; h++) {
+            if (g.grip_on_fixed && g.fixed_grip.down[h]) {
+                in.hand[static_cast<std::size_t>(h)].stick = {};
+            }
         }
     }
     if (r.released) {

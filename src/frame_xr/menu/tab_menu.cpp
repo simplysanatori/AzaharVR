@@ -488,7 +488,7 @@ std::vector<Id> ControlsScopeRows(bool kiu) {
 }
 
 int RecommendedModeIndex(const MenuModel& model) {
-    return model.mods.angels_aim.shown && model.scope == 1
+    return model.mods.angels_aim.recommended && model.scope == 1
                ? Immersive::Names::ModeIndexOf(Immersive::Names::kModeStoredAngelsAim)
                : -1;
 }

@@ -175,6 +175,10 @@ inline constexpr const char* kMayFeelLocked = "May Feel Locked";
 inline constexpr const char* kAtMax = "Max";
 inline constexpr const char* kAtMin = "Min";
 inline constexpr const char* kHoldScreenFirst = "Hold the Screen First";
+/// AzaharFrame aa6dof2, unapproved: Angel's Aim keeps its screen at true size (Layout::GripOnScreen),
+/// so a grip there holds nothing and the D-pad under it changes nothing: this toast says so
+/// instead (once a grab for the stick under a grip, and on each such D-pad press).
+inline constexpr const char* kAngelsAimScreenFixed = "Angel's Aim: Screen Size Fixed";
 /// The separator of a toast's parts (as "Motion Clarity: Experimental \u00b7 May Flicker").
 inline constexpr const char* kToastPartSeparator = " \u00b7 ";
 /// The whole percent ScreenSizeToast shows for a size.

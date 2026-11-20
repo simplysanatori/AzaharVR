@@ -93,6 +93,7 @@ private:
 struct State {
     const Kernel::Process* process = nullptr;
     uint64_t title = 0;
+    uint32_t run = 0; ///< AzaharFrame kiufix2: Kiu::FirstPerson::RunCount() when this began
     bool checked = false;
     bool code_ok = false;
     std::string note;
@@ -217,9 +218,10 @@ void Hook(int64_t ticks, bool vblank) {
         return;
     }
     const uint64_t title = process->codeset->program_id;
-    if (process.get() != s.process || title != s.title) {
+    if (process.get() != s.process || title != s.title || s.run != Kiu::FirstPerson::RunCount()) {
         s.process = process.get();
         s.title = title;
+        s.run = Kiu::FirstPerson::RunCount();
         s.checked = false;
         s.code_ok = false;
         Idle(s);

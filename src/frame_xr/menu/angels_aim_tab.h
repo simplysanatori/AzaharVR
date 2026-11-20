@@ -39,6 +39,7 @@ namespace FrameXr::Menu {
 
 struct AngelsAimModel {
     bool shown = false;         ///< Kid Icarus: Uprising is open
+    bool recommended = false;   ///< the badge: Angel's Aim is mapped for this copy (Europe only)
     bool mod_installed = false; ///< a C-Stick & Gyro mod (FrameXr::CStickModInstalled)
     bool textures_pack = false; ///< the catalog's weapons and effects pack is on (kAngelsAimPackIds)
     std::string report_url;     ///< Report an Issue's page ("" none)

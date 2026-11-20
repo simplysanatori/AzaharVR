@@ -269,9 +269,9 @@ ConfigureFrameVr::ConfigureFrameVr(QWidget* parent, u64 title_id) : QGroupBox(pa
     for (const char* choice : FrameXr::Immersive::Names::kModeChoices) {
         QString text = tr(choice);
         // AzaharFrame kiurec: Kid Icarus: Uprising's own Properties: "(Recommended)" after Angel's
-        // Aim (the lightest pattern here: a combo item has no icon; the text is the VR menu
+        // Aim (European game only; the lightest pattern here: a combo item has no icon; the text is the VR menu
         // badge's kRecommendedChip). Not in other games, not in Global (title id 0).
-        if (title_id != 0 && FrameXr::Kiu::IsKidIcarus(title_id) &&
+        if (title_id != 0 && FrameXr::Kiu::IsAngelsAimTitle(title_id) &&
             std::string_view(choice) == FrameXr::Immersive::Names::kModeAngelsAim) {
             text += QStringLiteral(" (%1)").arg(tr(FrameXr::Menu::kRecommendedChip));
         }

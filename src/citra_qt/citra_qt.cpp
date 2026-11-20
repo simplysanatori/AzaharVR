@@ -3726,7 +3726,7 @@ void GMainWindow::BootGame(const QString& filename) {
     // (core/frame_weapon_models.h): the game's own RomFS as the game reads it (LayeredFS mods
     // too), handed to a thread of its own; nothing here waits for it.
     if (Loader::ResultStatus::Success == res && !is_artic && FrameXr::Kiu::IsKidIcarus(title_id)) {
-        FrameXr::Kiu::Hooks::OnGameBoot(); // AzaharFrame kiuhook: test switches only
+        FrameXr::Kiu::Hooks::OnGameBoot(); // AzaharFrame kiuhook: sets the VBlank hook (once); Angel's Aim and the test switches use it
         std::shared_ptr<FileSys::RomFSReader> romfs;
         if (system.GetAppLoader().ReadRomFS(romfs) == Loader::ResultStatus::Success && romfs) {
             // Made now when Weapon in Hand is on, else the first time it is turned on.

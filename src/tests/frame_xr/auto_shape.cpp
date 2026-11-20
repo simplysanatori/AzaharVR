@@ -226,6 +226,33 @@ TEST_CASE("Auto shape: measures in every Match Game Camera mode", "[frame_xr][au
     measured.SetValue(measured_before);
 }
 
+// AzaharFrame kiufix2: Angel's Aim's wide camera is the app's own, so Automatic measures nothing
+// while it is in and for kHoldSettleMs after it.
+TEST_CASE("Auto shape: nothing is measured while the wide camera is in", "[frame_xr][autoshape]") {
+    namespace VI = VideoCore::Immersive;
+    auto& top = Settings::values.vr_top_aspect;
+    const u32 top_before = top.GetValue();
+    top.SetValue(kAutomatic);
+    SetHint(0.0f);
+    const auto run = [&](std::int64_t hold_ms_ago) {
+        Frame(false, true);
+        Frame(true, true); // a new game: 5:3
+        REQUIRE(CurrentShape().value == 0);
+        const std::int64_t start = VI::SteadyMs() + 10'000;
+        for (int i = 1; i <= 12; i++) {
+            HoldWhileWide(VI::SteadyMs() - hold_ms_ago); // the hook, each VBlank it is in
+            VI::g_measured_shape.Publish(0.5f, 4.0f / 3.0f, start + 250 * i);
+            Frame(true, true);
+        }
+    };
+    run(0); // held: the 4:3 of the wide camera is ignored
+    CHECK(CurrentShape().value == 0);
+    run(kHoldSettleMs + 100); // settled: the same camera is measured as before
+    CHECK(CurrentShape().value == 3);
+    Frame(false, true);
+    top.SetValue(top_before);
+}
+
 // AzaharFrame oot: a mod drawing 4:3 (or 3:2) switches Automatic after 2 s; a 4:3 camera shorter
 // than that, as at the boot of the owner's Ocarina of Time 3D, does not.
 TEST_CASE("Auto shape: 4:3 and 3:2 after 2 s", "[frame_xr][autoshape]") {

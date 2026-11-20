@@ -842,6 +842,44 @@ TEST_CASE("Kid Icarus hooks: the cave", "[frame_xr][kiuhook]") {
         CHECK(r.Of(Group::Eye) == GroupState::In);
     }
 
+    SECTION("a site patched by an older image goes back to the game's word, then in again") {
+        // an older build's state: its image, and the camera sink's branch to an entry that has
+        // since moved (not our word, but a branch into the image's area)
+        m.Set32(kImageBase, Stubs::kImageTag);
+        m.Set32(kImageBase + 4, Stubs::kImageVersion + 7);
+        m.Set32(kImageBase + 8, kInvented);
+        const uint32_t old_branch = B(kSiteCameraSink, kImageBase + 0x40);
+        REQUIRE(old_branch != 0xE92D4070);
+        m.Set32(kSiteCameraSink, old_branch);
+        CHECK(BranchesIntoImage(kSiteCameraSink, old_branch));
+        CHECK_FALSE(BranchesIntoImage(kSiteCameraSink, 0xE92D4070));
+        CHECK_FALSE(BranchesIntoImage(kSiteCameraSink, B(kSiteCameraSink, kMailbox + 0x10)));
+        m.writes.clear();
+        SyncResult r = Sync(m, Bit(Group::Eye), Mailbox{});
+        CHECK(r.cave == Cave::Ours);
+        CHECK(ImageInPlace(m));
+        CHECK(r.Of(Group::Eye) == GroupState::In);
+        // the site was put back before the image was rewritten
+        std::size_t restore = m.writes.size(), first_image = m.writes.size();
+        for (std::size_t i = 0; i < m.writes.size(); ++i) {
+            if (m.writes[i].addr == kSiteCameraSink && restore == m.writes.size()) {
+                restore = i;
+            }
+            if (m.writes[i].addr == kImageBase && first_image == m.writes.size()) {
+                first_image = i;
+            }
+        }
+        CHECK(restore < first_image);
+        CHECK(m.writes[restore].value == 0xE92D4070);
+    }
+
+    SECTION("an older image's site with every switch off: out, back to the game's word") {
+        m.Set32(kSiteCameraSink, B(kSiteCameraSink, kImageBase + 0x40));
+        const SyncResult r = Sync(m, 0, Mailbox{});
+        CHECK(m.Get32(kSiteCameraSink) == 0xE92D4070);
+        CHECK(r.in_mask == 0);
+    }
+
     SECTION("the cave is not mapped") {
         m.Unmap32(kImageBase + 0x10);
         SyncResult r = Sync(m, Bit(Group::Eye), Mailbox{});
@@ -1189,6 +1227,31 @@ TEST_CASE("Kid Icarus hooks: filling the mailbox", "[frame_xr][kiuhook]") {
         CHECK_FALSE(ShotTest(z, 0.0f, 0.0f, {}, true, false).rotate);
     }
 
+    // AzaharFrame aa6dof2: first person's shots along the hand's ray take no lock target (no
+    // bend onto an enemy beside the ray) unless the switch keeps the game's.
+    SECTION("shots along the hand's ray: no lock target unless kept") {
+        const Quat aim = Normalized({0.0f, 0.3f, 0.0f, 0.95f});
+        const Vec3 from{0.2f, -3.2f, -2.5f};
+        ShotRequest r = ShotAlongRay(aim, from, false);
+        CHECK(r.rotate);
+        CHECK(r.absolute);
+        CHECK(r.move);
+        CHECK(r.no_target);
+        CHECK(r.rotation.y == Approx(aim.y));
+        CHECK(r.offset.z == Approx(from.z));
+        Mailbox mb = Fill(p, EyeRequest{true, kEyeOffsetDefault}, r, 4);
+        CHECK(mb.shot_no_target);
+        CHECK(mb.shot_absolute);
+        const uint32_t flags = mb.Words()[Stubs::kMbShotFlags / 4];
+        CHECK(flags == (Stubs::kShotRotate | Stubs::kShotMove | Stubs::kShotNoTarget |
+                        Stubs::kShotAbsolute));
+        r = ShotAlongRay(aim, from, true); // AZAHARFRAME_KIU_SHOT_LOCK=1
+        CHECK_FALSE(r.no_target);
+        mb = Fill(p, EyeRequest{true, kEyeOffsetDefault}, r, 5);
+        CHECK_FALSE(mb.shot_no_target);
+        CHECK((mb.Words()[Stubs::kMbShotFlags / 4] & Stubs::kShotNoTarget) == 0u);
+    }
+
     SECTION("no player: everything off") {
         m.Set32(kActor, 0);
         ShotRequest shot;
@@ -1228,4 +1291,84 @@ TEST_CASE("Kid Icarus hooks: hiding the player and the switch values", "[frame_x
     CHECK(ParseFloats("1,2,x", v, 5) == 0);
     CHECK(ParseFloats("1,2,3,4,5,6", v, 5) == 0); // too many
     CHECK(ParseFloats("1,nan", v, 5) == 0);
+}
+
+// AzaharFrame kiuperf: inside Angel's Aim each group it puts in by itself can be kept out for an
+// A/B (AZAHARFRAME_KIU_NOCULL=0, _NO_PLAYER_SHADOW=0, _ENEMY_KEEP=0 or _ENEMY_KEEP_S=0).
+TEST_CASE("Kid Icarus hooks: switches at 0 keep Angel's Aim's groups out", "[frame_xr][kiuhook]") {
+    // No line, or a value that means nothing: the mode's choice.
+    CHECK(GroupWanted(true, nullptr));
+    CHECK_FALSE(GroupWanted(false, nullptr));
+    CHECK(GroupWanted(true, ""));
+    CHECK(GroupWanted(true, "2"));
+    CHECK(GroupWanted(true, "01"));
+    CHECK(GroupWanted(true, "10"));
+    CHECK_FALSE(GroupWanted(false, "yes"));
+    // "1" puts it in in any mode (as before); "0" keeps it out even in first person.
+    CHECK(GroupWanted(false, "1"));
+    CHECK(GroupWanted(true, "1"));
+    CHECK_FALSE(GroupWanted(true, "0"));
+    CHECK_FALSE(GroupWanted(false, "0"));
+
+    const float aa = 12.0f; // Angel's Aim's own
+    // Angel's Aim, no switch: the timed keep, 12 s.
+    EnemyKeepChoice c = ChooseEnemyKeep(aa, nullptr, nullptr);
+    CHECK(c.seconds == 12.0f);
+    CHECK_FALSE(c.plain);
+    // Another mode, no switch: none.
+    c = ChooseEnemyKeep(0.0f, nullptr, nullptr);
+    CHECK(c.seconds == 0.0f);
+    CHECK_FALSE(c.plain);
+    // ENEMY_KEEP_S=<s> replaces the mode's seconds, in any mode.
+    c = ChooseEnemyKeep(aa, nullptr, "6");
+    CHECK(c.seconds == 6.0f);
+    c = ChooseEnemyKeep(0.0f, nullptr, "25");
+    CHECK(c.seconds == 25.0f);
+    // ENEMY_KEEP_S=0 takes the timed keep out (before, a 0 was ignored and 12 s stayed).
+    c = ChooseEnemyKeep(aa, nullptr, "0");
+    CHECK(c.seconds == 0.0f);
+    CHECK_FALSE(c.plain);
+    // Negative or malformed: ignored, the mode's stays.
+    CHECK(ChooseEnemyKeep(aa, nullptr, "-3").seconds == 12.0f);
+    CHECK(ChooseEnemyKeep(aa, nullptr, "x").seconds == 12.0f);
+    CHECK(ChooseEnemyKeep(aa, nullptr, "").seconds == 12.0f);
+    // ENEMY_KEEP=1: the keep for good only when no timed one is in (they share a site).
+    c = ChooseEnemyKeep(0.0f, "1", nullptr);
+    CHECK(c.plain);
+    CHECK(c.seconds == 0.0f);
+    c = ChooseEnemyKeep(aa, "1", nullptr);
+    CHECK_FALSE(c.plain);
+    CHECK(c.seconds == 12.0f);
+    c = ChooseEnemyKeep(aa, "1", "0");
+    CHECK(c.plain);
+    CHECK(c.seconds == 0.0f);
+    // ENEMY_KEEP=0: no enemy keep at all, whatever ENEMY_KEEP_S says.
+    for (const char* timed : {static_cast<const char*>(nullptr), "0", "6", "x"}) {
+        c = ChooseEnemyKeep(aa, "0", timed);
+        CHECK(c.seconds == 0.0f);
+        CHECK_FALSE(c.plain);
+    }
+    // Only an exact 0 or 1 counts for ENEMY_KEEP.
+    c = ChooseEnemyKeep(aa, "00", nullptr);
+    CHECK(c.seconds == 12.0f);
+    CHECK_FALSE(c.plain);
+
+    // What the masks do on the game's words (plain groups, no cave): first person's no cull and a
+    // keep for good, then NOCULL=0: only the no cull's words go back.
+    FakeMemory m = Game();
+    REQUIRE(GameCodeMatches(m));
+    const auto mask = [](bool nocull, const EnemyKeepChoice& k) {
+        return (nocull ? Bit(Group::NoCull) : 0u) | (k.plain ? Bit(Group::EnemyKeep) : 0u);
+    };
+    const EnemyKeepChoice keep = ChooseEnemyKeep(0.0f, "1", nullptr);
+    SyncResult r = Sync(m, mask(GroupWanted(true, nullptr), keep), Mailbox{});
+    CHECK(r.Of(Group::NoCull) == GroupState::In);
+    CHECK(r.Of(Group::EnemyKeep) == GroupState::In);
+    r = Sync(m, mask(GroupWanted(true, "0"), keep), Mailbox{});
+    CHECK(r.Of(Group::NoCull) == GroupState::Out);
+    CHECK(SiteIs(m, Group::NoCull, false)); // the game's words back
+    CHECK(r.Of(Group::EnemyKeep) == GroupState::In);
+    r = Sync(m, mask(GroupWanted(true, "0"), ChooseEnemyKeep(0.0f, "0", nullptr)), Mailbox{});
+    CHECK(r.Of(Group::EnemyKeep) == GroupState::Out);
+    CHECK_FALSE(AnyOurs(m));
 }
