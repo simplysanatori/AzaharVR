@@ -1227,6 +1227,31 @@ TEST_CASE("Kid Icarus hooks: filling the mailbox", "[frame_xr][kiuhook]") {
         CHECK_FALSE(ShotTest(z, 0.0f, 0.0f, {}, true, false).rotate);
     }
 
+    // AzaharFrame aa6dof2: first person's shots along the hand's ray take no lock target (no
+    // bend onto an enemy beside the ray) unless the switch keeps the game's.
+    SECTION("shots along the hand's ray: no lock target unless kept") {
+        const Quat aim = Normalized({0.0f, 0.3f, 0.0f, 0.95f});
+        const Vec3 from{0.2f, -3.2f, -2.5f};
+        ShotRequest r = ShotAlongRay(aim, from, false);
+        CHECK(r.rotate);
+        CHECK(r.absolute);
+        CHECK(r.move);
+        CHECK(r.no_target);
+        CHECK(r.rotation.y == Approx(aim.y));
+        CHECK(r.offset.z == Approx(from.z));
+        Mailbox mb = Fill(p, EyeRequest{true, kEyeOffsetDefault}, r, 4);
+        CHECK(mb.shot_no_target);
+        CHECK(mb.shot_absolute);
+        const uint32_t flags = mb.Words()[Stubs::kMbShotFlags / 4];
+        CHECK(flags == (Stubs::kShotRotate | Stubs::kShotMove | Stubs::kShotNoTarget |
+                        Stubs::kShotAbsolute));
+        r = ShotAlongRay(aim, from, true); // AZAHARFRAME_KIU_SHOT_LOCK=1
+        CHECK_FALSE(r.no_target);
+        mb = Fill(p, EyeRequest{true, kEyeOffsetDefault}, r, 5);
+        CHECK_FALSE(mb.shot_no_target);
+        CHECK((mb.Words()[Stubs::kMbShotFlags / 4] & Stubs::kShotNoTarget) == 0u);
+    }
+
     SECTION("no player: everything off") {
         m.Set32(kActor, 0);
         ShotRequest shot;

@@ -24,6 +24,9 @@
 //                                     three, started from the player's position plus that offset
 //                                     (side, up, ahead of the game camera's level view).
 //   AZAHARFRAME_KIU_SHOT_NO_LOCK=1    with SHOT_TEST: the shots get no lock target (no homing).
+//   AZAHARFRAME_KIU_SHOT_LOCK=1       AzaharFrame aa6dof2: first person's shots from the hand
+//                                     keep the game's lock target (homing); without it they
+//                                     get none and fly along the hand's ray.
 //   AZAHARFRAME_KIU_ENEMY_KEEP=1      flying enemies whose scripted path ends fly it again
 //                                     instead of vanishing (they come round and keep shooting).
 //   AZAHARFRAME_KIU_ENEMY_KEEP_S=<seconds>

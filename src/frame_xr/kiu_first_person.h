@@ -39,7 +39,9 @@
 //                                     the game without the mod it turns on _AIM_NO_MOD's parts.
 //   AZAHARFRAME_KIU_SHOTS_6DOF=1      with first person: the game's own shots start at the
 //                                     hand's ray's origin (the weapon's muzzle) and fly along
-//                                     the ray, each with its own scatter, the lock target kept;
+//                                     the ray, each with its own scatter, with no lock target
+//                                     (AzaharFrame aa6dof2; AZAHARFRAME_KIU_SHOT_LOCK=1 keeps
+//                                     the game's: kiu_hooks.h);
 //                                     bullets out of the game camera's view live on (as
 //                                     AZAHARFRAME_KIU_BULLET_KEEP).
 //   AZAHARFRAME_KIU_FP_FACTOR=<f>     AzaharFrame kiufov: the most the game draws past its own

@@ -286,6 +286,7 @@ private:
     Vis::MuzzleFlash muzzle_flash; ///< AzaharFrame kiuflash: Muzzle Flash on the same shots
     Vis::ShotSignal shot_signal;   ///< AzaharFrame kiuflash: the projectiles' this frame
     bool muzzle_flash_logged = false;
+    bool projectiles_hand_logged = false; ///< AzaharFrame aa6dof2: the shots come from the hand
     bool recoil_real_logged = false;
     bool laser_logged = false; // AzaharFrame kiufix
     // AzaharFrame kiuaim2: Check Aim: the running game's map (its own file), and the steps.

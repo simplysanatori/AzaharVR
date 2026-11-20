@@ -381,8 +381,12 @@ screen. A ray that leaves the game's view holds the reticle at the screen's edge
 - **What the app fills.** `ShotRequest.absolute`: the rotation is the game's kind of aim
   quaternion for the hand's ray (`KiuRoom::ShotQuat`), and the stub makes each bullet's
   quaternion `rotation × conj(aim) × q`: the bullet keeps its own scatter and tilt, about the
-  ray. The offset is the eye offset plus the ray's origin from the eye (the transform). The lock
-  target is left as the game chose it.
+  ray. The offset is the eye offset plus the ray's origin from the eye (the transform).
+  AzaharFrame aa6dof2: no lock target (`ShotAlongRay`, the stub's "no lock target" flag), so
+  the shots stay on the ray; `AZAHARFRAME_KIU_SHOT_LOCK=1` keeps the game's lock (homing). With
+  the lock, a charged shot fired 8°, 15° or 25° beside the Practice Range's dummy bent all the way
+  onto it (35° and 50°: straight on), with the wide camera and without it alike: on the headset
+  the shots left the reticle for enemies near it (owner's session 4).
 - **The ray's origin** is the one ray's (Direct Aim's and the laser's): the drawn weapon's
   muzzle (`vis/weapon_fit.h`) when the weapon is in the hand, else the aim pose.
 

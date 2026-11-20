@@ -2158,7 +2158,21 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
             visuals.SetMuzzleFlash(flash);
         }
         shot_signal = {};
-        if (active && projectiles_on && readable) {
+        // AzaharFrame aa6dof2: in first person with the shots from the hand the game's own shots
+        // leave the weapon in the hand, so the app's stand-in projectiles are not drawn (they
+        // would double them; they aim at the Primary Screen, which first person has none of:
+        // every one was logged as skipped, "no point on the Primary Screen").
+        const bool game_shots_from_hand = Kiu::FirstPerson::Shots6DofOn();
+        if (game_shots_from_hand != projectiles_hand_logged) {
+            projectiles_hand_logged = game_shots_from_hand;
+            if (projectiles_on) {
+                LOG_INFO(Frontend, "xr: projectiles: {}",
+                         game_shots_from_hand
+                             ? "the game's own shots leave the weapon (first person): none drawn"
+                             : "drawn on the game's shots");
+            }
+        }
+        if (active && projectiles_on && readable && !game_shots_from_hand) {
             const Vis::ShotTune tune =
                 Vis::ParseShotTune(Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_SHOT"));
             shot_signal.on = true;

@@ -685,6 +685,24 @@ inline Quat ParentRotation(const Player& p) {
     return Normalized(Mul(p.world_q, Conj(p.local_q)));
 }
 
+/// AzaharFrame aa6dof2: first person's shots along the hand's ray (Angel's Aim with Direct Aim, or
+/// AZAHARFRAME_KIU_SHOTS_6DOF): `aim` is the game's kind of aim quaternion for the ray
+/// (KiuRoom::ShotQuat), taken as the aim itself (`absolute`: each bullet keeps the game's own
+/// scatter and tilt about it); each bullet starts at the eye offset plus `offset` (the ray's
+/// origin). No lock target unless `keep_lock` (AZAHARFRAME_KIU_SHOT_LOCK=1): with the game's
+/// lock, measured on the desktop, a charged shot fired along a ray 8, 15 or 25 degrees beside
+/// an enemy bent all the way onto it, so the shots left the reticle for whatever was near it.
+inline ShotRequest ShotAlongRay(const Quat& aim, const Vec3& offset, bool keep_lock) {
+    ShotRequest r;
+    r.rotate = true;
+    r.absolute = true;
+    r.rotation = aim;
+    r.move = true;
+    r.offset = offset;
+    r.no_target = !keep_lock;
+    return r;
+}
+
 /// The test switch's shot, laid out on the game camera's view direction made level (`view`:
 /// from the scene camera's eye to its look-at; the camera does not turn when the player fires,
 /// his body does): `yaw` turns the game's aim about the world's up axis (+y; by the right-hand

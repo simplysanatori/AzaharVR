@@ -41,6 +41,7 @@ constexpr const char* kSwitchEyeOffset = "AZAHARFRAME_KIU_EYE_OFFSET";
 constexpr const char* kSwitchHide = "AZAHARFRAME_KIU_HIDE_PLAYER";
 constexpr const char* kSwitchShot = "AZAHARFRAME_KIU_SHOT_TEST";
 constexpr const char* kSwitchShotNoLock = "AZAHARFRAME_KIU_SHOT_NO_LOCK";
+constexpr const char* kSwitchShotLock = "AZAHARFRAME_KIU_SHOT_LOCK"; // AzaharFrame aa6dof2
 constexpr const char* kSwitchEnemyKeep = "AZAHARFRAME_KIU_ENEMY_KEEP";
 constexpr const char* kSwitchEnemyKeepS = "AZAHARFRAME_KIU_ENEMY_KEEP_S";
 constexpr const char* kSwitchGroupKeep = "AZAHARFRAME_KIU_GROUP_KEEP";
@@ -247,18 +248,16 @@ FirstPersonNow ReadFirstPerson(const KH::GameMemory& mem, int64_t host_now) {
 /// the ray's origin (the eye offset plus the origin's place from the eye: no absolute position,
 /// so nothing of it is a game frame old but the camera's turn) and gets the game's kind of aim
 /// quaternion for the ray's direction in place of the game's own aim (the stub keeps each
-/// bullet's scatter). The lock target stays. Without a hand or a view: nothing (the game's own).
+/// bullet's scatter). AzaharFrame aa6dof2: no lock target, so no shot bends off the ray to an
+/// enemy beside it; AZAHARFRAME_KIU_SHOT_LOCK=1 keeps the game's lock (KH::ShotAlongRay).
+/// Without a hand or a view: nothing (the game's own).
 KH::ShotRequest ShotFromHand(const FirstPersonNow& now, const KH::Mailbox& eye_mailbox) {
-    KH::ShotRequest shot;
     if (!now.ray.ok || !eye_mailbox.eye_on) {
-        return shot;
+        return {};
     }
-    shot.rotate = true;
-    shot.absolute = true;
-    shot.rotation = KR::ShotQuat(now.ray.direction);
-    shot.move = true;
-    shot.offset = eye_mailbox.eye_offset + now.ray.from_eye;
-    return shot;
+    return KH::ShotAlongRay(KR::ShotQuat(now.ray.direction),
+                            eye_mailbox.eye_offset + now.ray.from_eye,
+                            SwitchIs(kSwitchShotLock, "1"));
 }
 
 /// AZAHARFRAME_KIU_FP_TRACE: one line of key=value words (the proof scripts read them).
