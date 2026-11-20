@@ -514,32 +514,36 @@ off): one word, `b shadow_stub` at 0x57B054.
 
 ### The game's sprites (AzaharFrame kiu2d)
 
-- **What they are (V, desktop, Chapter 1's air battle).** The purple lock-on triangles, the hit
-  numbers and other sprites are drawn through the game's geometry shader. The emulator runs
-  those draws on the CPU with the game's own registers, so mode 3's patch of register 90 never
-  reached them: they stayed where the game's camera put them while the world turned with the
-  head. Skipping the CPU-shaded draws takes every triangle away (V); the HUD is drawn on the
-  host's GPU and is untouched.
-- **The fix.** Each eye's world draw leaves its turn in clip space, H = P * C * P^-1 (P the
-  world projection, registers 86 to 89; C the turn of the patched view against the game's,
-  its move left out), and the CPU-shaded draws into that eye's colour buffer are turned by it
+- **What they are (V, desktop, Chapter 1's air battle).** The purple lock-on triangles are
+  drawn through the game's geometry shader. The emulator runs those draws on the CPU with the
+  game's own registers, so mode 3's patch of register 90 never reached them: they stayed where
+  the game's camera put them while the world turned with the head. Skipping the CPU-shaded
+  draws takes every triangle away (V); the HUD is drawn on the host's GPU and is untouched.
+  The hit numbers and score pop-ups are likely the same kind of draw (a second CPU-shaded
+  program with a 256 x 256 texture) but were not seen on the desktop (I).
+- **The fix.** Each eye's world draw leaves its turn in clip space, H = P * (V' * V^-1) * P^-1
+  (P the world projection, registers 86 to 89; V and V' the view rows as the game set them and
+  as mode 3 drew them), and the CPU-shaded draws into that eye's colour buffer are turned by it
   (`vr_view_matrix.h` ClipCorrection; `rasterizer_accelerated.cpp` TurnSoftwareVertices). Per
-  colour buffer: one eye's sprites come after the other eye's world. The move is left out
-  because a sprite's clip depth is not its anchor's (it is drawn nearer, on top): with the move
-  the triangles grew and jumped. So the lean and the eyes' half distance are not applied to
-  sprites (a few game units: visible only on sprites very close by).
-- **Measured (mock, 1600 x 964 per eye; triangle minus its nearest enemy, median, px):**
+  colour buffer: one eye's sprites come after the other eye's world. The turns are forgotten
+  at each new game frame (`SetVRData`), so a frame with sprites and no world takes none. The
+  sprites' clip depth is their point's (z + w = 10, the projection's, at every sprite vertex
+  read), so the lean and each eye's half distance are exact too.
+- **Measured (mock, Chapter 1's air battle; the same game frame with `FP_2D` 1 and 0; 1600 x
+  964 per eye; median over the triangles):**
 
-  | Head (turn from the rest pose) | Off (`FP_2D=0`) | On |
+  | Head (from the rest pose) | Triangles moved by the fix | Predicted (the turn at the middle) |
   |---|---|---|
-  | rest | dy -29 to -35 | dy -61 |
-  | 15 degrees down | dy +53 (moved 85 px: the turn) | dy -69 |
-  | 20 degrees left | dx -150 (the turn) | dx +2, -8 |
+  | rest | 4, -29 px | 0, -30 (the mock view's 5.25 degree screen pitch) |
+  | 15 degrees down | 3, -111 px | 0, -116 |
+  | lean 0.3 m right, 0.2 m up | 0, -30 px | 0, -30 plus about 10 (at 50 units) |
 
-  The 30 px between off and on at rest is the mock view's screen pitch (5.25 degrees: its view
-  is not centred up and down), which the world already got and the sprites did not.
+  Enemies between the two runs: 0 to 1 px (the same frame). Head turns of 20 degrees left and
+  25 left with 10 up were run too; the triangles' matching between runs was too unreliable
+  there for a number, by eye they sit above their enemies with the fix and off by the turn
+  without it.
 - **Not done.** Sprites drawn on the host's GPU (none seen in a battle) and the HUD keep the
-  head-locked picture, as before.
+  head-locked picture, as before. The game's own reticle ring was not checked.
 - **Pit's own body (V, Chapter 1's land section).** Looking down in first person shows a
   see-through white shape of his legs and body on the floor: the game draws the player faded
   when the camera is close, and first person does not hide him. `AZAHARFRAME_KIU_HIDE_PLAYER=1`

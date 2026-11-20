@@ -748,9 +748,11 @@ inline bool InvertRows4(const double m[4][4], double out[4][4]) {
 /// where the game's camera put it: on the head-locked picture, off its enemy by the head's turn.
 /// For the world draw before it, with projection rows `proj` (the four registers before the
 /// view matrix), view rows `view` as the game set them and `patched` as mode 3 drew them:
-/// H = P * C * P^-1 with C the turn of V' * V^-1 (its move left out), so that
-/// H * (P * V * x) = P * C * V * x: the point turned as the world was. False when P or V
-/// cannot be inverted, or the result is not finite.
+/// H = P * (V' * V^-1) * P^-1, so that H * (P * V * x) = P * V' * x for every point x: the
+/// head's turn, its lean and each eye's half of the eye distance, as the world got them. Exact
+/// when the sprite's clip depth is its point's (Kid Icarus's are: z + w is the projection's 10
+/// at every sprite vertex read). False when P or V cannot be inverted, or the result is not
+/// finite.
 inline bool ClipCorrection(const float proj[4][4], const float view[3][4],
                            const float patched[3][4], float out[4][4]) {
     double p[4][4], v[4][4], vp[4][4];
@@ -778,12 +780,6 @@ inline bool ClipCorrection(const float proj[4][4], const float view[3][4],
     };
     double c[4][4], pc[4][4], h[4][4];
     mul(vp, v_inv, c);
-    // The turn only: a sprite's depth in clip space is often not its anchor's (drawn nearer,
-    // to stay on top), and a move scaled by that depth enlarges and shifts it. The lean and
-    // the eyes' half distance (a few game units) are left out.
-    for (int i = 0; i < 3; ++i) {
-        c[i][3] = 0.0;
-    }
     mul(p, c, pc);
     mul(pc, p_inv, h);
     for (int i = 0; i < 4; ++i) {

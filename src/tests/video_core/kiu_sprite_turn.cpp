@@ -118,39 +118,29 @@ TEST_CASE("kiu2d: a sprite turns with the world it marks", "[video_core][kiu2d]"
             if (want[3] <= 0.0f) {
                 continue; // behind the turned eye
             }
-            // On the picture: the same place, up to the eyes' half distance (left out) seen
-            // at that depth.
-            const float tol = 0.0025f + 0.12f / want[3];
+            // On the picture: the same place.
+            const float tol = 1e-4f;
             REQUIRE(std::abs(game[0] / game[3] - want[0] / want[3]) < tol);
             REQUIRE(std::abs(game[1] / game[3] - want[1] / want[3]) < tol);
         }
     }
 }
 
-TEST_CASE("kiu2d: a sprite drawn nearer than its mark turns the same way", "[video_core][kiu2d]") {
-    // The game pulls a mark's depth towards the eye to keep it on top: its clip z no longer
-    // matches its w. The turn alone does not depend on it (the lean is left out).
-    float view[3][4], patched[3][4], h[4][4];
-    Views(0.3, -0.2, view, patched, 0.8f);
-    REQUIRE(ClipCorrection(kProj, view, patched, h));
-    const float p[3] = {10.0f, 4.0f, -60.0f};
-    float a[4], b[4];
-    Clip(view, p, a);
-    Clip(view, p, b);
-    b[2] = -b[3] + 0.5f; // at the near plane
-    ApplyClipCorrection(h, a);
-    ApplyClipCorrection(h, b);
-    REQUIRE(std::abs(a[0] / a[3] - b[0] / b[3]) < 1e-5f);
-    REQUIRE(std::abs(a[1] / a[3] - b[1] / b[3]) < 1e-5f);
-}
-
-TEST_CASE("kiu2d: the patch's move alone leaves sprites alone", "[video_core][kiu2d]") {
-    float view[3][4], patched[3][4], h[4][4];
-    Views(0.0, 0.0, view, patched, 2.5f);
-    REQUIRE(ClipCorrection(kProj, view, patched, h));
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            REQUIRE(std::abs(h[i][j] - (i == j ? 1.0f : 0.0f)) < 1e-5f);
+TEST_CASE("kiu2d: a sprite moves with the lean and each eye's offset", "[video_core][kiu2d]") {
+    // The patch's move (the head's lean, an eye's half distance) moves a sprite as it moves its
+    // point: near points most.
+    const float points[][3] = {{0.0f, 0.0f, -12.0f}, {4.0f, -3.0f, -20.0f}, {-6.0f, 2.0f, -60.0f}};
+    for (const float move : {2.5f, -0.25f}) {
+        float view[3][4], patched[3][4], h[4][4];
+        Views(0.2, -0.1, view, patched, move);
+        REQUIRE(ClipCorrection(kProj, view, patched, h));
+        for (const auto& p : points) {
+            float game[4], want[4];
+            Clip(view, p, game);
+            Clip(patched, p, want);
+            ApplyClipCorrection(h, game);
+            REQUIRE(std::abs(game[0] / game[3] - want[0] / want[3]) < 1e-4f);
+            REQUIRE(std::abs(game[1] / game[3] - want[1] / want[3]) < 1e-4f);
         }
     }
 }

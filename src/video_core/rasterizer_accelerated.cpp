@@ -305,11 +305,10 @@ void RasterizerAccelerated::SetVRData(const int32_t &vrImmersiveMode, const floa
     }
 
     vr_uoffset = uoffset;
-    // AzaharFrame kiu2d: the world's turn is mode 3's alone (also when stored as 33 etc.).
-    if ((vrImmersiveMode > 9 ? vrImmersiveMode % 10 : vrImmersiveMode) != 3) {
-        for (auto& c : vr_soft_clip) {
-            c.valid = false;
-        }
+    // AzaharFrame kiu2d: a new game frame (or a new mode) forgets the last frame's turns, so a
+    // frame whose sprites come with no world (a pause, a menu) does not take an old one.
+    for (auto& c : vr_soft_clip) {
+        c.valid = false;
     }
     vr_immersive_mode = vrImmersiveMode;
     vr_game_pos_scaler = gamePosScaler;
