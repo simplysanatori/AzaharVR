@@ -17,7 +17,9 @@ namespace L = FrameXr::Immersive::Layout;
 using Catch::Matchers::WithinAbs;
 
 TEST_CASE("kiuview: the talk panel's switches and place", "[kiuview]") {
-    const FP::Talk d = FP::ParseTalk(nullptr, nullptr);
+    const FP::Talk d0 = FP::ParseTalk(nullptr, nullptr);
+    CHECK_FALSE(d0.on); // off until the headset check
+    const FP::Talk d = FP::ParseTalk("1", nullptr);
     CHECK(d.on);
     CHECK(d.down_deg == FP::kTalkDownDeg);
     CHECK(d.width_deg == FP::kTalkWidthDeg);

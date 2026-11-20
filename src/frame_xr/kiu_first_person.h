@@ -85,8 +85,9 @@
 //   AZAHARFRAME_KIU_FP_TALK=0|1       AzaharFrame kiuview: in first person the Secondary Screen
 //                                     (where this game puts its talk: the portraits and the
 //                                     words, at the screen's top) is shown as a small panel that
-//                                     goes with the head, below the view's middle (default 1;
-//                                     the Full modes otherwise hide it). 0: hidden, as before.
+//                                     goes with the head, below the view's middle (default 0,
+//                                     hidden as before, until the headset shows whether the laser
+//                                     can touch it: controls.cpp makes it a pointable panel).
 //   AZAHARFRAME_KIU_FP_TALK_AT=<down>,<width>
 //                                     the panel's middle in degrees below straight ahead and its
 //                                     width in degrees (defaults kTalkDownDeg, kTalkWidthDeg;
@@ -209,14 +210,14 @@ inline constexpr float kTalkDownDeg = 24.0f;
 inline constexpr float kTalkWidthDeg = 34.0f;
 inline constexpr float kTalkDistanceM = 0.8f;
 struct Talk {
-    bool on = true;
+    bool on = false;
     float down_deg = kTalkDownDeg;
     float width_deg = kTalkWidthDeg;
 };
-/// The two switches' texts (null: unset): on unless the first is "0"; the place within its limits.
+/// The two switches' texts (null: unset): on when the first is "1"; the place within its limits.
 inline Talk ParseTalk(const char* on_text, const char* at_text) {
     Talk t;
-    t.on = !(on_text && std::string_view{on_text} == "0");
+    t.on = on_text && std::string_view{on_text} == "1";
     float v[2] = {};
     if (at_text && Input::KiuHooks::ParseFloats(at_text, v, 2) == 2) {
         t.down_deg = std::clamp(v[0], 0.0f, 60.0f);
