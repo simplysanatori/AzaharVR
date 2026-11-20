@@ -564,8 +564,9 @@ off): one word, `b shadow_stub` at 0x57B054.
   left controller) and the screen on the left wrist, the screen moves 11 cm along the forearm
   toward the elbow, clear of the stats.
 - **Size.** 10 x 7.5 cm (4:3). At 0.35 to 0.41 m (a watch glance; the mock's wrist-up pose is
-  0.41 m) it is 16.3 to 13.7 degrees wide, 20 to 23 of its 320 pixels a degree, about the
-  headset's own in the middle of the view; the handheld's own screen at 0.30 m is 11.7 degrees.
+  0.41 m) it is 16.3 to 13.7 degrees wide, 20 to 23 of its 320 pixels a degree, taken to be
+  about the headset's own in the middle of the view (an assumption, to check on the headset);
+  the handheld's own screen at 0.30 m is 11.7 degrees.
   The power orbs (about 32 px) are 10 mm, 1.6 degrees or more: easy laser taps.
 - **When.** Shown while its front is within 35 degrees of the eyes, hidden past 40 (the wrist
   stats' hysteresis). No fade: hidden it is neither drawn nor touched. Held to play (the mock's
@@ -600,6 +601,17 @@ off): one word, `b shadow_stub` at 0x57B054.
   layer at 0.06000, -0.28000, -0.30000, the left one's orientation mirrored; the same three
   taps at 160.0, 120.0, 80.0, 180.0 and 272.0, 48.0 px with no L, ZL or ZR; the control pulls
   (wrist down, wrist turned away) L and ZL (a shot).
+- **What a tap does in the game (w5: taps held 1 s, `AZAHARFRAME_KIU_LIGHTGUN_TRACE=1`, the
+  air).** The touch reaches the game: at 160, 120 and 272, 48 the aim object's flags at `+0x84`
+  went 0x41 to **0x43** for the length of the touch (a stylus touch, the game's own touch aim),
+  and back to 0x41; at 32, 218 (the power orb's place) they stayed 0x41 (a button there, not the
+  aim area; I). The reticle stayed where Direct Aim wrote it (`reticle` = `written` = the ray's
+  pixel) all through. But the aiming hand pointing down at the wrist is itself a Direct Aim ray:
+  the reticle went to the frame's lower left edge (0.5, 222 with the ray at -4.9, 222) while
+  the beam was on the wrist. In the air nothing turned; **on land the reticle past the aim box
+  turns the camera (the clamp above), not run on the desktop**: a tap there may turn the view.
+  Next step if it does: hold Direct Aim's reticle (and the 6DoF aim) where it was while the beam
+  is on the wrist screen.
 
 ### Not done, risks
 
