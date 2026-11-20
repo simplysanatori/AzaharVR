@@ -38,6 +38,7 @@ constexpr const char* kSwitchNoCull = "AZAHARFRAME_KIU_NOCULL";
 constexpr const char* kSwitchBulletKeep = "AZAHARFRAME_KIU_BULLET_KEEP";
 constexpr const char* kSwitchEye = "AZAHARFRAME_KIU_EYE";
 constexpr const char* kSwitchEyeOffset = "AZAHARFRAME_KIU_EYE_OFFSET";
+constexpr const char* kSwitchShoulder = "AZAHARFRAME_KIU_SHOULDER"; // AzaharFrame kiuview
 constexpr const char* kSwitchHide = "AZAHARFRAME_KIU_HIDE_PLAYER";
 constexpr const char* kSwitchShot = "AZAHARFRAME_KIU_SHOT_TEST";
 constexpr const char* kSwitchShotNoLock = "AZAHARFRAME_KIU_SHOT_NO_LOCK";
@@ -561,6 +562,20 @@ void Hook(int64_t ticks) {
                 eye.own_axes = true;
                 eye.axes = KH::LevelYawAxes(look_at - eye_at);
             }
+        }
+    }
+    // AzaharFrame kiuview: the over-the-shoulder view (AZAHARFRAME_KIU_SHOULDER, metres back, up
+    // and right of the first-person eye along the camera's level view); EYE_OFFSET wins.
+    if (first_person && !Switch(kSwitchEyeOffset)) {
+        float back = 0.0f, up = 0.0f, side = 0.0f;
+        const auto text = Switch(kSwitchShoulder);
+        KH::Vec3 eye_at, look_at;
+        if (text && Kiu::FirstPerson::ParseShoulder(text->c_str(), back, up, side) &&
+            KH::ReadVec3(mem, KH::kSceneEye, eye_at) &&
+            KH::ReadVec3(mem, KH::kSceneLookAt, look_at)) {
+            eye.extra = KH::Rotate(KH::LevelYawAxes(look_at - eye_at),
+                                   Kiu::FirstPerson::ShoulderOffset(
+                                       back, up, side, Kiu::FirstPerson::UnitsPerMetre()));
         }
     }
     KH::ShotRequest shot;

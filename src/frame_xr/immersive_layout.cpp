@@ -700,8 +700,17 @@ HeadLocked SolveHeadLocked(const Placement& placement, float game_fov_y_deg, flo
     return s;
 }
 
+Cover ShareCover(Cover cover, float share) {
+    if (!std::isfinite(share) || share < 0.5f || share >= 1.0f) {
+        return cover;
+    }
+    cover.tan_x = std::tan(share * std::atan(cover.tan_x));
+    cover.tan_y = std::tan(share * std::atan(cover.tan_y));
+    return cover;
+}
+
 HeadLocked SolveKiuFirstPerson(float game_fov_y_deg, float aspect, const ViewFov& view,
-                               float eye_shift, float factor_max, float distance) {
+                               float eye_shift, float factor_max, float distance, float field) {
     HeadLocked s;
     s.distance = std::isfinite(distance) && distance > 0.0f
                      ? std::clamp(distance, kMinDistance, kMaxDistance)
@@ -710,7 +719,7 @@ HeadLocked SolveKiuFirstPerson(float game_fov_y_deg, float aspect, const ViewFov
     // view's): what fills the view there.
     s.pitch_rad = ViewMiddlePitch(view);
     s.yaw_rad = 0.0f;
-    const Cover cover = DefaultCover(view, s.pitch_rad, eye_shift);
+    const Cover cover = ShareCover(DefaultCover(view, s.pitch_rad, eye_shift), field);
     const float t = GameTan(game_fov_y_deg);
     const float a = std::isfinite(aspect) && aspect > 0.1f ? aspect : 5.0f / 3.0f;
     const float hi = std::isfinite(factor_max)
@@ -727,9 +736,9 @@ HeadLocked SolveKiuFirstPerson(float game_fov_y_deg, float aspect, const ViewFov
     return s;
 }
 
-KiuWide KiuWideCamera(const ViewFov& view, float eye_shift, float keep_aspect) {
+KiuWide KiuWideCamera(const ViewFov& view, float eye_shift, float keep_aspect, float field) {
     KiuWide w;
-    const Cover cover = DefaultCover(view, ViewMiddlePitch(view), eye_shift);
+    const Cover cover = ShareCover(DefaultCover(view, ViewMiddlePitch(view), eye_shift), field);
     if (!(cover.tan_x > 0.0f) || !(cover.tan_y > 0.0f) || !std::isfinite(cover.tan_x) ||
         !std::isfinite(cover.tan_y)) {
         return w;

@@ -70,6 +70,48 @@
 //                                     and what it gives (kiu_hooks.cpp).
 //   AZAHARFRAME_KIU_FP_PROBE=<hex>    with the trace: the actor at that address, where it is in
 //                                     the world and in the head's view.
+//   AZAHARFRAME_KIU_FP_HUD=0|<p>|<across>,<up_down>
+//                                     AzaharFrame kiuview: the game's flat 2D (its HUD, the
+//                                     talk box with its portraits and words at the bottom) drawn
+//                                     nearer the view's middle in first person: HUD Spacing's
+//                                     scales (video_core/vr_hud_spacing.h) in percent of the
+//                                     game's own, 1 to 150 (one number: both); "on":
+//                                     kFpHudAcross, kFpHudUpDown. Default off. Only while the HUD Spacing
+//                                     setting is the game's own (100 %, 100 %): a value chosen
+//                                     there wins (HudSpacingFor). 0: the game's own placement.
+//                                     An experiment: on the desktop the life bar and the score
+//                                     icon, which touch the frame's edge, stretch (their edge
+//                                     corners stay put), so it is off.
+//   AZAHARFRAME_KIU_FP_TALK=0|1       AzaharFrame kiuview: in first person the Secondary Screen
+//                                     (where this game puts its talk: the portraits and the
+//                                     words, at the screen's top) is shown as a small panel that
+//                                     goes with the head, below the view's middle (default 1;
+//                                     the Full modes otherwise hide it). 0: hidden, as before.
+//   AZAHARFRAME_KIU_FP_TALK_AT=<down>,<width>
+//                                     the panel's middle in degrees below straight ahead and its
+//                                     width in degrees (defaults kTalkDownDeg, kTalkWidthDeg;
+//                                     down 0 to 60, width 10 to 60).
+//   AZAHARFRAME_KIU_FP_FIELD=<percent>
+//                                     AzaharFrame kiuview: how much of the view the picture fills
+//                                     in first person, in percent of the view's angle on each
+//                                     axis (kMinFieldPercent to 100; default 100, the whole
+//                                     view). Below 100 the game's camera is that much narrower
+//                                     and the screen still at true size, so a dark border shows
+//                                     around it (Layout::ShareCover).
+//   AZAHARFRAME_KIU_FP_EDGE=<percent>
+//                                     AzaharFrame kiuview: the picture's edge fades to black over
+//                                     this share of its half width and half height in first
+//                                     person (0 to kMaxEdgePercent; default 0, a hard edge). On
+//                                     the projection path only (vis/proj_screen.h kScreenFrag).
+//   AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]
+//                                     AzaharFrame kiuview: an over-the-shoulder view in first
+//                                     person: the eye moved this many metres behind, above and
+//                                     to the right of the first-person eye (negative: in front,
+//                                     below, to the left), along the game camera's level view
+//                                     (its yaw), so Pit is in sight. Metres at life size
+//                                     (UnitsPerMetre). Default off. AZAHARFRAME_KIU_EYE_OFFSET
+//                                     (game units, kiu_hooks.cpp) replaces the eye's offset
+//                                     itself and wins over this.
 // All live. The transform is input/kiu_room.h (pure, unit tested); the notes are in
 // input/KIU_HOOKS.md ("First person in 6DoF").
 //
@@ -79,7 +121,10 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <string_view>
 #include "frame_xr/input/kiu_room.h"
 #include "frame_xr/input/kiu_turn.h"
 #include "frame_xr/kiu_scan.h"
@@ -156,6 +201,140 @@ bool SceneProjection(float& fov_y_deg, float& aspect);
 /// widened it), published by the hooks each VBlank; 0 when not known. Any thread.
 void PublishGameAspect(float aspect);
 float GameAspect();
+
+/// AzaharFrame kiuview: the talk panel (AZAHARFRAME_KIU_FP_TALK, _AT): the Secondary Screen
+/// head-locked below the view's middle, kTalkDistanceM away (nearer than first person's screen,
+/// so it is drawn over it).
+inline constexpr float kTalkDownDeg = 24.0f;
+inline constexpr float kTalkWidthDeg = 34.0f;
+inline constexpr float kTalkDistanceM = 0.8f;
+struct Talk {
+    bool on = true;
+    float down_deg = kTalkDownDeg;
+    float width_deg = kTalkWidthDeg;
+};
+/// The two switches' texts (null: unset): on unless the first is "0"; the place within its limits.
+inline Talk ParseTalk(const char* on_text, const char* at_text) {
+    Talk t;
+    t.on = !(on_text && std::string_view{on_text} == "0");
+    float v[2] = {};
+    if (at_text && Input::KiuHooks::ParseFloats(at_text, v, 2) == 2) {
+        t.down_deg = std::clamp(v[0], 0.0f, 60.0f);
+        t.width_deg = std::clamp(v[1], 10.0f, 60.0f);
+    }
+    return t;
+}
+/// Live, with first person on (off otherwise). Any thread.
+Talk TalkNow();
+/// The panel in the head's frame (x right, y up, -z ahead): its middle, its pitch (about x; it
+/// faces the eye) and its size for a picture of `aspect` (width over height).
+struct TalkPlace {
+    float y = 0.0f, z = 0.0f;
+    float pitch_rad = 0.0f;
+    float width = 0.0f, height = 0.0f;
+};
+inline TalkPlace TalkPanelInView(const Talk& t, float aspect, float distance = kTalkDistanceM) {
+    constexpr float kDeg = 3.14159265358979f / 180.0f;
+    TalkPlace p;
+    const float a = t.down_deg * kDeg;
+    p.y = -distance * std::sin(a);
+    p.z = -distance * std::cos(a);
+    p.pitch_rad = -a;
+    p.width = 2.0f * distance * std::tan(0.5f * t.width_deg * kDeg);
+    p.height = aspect > 0.1f ? p.width / aspect : p.width * 0.75f;
+    return p;
+}
+
+/// AzaharFrame kiuview: first person's HUD Spacing (AZAHARFRAME_KIU_FP_HUD), percent of the
+/// game's own: the life bar and the score sit in the Primary Screen's corners, which the wide
+/// camera's frame puts about 48 degrees up and 55 to 60 across (KIU_HOOKS.md "The talk and the
+/// HUD in first person").
+inline constexpr int kFpHudAcross = 45;
+inline constexpr int kFpHudUpDown = 40;
+struct HudPercent {
+    int across = 100;
+    int up_down = 100;
+    constexpr bool operator==(const HudPercent&) const = default;
+};
+/// The HUD Spacing in use: the setting's (`set_*`) unless first person is on and the setting is
+/// the game's own (100 %, 100 %); then first person's (`fp`).
+constexpr HudPercent HudSpacingFor(bool first_person, int set_across, int set_up_down,
+                                   HudPercent fp) {
+    if (!first_person || set_across != 100 || set_up_down != 100) {
+        return {set_across, set_up_down};
+    }
+    return fp;
+}
+/// AZAHARFRAME_KIU_FP_HUD's text: null (unset), "0" or unreadable the game's own (100, 100), "on"
+/// the defaults, one number both axes, two numbers across and up and down; each within 1 to 150.
+inline HudPercent ParseFpHud(const char* text) {
+    if (!text) {
+        return {};
+    }
+    if (std::string_view{text} == "on") {
+        return {kFpHudAcross, kFpHudUpDown};
+    }
+    float v[2] = {};
+    const int n = Input::KiuHooks::ParseFloats(text, v, 2);
+    if (n < 1 || (n == 1 && v[0] == 0.0f)) {
+        return {}; // the game's own
+    }
+    const auto pct = [](float f) { return static_cast<int>(std::clamp(std::lround(f), 1L, 150L)); };
+    return {pct(v[0]), pct(n == 2 ? v[1] : v[0])};
+}
+/// The switch, live. Any thread.
+HudPercent FpHud();
+
+/// AzaharFrame kiuview: AZAHARFRAME_KIU_FP_FIELD, a share of the view's angle (0.5 to 1).
+inline constexpr int kMinFieldPercent = 50;
+/// AZAHARFRAME_KIU_FP_FIELD's text as a share: null or unreadable 1, else the percent within
+/// kMinFieldPercent to 100 over 100.
+inline float ParseFieldShare(const char* text) {
+    float v = 0.0f;
+    if (!text || Input::KiuHooks::ParseFloats(text, &v, 1) != 1 || !std::isfinite(v)) {
+        return 1.0f;
+    }
+    return std::clamp(v, static_cast<float>(kMinFieldPercent), 100.0f) / 100.0f;
+}
+/// The switch, live (1 when first person is off). Any thread.
+float FieldShare();
+/// AzaharFrame kiuview: AZAHARFRAME_KIU_FP_EDGE, the soft edge's width (0 to 0.5 of the half
+/// size), 0 when first person is off. Any thread.
+inline constexpr int kMaxEdgePercent = 50;
+inline float ParseEdgeShare(const char* text) {
+    float v = 0.0f;
+    if (!text || Input::KiuHooks::ParseFloats(text, &v, 1) != 1 || !std::isfinite(v)) {
+        return 0.0f;
+    }
+    return std::clamp(v, 0.0f, static_cast<float>(kMaxEdgePercent)) / 100.0f;
+}
+float EdgeShare();
+
+/// AzaharFrame kiuview: AZAHARFRAME_KIU_SHOULDER's text in metres: back, up and side (side
+/// optional, 0); false when unset, unreadable, or all of it 0. Each kept within -kMaxShoulderM to
+/// kMaxShoulderM.
+inline constexpr float kMaxShoulderM = 10.0f;
+inline bool ParseShoulder(const char* text, float& back_m, float& up_m, float& side_m) {
+    float v[3] = {};
+    if (!text) {
+        return false;
+    }
+    const int n = Input::KiuHooks::ParseFloats(text, v, 3);
+    if (n < 2 || !std::isfinite(v[0]) || !std::isfinite(v[1]) || !std::isfinite(v[2])) {
+        return false;
+    }
+    back_m = std::clamp(v[0], -kMaxShoulderM, kMaxShoulderM);
+    up_m = std::clamp(v[1], -kMaxShoulderM, kMaxShoulderM);
+    side_m = n == 3 ? std::clamp(v[2], -kMaxShoulderM, kMaxShoulderM) : 0.0f;
+    return back_m != 0.0f || up_m != 0.0f || side_m != 0.0f;
+}
+/// The eye's extra offset in game units along the camera's level view (x right, y up, z ahead:
+/// the axes of Input::KiuHooks::LevelYawAxes), from metres back, up and right at
+/// `units_per_metre`.
+inline Input::KiuRoom::Vec3 ShoulderOffset(float back_m, float up_m, float side_m,
+                                           float units_per_metre) {
+    return {-side_m * units_per_metre, up_m * units_per_metre, -back_m * units_per_metre};
+}
 
 /// AzaharFrame kiuwide: AZAHARFRAME_KIU_FP_WIDE (live): 0 off, 1 the view's shape (default), 2
 /// the game's own shape kept. Any thread.

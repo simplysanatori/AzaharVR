@@ -2,12 +2,14 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
+#include <algorithm>
 #include <atomic>
 #include <bit>
 #include <chrono>
 #include <cmath>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include "common/frame_flat.h" // AzaharFrame kiumode: frame_flat_mono
 #include "common/frame_test_switches.h"
 #include "common/logging/log.h"
@@ -35,6 +37,12 @@ constexpr const char* kSwitchAim6Dof = "AZAHARFRAME_KIU_AIM_6DOF";
 constexpr const char* kSwitchShots6Dof = "AZAHARFRAME_KIU_SHOTS_6DOF";
 constexpr const char* kSwitchFactor = "AZAHARFRAME_KIU_FP_FACTOR"; // AzaharFrame kiufov
 constexpr const char* kSwitchWide = "AZAHARFRAME_KIU_FP_WIDE";     // AzaharFrame kiuwide
+// AzaharFrame kiuview
+constexpr const char* kSwitchHud = "AZAHARFRAME_KIU_FP_HUD";
+constexpr const char* kSwitchField = "AZAHARFRAME_KIU_FP_FIELD";
+constexpr const char* kSwitchEdge = "AZAHARFRAME_KIU_FP_EDGE";
+constexpr const char* kSwitchTalk = "AZAHARFRAME_KIU_FP_TALK";
+constexpr const char* kSwitchTalkAt = "AZAHARFRAME_KIU_FP_TALK_AT";
 /// The aim object's world position (it is a node of the scene: the game puts it on the scene
 /// camera's ray through the reticle each frame).
 constexpr uint32_t kAimWorldPos = 0x54;
@@ -292,6 +300,44 @@ void PublishGameAspect(float aspect) {
 float GameAspect() {
     return g_game_aspect.load(std::memory_order_relaxed);
 }
+
+// AzaharFrame kiuview
+
+HudPercent FpHud() {
+    const auto text = Common::FrameTestSwitches::Value(kSwitchHud);
+    return ParseFpHud(text ? text->c_str() : nullptr);
+}
+
+
+Talk TalkNow() {
+    if (!On()) {
+        Talk off;
+        off.on = false;
+        return off;
+    }
+    const auto on = Common::FrameTestSwitches::Value(kSwitchTalk);
+    const auto at = Common::FrameTestSwitches::Value(kSwitchTalkAt);
+    return ParseTalk(on ? on->c_str() : nullptr, at ? at->c_str() : nullptr);
+}
+
+
+float FieldShare() {
+    if (!On()) {
+        return 1.0f;
+    }
+    const auto text = Common::FrameTestSwitches::Value(kSwitchField);
+    return ParseFieldShare(text ? text->c_str() : nullptr);
+}
+
+
+float EdgeShare() {
+    if (!On()) {
+        return 0.0f;
+    }
+    const auto text = Common::FrameTestSwitches::Value(kSwitchEdge);
+    return ParseEdgeShare(text ? text->c_str() : nullptr);
+}
+
 
 int WideMode() {
     const auto v = Common::FrameTestSwitches::Value(kSwitchWide);

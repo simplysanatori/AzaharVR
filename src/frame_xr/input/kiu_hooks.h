@@ -652,6 +652,9 @@ struct EyeRequest {
     /// moved behind the player stays behind the camera's view when his body turns to fire.
     bool own_axes = false;
     Quat axes;
+    /// AzaharFrame kiuview: added after the offset is turned, world axes (the over-the-shoulder
+    /// view, AZAHARFRAME_KIU_SHOULDER).
+    Vec3 extra{0.0f, 0.0f, 0.0f};
 };
 /// AzaharFrame kiufov: the level yaw of a view direction (world), as axes for an EyeRequest:
 /// +z along the direction's level part, +y up. Identity when the direction is (nearly) vertical.
@@ -741,8 +744,10 @@ inline Mailbox Fill(const Player& p, const EyeRequest& eye, const ShotRequest& s
     }
     mb.player = p.actor;
     mb.eye_node = p.eye_node;
-    const Vec3 eye_offset =
+    const Vec3 turned =
         Rotate(Normalized(eye.own_axes ? eye.axes : p.world_q), eye.offset); // AzaharFrame kiufov
+    const Vec3 eye_offset{turned.x + eye.extra.x, turned.y + eye.extra.y,
+                          turned.z + eye.extra.z}; // AzaharFrame kiuview
     if (eye.on && Finite(eye_offset)) {
         mb.eye_on = true;
         mb.eye_offset = eye_offset;
