@@ -272,6 +272,7 @@ Other Games; the hooks' log line says why. The switches below still force their 
 | `AZAHARFRAME_KIU_SHOTS_6DOF=1` | with first person: the game's own shots from the hand's ray; turns the bullet keep on |
 | `AZAHARFRAME_KIU_FP_WIDE=0\|1\|2` | first person's scene camera (default 1): 1, as wide as the view and in its shape (the screen then needs no drawing past the frame); 2, as wide but in the game's own shape (square pixels; some of the picture falls outside the view across); 0, the game's own camera and the old draw-past-the-frame path ("The wide camera" below) |
 | `AZAHARFRAME_KIU_FP_2D=0\|1` | first person's sprites (default 1 in first person): the game's lock-on marks, hit numbers and other sprites drawn through its geometry shader turn with the world; 0 leaves them where the game's camera put them ("The game's sprites" below) |
+| `AZAHARFRAME_KIU_WRIST_SCREEN=0\|1` | Angel's Aim's Secondary Screen on the off hand's wrist (default 0, off): shown while the wrist is turned up, touched by the aiming hand's beam without a shot ("The Secondary Screen on the wrist" below) |
 | `AZAHARFRAME_KIU_FP_FACTOR=<f>` | the most the game draws past its own frame on either axis in first person (1 to 8, default 6); past it the screen is smaller on that axis ("The screen in first person" below) |
 | `AZAHARFRAME_KIU_FP_TRACE=1\|2`, `AZAHARFRAME_KIU_FP_PROBE=<hex>` | a line of `key=value` words a second (2: a VBlank): the scene camera, the view register, the rest pose, the head, the hand's ray in the world, the reticle, the mailbox; and an actor's place in the world and in the head's view |
 
@@ -550,6 +551,46 @@ off): one word, `b shadow_stub` at 0x57B054.
   takes it away on land (V); it is not in Angel's Aim's set (in the air it washes the picture
   out and he takes less damage; his hurt boxes on land are unchecked). The player's round
   shadow is not it (`NO_PLAYER_SHADOW=0`: the same picture).
+
+### The Secondary Screen on the wrist (AzaharFrame kiuwrist)
+
+`AZAHARFRAME_KIU_WRIST_SCREEN=1` (live; off by default). Angel's Aim in effect only.
+
+- **Where.** On the off hand's wrist like a watch: the right hand with Motion Controls' Left
+  Controller, else the left one (as the aiming hand is picked). The left wrist is the wrist
+  stats' place (`vis/stats_place.cpp` WristLocalPose: along the forearm on the inner side, 2.3 cm
+  clear of the controller, turned 10 degrees up); the right wrist is it mirrored, turned so the
+  picture is upright and reads left to right (`vis/wrist_screen.cpp`). With Stats On Wrist (the
+  left controller) and the screen on the left wrist, the screen moves 11 cm along the forearm
+  toward the elbow, clear of the stats.
+- **Size.** 10 x 7.5 cm (4:3). At 0.35 to 0.41 m (a watch glance; the mock's wrist-up pose is
+  0.41 m) it is 16.3 to 13.7 degrees wide, 20 to 23 of its 320 pixels a degree, about the
+  headset's own in the middle of the view; the handheld's own screen at 0.30 m is 11.7 degrees.
+  The power orbs (about 32 px) are 10 mm, 1.6 degrees or more: easy laser taps.
+- **When.** Shown while its front is within 35 degrees of the eyes, hidden past 40 (the wrist
+  stats' hysteresis). No fade: hidden it is neither drawn nor touched. Held to play (the mock's
+  rest pose, pointing ahead) it is 57 degrees off: hidden.
+- **First person stays engaged.** The bottom screen shown by the bumper chord or in focus pauses
+  the Full view (as before); the wrist screen is not that: `Immersive::Screens` puts the bottom
+  screen on the wrist only while first person is engaged (`ScreenLayers::bottom_on_wrist`), from
+  the pose the controls set for that display frame (`SetWristScreen`).
+- **Touch, no shot.** The mapper takes the wrist screen as the bottom panel: a trigger pulled
+  with the aiming hand's beam (the controller's aim pose, as the bottom screen's beam always
+  was; not the weapon's axis) on it is a touch at u x 320, v x 240 and presses no ZL or ZR, so
+  neither Fire route (Original's L with either trigger, Fire and Power's L) sees it. Pulled off
+  it, or with the wrist down, it fires as always. A grip on it grabs nothing
+  (`PanelGeometry::bottom_fixed`). It is no screen for the toast's depth or the stats' placing.
+- **Measured (mock, Chapter 1's air battle, Direct Aim with the right hand, the wrist screen on
+  the left wrist):**
+
+  | Phase | Wrist screen | Touch (3DS px) | The game's held word during the pull |
+  |---|---|---|---|
+  | wrist down (rest), pull pointing ahead | not submitted | none | L and ZR (a shot) |
+  | wrist up, centre at -0.06, -0.28, -0.30 m | submitted, 0.10 x 0.08 m, facing 0.0 deg, 0.41 m | | |
+  | tap at u 0.50, v 0.50 | | 160.0, 120.0 | no L, no ZR |
+  | tap at u 0.25, v 0.75 | | 80.0, 180.0 | no L, no ZR |
+  | tap at u 0.85, v 0.20 | | 272.0, 48.0 | no L, no ZR |
+  | wrist turned 50 deg away, pull at where it was | hidden (facing 50.0 deg) | none | L and ZR (a shot) |
 
 ### Not done, risks
 

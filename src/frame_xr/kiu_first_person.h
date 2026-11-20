@@ -66,6 +66,15 @@
 //                                     geometry shader (lock-on marks, hit numbers) turn with the
 //                                     world (default 1 in first person; kiu_hooks.cpp,
 //                                     vr_view_matrix.h ClipCorrection). 0: as before.
+//   AZAHARFRAME_KIU_WRIST_SCREEN=0|1  AzaharFrame kiuwrist: Angel's Aim's Secondary Screen on the
+//                                     off hand's wrist like a watch (default 0, off): 10 x 7.5
+//                                     cm, shown while it faces the eyes (wrist turned up), first
+//                                     person staying engaged; the aiming hand's beam touches it
+//                                     (a touch, never a shot); a grip on it grabs nothing. The off
+//                                     hand is the right one with Motion Controls' Left
+//                                     Controller, else the left. Angel's Aim in effect only (not
+//                                     with AZAHARFRAME_KIU_FIRST_PERSON alone). vis/wrist_screen.h,
+//                                     controls.cpp, immersive.cpp (Screens).
 //   AZAHARFRAME_KIU_FP_TRACE=1|2      a line a second (2: a VBlank) with the transform's inputs
 //                                     and what it gives (kiu_hooks.cpp).
 //   AZAHARFRAME_KIU_FP_PROBE=<hex>    with the trace: the actor at that address, where it is in

@@ -18,11 +18,13 @@
 //   - Stats On Wrist is always on the left controller: when the screen is on the left wrist too,
 //     the screen moves kWristScreenBesideStats along the forearm toward the elbow.
 //
-// The size: 10 x 7.5 cm (the 3DS's 4:3). Glanced at like a watch it is about 0.35 m from the
-// eyes: 16.3 x 12.2 degrees, about 20 of the Secondary Screen's 320 x 240 pixels a degree, near
-// the headset's own pixels a degree in the middle of the view, so the picture is neither blurred
-// nor wasted. The handheld's own screen (61 x 46 mm at about 0.30 m) is 11.7 x 8.8 degrees, so
-// this is 1.4 times as big as seen. A 32 px power slot is 10 mm, 1.6 degrees: an easy tap.
+// The size: 10 x 7.5 cm (the 3DS's 4:3). Glanced at like a watch it is 0.35 to 0.41 m from the
+// eyes (the desktop mock's wrist-up pose: 0.41 m): 16.3 x 12.2 to 13.7 x 10.3 degrees, 20 to 23
+// of the Secondary Screen's 320 x 240 pixels a degree, about the headset's own pixels a degree
+// in the middle of the view (2160 across some 110 degrees, more in the middle), so the picture
+// is neither blurred nor wasted. The handheld's own screen (61 x 46 mm at about 0.30 m) is 11.7
+// x 8.8 degrees: this is 1.2 to 1.4 times as big as seen. A 32 px power orb is 10 mm, 1.4 to 1.6
+// degrees: an easy tap.
 
 #pragma once
 
