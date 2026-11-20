@@ -1687,6 +1687,44 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         Kiu::SetWanted(false, false);
         return;
     }
+    // AzaharFrame kiuwrist: Angel's Aim's Secondary Screen on the off hand's wrist (test switch
+    // AZAHARFRAME_KIU_WRIST_SCREEN=1; vis/wrist_screen.h), shown while it faces the eyes. Set
+    // before the screens are asked for: they put the bottom screen there for this frame.
+    {
+        const ViewPose head_view = LatestViewPose();
+        const bool wanted =
+            Kiu::FirstPerson::AngelsAim() && head_view.valid &&
+            Vis::WristScreenSwitchOn(Common::FrameTestSwitches::Value(Vis::kKiuWristScreenSwitch));
+        const Input::Hand hand =
+            Vis::WristScreenHand(Settings::values.vr_motion_controls.GetValue());
+        const Input::HandInput& off = in.hand[static_cast<std::size_t>(Input::HandIndex(hand))];
+        const bool beside_stats = hand == Input::Hand::Left && visuals.StatsOnWrist();
+        const Vis::WristScreen::Out w =
+            wrist_screen.Update(wanted, off.active, off.aim, hand, beside_stats,
+                                ToInput(head_view.head).position);
+        wrist_on = w.shown;
+        Immersive::SetWristScreen(w.shown, ToXr(w.pose),
+                                  {Vis::kWristScreenWidth, Vis::kWristScreenHeight},
+                                  info.display_time);
+        if (w.changed && wrist_logs < 200) {
+            wrist_logs++;
+            const Input::Vec3f to = Input::Normalized(ToInput(head_view.head).position - w.pose.position);
+            LOG_INFO(Frontend,
+                     "xr: Angel's Aim: the Secondary Screen on the {} wrist {} (facing {:.1f} "
+                     "deg, {:.2f} m from the eyes, {:.1f} x {:.1f} deg; at {:.3f}, {:.3f}, {:.3f}, "
+                     "to the eyes {:.2f}, {:.2f}, {:.2f}{})",
+                     hand == Input::Hand::Left ? "left" : "right",
+                     w.shown ? "shown" : "hidden", w.facing_deg, w.distance_m,
+                     w.distance_m > 0.0f
+                         ? 2.0f * std::atan(0.5f * Vis::kWristScreenWidth / w.distance_m) * 57.2958f
+                         : 0.0f,
+                     w.distance_m > 0.0f
+                         ? 2.0f * std::atan(0.5f * Vis::kWristScreenHeight / w.distance_m) * 57.2958f
+                         : 0.0f,
+                     w.pose.position.x, w.pose.position.y, w.pose.position.z, to.x, to.y, to.z,
+                     beside_stats ? "; beside the wrist stats" : "");
+        }
+    }
     ScreenPlacement place = GetScreenPlacement();
     // The screens where they are drawn this frame (immersive.cpp) are the two slots (main,
     // secondary; AzaharFrame screenswap): the focus says which screen is in which, and the
@@ -1709,10 +1747,15 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     panels.top = quads.top;
     panels.bottom = quads.bottom;
     panels.bottom_toggle_enabled = managed;
+    // AzaharFrame kiuwrist: the wrist screen is touched, never grabbed (it goes with the hand).
+    panels.bottom_fixed = shown.bottom_on_wrist;
     // AzaharFrame statspos: the beam stops at the stats in front of the screens; the stats are
     // never placed behind the screens as drawn, the immersive one too.
     panels.occluder = visuals.StatsOccluder();
     stats_screens = {quads.top, quads.bottom};
+    if (shown.bottom_on_wrist) {
+        stats_screens.back().visible = false; // AzaharFrame kiuwrist: it goes with the hand
+    }
     if (shown.show_top && !shown.top_pointable) {
         Input::Posef top = ToInput(shown.top_pose[0]);
         if (shown.top_space == info.view_space) {
@@ -2098,6 +2141,23 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     const Input::MapperOutput& out =
         bridge.Process(game_in, panels, &in, &mouse_frame, &reticle_sample, &gyro_aim_frame);
     bridge_live = true;
+    // AzaharFrame kiuwrist: each touch of the wrist screen, where it lands in the Secondary
+    // Screen's 320 x 240 pixels and whether a trigger reached the game with it (it never should).
+    if (shown.bottom_on_wrist) {
+        for (int i = 0; i < out.touch_event_count; i++) {
+            const Input::TouchEvent& e = out.touch_events[static_cast<std::size_t>(i)];
+            if (e.type != Input::TouchEventType::Moved && wrist_logs < 200) {
+                wrist_logs++;
+                LOG_INFO(Frontend,
+                         "xr: Angel's Aim: wrist screen touch {} at {:.1f}, {:.1f} (ZL {}, ZR {}, "
+                         "L {})",
+                         e.type == Input::TouchEventType::Pressed ? "pressed" : "released", e.x,
+                         e.y, out.controls.Get(Input::Control::TriggerL) ? 1 : 0,
+                         out.controls.Get(Input::Control::TriggerR) ? 1 : 0,
+                         out.controls.Get(Input::Control::BumperL) ? 1 : 0);
+            }
+        }
+    }
     // AzaharFrame kiuguns: what Kid Icarus: Uprising's memory is read for (kiu_weapon.h): the
     // weapon in hand and the shots, only while Gyro Aim steers in the game.
     const bool kiu = gyro_aim_hand >= 0 && Kiu::IsKidIcarus(GameTitleId());

@@ -1327,7 +1327,9 @@ void Runtime::FrameLoop() {
                 const ToastDepth::ScreenUse use =
                     ToastDepth::UseOf(chain.handle != XR_NULL_HANDLE && chain.has_image,
                                       top && top_layers.omit);
-                if (use.toast_input) {
+                // AzaharFrame kiuwrist: Angel's Aim's wrist screen is no screen the toast keeps
+                // in front of (it is on the hand, under the view).
+                if (use.toast_input && !(!top && shown.bottom_on_wrist)) {
                     // AzaharFrame kiu2: where it is in LOCAL space, for the toast (toast_depth.h).
                     Input::PanelQuad tq;
                     tq.pose = {{pose.orientation.x, pose.orientation.y, pose.orientation.z,

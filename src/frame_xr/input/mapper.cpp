@@ -531,7 +531,9 @@ MapperOutput Mapper::Update(const InputFrame& frame, const PanelGeometry& panels
         if (state.grip_down && !state.dragging && !drag_active_ && input.active &&
             !grip_was_down_[static_cast<std::size_t>(h)]) {
             const PanelHit target = NearestInBounds(ray, panels);
-            if (target.panel != Panel::None) {
+            // AzaharFrame kiuwrist: not the wrist screen (it goes with the hand).
+            if (target.panel != Panel::None &&
+                !(target.panel == Panel::Bottom && panels.bottom_fixed)) {
                 state.dragging = true;
                 drag_active_ = true;
                 drag_panel_ = target.panel;

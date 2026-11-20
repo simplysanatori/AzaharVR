@@ -100,6 +100,9 @@ public:
     /// frame), for the mapper: a beam on it hits no screen behind it. Not visible when it does
     /// not show.
     Input::PanelQuad StatsOccluder() const;
+    /// AzaharFrame kiuwrist: the stats are on and set On Wrist (the left controller), whether or
+    /// not they face you now.
+    bool StatsOnWrist() const;
     /// app.cpp, after the other layers (`used` of them): the models' projection layer (or null)
     /// and the quads that go over it, as many as the runtime's layer limit leaves room for: the
     /// pointer dots first, then the models, then the beams. AzaharFrame ctrlfront: unless
