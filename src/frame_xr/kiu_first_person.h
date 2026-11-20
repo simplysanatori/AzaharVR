@@ -247,8 +247,8 @@ inline TalkPlace TalkPanelInView(const Talk& t, float aspect, float distance = k
 
 /// AzaharFrame kiuview: first person's HUD Spacing (AZAHARFRAME_KIU_FP_HUD), percent of the
 /// game's own: the life bar and the score sit in the Primary Screen's corners, which the wide
-/// camera's frame puts about 48 degrees up and 55 to 60 across (KIU_HOOKS.md "The talk and the
-/// HUD in first person").
+/// camera's frame puts about 42 to 50 degrees above straight ahead and 38 to 63 to the side
+/// (KIU_HOOKS.md "The talk and the HUD in first person").
 inline constexpr int kFpHudAcross = 45;
 inline constexpr int kFpHudUpDown = 40;
 struct HudPercent {
