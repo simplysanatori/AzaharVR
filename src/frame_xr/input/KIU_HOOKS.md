@@ -592,6 +592,12 @@ off): one word, `b shadow_stub` at 0x57B054.
   | tap at u 0.85, v 0.20 | | 272.0, 48.0 | no L, no ZR |
   | wrist turned 50 deg away, pull at where it was | hidden (facing 50.0 deg) | none | L and ZR (a shot) |
 
+  Two runs of that script (w2; w3 with taps at u 0.10 and 0.235, v 0.91, the power orbs' place:
+  32.0, 218.4 and 75.2, 218.4 px, as expected), the same results. With the mock's pose trace the
+  submitted layer is at -0.06000, -0.28000, -0.30000 with the orientation the script asked for,
+  and the beam's dot during a tap 5 mm in front of the tap point along the screen's normal.
+  Not run on the desktop: the right wrist (Motion Controls' Left Controller; unit tested).
+
 ### Not done, risks
 
 - The headset: nothing here ran on it.
