@@ -14,6 +14,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "common/settings.h"
 #include "frame_xr/immersive_layout.h"
+#include "frame_xr/immersive_names.h" // AzaharFrame aa6dof2
 #include "video_core/vr_immersive.h" // AzaharFrame depth: MeasureDraw
 #include "video_core/vr_view_matrix.h"
 
@@ -694,6 +695,62 @@ TEST_CASE("FrameXr immersive: the grip gesture", "[frame_xr]") {
         REQUIRE_FALSE(r.active);
         REQUIRE_FALSE(r.released);
         REQUIRE_FALSE(adj.Active());
+    }
+}
+
+// AzaharFrame aa6dof2: Angel's Aim keeps its screen at true size; the grip holds nothing there.
+TEST_CASE("FrameXr immersive: the grip on Angel's Aim's fixed screen", "[frame_xr][aa6dof2]") {
+    SECTION("fixed only with first person in effect, on view; other modes hold as always") {
+        REQUIRE(GripOnScreenFor(true, true) == GripOnScreen::Fixed);
+        REQUIRE(GripOnScreenFor(true, false) == GripOnScreen::Holds);
+        REQUIRE(GripOnScreenFor(false, true) == GripOnScreen::None);
+        REQUIRE(GripOnScreenFor(false, false) == GripOnScreen::None);
+    }
+    SECTION("a grab and its stick move, resize and rescale nothing, and nothing is saved") {
+        // As OnGameInput while Fixed: the Adjuster runs disabled, every frame of the gesture.
+        Adjuster adj;
+        Placement p;
+        p.distance = kDefaultDistance;
+        const Placement before = p;
+        const Posef head{};
+        float ratio = 1.0f;
+        for (int i = 0; i < 60; i++) {
+            const In::Vec2f stick = i < 30 ? In::Vec2f{1.0f, 1.0f} : In::Vec2f{-1.0f, -1.0f};
+            const Adjuster::Result r = adj.Update(Hands(1.0f, AimPitched(-20.0f + i), stick),
+                                                  head, 0.05f, false, p, &ratio);
+            REQUIRE_FALSE(r.active);
+            REQUIRE_FALSE(r.changed);
+            REQUIRE_FALSE(r.released); // the save happens only on a release
+        }
+        const Adjuster::Result r = adj.Update(Hands(0.0f, AimPitched(0)), head, 0.05f, false, p,
+                                              &ratio);
+        REQUIRE_FALSE(r.released);
+        REQUIRE(p == before);
+        REQUIRE(ratio == 1.0f); // World Scale untouched
+        REQUIRE_FALSE(adj.Active());
+    }
+    SECTION("a grip alone shows nothing (Grip Frees Aim); the stick under it, once a grab") {
+        constexpr float kDown = 0.9f, kHalf = 0.5f, kUp = 0.1f, kPush = 1.0f, kRest = 0.0f;
+        FixedScreenGrip g;
+        REQUIRE_FALSE(g.Update(kUp, kDown, kRest, kRest)); // the grip: no toast
+        REQUIRE(g.Any());
+        REQUIRE_FALSE(g.Update(kUp, kDown, kRest, 0.4f));  // under the stick's threshold
+        REQUIRE_FALSE(g.Update(kUp, kDown, kPush, kRest)); // the other hand's stick, no grip
+        REQUIRE(g.Update(kUp, kDown, kRest, kPush));       // the resize gesture: the toast
+        for (int i = 0; i < 10; i++) {
+            REQUIRE_FALSE(g.Update(kUp, kDown, kRest, kPush)); // held: no more
+        }
+        REQUIRE_FALSE(g.Update(kDown, kHalf, kPush, kPush)); // eased, still the same grab
+        REQUIRE_FALSE(g.Update(kUp, kUp, kPush, kPush));     // both up: over
+        REQUIRE_FALSE(g.Any());
+        REQUIRE_FALSE(g.Update(kDown, kUp, kRest, kRest));
+        REQUIRE(g.Update(kDown, kUp, kPush, kRest)); // a new grab: a new toast
+        g.Reset();
+        REQUIRE_FALSE(g.Any());
+    }
+    SECTION("the toast's text") {
+        REQUIRE(std::string(FrameXr::Immersive::Names::kAngelsAimScreenFixed) ==
+                "Angel's Aim: Screen Size Fixed");
     }
 }
 

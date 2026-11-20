@@ -2060,6 +2060,9 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     // the game. The normal pair's drag is the mapper's, as of the last frame.
     const bool holding_immersive = Immersive::HoldingScreen();
     const bool holding_normal = !holding_immersive && bridge.mapper().DragActive();
+    // AzaharFrame aa6dof2: a grip on Angel's Aim's fixed screen: the D-pad under it stays off the
+    // game, as under a held screen, and its steps show the toast (Immersive::GripOnFixedScreen).
+    const bool holding_fixed = Immersive::GripOnFixedScreen();
     // AzaharFrame immersive2: both grips down while one holds the immersive screen: the D-pad
     // shapes the screen (AzaharFrame kiu: Horizontal Scale, Vertical Scale) instead of the offset
     // and Render Margin. The raw grips: a Bottom Screen Reticle hand's grip is taken out of
@@ -2067,9 +2070,9 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     // under kGripRelease). 1.2.0 fix lane B (triage item 6): latched until both grips are up
     // (Layout::ScaleChord), and the D-pad stays off the game meanwhile.
     const bool both_grips =
-        scale_chord.Update(in.hand[0].grip, in.hand[1].grip, holding_immersive);
-    const Rig::DpadNudger::Steps nudge =
-        nudger.Filter(game_in, holding_immersive || holding_normal || both_grips);
+        scale_chord.Update(in.hand[0].grip, in.hand[1].grip, holding_immersive || holding_fixed);
+    const Rig::DpadNudger::Steps nudge = nudger.Filter(
+        game_in, holding_immersive || holding_normal || both_grips || holding_fixed);
     // AzaharFrame move: Detach Screens: a grip moves the slot under it (main or second).
     const uint32_t detach = DetachMode();
     // AzaharFrame controls: a grab starts: the hint chip, unless one showed in the last 10 s.
@@ -2402,7 +2405,7 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
             }
         }
     } else if (nudge.Any()) {
-        if (holding_immersive) {
+        if (holding_immersive || holding_fixed) {
             // Left and right: the lens offset; up and down: Render Margin (AzaharFrame widerview;
             // the vertical offset stays in the settings). Both show their own toast.
             // AzaharFrame fovaxis: with Field of View (Full modes) up and down are 3D Depth

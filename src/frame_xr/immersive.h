@@ -120,6 +120,12 @@ void SetBottomFocused(bool focused);
 /// hide the screens then (a swap would cancel the move half way). XR thread.
 bool HoldingScreen();
 
+/// AzaharFrame aa6dof2: a grip is down on Angel's Aim's screen, which stays at true size
+/// (Layout::GripOnScreen): it holds nothing, and the D-pad under it changes nothing:
+/// NudgeOffset, StepWiderView, StepDepth3d, StepScale and FillView show the toast instead and
+/// change and save nothing. XR thread.
+bool GripOnFixedScreen();
+
 /// AzaharFrame vrsize: grip + D-pad. While a grip holds the immersive screen, turns it by that
 /// many kOffsetStepDeg steps of the global Immersive Offset (immersive_layout.h; all immersive
 /// modes, every game), writes Settings::values.vr_immersive_offset_x and _y and shows the
