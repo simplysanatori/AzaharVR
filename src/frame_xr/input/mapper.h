@@ -34,6 +34,9 @@ struct PanelGeometry {
     /// panel, In Front): a ray that meets it before a screen hits no screen (no touch, no grab,
     /// no cursor; a trigger there is ZL/ZR, as over nothing). Not visible: none.
     PanelQuad occluder;
+    /// AzaharFrame kiuwrist: the bottom screen is Angel's Aim's wrist screen: it goes with the
+    /// off hand, so a grip on it grabs nothing (a touch is as on any bottom screen).
+    bool bottom_fixed = false;
 };
 
 struct MapperConfig {

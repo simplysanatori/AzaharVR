@@ -355,6 +355,13 @@ struct State {
     bool focus_bottom = false;   ///< the bottom screen is in focus (SetBottomFocused)
     bool menu_open = false;      ///< the in-game menu shows (immersive modes 2 and 3 pause)
     bool hide_bottom = false;    ///< "Hide Bottom Screen" (per game), read when the game starts
+    /// AzaharFrame kiuwrist: the wrist screen (SetWristScreen) and the display frame it is for;
+    /// `display_time`: this frame's (OnFrame).
+    bool wrist_shown = false;
+    XrPosef wrist_pose{{0, 0, 0, 1}, {0, 0, 0}};
+    XrExtent2Df wrist_size{0.0f, 0.0f};
+    XrTime wrist_time = 0;
+    XrTime display_time = 0;
     float game_fov_y_deg = kDefaultGameFovY; ///< "Immersive Game FOV" (per game), every frame
     u32 shape = 0;             ///< "Screen Shape" (per game), every frame (g_top_aspect)
     /// AzaharFrame depth: the game camera as measured from its projection (modes 2 and 3);
@@ -1415,6 +1422,7 @@ void OnFrame(const FrameInfo& info) {
     }
     g.mode = mode;
     g.live = info.screens_live && visible;
+    g.display_time = info.display_time; // AzaharFrame kiuwrist
     // AzaharFrame depth: the emulation thread measures the game camera only while this is set
     // (Match Game Camera on, a game in a Full mode); off, it does no work at all.
     // AzaharFrame fovonce: Always, or Set Once until it has a value.
@@ -2292,6 +2300,14 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
             }
         }
         out.head_driven = true; // AzaharFrame flash
+        // AzaharFrame kiuwrist: Angel's Aim's Secondary Screen on the off hand's wrist, set for
+        // this display frame (the controls ask for this frame's screens after setting it).
+        if (g.wrist_shown && g.wrist_time == g.display_time && KiuFirstPerson()) {
+            out.show_bottom = true;
+            out.bottom_on_wrist = true;
+            out.bottom_pose = g.wrist_pose;
+            out.bottom_size = g.wrist_size;
+        }
     }
     const float top_distance = out.top_space == view_space || (g.engaged && IsViewMode(g.mode))
                                    ? g.solved.distance
@@ -2306,6 +2322,13 @@ PathState ScreensPathState() { // AzaharFrame projdef
 
 bool CanToggleBottom() {
     return g.live && (g.mode != 0 || g.hide_bottom);
+}
+
+void SetWristScreen(bool shown, const XrPosef& pose, XrExtent2Df size, XrTime display_time) {
+    g.wrist_shown = shown;
+    g.wrist_pose = pose;
+    g.wrist_size = size;
+    g.wrist_time = display_time;
 }
 
 void SetMenuOpen(bool open) {

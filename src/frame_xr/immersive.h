@@ -70,6 +70,9 @@ struct ScreenLayers {
     /// The bottom screen is farther away than the top one: submit it first. Quad layers are
     /// drawn in submission order, with no depth test, so the nearer one has to come last.
     bool bottom_first = false;
+    /// AzaharFrame kiuwrist: the bottom screen is Angel's Aim's wrist screen (SetWristScreen):
+    /// shown with first person engaged, on the off hand's wrist, its pose and size above.
+    bool bottom_on_wrist = false;
     /// AzaharFrame flash: the top screen is the Full modes' screen, engaged: the game draws its
     /// picture for the head pose (modes 2 and 3, not paused by the menu or the bottom screen).
     /// Motion Clarity flashes it (motion_clarity.h).
@@ -102,6 +105,13 @@ struct PathState {
     bool full_mode = false;
 };
 PathState ScreensPathState();
+
+/// AzaharFrame kiuwrist: Angel's Aim's Secondary Screen on the off hand's wrist
+/// (vis/wrist_screen.h), from the controls each game frame before they ask for Screens: shown
+/// (in LOCAL space) or not, for the display frame `display_time`. Screens shows the bottom screen
+/// there while first person is engaged, without pausing it; another frame's is ignored. XR
+/// thread.
+void SetWristScreen(bool shown, const XrPosef& pose, XrExtent2Df size, XrTime display_time);
 
 /// The in-game menu (Azahar's window over the paused game) is open: immersive modes 2 and 3
 /// pause, as when the bottom screen is shown. XR thread.

@@ -277,6 +277,7 @@ Other Games; the hooks' log line says why. The switches below still force their 
 | `AZAHARFRAME_KIU_FP_FIELD=<percent>` | the share of the view's angle the picture fills (50 to 100, default 100): the wide camera that much narrower, the screen still at true size, a dark border around it (unit tested; on the mock, set live at 80 on land, no new screen line was logged: unproven) |
 | `AZAHARFRAME_KIU_FP_EDGE=<percent>` | the picture's edge fades to black over that share of its half size (0 to 50, default 0); the projection path only (only the shader compile test: never drawn on the mock) |
 | `AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]` | over the shoulder: the eye this many metres behind, above and to the right of the first-person eye along the camera's level view (game units = metres × the leaning scale, 7.7 per metre at life size); `AZAHARFRAME_KIU_EYE_OFFSET` wins |
+| `AZAHARFRAME_KIU_WRIST_SCREEN=0\|1` | Angel's Aim's Secondary Screen on the off hand's wrist (default 0, off): shown while the wrist is turned up, touched by the aiming hand's beam without a shot ("The Secondary Screen on the wrist" below) |
 | `AZAHARFRAME_KIU_FP_FACTOR=<f>` | the most the game draws past its own frame on either axis in first person (1 to 8, default 6); past it the screen is smaller on that axis ("The screen in first person" below) |
 | `AZAHARFRAME_KIU_FP_TRACE=1\|2`, `AZAHARFRAME_KIU_FP_PROBE=<hex>` | a line of `key=value` words a second (2: a VBlank): the scene camera, the view register, the rest pose, the head, the hand's ray in the world, the reticle, the mailbox; and an actor's place in the world and in the head's view |
 
@@ -586,6 +587,67 @@ off): one word, `b shadow_stub` at 0x57B054.
   them in, but they touch the frame's edge, whose corners the shader pins, so they stretch (the
   life bar across the view, the score icon several times its size; the cause is read from the
   shader's rule, not traced): off.
+
+### The Secondary Screen on the wrist (AzaharFrame kiuwrist)
+
+`AZAHARFRAME_KIU_WRIST_SCREEN=1` (live; off by default). Angel's Aim in effect only.
+
+- **Where.** On the off hand's wrist like a watch: the right hand with Motion Controls' Left
+  Controller, else the left one (as the aiming hand is picked). The left wrist is the wrist
+  stats' place (`vis/stats_place.cpp` WristLocalPose: along the forearm on the inner side, 2.3 cm
+  clear of the controller, turned 10 degrees up); the right wrist is it mirrored, turned so the
+  picture is upright and reads left to right (`vis/wrist_screen.cpp`). With Stats On Wrist (the
+  left controller) and the screen on the left wrist, the screen moves 11 cm along the forearm
+  toward the elbow, clear of the stats.
+- **Size.** 10 x 7.5 cm (4:3). At 0.35 to 0.41 m (a watch glance; the mock's wrist-up pose is
+  0.41 m) it is 16.3 to 13.7 degrees wide, 20 to 23 of its 320 pixels a degree, taken to be
+  about the headset's own in the middle of the view (an assumption, to check on the headset);
+  the handheld's own screen at 0.30 m is 11.7 degrees.
+  The power orbs (about 32 px) are 10 mm, 1.6 degrees or more: easy laser taps.
+- **When.** Shown while its front is within 35 degrees of the eyes, hidden past 40 (the wrist
+  stats' hysteresis). No fade: hidden it is neither drawn nor touched. Held to play (the mock's
+  rest pose, pointing ahead) it is 57 degrees off: hidden.
+- **First person stays engaged.** The bottom screen shown by the bumper chord or in focus pauses
+  the Full view (as before); the wrist screen is not that: `Immersive::Screens` puts the bottom
+  screen on the wrist only while first person is engaged (`ScreenLayers::bottom_on_wrist`), from
+  the pose the controls set for that display frame (`SetWristScreen`).
+- **Touch, no shot.** The mapper takes the wrist screen as the bottom panel: a trigger pulled
+  with the aiming hand's beam (the controller's aim pose, as the bottom screen's beam always
+  was; not the weapon's axis) on it is a touch at u x 320, v x 240 and presses no ZL or ZR, so
+  neither Fire route (Original's L with either trigger, Fire and Power's L) sees it. Pulled off
+  it, or with the wrist down, it fires as always. A grip on it grabs nothing
+  (`PanelGeometry::bottom_fixed`). It is no screen for the toast's depth or the stats' placing.
+- **Measured (mock, Chapter 1's air battle, Direct Aim with the right hand, the wrist screen on
+  the left wrist):**
+
+  | Phase | Wrist screen | Touch (3DS px) | The game's held word during the pull |
+  |---|---|---|---|
+  | wrist down (rest), pull pointing ahead | not submitted | none | L and ZR (a shot) |
+  | wrist up, centre at -0.06, -0.28, -0.30 m | submitted, 0.10 x 0.08 m, facing 0.0 deg, 0.41 m | | |
+  | tap at u 0.50, v 0.50 | | 160.0, 120.0 | no L, no ZR |
+  | tap at u 0.25, v 0.75 | | 80.0, 180.0 | no L, no ZR |
+  | tap at u 0.85, v 0.20 | | 272.0, 48.0 | no L, no ZR |
+  | wrist turned 50 deg away, pull at where it was | hidden (facing 50.0 deg) | none | L and ZR (a shot) |
+
+  Two runs of that script (w2; w3 with taps at u 0.10 and 0.235, v 0.91, the power orbs' place:
+  32.0, 218.4 and 75.2, 218.4 px, as expected), the same results. With the mock's pose trace the
+  submitted layer is at -0.06000, -0.28000, -0.30000 with the orientation the script asked for,
+  and the beam's dot during a tap 5 mm in front of the tap point along the screen's normal.
+  The right wrist (w4r: Motion Controls' Left Controller, the left hand aims and taps): the
+  layer at 0.06000, -0.28000, -0.30000, the left one's orientation mirrored; the same three
+  taps at 160.0, 120.0, 80.0, 180.0 and 272.0, 48.0 px with no L, ZL or ZR; the control pulls
+  (wrist down, wrist turned away) L and ZL (a shot).
+- **What a tap does in the game (w5: taps held 1 s, `AZAHARFRAME_KIU_LIGHTGUN_TRACE=1`, the
+  air).** The touch reaches the game: at 160, 120 and 272, 48 the aim object's flags at `+0x84`
+  went 0x41 to **0x43** for the length of the touch (a stylus touch, the game's own touch aim),
+  and back to 0x41; at 32, 218 (the power orb's place) they stayed 0x41 (a button there, not the
+  aim area; I). The reticle stayed where Direct Aim wrote it (`reticle` = `written` = the ray's
+  pixel) all through. But the aiming hand pointing down at the wrist is itself a Direct Aim ray:
+  the reticle went to the frame's lower left edge (0.5, 222 with the ray at -4.9, 222) while
+  the beam was on the wrist. In the air nothing turned; **on land the reticle past the aim box
+  turns the camera (the clamp above), not run on the desktop**: a tap there may turn the view.
+  Next step if it does: hold Direct Aim's reticle (and the 6DoF aim) where it was while the beam
+  is on the wrist screen.
 
 ### Not done, risks
 

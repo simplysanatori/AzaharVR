@@ -456,6 +456,10 @@ Input::PanelQuad Visuals::StatsOccluder() const {
     return impl->FrontQuad();
 }
 
+bool Visuals::StatsOnWrist() const { // AzaharFrame kiuwrist
+    return impl->stats_on && Settings::values.vr_stats_position.GetValue() == 1;
+}
+
 void Visuals::Impl::ToggleStats() {
     stats_on = !stats_on;
     LOG_INFO(Frontend, "xr: Stats button: {}", stats_on ? "on" : "off");

@@ -38,6 +38,7 @@
 #include "frame_xr/qt_mirror/mirror_panel.h"
 #include "frame_xr/startup_escape.h" // AzaharFrame memguard
 #include "frame_xr/vis/visuals.h" // AzaharFrame vrvis
+#include "frame_xr/vis/wrist_screen.h" // AzaharFrame kiuwrist
 
 namespace frame_xr::picker {
 class Library;
@@ -281,6 +282,11 @@ private:
     /// 1.2.0 RC2: the other controller's grip (with hysteresis); held, it frees the aiming one.
     Input::GripClutch other_grip_clutch;
     bool aim_rest_logged = false; ///< AzaharFrame kiuaim3: Keep Reticle on Screen's resting guard
+    /// AzaharFrame kiuwrist: Angel's Aim's Secondary Screen on the off hand's wrist, shown this
+    /// game frame (the bottom panel the mapper touches is it then), and how many lines it logged.
+    Vis::WristScreen wrist_screen;
+    bool wrist_on = false;
+    int wrist_logs = 0;
     Input::Recoil recoil;          ///< AzaharFrame kiugyro: Light Gun's recoil
     Input::ShotRecoil shot_recoil; ///< AzaharFrame kiuguns: Recoil on the game's own shots
     Vis::MuzzleFlash muzzle_flash; ///< AzaharFrame kiuflash: Muzzle Flash on the same shots
