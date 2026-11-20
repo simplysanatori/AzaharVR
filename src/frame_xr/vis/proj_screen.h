@@ -173,7 +173,8 @@ layout(push_constant) uniform PC {
     vec4 shape;   // x, y: half width and height (m), z: cylinder radius (0: flat), w: columns
     vec4 rect;    // the eye's part of the image: offset (x, y) and size (z, w), 0..1
     vec4 tex;     // x, y: the image's size in texels, z: flags (1: test marks)
-    vec4 extra;   // x: the depth (0 its own, 1 nearest, 2 farthest), y: the filter (projdef)
+    vec4 extra;   // x: the depth (0 its own, 1 nearest, 2 farthest), y: the filter (projdef),
+                  // z: the soft edge's width, a share of the half size (0: none; kiuview)
 } pc;
 
 layout(location = 0) out vec2 v_uv;
@@ -274,6 +275,12 @@ void main() {
             }
         }
         colour = sum / float(n.x * n.y);
+    }
+    // AzaharFrame kiuview: the edge fades to black over extra.z of the half width and height
+    // (Kid Icarus first person, AZAHARFRAME_KIU_FP_EDGE).
+    if (pc.extra.z > 0.0) {
+        vec2 inside = 1.0 - abs(v_screen);
+        colour *= smoothstep(0.0, pc.extra.z, inside.x) * smoothstep(0.0, pc.extra.z, inside.y);
     }
     if (mod(pc.tex.z, 2.0) > 0.5) {
         // Test marks: on each mark's picture point a magenta Gaussian dot (sigma 1.2 pixels) on

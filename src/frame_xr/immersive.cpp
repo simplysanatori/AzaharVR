@@ -1621,7 +1621,8 @@ void OnFrame(const FrameInfo& info) {
                 // sized from the camera as the game has it (factor 1 once it is in).
                 if (const int wide = Kiu::FirstPerson::WideMode(); wide != 0) {
                     const L::KiuWide w = L::KiuWideCamera(g.view_fov, eye_shift,
-                                                          wide == 2 ? game_field * widen : 0.0f);
+                                                          wide == 2 ? game_field * widen : 0.0f,
+                                                          Kiu::FirstPerson::FieldShare());
                     if (w.ok) {
                         Kiu::FirstPerson::PublishWideTarget(w.fov_y_deg, w.aspect / widen);
                     }
@@ -1629,8 +1630,10 @@ void OnFrame(const FrameInfo& info) {
             }
             Kiu::FirstPerson::PublishDrawnShape(fp_aspect);
             const float fp_max = Kiu::FirstPerson::FactorMax();
+            // AzaharFrame kiuview: AZAHARFRAME_KIU_FP_FIELD, the share of the view covered.
             g.solved = L::SolveKiuFirstPerson(fp_fov, fp_aspect, g.view_fov, eye_shift, fp_max,
-                                              g.head_place.distance);
+                                              g.head_place.distance,
+                                              Kiu::FirstPerson::FieldShare());
             LogKiuFirstPersonScreen(fp_fov, scene, fp_aspect, fp_max);
         } else {
             g.solved = L::SolveHeadLocked(g.head_place, screen_fov, cam.aspect, g.view_fov,
@@ -1678,8 +1681,15 @@ void OnFrame(const FrameInfo& info) {
         // AzaharFrame hudmove: HUD Spacing, the Full modes only, eased off with mode 2's menu
         // rule (video_core/vr_hud_spacing.h); logged when the setting changes.
         {
-            const int spacing_x = Settings::values.vr_immersive_hud_spacing_x.GetValue();
-            const int spacing_y = Settings::values.vr_immersive_hud_spacing_y.GetValue();
+            // AzaharFrame kiuview: in first person, while the setting is the game's own, the
+            // first-person values (AZAHARFRAME_KIU_FP_HUD; kiu_first_person.h): the talk box
+            // and the HUD nearer the view's middle.
+            const Kiu::FirstPerson::HudPercent hud = Kiu::FirstPerson::HudSpacingFor(
+                KiuFirstPerson(), Settings::values.vr_immersive_hud_spacing_x.GetValue(),
+                Settings::values.vr_immersive_hud_spacing_y.GetValue(),
+                KiuFirstPerson() ? Kiu::FirstPerson::FpHud() : Kiu::FirstPerson::HudPercent{});
+            const int spacing_x = hud.across;
+            const int spacing_y = hud.up_down;
             data.hud = VideoCore::HudSpacing::ForFrame(true, mode, spacing_x, spacing_y,
                                                        g.menu_exact.Weight());
             const ImmersivePreset* preset = FindImmersivePreset(g.title_id);
@@ -2265,6 +2275,22 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
         NoteSlip(anchored, anchor_head, out.top_pose);
         out.top_pointable = false;
         out.show_bottom = false;
+        // AzaharFrame kiuview: Kid Icarus first person's talk (portraits and words) is on the
+        // Secondary Screen: a small panel with the head, below the view's middle and nearer
+        // than the screen (AZAHARFRAME_KIU_FP_TALK; kiu_first_person.h).
+        if (KiuFirstPerson() && g.view.valid) {
+            const Kiu::FirstPerson::Talk talk = Kiu::FirstPerson::TalkNow();
+            if (talk.on) {
+                const Kiu::FirstPerson::TalkPlace p =
+                    Kiu::FirstPerson::TalkPanelInView(talk, 320.0f / 240.0f);
+                const XrPosef in_view{{std::sin(0.5f * p.pitch_rad), 0.0f, 0.0f,
+                                       std::cos(0.5f * p.pitch_rad)},
+                                      {0.0f, p.y, p.z}};
+                out.bottom_pose = Compose(g.view.head, in_view);
+                out.bottom_size = {p.width, p.height};
+                out.show_bottom = true;
+            }
+        }
         out.head_driven = true; // AzaharFrame flash
     }
     const float top_distance = out.top_space == view_space || (g.engaged && IsViewMode(g.mode))

@@ -33,6 +33,7 @@
 #include "common/settings.h" // AzaharFrame vrqol: Background
 #include "common/stall_telemetry.h"
 #include "common/thread.h"
+#include "frame_xr/kiu_first_person.h" // AzaharFrame kiuview
 #include "frame_xr/auto_shape.h" // AzaharFrame fixes7
 #include "frame_xr/controls.h"
 #include "frame_xr/dynamic_resolution.h" // AzaharFrame menuux
@@ -1424,6 +1425,8 @@ void Runtime::FrameLoop() {
                     pe.size = size;
                     pe.curve = curve;
                     pe.serial = chain.frame_serial;
+                    // AzaharFrame kiuview: first person's soft edge (the top screen only).
+                    pe.soft_edge = top_immersive ? Kiu::FirstPerson::EdgeShare() : 0.0f;
                     // projb: "Controllers in Front of Screen" as on the quad path (ctrlfront's
                     // occluders above): by depth when the choice takes this screen's slot (the
                     // immersive screen then never hides them: what it shows is far away), else

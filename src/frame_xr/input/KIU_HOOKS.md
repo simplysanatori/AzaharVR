@@ -272,6 +272,11 @@ Other Games; the hooks' log line says why. The switches below still force their 
 | `AZAHARFRAME_KIU_SHOTS_6DOF=1` | with first person: the game's own shots from the hand's ray; turns the bullet keep on |
 | `AZAHARFRAME_KIU_FP_WIDE=0\|1\|2` | first person's scene camera (default 1): 1, as wide as the view and in its shape (the screen then needs no drawing past the frame); 2, as wide but in the game's own shape (square pixels; some of the picture falls outside the view across); 0, the game's own camera and the old draw-past-the-frame path ("The wide camera" below) |
 | `AZAHARFRAME_KIU_FP_2D=0\|1` | first person's sprites (default 1 in first person): the game's lock-on marks, hit numbers and other sprites drawn through its geometry shader turn with the world; 0 leaves them where the game's camera put them ("The game's sprites" below) |
+| `AZAHARFRAME_KIU_FP_TALK=0\|1`, `AZAHARFRAME_KIU_FP_TALK_AT=<down>,<width>` | first person's talk panel (default 0; 1 shows it): the Secondary Screen, where this game shows its talk, as a small panel with the head, its middle 24° below straight ahead, 34° wide, 0.8 m away (degrees; "The talk and the HUD in first person" below) |
+| `AZAHARFRAME_KIU_FP_HUD=0\|on\|<p>\|<across>,<up_down>` | HUD Spacing's scales in first person while the setting is the game's own (default off; an experiment, see below) |
+| `AZAHARFRAME_KIU_FP_FIELD=<percent>` | the share of the view's angle the picture fills (50 to 100, default 100): the wide camera that much narrower, the screen still at true size, a dark border around it (unit tested; on the mock, set live at 80 on land, no new screen line was logged: unproven) |
+| `AZAHARFRAME_KIU_FP_EDGE=<percent>` | the picture's edge fades to black over that share of its half size (0 to 50, default 0); the projection path only (only the shader compile test: never drawn on the mock) |
+| `AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]` | over the shoulder: the eye this many metres behind, above and to the right of the first-person eye along the camera's level view (game units = metres × the leaning scale, 7.7 per metre at life size); `AZAHARFRAME_KIU_EYE_OFFSET` wins |
 | `AZAHARFRAME_KIU_FP_FACTOR=<f>` | the most the game draws past its own frame on either axis in first person (1 to 8, default 6); past it the screen is smaller on that axis ("The screen in first person" below) |
 | `AZAHARFRAME_KIU_FP_TRACE=1\|2`, `AZAHARFRAME_KIU_FP_PROBE=<hex>` | a line of `key=value` words a second (2: a VBlank): the scene camera, the view register, the rest pose, the head, the hand's ray in the world, the reticle, the mailbox; and an actor's place in the world and in the head's view |
 
@@ -422,6 +427,15 @@ screen. A ray that leaves the game's view holds the reticle at the screen's edge
   shape (the 21:9 mod draws 7:3 with Screen Shape 21:9).
 - **Behind Pit.** `AZAHARFRAME_KIU_EYE_OFFSET=x,y,z` in first person is laid out along the
   camera's level view (its yaw), not the player's body, which turns with shots.
+- **Over the shoulder (AzaharFrame kiuview).** `AZAHARFRAME_KIU_SHOULDER=back,up[,side]` in
+  metres adds to the first-person eye (land 12.3 units up in his axes, air 3), along the
+  camera's level view, so both keep their own height. Desktop: 2,0.6 in Chapter 1's air battle
+  moved the eye offset from (0.2, 3.0, 0.0) to (-2.3, 7.6, 15.1) units (4.6 up, 15.3 back: 0.6
+  and 2.0 m) and shows Pit ahead and below, faded (why: not traced). On land (Chapter 1, by a
+  wall) 1.5,0.4 showed no clear change in the picture: unverified there. The shots, the laser and the sprite correction follow the moved eye with no change
+  (read from the code: the hand's ray is taken from the scene's eye, so shots start behind Pit
+  and fly along the laser; not measured); the head and Right Stick turning turn about the moved eye. Not
+  measured: the angle of shots off the ray, a wall between the eye and Pit.
 - **The land aim box.** With Right Stick turning (and so in first person) the "aim box" group
   writes the land box as the whole screen and Direct Aim never pushes the Turn Zone; the box
   words are the same with the 21:9 mod, the "aim hold" words are not.
@@ -550,6 +564,28 @@ off): one word, `b shadow_stub` at 0x57B054.
   takes it away on land (V); it is not in Angel's Aim's set (in the air it washes the picture
   out and he takes less damage; his hurt boxes on land are unchecked). The player's round
   shadow is not it (`NO_PLAYER_SHADOW=0`: the same picture).
+
+### The talk and the HUD in first person (AzaharFrame kiuview)
+
+- **The talk is on the Secondary Screen (V, desktop, EUR, Chapter 1's air battle).** The
+  portraits and the words ("If these are Underworld troops...", "Resurrected. Yes.") are drawn
+  on the 3DS's lower screen, the words in its top fifth; the Primary picture shows only the life
+  bar and the score (emulator screenshots of both screens every 2 s, 16 of them). The Full modes
+  never show the Secondary Screen (`Screens`: `show_bottom = false` in modes 2 and 3), so in
+  Angel's Aim the talk was not on view at all.
+- **The talk panel** (`AZAHARFRAME_KIU_FP_TALK=1`; off by default, see the laser below): the Secondary
+  Screen as a quad with the head, its middle 24° below straight ahead (18.75° below the view's
+  middle on the desktop mock), 34° wide and 25.9° high at 0.8 m, nearer than first person's
+  screen so it is drawn over it. Its words run from about 11° to 16° below straight ahead. The angles
+  are the code's (the mock trace has the quad's size, 0.49 × 0.37 m, not its pose). Not run:
+  the panel goes into controls.cpp's pointable Secondary slot, so the laser aimed low may
+  point at it and touch the Secondary Screen; hence off by default.
+- **The HUD's corners.** The wide camera's frame is 126° × 112° about the view's middle
+  (−5.25°), so the life bar and the score (rows 5 to 30 of 240, 0 to 120 px from the sides)
+  sit about 42 to 50° above straight ahead and 38 to 63° to the side. HUD Spacing (`AZAHARFRAME_KIU_FP_HUD`) does move
+  them in, but they touch the frame's edge, whose corners the shader pins, so they stretch (the
+  life bar across the view, the score icon several times its size; the cause is read from the
+  shader's rule, not traced): off.
 
 ### Not done, risks
 

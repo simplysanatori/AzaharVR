@@ -27,6 +27,9 @@ struct ProjScreenEye {
     float curve = 0.0f;    ///< a cylinder's radius (0: flat), as MakeCylinder
     uint64_t serial = 0;   ///< the picture (ScreenChain::frame_serial)
     ProjDepth depth = ProjDepth::Real; ///< projb
+    /// AzaharFrame kiuview: the edge's fade to black, a share of the half size (0: a hard edge;
+    /// Kid Icarus first person's top screen, AZAHARFRAME_KIU_FP_EDGE).
+    float soft_edge = 0.0f;
 };
 
 struct ProjScreens {

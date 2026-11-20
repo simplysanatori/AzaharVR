@@ -531,6 +531,10 @@ struct Cover {
 /// kFillMarginDeg to spare on every side and at least kMinFillHalfHeightDeg high (`eye_shift`:
 /// mode 2's shared quad, seen from half the IPD to the side, needs that much more across).
 Cover DefaultCover(const ViewFov& view, float pitch_rad, float eye_shift);
+/// AzaharFrame kiuview: `share` (0.5 to 1; anything else 1) of the cover's angle on each axis:
+/// the half angles times the share (AZAHARFRAME_KIU_FP_FIELD), so the picture fills less of the
+/// view and a border shows around it.
+Cover ShareCover(Cover cover, float share);
 
 // ---- Wider View (AzaharFrame widerview) ----
 /// Settings::values.vr_immersive_wider_view_level: 0 = Off (1.0x), 1 to 4 = 1.1x to 1.4x.
@@ -864,9 +868,10 @@ inline constexpr float kKiuFpFactorMax = 6.0f;
 /// The highest factor the switch takes (the shader has no limit; past this a pixel of the
 /// game's picture is spread too thin to be worth drawing).
 inline constexpr float kKiuFpFactorCeiling = 8.0f;
+/// AzaharFrame kiuview: `field` is ShareCover's share: the view covered is that much smaller.
 HeadLocked SolveKiuFirstPerson(float game_fov_y_deg, float aspect, const ViewFov& view,
                                float eye_shift = 0.0f, float factor_max = kKiuFpFactorMax,
-                               float distance = kDefaultHeadDistance);
+                               float distance = kDefaultHeadDistance, float field = 1.0f);
 
 /// AzaharFrame kiuwide: Kid Icarus: Uprising's first person with the game's own camera widened
 /// (AZAHARFRAME_KIU_FP_WIDE): the game camera's angle up and down and its shape that make the
@@ -881,7 +886,9 @@ struct KiuWide {
     float fov_y_deg = 0.0f;
     float aspect = 0.0f;
 };
-KiuWide KiuWideCamera(const ViewFov& view, float eye_shift = 0.0f, float keep_aspect = 0.0f);
+/// AzaharFrame kiuview: `field` as SolveKiuFirstPerson's, so the two still give factor 1.
+KiuWide KiuWideCamera(const ViewFov& view, float eye_shift = 0.0f, float keep_aspect = 0.0f,
+                      float field = 1.0f);
 
 /// AzaharFrame fovaxis: Fill View, set once (no mode). 1.2.0: across only, at kFillAcrossShare
 /// of the view. The placement size and Horizontal Scale that make the screen's width exactly
