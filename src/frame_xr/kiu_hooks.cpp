@@ -45,6 +45,7 @@ constexpr const char* kSwitchEnemyKeep = "AZAHARFRAME_KIU_ENEMY_KEEP";
 constexpr const char* kSwitchEnemyKeepS = "AZAHARFRAME_KIU_ENEMY_KEEP_S";
 constexpr const char* kSwitchGroupKeep = "AZAHARFRAME_KIU_GROUP_KEEP";
 constexpr const char* kSwitchNoFollow = "AZAHARFRAME_KIU_NO_FOLLOW";
+constexpr const char* kSwitchNoPlayerShadow = "AZAHARFRAME_KIU_NO_PLAYER_SHADOW"; // kiuperf
 constexpr const char* kSwitchTrace = "AZAHARFRAME_KIU_HOOK_TRACE";
 // AzaharFrame kiuvr (kiu_first_person.h)
 constexpr const char* kSwitchFpTrace = "AZAHARFRAME_KIU_FP_TRACE";
@@ -455,7 +456,11 @@ void Hook(int64_t ticks) {
     // turns the land camera and the reticle never does: the land aim box is the whole screen,
     // with the mod or without it.
     const bool want_aim_box = want_aim_hold || Kiu::Turn::RightStickOn();
-    const bool want_nocull = first_person || SwitchIs(kSwitchNoCull, "1");
+    // AzaharFrame kiuperf: a group first person puts in by itself is kept out with its switch at
+    // "0" (an A/B for the cost of each; KH::GroupWanted).
+    const auto nocull_text = Switch(kSwitchNoCull);
+    const bool want_nocull =
+        KH::GroupWanted(first_person, nocull_text ? nocull_text->c_str() : nullptr);
     const bool want_keep = shots_6dof || SwitchIs(kSwitchBulletKeep, "1");
     const bool want_eye = first_person || SwitchIs(kSwitchEye, "1");
     const bool want_hide = SwitchIs(kSwitchHide, "1");
@@ -465,21 +470,25 @@ void Hook(int64_t ticks) {
     const bool shot_test = shot_count == 2 || shot_count == 5;
     const bool want_shot = shot_test || shots_6dof;
     // The timed keep replaces the plain one (they share a site). AzaharFrame kiumode: Angel's
-    // Aim's own (12 s) unless the switch gives one.
-    float keep_seconds = angels_aim ? Kiu::FirstPerson::kAngelsAimEnemyKeepS : 0.0f;
-    if (const auto text = Switch(kSwitchEnemyKeepS)) {
-        float v = 0.0f;
-        if (KH::ParseFloats(text->c_str(), &v, 1) == 1 && v > 0.0f) {
-            keep_seconds = v;
-        }
-    }
+    // Aim's own (12 s) unless the switch gives one. AzaharFrame kiuperf: ENEMY_KEEP_S=0 or
+    // ENEMY_KEEP=0 keeps it out (KH::ChooseEnemyKeep).
+    const auto keep_plain_text = Switch(kSwitchEnemyKeep);
+    const auto keep_timed_text = Switch(kSwitchEnemyKeepS);
+    const KH::EnemyKeepChoice keep_choice = KH::ChooseEnemyKeep(
+        angels_aim ? Kiu::FirstPerson::kAngelsAimEnemyKeepS : 0.0f,
+        keep_plain_text ? keep_plain_text->c_str() : nullptr,
+        keep_timed_text ? keep_timed_text->c_str() : nullptr);
+    const float keep_seconds = keep_choice.seconds;
     const bool want_keep_timed = keep_seconds > 0.0f;
-    const bool want_enemy_keep = !want_keep_timed && SwitchIs(kSwitchEnemyKeep, "1");
+    const bool want_enemy_keep = keep_choice.plain;
     const bool want_group_keep = SwitchIs(kSwitchGroupKeep, "1");
     const bool want_no_follow = first_person || SwitchIs(kSwitchNoFollow, "1");
     // AzaharFrame kiushadow: in first person the player's own round shadow lies right under the
     // eye: only his is left out (everyone else's stays).
-    const bool want_player_shadow = first_person;
+    // AzaharFrame kiuperf: AZAHARFRAME_KIU_NO_PLAYER_SHADOW=0 keeps his shadow (the group out).
+    const auto shadow_text = Switch(kSwitchNoPlayerShadow);
+    const bool want_player_shadow =
+        KH::GroupWanted(first_person, shadow_text ? shadow_text->c_str() : nullptr);
     const auto trace_text = Switch(kSwitchTrace);
     const int trace = trace_text ? std::atoi(trace_text->c_str()) : 0;
     const bool any = want_nocull || want_keep || want_eye || want_hide || want_shot ||
