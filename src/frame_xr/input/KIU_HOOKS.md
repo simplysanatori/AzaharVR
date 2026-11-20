@@ -596,7 +596,10 @@ off): one word, `b shadow_stub` at 0x57B054.
   32.0, 218.4 and 75.2, 218.4 px, as expected), the same results. With the mock's pose trace the
   submitted layer is at -0.06000, -0.28000, -0.30000 with the orientation the script asked for,
   and the beam's dot during a tap 5 mm in front of the tap point along the screen's normal.
-  Not run on the desktop: the right wrist (Motion Controls' Left Controller; unit tested).
+  The right wrist (w4r: Motion Controls' Left Controller, the left hand aims and taps): the
+  layer at 0.06000, -0.28000, -0.30000, the left one's orientation mirrored; the same three
+  taps at 160.0, 120.0, 80.0, 180.0 and 272.0, 48.0 px with no L, ZL or ZR; the control pulls
+  (wrist down, wrist turned away) L and ZL (a shot).
 
 ### Not done, risks
 
