@@ -62,6 +62,10 @@
 //                                     undistorted; the frame then reaches past the view's sides).
 //                                     0: the game's camera as it is and the game drawing past
 //                                     its frame (AzaharFrame kiufov), as before.
+//   AZAHARFRAME_KIU_FP_2D=0|1         AzaharFrame kiu2d: the game's sprites drawn through its
+//                                     geometry shader (lock-on marks, hit numbers) turn with the
+//                                     world (default 1 in first person; kiu_hooks.cpp,
+//                                     vr_view_matrix.h ClipCorrection). 0: as before.
 //   AZAHARFRAME_KIU_FP_TRACE=1|2      a line a second (2: a VBlank) with the transform's inputs
 //                                     and what it gives (kiu_hooks.cpp).
 //   AZAHARFRAME_KIU_FP_PROBE=<hex>    with the trace: the actor at that address, where it is in

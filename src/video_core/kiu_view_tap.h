@@ -47,4 +47,9 @@ struct WorldViewTap {
 };
 inline WorldViewTap g_world_view_tap;
 
+/// AzaharFrame kiu2d: mode 3 turns the draws whose shaders run on the CPU (a geometry shader's:
+/// vr_view_matrix.h ClipCorrection) with the world. Set each VBlank by Kid Icarus: Uprising's
+/// first person (frame_xr/kiu_hooks.cpp; AZAHARFRAME_KIU_FP_2D=0 keeps it off); off elsewhere.
+inline std::atomic<bool> g_soft_draw_turn{false};
+
 } // namespace VideoCore::Immersive

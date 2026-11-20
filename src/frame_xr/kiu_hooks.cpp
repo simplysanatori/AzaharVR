@@ -47,6 +47,7 @@ constexpr const char* kSwitchEnemyKeepS = "AZAHARFRAME_KIU_ENEMY_KEEP_S";
 constexpr const char* kSwitchGroupKeep = "AZAHARFRAME_KIU_GROUP_KEEP";
 constexpr const char* kSwitchNoFollow = "AZAHARFRAME_KIU_NO_FOLLOW";
 constexpr const char* kSwitchNoPlayerShadow = "AZAHARFRAME_KIU_NO_PLAYER_SHADOW"; // kiuperf
+constexpr const char* kSwitchFp2d = "AZAHARFRAME_KIU_FP_2D"; // AzaharFrame kiu2d
 constexpr const char* kSwitchTrace = "AZAHARFRAME_KIU_HOOK_TRACE";
 // AzaharFrame kiuvr (kiu_first_person.h)
 constexpr const char* kSwitchFpTrace = "AZAHARFRAME_KIU_FP_TRACE";
@@ -407,6 +408,7 @@ void Hook(int64_t ticks) {
     Core::System& system = Core::System::GetInstance();
     if (!system.IsPoweredOn()) {
         s.process = nullptr;
+        VideoCore::Immersive::g_soft_draw_turn.store(false, std::memory_order_relaxed); // kiu2d
         return;
     }
     std::shared_ptr<Kernel::Process> process;
@@ -420,6 +422,7 @@ void Hook(int64_t ticks) {
         s.process = nullptr;
         Kiu::FirstPerson::SetGameCode(0, false); // AzaharFrame kiumode
         Kiu::FirstPerson::SupplyRegisters(false);
+        VideoCore::Immersive::g_soft_draw_turn.store(false, std::memory_order_relaxed); // kiu2d
         return;
     }
     const uint64_t title = process->codeset->program_id;
@@ -497,6 +500,14 @@ void Hook(int64_t ticks) {
     if (fp_trace <= 0) {
         VideoCore::Immersive::g_world_view_tap.wanted.store(false, std::memory_order_relaxed);
     }
+    // AzaharFrame kiu2d: in first person the game's sprites drawn through its geometry shader
+    // (lock-on marks, hit numbers) turn with the world like everything else mode 3 draws
+    // (vr_immersive.h g_soft_draw_turn); AZAHARFRAME_KIU_FP_2D=0 leaves them where the game's
+    // camera put them, for an A/B.
+    const auto fp2d_text = Switch(kSwitchFp2d);
+    VideoCore::Immersive::g_soft_draw_turn.store(
+        KH::GroupWanted(first_person, fp2d_text ? fp2d_text->c_str() : nullptr),
+        std::memory_order_relaxed);
     // AzaharFrame kiumode: why Angel's Aim plays as Full (6DoF): Other Games here.
     const char* const as_other =
         fp_wanted && !first_person ? "; Angel's Aim plays as Full (6DoF): Other Games" : "";

@@ -561,6 +561,7 @@ void RasterizerVulkan::DrawTriangles() {
     pipeline_cache.UseTrivialVertexShader();
     pipeline_cache.UseTrivialGeometryShader();
 
+    TurnSoftwareVertices(); // AzaharFrame kiu2d
     Draw(false, false);
 }
 

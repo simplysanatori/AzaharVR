@@ -271,6 +271,7 @@ Other Games; the hooks' log line says why. The switches below still force their 
 | `AZAHARFRAME_KIU_AIM_6DOF=1` | with first person and Direct Aim (Aiming: Direct Aim): the reticle where the hand's ray points in the game's world, through the game's camera |
 | `AZAHARFRAME_KIU_SHOTS_6DOF=1` | with first person: the game's own shots from the hand's ray; turns the bullet keep on |
 | `AZAHARFRAME_KIU_FP_WIDE=0\|1\|2` | first person's scene camera (default 1): 1, as wide as the view and in its shape (the screen then needs no drawing past the frame); 2, as wide but in the game's own shape (square pixels; some of the picture falls outside the view across); 0, the game's own camera and the old draw-past-the-frame path ("The wide camera" below) |
+| `AZAHARFRAME_KIU_FP_2D=0\|1` | first person's sprites (default 1 in first person): the game's lock-on marks, hit numbers and other sprites drawn through its geometry shader turn with the world; 0 leaves them where the game's camera put them ("The game's sprites" below) |
 | `AZAHARFRAME_KIU_FP_FACTOR=<f>` | the most the game draws past its own frame on either axis in first person (1 to 8, default 6); past it the screen is smaller on that axis ("The screen in first person" below) |
 | `AZAHARFRAME_KIU_FP_TRACE=1\|2`, `AZAHARFRAME_KIU_FP_PROBE=<hex>` | a line of `key=value` words a second (2: a VBlank): the scene camera, the view register, the rest pose, the head, the hand's ray in the world, the reticle, the mailbox; and an actor's place in the world and in the head's view |
 
@@ -511,6 +512,45 @@ off): one word, `b shadow_stub` at 0x57B054.
   base, 16:9 and 21:9 builds (V, files).
 
 
+### The game's sprites (AzaharFrame kiu2d)
+
+- **What they are (V, desktop, Chapter 1's air battle).** The purple lock-on triangles are
+  drawn through the game's geometry shader. The emulator runs those draws on the CPU with the
+  game's own registers, so mode 3's patch of register 90 never reached them: they stayed where
+  the game's camera put them while the world turned with the head. Skipping the CPU-shaded
+  draws takes every triangle away (V); the HUD is drawn on the host's GPU and is untouched.
+  The hit numbers and score pop-ups are likely the same kind of draw (a second CPU-shaded
+  program with a 256 x 256 texture) but were not seen on the desktop (I).
+- **The fix.** Each eye's world draw leaves its turn in clip space, H = P * (V' * V^-1) * P^-1
+  (P the world projection, registers 86 to 89; V and V' the view rows as the game set them and
+  as mode 3 drew them), and the CPU-shaded draws into that eye's colour buffer are turned by it
+  (`vr_view_matrix.h` ClipCorrection; `rasterizer_accelerated.cpp` TurnSoftwareVertices). Per
+  colour buffer: one eye's sprites come after the other eye's world. The turns are forgotten
+  at each new game frame (`SetVRData`), so a frame with sprites and no world takes none. The
+  sprites' clip depth is their point's (z + w = 10, the projection's, at every sprite vertex
+  read), so the lean and each eye's half distance are exact too.
+- **Measured (mock, Chapter 1's air battle; the same game frame with `FP_2D` 1 and 0; 1600 x
+  964 per eye; median over the triangles):**
+
+  | Head (from the rest pose) | Triangles moved by the fix | Predicted (the turn at the middle) |
+  |---|---|---|
+  | rest | 4, -29 px | 0, -30 (the mock view's 5.25 degree screen pitch) |
+  | 15 degrees down | 3, -111 px | 0, -116 |
+  | lean 0.3 m right, 0.2 m up | 0, -30 px | 0, -30 plus about 10 (at 50 units) |
+
+  Enemies between the two runs: 0 to 1 px (the same frame). Head turns of 20 degrees left and
+  25 left with 10 up were run too; the triangles' matching between runs was too unreliable
+  there for a number, by eye they sit above their enemies with the fix and off by the turn
+  without it.
+- **Not done.** Sprites drawn on the host's GPU (none seen in a battle) and the HUD keep the
+  head-locked picture, as before. The game's own reticle ring was not checked.
+- **Pit's own body (V, Chapter 1's land section).** Looking down in first person shows a
+  see-through white shape of his legs and body on the floor: the game draws the player faded
+  when the camera is close, and first person does not hide him. `AZAHARFRAME_KIU_HIDE_PLAYER=1`
+  takes it away on land (V); it is not in Angel's Aim's set (in the air it washes the picture
+  out and he takes less damage; his hurt boxes on land are unchecked). The player's round
+  shadow is not it (`NO_PLAYER_SHADOW=0`: the same picture).
+
 ### Not done, risks
 
 - The headset: nothing here ran on it.
@@ -523,6 +563,7 @@ off): one word, `b shadow_stub` at 0x57B054.
 - The hand's ray is the right hand's when no controller aims, and Direct Aim must be on for
   `AZAHARFRAME_KIU_AIM_6DOF`.
 - The reticle sprite the game draws is 2D: it sits on the head-locked picture, not in the world.
+  (Its lock-on marks and hit numbers turn with the world: "The game's sprites" above.)
 
 ## Not done, not known
 

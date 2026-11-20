@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <utility>
 
 namespace VideoCore::Immersive {
 
@@ -693,5 +694,114 @@ private:
     int count_ = 0;
     int64_t start_ms_ = 0;
 };
+
+/// AzaharFrame kiu2d: a general 4x4 inverse (rows), in double precision. False when singular.
+inline bool InvertRows4(const double m[4][4], double out[4][4]) {
+    double a[4][8];
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            a[i][j] = m[i][j];
+            a[i][j + 4] = i == j ? 1.0 : 0.0;
+        }
+    }
+    for (int c = 0; c < 4; ++c) {
+        int pivot = c;
+        for (int r = c + 1; r < 4; ++r) {
+            if (std::abs(a[r][c]) > std::abs(a[pivot][c])) {
+                pivot = r;
+            }
+        }
+        if (!(std::abs(a[pivot][c]) > 1e-12)) {
+            return false;
+        }
+        if (pivot != c) {
+            for (int j = 0; j < 8; ++j) {
+                std::swap(a[c][j], a[pivot][j]);
+            }
+        }
+        const double d = a[c][c];
+        for (int j = 0; j < 8; ++j) {
+            a[c][j] /= d;
+        }
+        for (int r = 0; r < 4; ++r) {
+            if (r == c) {
+                continue;
+            }
+            const double k = a[r][c];
+            for (int j = 0; j < 8; ++j) {
+                a[r][j] -= k * a[c][j];
+            }
+        }
+    }
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            out[i][j] = a[i][j + 4];
+        }
+    }
+    return true;
+}
+
+/// AzaharFrame kiu2d: mode 3's turn of the world for draws whose vertices arrive already in the
+/// game camera's clip space. A draw the PICA cannot run on the host's GPU (a geometry shader:
+/// Kid Icarus: Uprising's lock-on marks, hit numbers and other sprites) runs its shaders on the
+/// CPU with the game's own registers, so the view register patch never reaches it and it stayed
+/// where the game's camera put it: on the head-locked picture, off its enemy by the head's turn.
+/// For the world draw before it, with projection rows `proj` (the four registers before the
+/// view matrix), view rows `view` as the game set them and `patched` as mode 3 drew them:
+/// H = P * (V' * V^-1) * P^-1, so that H * (P * V * x) = P * V' * x for every point x: the
+/// head's turn, its lean and each eye's half of the eye distance, as the world got them. Exact
+/// when the sprite's clip depth is its point's (Kid Icarus's are: z + w is the projection's 10
+/// at every sprite vertex read). False when P or V cannot be inverted, or the result is not
+/// finite.
+inline bool ClipCorrection(const float proj[4][4], const float view[3][4],
+                           const float patched[3][4], float out[4][4]) {
+    double p[4][4], v[4][4], vp[4][4];
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            p[i][j] = proj[i][j];
+            v[i][j] = i < 3 ? view[i][j] : (j == 3 ? 1.0 : 0.0);
+            vp[i][j] = i < 3 ? patched[i][j] : (j == 3 ? 1.0 : 0.0);
+        }
+    }
+    double p_inv[4][4], v_inv[4][4];
+    if (!InvertRows4(p, p_inv) || !InvertRows4(v, v_inv)) {
+        return false;
+    }
+    auto mul = [](const double a[4][4], const double b[4][4], double r[4][4]) {
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < 4; ++j) {
+                double sum = 0.0;
+                for (int k = 0; k < 4; ++k) {
+                    sum += a[i][k] * b[k][j];
+                }
+                r[i][j] = sum;
+            }
+        }
+    };
+    double c[4][4], pc[4][4], h[4][4];
+    mul(vp, v_inv, c);
+    mul(p, c, pc);
+    mul(pc, p_inv, h);
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            if (!std::isfinite(h[i][j])) {
+                return false;
+            }
+            out[i][j] = static_cast<float>(h[i][j]);
+        }
+    }
+    return true;
+}
+
+/// AzaharFrame kiu2d: one clip-space position through ClipCorrection's H.
+inline void ApplyClipCorrection(const float h[4][4], float pos[4]) {
+    float r[4];
+    for (int i = 0; i < 4; ++i) {
+        r[i] = h[i][0] * pos[0] + h[i][1] * pos[1] + h[i][2] * pos[2] + h[i][3] * pos[3];
+    }
+    for (int i = 0; i < 4; ++i) {
+        pos[i] = r[i];
+    }
+}
 
 } // namespace VideoCore::Immersive
