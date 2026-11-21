@@ -186,10 +186,13 @@ struct FakeRuntime {
     bool ClearTexture(FakeSurface&, const TextureClear&) {
         return true;
     }
-    bool CopyTextures(FakeSurface&, FakeSurface&, std::span<const TextureCopy>) {
+    u32 copies_from_custom = 0; ///< image copies whose source is a replacement's image
+    bool CopyTextures(FakeSurface& src, FakeSurface&, std::span<const TextureCopy>) {
+        copies_from_custom += src.IsCustom();
         return true;
     }
-    bool CopyTextures(FakeSurface&, FakeSurface&, const TextureCopy&) {
+    bool CopyTextures(FakeSurface& src, FakeSurface&, const TextureCopy&) {
+        copies_from_custom += src.IsCustom();
         return true;
     }
     bool BlitTextures(FakeSurface&, FakeSurface&, const TextureBlit&) {
@@ -576,4 +579,38 @@ TEST_CASE("Custom textures: a GPU that cannot sample the pack's format keeps the
     FakeSurface& surface = rig.Get(id);
     CHECK_FALSE(surface.IsCustom());
     CheckGameLevels(surface.Sampled());
+}
+
+// AzaharFrame sm3dltex: a second surface over a replaced texture's memory (the same texture with
+// another mip count, say) was validated by an image copy from the replacement: from its image at
+// the pack's size and format, for a compressed pack a copy between incompatible formats into the
+// game's RGBA8 image. Super Mario 3D Land's World 1-1 does this with its dirt path texture
+// (FE969ABCC0FEAAB3: a 4-level surface copied from a replaced 1-level one at the same address).
+TEST_CASE("Custom textures: a surface over a replaced texture's memory is not copied from it",
+          "[video_core][sm3dltex]") {
+    const bool async = GENERATE(false, true);
+    INFO("async " << async);
+    SettingsGuard settings{Settings::TextureFilter::NoFilter, 1};
+    Rig rig{async, /*skip_mipmap=*/true};
+
+    const auto guest = rig.Fill(0xA00000, kLevel0 + kLevel1 + kLevel2, 10);
+    const std::vector<u8> pack =
+        rig.AddPackTexture(guest.first(kLevel0), kGuestSize * kPackScale, 0xF0, async);
+    rig.textures.back()->hashes.push_back(~0ULL); // stays in memory for the second upload
+    const SurfaceId first = rig.Texture(0xA00000, 0);
+    if (async) {
+        rig.FinishLoading();
+    }
+    REQUIRE(rig.Get(first).IsCustom());
+
+    // The same memory as a texture with three levels: another surface
+    const SurfaceId second = rig.Texture(0xA00000, 2);
+    REQUIRE(second != first);
+    if (async) {
+        rig.FinishLoading();
+    }
+    CHECK(rig.runtime.copies_from_custom == 0);
+    FakeSurface& surface = rig.Get(second);
+    CHECK(surface.IsCustom());
+    CHECK(surface.Sampled().levels[0] == pack);
 }
