@@ -572,6 +572,12 @@ CeilingHold g_ceiling; ///< AzaharFrame bfidr: the screen's ceiling (the Full mo
 bool g_bfi_logged = false; ///< AzaharFrame bfidr: Black Frame Insertion's rules last logged on
 /// AzaharFrame bfidr: the level in use is the one with Black Frame Insertion (Second::bfi_asked)
 bool g_bfi_level = false;
+/// AzaharFrame bfikit: judged seconds in a row at this level that Black Frame Insertion flashed
+/// (Second::bfi). A level held kRememberAfter seconds is kept as the game's level with it only
+/// when it held under its rules: asked for but not flashing (held for a 30 fps game, as Kid
+/// Icarus always is), the seconds are judged by the line without it, so "6x remembered with Black
+/// Frame Insertion (held 60 s)" was a level it never flashed at.
+int g_bfi_flash_run = 0;
 
 void Publish(int drop) {
     VideoCore::DynamicResolution::g_drop.store(static_cast<u32>(std::max(0, drop)),
@@ -626,12 +632,14 @@ void ResetLocked(const char* why) {
     g_ceiling = {}; // AzaharFrame bfidr
     g_bfi_logged = false;
     g_have_saved = false;
+    g_bfi_flash_run = 0; // AzaharFrame bfikit
     Publish(0);
 }
 
 // AzaharFrame fixd: a game's start or a Load (its screens off), or VR started in a game: from
 // the level remembered for the game, else from the setting. Logged as what it is.
 void StartLocked(int base, int max_drop, const char* when) {
+    g_bfi_flash_run = 0; // AzaharFrame bfikit: a start counts its flashing seconds afresh
     const int before = g_controller.Drop();
     const uint64_t title = Title();
     // AzaharFrame bfidr: the level of the mode in use; with Black Frame Insertion and none of
@@ -769,6 +777,9 @@ void NoteSecond(const Second& s) {
         min_drop = std::clamp(static_cast<int>(base) - top, 0, max_drop);
     }
     const int drop = g_controller.Judge(judged, max_drop, min_drop);
+    // AzaharFrame bfikit: the flashing seconds at this level (a new level, or the other one, or a
+    // second it did not flash, starts the run again).
+    g_bfi_flash_run = (drop != before || level_switch || !s.bfi) ? 0 : g_bfi_flash_run + 1;
     const auto at = [base](int d) { return base > static_cast<u32>(d) ? static_cast<int>(base) - d : 1; };
     if (drop != before) {
         Publish(drop);
@@ -807,8 +818,10 @@ void NoteSecond(const Second& s) {
     const uint64_t title = Title();
     const bool stepped_down = g_controller.LastStep() > 0;
     // AzaharFrame bfidr: not a level the screen's ceiling holds (the seconds did not decide it).
-    if (title != 0 && max_drop > 0 &&
-        (stepped_down || (g_controller.Held() >= kRememberAfter && !g_controller.Ceilinged()))) {
+    // AzaharFrame bfikit: with Black Frame Insertion's level, a hold counts only flashing seconds.
+    const bool held_long = g_controller.Held() >= kRememberAfter && !g_controller.Ceilinged() &&
+                           (!g_bfi_level || g_bfi_flash_run >= kRememberAfter);
+    if (title != 0 && max_drop > 0 && (stepped_down || held_long)) {
         const int factor = at(g_controller.OwnDrop());
         if (RememberedLocked(title, g_bfi_level) != factor) {
             Remember(title, g_bfi_level, factor);

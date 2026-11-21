@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdint>
 #include <initializer_list>
+#include <optional>
 #include <string>
 #include <vector>
 #include <catch2/catch_test_macros.hpp>
@@ -923,4 +924,57 @@ TEST_CASE("Motion Clarity: only at a whole number of refreshes a picture", "[fra
         expected += "PB";
     }
     CHECK(out == expected);
+}
+
+// AzaharFrame bfikit: a game that swaps 60 times a second with 30 new pictures (a world redrawn
+// at each VBlank, moved every other one). Keyed to swaps (the default), every swap is a new
+// picture: each game picture is lit on 2 refreshes 2 apart (the doubling). Keyed to the game's
+// new pictures (AZAHARFRAME_XR_FLASH_BY_CONTENT), its pictures are 4 refreshes apart: held as a
+// 30 fps game, no picture flashed twice.
+TEST_CASE("Motion Clarity: 60 swaps with 30 pictures, keyed to swaps or to content",
+          "[frame_xr][bfikit]") {
+    CHECK(MC::ContentKeyFrom(std::nullopt) == MC::ContentKey::Swap);
+    CHECK(MC::ContentKeyFrom(std::string{"0"}) == MC::ContentKey::Swap);
+    CHECK(MC::ContentKeyFrom(std::string{"1"}) == MC::ContentKey::All);
+    CHECK(MC::ContentKeyFrom(std::string{"all"}) == MC::ContentKey::All);
+    CHECK(MC::ContentKeyFrom(std::string{"scene"}) == MC::ContentKey::Scene);
+    CHECK(MC::KeyedPicture(MC::ContentKey::Swap, 7, 3) == 7u);
+    CHECK(MC::KeyedPicture(MC::ContentKey::All, 7, std::nullopt) == 7u); // not known: the swap
+    CHECK(MC::KeyedPicture(MC::ContentKey::All, 0, 3) == 0u);
+    CHECK(MC::KeyedPicture(MC::ContentKey::All, 7, 3) == MC::kContentBase + 3);
+
+    constexpr int64_t kPeriod = 8'333'333;
+    const auto run = [&](MC::ContentKey key, std::vector<MC::Why>& whys,
+                         std::vector<uint32_t>& lit_per_content) {
+        MC::Scheduler s;
+        lit_per_content.assign(100, 0);
+        for (int r = 0; r < 800; r++) {
+            const uint64_t swap = static_cast<uint64_t>(r / 2) + 1;    // 60 swaps a second
+            const uint64_t content = static_cast<uint64_t>(r / 4) + 1; // 30 pictures
+            MC::Refresh rf;
+            rf.on = true;
+            rf.steady = true;
+            rf.time_ns = (r + 1) * kPeriod;
+            rf.period_ns = kPeriod;
+            rf.picture = MC::PictureId(MC::KeyedPicture(key, swap, content), 0);
+            const MC::Decision d = s.Next(rf);
+            if (r >= 400) { // learnt by then
+                whys.push_back(d.why);
+                if (d.show) {
+                    lit_per_content[content - 101]++;
+                }
+            }
+        }
+    };
+    std::vector<MC::Why> by_swap, by_content;
+    std::vector<uint32_t> lit_swap, lit_content;
+    run(MC::ContentKey::Swap, by_swap, lit_swap);
+    run(MC::ContentKey::All, by_content, lit_content);
+    // By swap: flashing, each game picture lit twice (on its two swaps' first refreshes).
+    CHECK(std::count(by_swap.begin(), by_swap.end(), MC::Why::Fresh) == 200);
+    CHECK(std::count(by_swap.begin(), by_swap.end(), MC::Why::Dark) == 200);
+    CHECK(std::all_of(lit_swap.begin(), lit_swap.end(), [](uint32_t n) { return n == 2; }));
+    // By content: held as a 30 fps game (lit every refresh, no backing between its repeats).
+    CHECK(std::count(by_content.begin(), by_content.end(), MC::Why::Slow) == 400);
+    CHECK(std::all_of(lit_content.begin(), lit_content.end(), [](uint32_t n) { return n == 4; }));
 }

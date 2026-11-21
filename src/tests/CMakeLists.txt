@@ -166,6 +166,7 @@ add_executable(tests
     video_core/transfer_overlap.cpp # AzaharFrame feshimmer
     video_core/rasterizer_cache_clear.cpp # AzaharFrame savemem
     video_core/custom_texture_filter.cpp # AzaharFrame texfilt
+    video_core/vr_content_repeat.cpp # AzaharFrame bfikit
     audio_core/merryhime_3ds_audio/merry_audio/merry_audio.cpp
     audio_core/merryhime_3ds_audio/merry_audio/merry_audio.h
     audio_core/merryhime_3ds_audio/merry_audio/service_fixture.cpp

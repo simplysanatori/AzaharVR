@@ -847,6 +847,25 @@ rate; it is a late picture, lit on the beat. One hitch of 11 or 12 refreshes in 
 history made the mean over 3.0 and held the screen lit as a slow game: after Quick Load and at
 race starts (handoff report 70, session 573). A slower game is learnt from 8 such intervals in a
 row, each within 1 of the run's first (4 +-1 at 30 a second), and is held as before.
+AzaharFrame bfikit: a new picture is a top screen swap, so a game that swaps 60 times a second
+with 30 new pictures (a world redrawn at each VBlank, moved every other one, as a 60 fps mod may
+do) has each picture lit twice, 2 refreshes apart: anything the eye follows is seen twice. A swap
+with no display transfer since the one before is the picture before again (Super Mario 3D Land
+swaps 60 times a second with nothing copied in every other one: 3634 of 7271 swaps on the Frame in
+session 4, 4768 of 9537 on the desktop mock). Otherwise each world upload's own uniforms (before
+the patch, the immersive modes only) are hashed, all of them and all but the camera's rows
+(`video_core/vr_content_repeat.h`), and compared with the swap before's. Every 10 s the `xr: perf`
+line says how many swaps were new (`game pictures: N top screen swaps, C with nothing copied since
+the one before (c right after a new one), R with world uniforms read, X new, Y the same as the
+swap before (Z right after a new one), without the camera ...`; a repeat right after a new picture
+in nearly every case is the 30-in-60 pattern, a run of repeats a still scene). `AZAHARFRAME_XR_FLASH_BY_CONTENT`
+(live, off by default; `1` or `all`: the game's uniforms; `scene`: all but its camera's rows) keys
+the scheduler to those new pictures instead of the swaps, so such a game is held as a 30 fps game
+(with `AZAHARFRAME_XR_FLASH_SLOW=twice`: 2 refreshes of each). The pacing, the pose tags and the
+image lag still go by swaps (each swap is still a new head pose). With it on, a still scene in a
+60 fps game is a picture late past its time and is lit on the beat as `late`, so the perf line's
+"late pictures lit again" and Dynamic Resolution's symptoms count it: turn Dynamic Resolution off
+for that A/B.
 AzaharFrame flash3: a swapchain made anew (a Dynamic Resolution step, Internal Resolution changed)
 has no picture for 3 to 5 refreshes; its screen and backing were left out then, and the
 compositor's background blinked through. The old swapchain now stays on view with its last

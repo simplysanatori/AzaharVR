@@ -54,6 +54,7 @@
 #include "frame_xr/vis/proj_screen_layer.h"
 #include "frame_xr/watchdog.h"
 #include "frame_xr/xr_loader.h"
+#include "video_core/vr_content_repeat.h" // AzaharFrame bfikit
 #include "video_core/vr_dynamic_resolution.h" // AzaharFrame menuux
 #include "input_common/main.h" // AzaharFrame flat: SDL pump count
 
@@ -596,8 +597,21 @@ void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
             PerfRead(std::nullopt);
             w = {};
         } else if (say == Common::FrameLog::ChangeGate::Say::Summary) {
+            // AzaharFrame bfikit: the game's new pictures against its swaps over the window.
+            const VideoCore::Immersive::ContentCounts c = VideoCore::Immersive::TakeContentCounts();
+            w.swaps = c.swaps;
+            w.swaps_uncopied = c.uncopied;
+            w.swaps_uncopied_alt = c.uncopied_alt;
+            w.swaps_read = c.read;
+            w.swaps_same = c.same;
+            w.swaps_same_alt = c.same_alt;
+            w.swaps_scene_same = c.scene_same;
+            w.swaps_scene_same_alt = c.scene_same_alt;
             PerfRead(w);
             w = {};
+        }
+        if (say == Common::FrameLog::ChangeGate::Say::First) {
+            VideoCore::Immersive::TakeContentCounts(); // bfikit: the window starts here
         }
     } else {
         perf_gate.Reset(); // no game on view: the next line starts afresh
@@ -712,6 +726,7 @@ void Runtime::FrameLoop() {
     MotionClarity::RateGate clarity_rate; // AzaharFrame bfidr: only at 120 Hz, said once
     std::optional<bool> clarity_override;
     bool flash_backing = true;
+    MotionClarity::ContentKey clarity_key = MotionClarity::ContentKey::Swap; // bfikit
     const auto read_clarity_switches = [&] {
         clarity_override = MotionClarity::OverrideFrom(
             Common::FrameTestSwitches::Value("AZAHARFRAME_XR_SINGLE_FLASH"));
@@ -719,6 +734,14 @@ void Runtime::FrameLoop() {
             MotionClarity::SlowFrom(Common::FrameTestSwitches::Value("AZAHARFRAME_XR_FLASH_SLOW")));
         flash_backing = TestSwitches::BackingFrom(
             Common::FrameTestSwitches::Value("AZAHARFRAME_XR_FLASH_BACKING"));
+        // AzaharFrame bfikit: a new picture by the game's uniforms, not by its swaps (the A/B).
+        const MotionClarity::ContentKey key = MotionClarity::ContentKeyFrom(
+            Common::FrameTestSwitches::Value("AZAHARFRAME_XR_FLASH_BY_CONTENT"));
+        if (key != clarity_key) {
+            clarity_key = key;
+            LOG_INFO(Frontend, "xr: Motion Clarity: {} (AZAHARFRAME_XR_FLASH_BY_CONTENT)",
+                     MotionClarity::ContentKeyName(key));
+        }
     };
     read_clarity_switches();
     // fixa: Match Bottom Screen Brightness (vr_motion_clarity_match_bottom): the bottom screen
@@ -779,7 +802,8 @@ void Runtime::FrameLoop() {
                 continue;
             }
             if (c.name == "AZAHARFRAME_XR_SINGLE_FLASH" || c.name == "AZAHARFRAME_XR_FLASH_SLOW" ||
-                c.name == "AZAHARFRAME_XR_FLASH_BACKING") {
+                c.name == "AZAHARFRAME_XR_FLASH_BACKING" ||
+                c.name == "AZAHARFRAME_XR_FLASH_BY_CONTENT") { // bfikit
                 read_clarity_switches(); // AzaharFrame flash
             } else if (c.name == Vis::kScreensInProjectionSwitch ||
                        c.name == Vis::kProjScaleSwitch) { // AzaharFrame projscreen
@@ -1262,7 +1286,18 @@ void Runtime::FrameLoop() {
                         t.frame_serial, sent_serial.load(), image_lag.load());
                     const std::array<ShownPicture, kShownPictures> pics = ShownPictures();
                     const ShownPicture* p = ImageLag::FindPicture(pics, on_view);
-                    rf.picture = MotionClarity::PictureId(p ? p->picture : 0, on_view);
+                    // AzaharFrame bfikit: or by the game's new pictures (vr_content_repeat.h):
+                    // the picture's swap is game_swaps + 1 - 1.
+                    uint64_t picture = p ? p->picture : 0;
+                    if (clarity_key != MotionClarity::ContentKey::Swap && picture != 0) {
+                        picture = MotionClarity::KeyedPicture(
+                            clarity_key, picture,
+                            VideoCore::Immersive::g_content_ring.Get(
+                                picture - 1, clarity_key == MotionClarity::ContentKey::All
+                                                 ? VideoCore::Immersive::ContentBy::All
+                                                 : VideoCore::Immersive::ContentBy::Scene));
+                    }
+                    rf.picture = MotionClarity::PictureId(picture, on_view);
                 }
                 const MotionClarity::Decision d = clarity.Next(rf);
                 // AzaharFrame flash: SteamVR makes each quad layer the overlay of its index and

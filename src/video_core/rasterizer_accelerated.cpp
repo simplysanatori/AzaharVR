@@ -14,6 +14,7 @@
 #include "video_core/vr_auto_shape.h" // AzaharFrame fixes7
 #include "video_core/kiu_view_tap.h" // AzaharFrame kiu2d
 #include "video_core/vr_immersive.h" // AzaharFrame depth
+#include "video_core/vr_content_repeat.h" // AzaharFrame bfikit
 #include "video_core/vr_view_matrix.h" // AzaharFrame
 
 #include <set>
@@ -722,6 +723,20 @@ void RasterizerAccelerated::ApplyVRDataToPicaVSUniforms(Pica::Shader::Generator:
             if (VideoCore::Immersive::FrameTrace::Traced()) {
                 VideoCore::Immersive::g_frame_trace.WorldUniforms(
                     VideoCore::Immersive::HashBytes(f.data(), sizeof(f[0]) * f.size()));
+            }
+            // AzaharFrame bfikit: always, for which swaps carry a new picture (vr_content_repeat.h):
+            // all of them, and all but the camera's rows (the register and the 3 after it).
+            {
+                const std::size_t row = sizeof(f[0]);
+                const std::size_t n = f.size();
+                const std::size_t cam = static_cast<std::size_t>(viewMatrixIndex);
+                const std::size_t cam_end = std::min(n, cam + 4);
+                const auto* base = reinterpret_cast<const unsigned char*>(f.data());
+                const uint64_t all = VideoCore::Immersive::HashWords(base, row * n);
+                const uint64_t scene =
+                    VideoCore::Immersive::HashWords(base, row * cam) * 31u +
+                    VideoCore::Immersive::HashWords(base + row * cam_end, row * (n - cam_end));
+                VideoCore::Immersive::g_content_repeat.Upload(all, scene);
             }
             // AzaharFrame dbl: the game's own near term of this draw, before the patch moves its
             // camera (vr_view_matrix.h NearTermFromRows): with the far points it tells where the

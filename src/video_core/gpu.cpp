@@ -25,6 +25,7 @@
 #include "video_core/right_eye_disabler.h"
 #include "video_core/video_core.h"
 #include "video_core/vr_immersive.h" // AzaharFrame
+#include "video_core/vr_content_repeat.h" // AzaharFrame bfikit
 
 namespace VideoCore {
 
@@ -350,7 +351,9 @@ void GPU::SetBufferSwap(u32 screen_id, const Service::GSP::FrameBufferInfo& info
         impl->system.perf_stats->EndGameFrame();
         // AzaharFrame pacing2: a new top screen picture (a VBlank without one shows the last
         // again: the VR pacing's cadence, common/xr_pacer.h PictureCadence).
-        Common::XrPacer::Get().game_swaps.fetch_add(1, std::memory_order_relaxed);
+        const u64 swap = Common::XrPacer::Get().game_swaps.fetch_add(1, std::memory_order_relaxed) + 1;
+        // AzaharFrame bfikit: whether the frame that ended is a new picture (vr_content_repeat.h).
+        VideoCore::Immersive::OnContentSwap(swap);
         right_eye_disabler->ReportEndFrame();
         // AzaharFrame immersive: a game frame ended; the next one gets the newest head pose,
         // all of its draws (both eyes) the same one (vr_immersive.h FrameLatch).
@@ -578,6 +581,7 @@ void GPU::MemoryTransfer() {
 
     // AzaharFrame oot: the picture now at the output address has the world drawn last.
     VideoCore::Immersive::OnTransfer(config.GetPhysicalOutputAddress());
+    VideoCore::Immersive::g_content_repeat.Transfer(); // AzaharFrame bfikit
 
     // Complete transfer.
     config.trigger.Assign(0);
