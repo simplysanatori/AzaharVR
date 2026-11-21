@@ -434,18 +434,22 @@ screen. A ray that leaves the game's view holds the reticle at the screen's edge
   and 2.0 m) and shows Pit ahead and below, faded. kiuview's land run (1.5,0.4) never took the
   switch (its rig wrote it before the run began).
 - **Why Pit is faded (AzaharFrame kiufp3, V on the desktop, Practice Range).** The game fades
-  its player when the camera comes near him, so he never hides the view; the shoulder eye is the
-  scene's camera, so the same rule applies. By distance only: with 0.5 m up he is faded at 1,
-  1.5 and 2 m back (also with the hand aimed 20° up or 35° right at 1.5 m), solid at 2.3, 2.6,
-  4 and 8 m, and at 2 m back with 0.8 m to the side (2.2 m away). So the edge is about 2.1 m
-  (16 units). The actor and its owner hold no word that differs between faded and solid (a
-  memory diff of 0x1000 and 0x800 bytes), so the fade lives in the model's drawing; left as
-  the game does it. `SHOULDER=2.5,0.5` shows him solid. Pictures: reports/91/kiufp3/pics/s1-*,
-  s2-*.
+  its player when the camera comes near him (V); that it does so to keep the view clear is
+  inferred (I). The shoulder eye is the scene's camera, so the same rule applies. With 0.5 m
+  up he is faded at 1, 1.5 and 2 m back (also at 2 m with the hand aimed 20° up, and at 1.5 m
+  with it 35° right or with 0.8 m to the side), solid at 2.3, 2.6, 4 and 8 m, and at 2 m back
+  with 0.8 m to the side (2.2 m away). At 2 m with the hand 35° right he was solid too: he had
+  turned to aim, so the distance the game measures moved. So the edge lies between 2.0 and
+  2.3 m back (about 16 to 18 units), and the aim's direction acts only through his pose. The
+  actor and its owner hold no word that differs between faded and solid (a memory diff of
+  0x1000 and 0x800 bytes), so the fade lives in the model's drawing; left as the game does it.
+  At `SHOULDER=1.5,0.5` he stays faded; `2.5,0.5` shows him solid on land and in the air.
+  Pictures: reports/91/kiufp3/pics/s1-*, s2-*, t1-*.
 - **Shots over the shoulder (AzaharFrame kiufp3, V on the desktop, Practice Range,
   `SHOULDER=2.5,0.5`, charged shots, aa6dof2's method).** 0.00° off the hand's ray at head yaw
   0, 20 and 40 right and 20 left with 15 down; each passes the aim point 0.00 units away (526
-  units on). They start at the hand's place behind the moved eye (2.1 m behind Pit, 1.7 m up),
+  units on). The path each flew (its first to its last point, about 255 units, 29 to 31 points)
+  is 0.000° off the ray too, so no homing turned it. They start at the hand's place behind the moved eye (2.1 m behind Pit, 1.7 m up),
   not at Pit: they fly from behind him, along the laser.
 - **Lock-on marks over the shoulder (AzaharFrame kiufp3, desktop, Chapter 1's air battle,
   `SHOULDER=2.5,0.5`, projection path).** By eye the triangles stay above their enemies at rest,
