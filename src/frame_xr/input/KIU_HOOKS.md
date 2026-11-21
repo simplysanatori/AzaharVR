@@ -274,7 +274,7 @@ Other Games; the hooks' log line says why. The switches below still force their 
 | `AZAHARFRAME_KIU_FP_2D=0\|1` | first person's sprites (default 1 in first person): the game's lock-on marks, hit numbers and other sprites drawn through its geometry shader turn with the world; 0 leaves them where the game's camera put them ("The game's sprites" below) |
 | `AZAHARFRAME_KIU_FP_TALK=0\|1`, `AZAHARFRAME_KIU_FP_TALK_AT=<down>,<width>` | first person's talk panel (default 0; 1 shows it): the Secondary Screen, where this game shows its talk, as a small panel with the head, its middle 24° below straight ahead, 34° wide, 0.8 m away (degrees; "The talk and the HUD in first person" below) |
 | `AZAHARFRAME_KIU_FP_FIELD=<percent>` | the share of the view's angle the picture fills (50 to 100, default 100): the wide camera that much narrower, the screen still at true size, a dark border around it (live; desktop, AzaharFrame kiufp3: the screen 126 × 112° at 100, 101 × 89° at 80, 76 × 67° at 60, a black border around it; kiuview's "no change" was its rig writing the switch before the app started) |
-| `AZAHARFRAME_KIU_FP_EDGE=<percent>` | the picture's edge fades to black over that share of its half size (0 to 50, default 0); the projection path only, which needs the controller models' files (without them the models' pass is never made and the screen goes as quads: why kiuview's mock never drew it); at `FP_FIELD` 100 most of the edge is outside the view |
+| `AZAHARFRAME_KIU_FP_EDGE=<percent>` | the picture's edge fades to black over that share of its half size (0 to 50, default 0); the projection path only, which needs the controller models' files (without them the models' pass is never made and the screen goes as quads: why kiuview's mock never drew it); at `FP_FIELD` 100 most of the edge is outside the view. Desktop, AzaharFrame kiufp3, `FP_FIELD=80`: the picture's brightness against no edge, across the left edge, reaches full at 15 % of the half width with 15 and at about 30 % with 30 (pictures reports/91/kiufp3/pics/edge-*); the HUD pieces at the edge fade with it |
 | `AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]` | over the shoulder: the eye this many metres behind, above and to the right of the first-person eye along the camera's level view (game units = metres × the leaning scale, 7.7 per metre at life size); `AZAHARFRAME_KIU_EYE_OFFSET` wins |
 | `AZAHARFRAME_KIU_WRIST_SCREEN=0\|1` | Angel's Aim's Secondary Screen on the off hand's wrist (default 0, off): shown while the wrist is turned up, touched by the aiming hand's beam without a shot ("The Secondary Screen on the wrist" below) |
 | `AZAHARFRAME_KIU_FP_FACTOR=<f>` | the most the game draws past its own frame on either axis in first person (1 to 8, default 6); past it the screen is smaller on that axis ("The screen in first person" below) |
@@ -446,7 +446,11 @@ screen. A ray that leaves the game's view holds the reticle at the screen's edge
   `SHOULDER=2.5,0.5`, charged shots, aa6dof2's method).** 0.00° off the hand's ray at head yaw
   0, 20 and 40 right and 20 left with 15 down; each passes the aim point 0.00 units away (526
   units on). They start at the hand's place behind the moved eye (2.1 m behind Pit, 1.7 m up),
-  not at Pit: they fly from behind him, along the laser. The shots, the laser and the sprite correction follow the moved eye with no change
+  not at Pit: they fly from behind him, along the laser.
+- **Lock-on marks over the shoulder (AzaharFrame kiufp3, desktop, Chapter 1's air battle,
+  `SHOULDER=2.5,0.5`, projection path).** By eye the triangles stay above their enemies at rest,
+  with the head 20° left and 15° down, Pit solid in front (pictures
+  reports/91/kiufp3/pics/t1-*); not measured to the pixel. The shots, the laser and the sprite correction follow the moved eye with no change
   (read from the code: the hand's ray is taken from the scene's eye, so shots start behind Pit
   and fly along the laser; not measured); the head and Right Stick turning turn about the moved eye. Not
   measured: the angle of shots off the ray, a wall between the eye and Pit.
