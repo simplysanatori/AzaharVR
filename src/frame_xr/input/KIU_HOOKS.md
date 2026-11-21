@@ -431,8 +431,22 @@ screen. A ray that leaves the game's view holds the reticle at the screen's edge
   metres adds to the first-person eye (land 12.3 units up in his axes, air 3), along the
   camera's level view, so both keep their own height. Desktop: 2,0.6 in Chapter 1's air battle
   moved the eye offset from (0.2, 3.0, 0.0) to (-2.3, 7.6, 15.1) units (4.6 up, 15.3 back: 0.6
-  and 2.0 m) and shows Pit ahead and below, faded (why: not traced). On land (Chapter 1, by a
-  wall) 1.5,0.4 showed no clear change in the picture: unverified there. The shots, the laser and the sprite correction follow the moved eye with no change
+  and 2.0 m) and shows Pit ahead and below, faded. kiuview's land run (1.5,0.4) never took the
+  switch (its rig wrote it before the run began).
+- **Why Pit is faded (AzaharFrame kiufp3, V on the desktop, Practice Range).** The game fades
+  its player when the camera comes near him, so he never hides the view; the shoulder eye is the
+  scene's camera, so the same rule applies. By distance only: with 0.5 m up he is faded at 1,
+  1.5 and 2 m back (also with the hand aimed 20° up or 35° right at 1.5 m), solid at 2.3, 2.6,
+  4 and 8 m, and at 2 m back with 0.8 m to the side (2.2 m away). So the edge is about 2.1 m
+  (16 units). The actor and its owner hold no word that differs between faded and solid (a
+  memory diff of 0x1000 and 0x800 bytes), so the fade lives in the model's drawing; left as
+  the game does it. `SHOULDER=2.5,0.5` shows him solid. Pictures: reports/91/kiufp3/pics/s1-*,
+  s2-*.
+- **Shots over the shoulder (AzaharFrame kiufp3, V on the desktop, Practice Range,
+  `SHOULDER=2.5,0.5`, charged shots, aa6dof2's method).** 0.00° off the hand's ray at head yaw
+  0, 20 and 40 right and 20 left with 15 down; each passes the aim point 0.00 units away (526
+  units on). They start at the hand's place behind the moved eye (2.1 m behind Pit, 1.7 m up),
+  not at Pit: they fly from behind him, along the laser. The shots, the laser and the sprite correction follow the moved eye with no change
   (read from the code: the hand's ray is taken from the scene's eye, so shots start behind Pit
   and fly along the laser; not measured); the head and Right Stick turning turn about the moved eye. Not
   measured: the angle of shots off the ray, a wall between the eye and Pit.

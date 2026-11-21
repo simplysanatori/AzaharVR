@@ -116,7 +116,11 @@
 //                                     (its yaw), so Pit is in sight. Metres at life size
 //                                     (UnitsPerMetre). Default off. AZAHARFRAME_KIU_EYE_OFFSET
 //                                     (game units, kiu_hooks.cpp) replaces the eye's offset
-//                                     itself and wins over this.
+//                                     itself and wins over this. AzaharFrame kiufp3: Pit is drawn
+//                                     faded while the eye is within about 2.1 m of him: the
+//                                     game's own fade of its player near its camera (by distance:
+//                                     the aim's direction does not change it). Left as the game
+//                                     does it; 2.5,0.5 shows him solid (KIU_HOOKS.md).
 // All live. The transform is input/kiu_room.h (pure, unit tested); the notes are in
 // input/KIU_HOOKS.md ("First person in 6DoF").
 //
