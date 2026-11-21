@@ -802,7 +802,8 @@ void Runtime::FrameLoop() {
                 continue;
             }
             if (c.name == "AZAHARFRAME_XR_SINGLE_FLASH" || c.name == "AZAHARFRAME_XR_FLASH_SLOW" ||
-                c.name == "AZAHARFRAME_XR_FLASH_BACKING") {
+                c.name == "AZAHARFRAME_XR_FLASH_BACKING" ||
+                c.name == "AZAHARFRAME_XR_FLASH_BY_CONTENT") { // bfikit
                 read_clarity_switches(); // AzaharFrame flash
             } else if (c.name == Vis::kScreensInProjectionSwitch ||
                        c.name == Vis::kProjScaleSwitch) { // AzaharFrame projscreen
