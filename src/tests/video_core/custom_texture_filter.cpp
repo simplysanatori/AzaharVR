@@ -186,10 +186,13 @@ struct FakeRuntime {
     bool ClearTexture(FakeSurface&, const TextureClear&) {
         return true;
     }
-    bool CopyTextures(FakeSurface&, FakeSurface&, std::span<const TextureCopy>) {
+    u32 copies_from_custom = 0; ///< image copies whose source is a replacement's image
+    bool CopyTextures(FakeSurface& src, FakeSurface&, std::span<const TextureCopy>) {
+        copies_from_custom += src.IsCustom();
         return true;
     }
-    bool CopyTextures(FakeSurface&, FakeSurface&, const TextureCopy&) {
+    bool CopyTextures(FakeSurface& src, FakeSurface&, const TextureCopy&) {
+        copies_from_custom += src.IsCustom();
         return true;
     }
     bool BlitTextures(FakeSurface&, FakeSurface&, const TextureBlit&) {
@@ -210,8 +213,9 @@ struct FakeRuntime {
     bool NeedsConversion(const FakeSurface&) const {
         return false;
     }
+    bool supports_custom = true; ///< false: a GPU without the pack's format (ASTC on the desktop)
     bool SupportsCustomFormat(CustomPixelFormat) const {
-        return true;
+        return supports_custom;
     }
 };
 
@@ -484,4 +488,129 @@ TEST_CASE("Custom textures: a level the pack has a file for is not overwritten b
     CHECK(image.levels[1] == pack1);
     CHECK_FALSE(image.generated[1]);
     CHECK(image.generated[2]);
+}
+
+// AzaharFrame sm3dltex: a pack that skips mipmaps can still have a file for a later level (Super
+// Mario 3D Land's 4K pack has one, for level 1 of the World 1-1 dirt path). That level's
+// material was taken as handled, so the game's pixels of the level were never uploaded, while the
+// pack's file is never used either: the level was left unwritten until the base replacement's
+// image took the slot (with async loading and no finished preload), and for good where it never
+// did (no base file; a format the GPU cannot sample, as ASTC on a desktop GPU, which keeps the
+// game's textures).
+
+namespace {
+
+constexpr u32 kLevel1 = kLevel0 / 4;
+constexpr u32 kLevel2 = kLevel1 / 4;
+
+/// Every level of `image` was written with the game's pixels of it (the fake keeps what an
+/// upload wrote; a level nothing wrote is empty)
+void CheckGameLevels(const FakeImage& image) {
+    REQUIRE(image.levels.size() == 3);
+    constexpr std::array<u32, 3> sizes{kLevel0, kLevel1, kLevel2};
+    for (std::size_t i = 0; i < sizes.size(); i++) {
+        INFO("level " << i);
+        CHECK(image.levels[i].size() == sizes[i]);
+        CHECK_FALSE(image.generated[i]);
+    }
+}
+
+} // namespace
+
+TEST_CASE("Custom textures: a later level's file with no base replacement leaves the game's level",
+          "[video_core][sm3dltex]") {
+    const bool async = GENERATE(false, true);
+    INFO("async " << async);
+    SettingsGuard settings{Settings::TextureFilter::NoFilter, 1};
+    Rig rig{async, /*skip_mipmap=*/true};
+
+    const auto guest = rig.Fill(0x600000, kLevel0 + kLevel1 + kLevel2, 6);
+    rig.AddPackTexture(guest.subspan(kLevel0, kLevel1), kGuestSize * kPackScale, 0x90, async);
+    const SurfaceId id = rig.Texture(0x600000, 2);
+    if (async) {
+        rig.FinishLoading();
+    }
+    FakeSurface& surface = rig.Get(id);
+    CHECK_FALSE(surface.IsCustom());
+    // Before the fix level 1 was empty: nothing wrote it
+    CheckGameLevels(surface.Sampled());
+}
+
+TEST_CASE("Custom textures: the game's texture is whole until its replacement's image takes over",
+          "[video_core][sm3dltex]") {
+    SettingsGuard settings{Settings::TextureFilter::NoFilter, 1};
+    Rig rig{/*async=*/true, /*skip_mipmap=*/true};
+
+    // As in the pack: a file for level 0 and one for level 1, read by a worker
+    const auto guest = rig.Fill(0x700000, kLevel0 + kLevel1 + kLevel2, 7);
+    const std::vector<u8> pack0 =
+        rig.AddPackTexture(guest.first(kLevel0), kGuestSize * kPackScale, 0xA0, true);
+    rig.AddPackTexture(guest.subspan(kLevel0, kLevel1), kGuestSize * kPackScale, 0xB0, true);
+    const SurfaceId id = rig.Texture(0x700000, 2);
+    {
+        FakeSurface& waiting = rig.Get(id);
+        CHECK_FALSE(waiting.IsCustom());
+        CheckGameLevels(waiting.Sampled());
+    }
+
+    rig.FinishLoading();
+    FakeSurface& replaced = rig.Get(id);
+    REQUIRE(replaced.IsCustom());
+    const FakeImage& image = replaced.Sampled();
+    REQUIRE(image.levels.size() == 3);
+    CHECK(image.levels[0] == pack0);
+    CHECK(image.generated[1]); // the pack's level 1 file is not used: the pack skips mipmaps
+    CHECK(image.generated[2]);
+}
+
+TEST_CASE("Custom textures: a GPU that cannot sample the pack's format keeps the whole game texture",
+          "[video_core][sm3dltex]") {
+    const bool async = GENERATE(false, true);
+    INFO("async " << async);
+    SettingsGuard settings{Settings::TextureFilter::NoFilter, 1};
+    Rig rig{async, /*skip_mipmap=*/true};
+    rig.runtime.supports_custom = false;
+
+    const auto guest = rig.Fill(0x800000, kLevel0 + kLevel1 + kLevel2, 8);
+    rig.AddPackTexture(guest.first(kLevel0), kGuestSize * kPackScale, 0xC0);
+    rig.AddPackTexture(guest.subspan(kLevel0, kLevel1), kGuestSize * kPackScale, 0xD0);
+    rig.FinishLoading(); // read before the game shows it (a preload): the format is known
+    const SurfaceId id = rig.Texture(0x800000, 2);
+    FakeSurface& surface = rig.Get(id);
+    CHECK_FALSE(surface.IsCustom());
+    CheckGameLevels(surface.Sampled());
+}
+
+// AzaharFrame sm3dltex: a second surface over a replaced texture's memory (the same texture with
+// another mip count, say) was validated by an image copy from the replacement: from its image at
+// the pack's size and format, for a compressed pack a copy between incompatible formats into the
+// game's RGBA8 image. Super Mario 3D Land's World 1-1 does this with its dirt path texture
+// (FE969ABCC0FEAAB3: a 4-level surface copied from a replaced 1-level one at the same address).
+TEST_CASE("Custom textures: a surface over a replaced texture's memory is not copied from it",
+          "[video_core][sm3dltex]") {
+    const bool async = GENERATE(false, true);
+    INFO("async " << async);
+    SettingsGuard settings{Settings::TextureFilter::NoFilter, 1};
+    Rig rig{async, /*skip_mipmap=*/true};
+
+    const auto guest = rig.Fill(0xA00000, kLevel0 + kLevel1 + kLevel2, 10);
+    const std::vector<u8> pack =
+        rig.AddPackTexture(guest.first(kLevel0), kGuestSize * kPackScale, 0xF0, async);
+    rig.textures.back()->hashes.push_back(~0ULL); // stays in memory for the second upload
+    const SurfaceId first = rig.Texture(0xA00000, 0);
+    if (async) {
+        rig.FinishLoading();
+    }
+    REQUIRE(rig.Get(first).IsCustom());
+
+    // The same memory as a texture with three levels: another surface
+    const SurfaceId second = rig.Texture(0xA00000, 2);
+    REQUIRE(second != first);
+    if (async) {
+        rig.FinishLoading();
+    }
+    CHECK(rig.runtime.copies_from_custom == 0);
+    FakeSurface& surface = rig.Get(second);
+    CHECK(surface.IsCustom());
+    CHECK(surface.Sampled().levels[0] == pack);
 }

@@ -1002,11 +1002,19 @@ SurfaceId RasterizerCache<T>::FindMatch(const SurfaceParams& params, ScaleMatch 
         IsMatch_Helper(std::integral_constant<MatchFlags, MatchFlags::SubRect>{}, [&] {
             return std::make_pair(surface.CanSubRect(params), surface.GetInterval());
         });
+        // AzaharFrame sm3dltex: a replaced texture is never a source of the game's pixels for
+        // another surface. Its image is the pack's, at the pack's size and maybe compressed: a
+        // copy at the game's size took a corner of it, and from an ASTC or BC image into the
+        // game's RGBA8 one is a copy between incompatible formats (raw blocks, at best). Super
+        // Mario 3D Land's World 1-1 makes such a second surface over a replaced dirt path
+        // texture. The memory under a replacement holds the game's pixels, so the other surface
+        // is uploaded from it, and replaced in turn.
         IsMatch_Helper(std::integral_constant<MatchFlags, MatchFlags::Copy>{}, [&] {
             ASSERT(validate_interval);
             const SurfaceInterval copy_interval =
                 surface.GetCopyableInterval(params.FromInterval(*validate_interval));
-            const bool matched = boost::icl::length(copy_interval & *validate_interval) != 0 &&
+            const bool matched = !surface.IsCustom() &&
+                                 boost::icl::length(copy_interval & *validate_interval) != 0 &&
                                  surface.CanCopy(params, copy_interval);
             return std::make_pair(matched, copy_interval);
         });
@@ -1014,7 +1022,8 @@ SurfaceId RasterizerCache<T>::FindMatch(const SurfaceParams& params, ScaleMatch 
             ASSERT(validate_interval);
             const SurfaceInterval copy_interval =
                 surface.GetCopyableInterval(params.FromInterval(*validate_interval));
-            const bool matched = boost::icl::length(copy_interval & *validate_interval) != 0 &&
+            const bool matched = !surface.IsCustom() &&
+                                 boost::icl::length(copy_interval & *validate_interval) != 0 &&
                                  surface.CanReinterpret(params);
             return std::make_pair(matched, copy_interval);
         });
@@ -1197,8 +1206,16 @@ bool RasterizerCache<T>::UploadCustomSurface(SurfaceId surface_id, SurfaceInterv
     if (!material) {
         return surface.IsCustom();
     }
+    // AzaharFrame sm3dltex: a file for a later level, in a pack that skips mipmaps, is not used
+    // (the base material's image brings its chain). True here would leave the game's pixels of
+    // the level out while nothing writes it: until the base replacement's image takes the slot
+    // (async loading without a finished preload: uploads are queued), or for good where it never
+    // does (no base file, or a format the GPU cannot sample). Draws sampled whatever was in
+    // memory. Super Mario 3D Land's 4K pack has such a file, for level 1 of a dirt path texture.
+    // The game's level is uploaded unless the replacement is in already.
     if (level != 0 && custom_tex_manager.SkipMipmaps()) {
-        return true;
+        custom_tex_manager.NoteUnusedLevelFile(*material, level);
+        return surface.IsCustom();
     }
     // AzaharFrame: a format this GPU cannot sample (logged once at start) keeps the guest
     // texture. The format is known once the material was read, also after it was released

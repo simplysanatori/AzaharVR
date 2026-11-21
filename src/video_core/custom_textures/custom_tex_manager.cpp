@@ -604,6 +604,17 @@ void CustomTexManager::DumpTexture(const SurfaceParams& params, u32 level, std::
     dumped_textures.insert(data_hash);
 }
 
+void CustomTexManager::NoteUnusedLevelFile(const Material& material, u32 level) {
+    if (!unused_level_files.insert(material.hash).second) {
+        return;
+    }
+    const CustomTexture* texture = material.textures[0];
+    LOG_WARNING(Render,
+                "custom textures: {} replaces mip level {} of a texture, but this pack skips "
+                "mipmaps (pack.json), so it is not used",
+                texture ? texture->path : fmt::format("{:016X}", material.hash), level);
+}
+
 Material* CustomTexManager::GetMaterial(u64 data_hash) {
     const auto it = material_map.find(data_hash);
     if (it == material_map.end()) {
