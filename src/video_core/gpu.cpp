@@ -581,6 +581,7 @@ void GPU::MemoryTransfer() {
 
     // AzaharFrame oot: the picture now at the output address has the world drawn last.
     VideoCore::Immersive::OnTransfer(config.GetPhysicalOutputAddress());
+    VideoCore::Immersive::g_content_repeat.Transfer(); // AzaharFrame bfikit
 
     // Complete transfer.
     config.trigger.Assign(0);

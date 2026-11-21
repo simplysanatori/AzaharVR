@@ -600,6 +600,8 @@ void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
             // AzaharFrame bfikit: the game's new pictures against its swaps over the window.
             const VideoCore::Immersive::ContentCounts c = VideoCore::Immersive::TakeContentCounts();
             w.swaps = c.swaps;
+            w.swaps_uncopied = c.uncopied;
+            w.swaps_uncopied_alt = c.uncopied_alt;
             w.swaps_read = c.read;
             w.swaps_same = c.same;
             w.swaps_same_alt = c.same_alt;

@@ -180,7 +180,8 @@ struct Window {
     /// immersive modes), and of them the ones with the same uniforms as the swap before (all of
     /// them; without the camera's rows), each with how many came right after a new picture
     /// (video_core/vr_content_repeat.h).
-    uint32_t swaps = 0, swaps_read = 0, swaps_same = 0, swaps_same_alt = 0;
+    uint32_t swaps = 0, swaps_uncopied = 0, swaps_uncopied_alt = 0;
+    uint32_t swaps_read = 0, swaps_same = 0, swaps_same_alt = 0;
     uint32_t swaps_scene_same = 0, swaps_scene_same_alt = 0;
 };
 
@@ -230,13 +231,15 @@ inline std::string Format(const Window& w, bool gpu_busy_on, const CpuShares& cp
         out += buf;
     }
     // AzaharFrame bfikit: new pictures against swaps (only where the uniforms were read).
-    if (w.swaps_read > 0) {
+    if (w.swaps > 0) {
         std::snprintf(buf, sizeof(buf),
-                      "; game pictures: %u top screen swaps, %u with world uniforms read, %u new, "
+                      "; game pictures: %u top screen swaps, %u with nothing copied since the one "
+                      "before (%u right after a new one), %u with world uniforms read, %u new, "
                       "%u the same as the swap before (%u right after a new one), without the "
                       "camera %u new, %u the same (%u right after a new one)",
-                      w.swaps, w.swaps_read, w.swaps_read - w.swaps_same, w.swaps_same,
-                      w.swaps_same_alt, w.swaps_read - w.swaps_scene_same, w.swaps_scene_same,
+                      w.swaps, w.swaps_uncopied, w.swaps_uncopied_alt, w.swaps_read,
+                      w.swaps_read - w.swaps_same, w.swaps_same, w.swaps_same_alt,
+                      w.swaps_read - w.swaps_scene_same, w.swaps_scene_same,
                       w.swaps_scene_same_alt);
         out += buf;
     }

@@ -10,8 +10,10 @@
 // anything the eye follows is seen twice (the doubling of report 30's H2, never measured: the
 // frame trace's uniform hash, AZAHARFRAME_IMMERSIVE_FRAME_TRACE, was off in every log).
 //
-// Here, always (the immersive modes only: the world uploads are read where the view is patched,
-// rasterizer_accelerated.cpp ApplyVRDataToPicaVSUniforms): each world upload's own uniforms, before
+// Here, always: a swap with no display transfer since the one before (nothing copied into a
+// framebuffer, so nothing new to show: Super Mario 3D Land in session 4, 3634 of 7271 swaps) is the
+// picture before again. Otherwise (the immersive modes only: the world uploads are read where the
+// view is patched, rasterizer_accelerated.cpp ApplyVRDataToPicaVSUniforms) each world upload's own uniforms, before
 // the patch, are hashed (64-bit words, about 0.1 us an upload), twice: all of them, and all but the
 // camera's rows (the view matrix register and the 3 after it), as the game may take a head-driven
 // camera every frame while its world moves at 30. At each top screen swap the frame that ended is
@@ -53,7 +55,9 @@ inline uint64_t HashWords(const void* data, std::size_t bytes) noexcept {
 /// The counts of a window (the perf line's 10 s).
 struct ContentCounts {
     uint32_t swaps = 0; ///< top screen swaps
-    uint32_t read = 0;  ///< of them with world uploads read (else not known: counted as new)
+    uint32_t uncopied = 0; ///< of them with no display transfer since the swap before: a repeat
+    uint32_t uncopied_alt = 0; ///< of `uncopied`, right after a new picture
+    uint32_t read = 0;  ///< of the others, with world uploads read (else not known: counted as new)
     uint32_t same = 0;  ///< the same uniforms as the swap before
     uint32_t same_alt = 0; ///< of `same`, right after a swap with new ones (30 in 60: every other)
     uint32_t scene_same = 0;     ///< the same without the camera's rows
@@ -76,13 +80,23 @@ public:
         ++uploads_;
     }
 
-    /// A top screen swap ended the frame (the emulation thread): its uploads against the swap
-    /// before's. A frame without uploads is not known: a new picture, and the next one is not
-    /// compared with it.
+    /// A display transfer (GPU::MemoryTransfer): a picture copied into a framebuffer.
+    void Transfer() noexcept {
+        ++copies_;
+    }
+
+    /// A top screen swap ended the frame (the emulation thread): with no display transfer since
+    /// the swap before, the picture before again; else its uploads against the swap before's. A
+    /// frame without uploads is not known: a new picture, and the next one is not compared with
+    /// it.
     void Swap() noexcept {
         ++counts_.swaps;
         bool same = false, scene_same = false;
-        if (uploads_ > 0) {
+        if (copies_ == 0) {
+            ++counts_.uncopied;
+            counts_.uncopied_alt += last_new_ ? 1 : 0;
+            same = scene_same = true; // the uploads' sums (if any) are not taken as the last
+        } else if (uploads_ > 0) {
             ++counts_.read;
             same = have_last_ && sum_ == last_sum_;
             scene_same = have_last_ && scene_sum_ == last_scene_;
@@ -106,6 +120,7 @@ public:
         scene_serial_ += scene_same ? 0 : 1;
         sum_ = scene_sum_ = 0;
         uploads_ = 0;
+        copies_ = 0;
     }
 
     /// The picture's serial after the last Swap (a new one at each new picture).
@@ -122,7 +137,7 @@ public:
 
 private:
     uint64_t sum_ = 0, scene_sum_ = 0;
-    uint32_t uploads_ = 0;
+    uint32_t uploads_ = 0, copies_ = 0;
     uint64_t last_sum_ = 0, last_scene_ = 0;
     bool have_last_ = false;
     bool last_new_ = true, last_scene_new_ = true;
@@ -173,7 +188,7 @@ private:
 /// thread under the mutex-free exchange below.
 inline ContentRepeat g_content_repeat;
 inline ContentRing g_content_ring;
-inline std::atomic<uint32_t> g_content_swaps{0}, g_content_read{0}, g_content_same{0},
+inline std::atomic<uint32_t> g_content_swaps{0}, g_content_uncopied{0}, g_content_uncopied_alt{0}, g_content_read{0}, g_content_same{0},
     g_content_same_alt{0}, g_content_scene_same{0}, g_content_scene_same_alt{0};
 
 /// GPU::SetBufferSwap for the top screen, after game_swaps counted it (`swap`: its new value).
@@ -183,6 +198,8 @@ inline void OnContentSwap(uint64_t swap) noexcept {
                        g_content_repeat.Serial(ContentBy::Scene));
     const ContentCounts c = g_content_repeat.Take();
     g_content_swaps.fetch_add(c.swaps, std::memory_order_relaxed);
+    g_content_uncopied.fetch_add(c.uncopied, std::memory_order_relaxed);
+    g_content_uncopied_alt.fetch_add(c.uncopied_alt, std::memory_order_relaxed);
     g_content_read.fetch_add(c.read, std::memory_order_relaxed);
     g_content_same.fetch_add(c.same, std::memory_order_relaxed);
     g_content_same_alt.fetch_add(c.same_alt, std::memory_order_relaxed);
@@ -194,6 +211,8 @@ inline void OnContentSwap(uint64_t swap) noexcept {
 inline ContentCounts TakeContentCounts() noexcept {
     ContentCounts c;
     c.swaps = g_content_swaps.exchange(0, std::memory_order_relaxed);
+    c.uncopied = g_content_uncopied.exchange(0, std::memory_order_relaxed);
+    c.uncopied_alt = g_content_uncopied_alt.exchange(0, std::memory_order_relaxed);
     c.read = g_content_read.exchange(0, std::memory_order_relaxed);
     c.same = g_content_same.exchange(0, std::memory_order_relaxed);
     c.same_alt = g_content_same_alt.exchange(0, std::memory_order_relaxed);

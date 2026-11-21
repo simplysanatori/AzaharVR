@@ -24,6 +24,7 @@ void Frame(I::ContentRepeat& c, uint64_t world, uint64_t cam, int n = 3) {
         const uint64_t scene = I::HashWords(rows.data(), 2 * sizeof(uint64_t));
         c.Upload(all, scene);
     }
+    c.Transfer(); // the picture copied into the framebuffer
     c.Swap();
 }
 
@@ -88,6 +89,7 @@ TEST_CASE("Content repeats: a still scene, and frames not read", "[video_core][b
     CHECK(n.same_alt == 1);
     // A swap without world uploads (a 2D screen): not known, a new picture, and the one after is
     // not compared with it.
+    c.Transfer();
     c.Swap();
     Frame(c, 5, 5);
     n = c.Take();
@@ -95,6 +97,28 @@ TEST_CASE("Content repeats: a still scene, and frames not read", "[video_core][b
     CHECK(n.read == 1);
     CHECK(n.same == 0);
     CHECK(c.Serial(I::ContentBy::All) == 3);
+}
+
+TEST_CASE("Content repeats: swaps with nothing copied", "[video_core][bfikit]") {
+    // Super Mario 3D Land in session 4: about every other swap without a display transfer (3634
+    // of 7271): the picture before again, whatever was uploaded.
+    I::ContentRepeat c;
+    for (uint64_t f = 0; f < 60; f++) {
+        if (f % 2 == 0) {
+            Frame(c, f, f);
+        } else {
+            c.Upload(1, 1); // drawn, not copied
+            c.Swap();
+        }
+    }
+    const I::ContentCounts n = c.Take();
+    CHECK(n.swaps == 60);
+    CHECK(n.uncopied == 30);
+    CHECK(n.uncopied_alt == 30);
+    CHECK(n.read == 30);
+    CHECK(n.same == 0);
+    CHECK(c.Serial(I::ContentBy::All) == 30);
+    CHECK(c.Serial(I::ContentBy::Scene) == 30);
 }
 
 TEST_CASE("Content repeats: the ring by swap number", "[video_core][bfikit]") {
