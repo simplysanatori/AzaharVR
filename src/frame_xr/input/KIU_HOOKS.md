@@ -660,7 +660,7 @@ off): one word, `b shadow_stub` at 0x57B054.
   hook (`AimBox`) makes the land aim box the whole screen, so the game's clamp never turns the
   camera, and Right Stick turning (on in first person) stops the Turn Zone (`kiu_probe.cpp`:
   `out.turning = false`); the probe's own line reads "air, box 0.5 to 399.5" on land for that
-  reason. Even at the frame's edge (the reticle at 74, 239.5) the yaw stayed. What did happen:
+  reason. What did happen:
   the reticle ran from 203.5, 124.5 to the lower left with each tap (57.9, 190.8; 78.6, 191.7;
   51.3, 207.8; 108.3, 175.8 of 400 x 240).
 - **The hold** (`AZAHARFRAME_KIU_WRIST_HOLD`, default on; `vis/wrist_screen.h` WristAimHold,
@@ -672,13 +672,15 @@ off): one word, `b shadow_stub` at 0x57B054.
   way in: the script's three poses between rest and the tap, before the beam reached the
   screen); the taps landed at 160, 120 / 80, 180 / 272, 48 with no ZR or L; the yaw 0.00 deg
   all through; "the aim held" logged as the beam reached the screen and "free again" 250 ms
-  after the wrist hid. On the headset the hand sweeps in, so the hold starts where the beam
+  after the wrist hid. The worst case (after the change, with the hold on and off): the hand 60
+  deg left and 70 deg down with the wrist hidden put the reticle on the frame's bottom edge
+  (y 239.5) for 1.5 s, and the yaw still did not move. On the headset the hand sweeps in, so the hold starts where the beam
   enters the screen: the reticle follows the beam until then.
 - **The stray drag.** A trigger still held when the wrist turned past 40 deg kept the touch:
   before, the aim object's flags stayed 0x43 (a touch) for all 121 samples of the 2 s after the
   wrist hid. Now the mapper ends a touch that began on the wrist screen as soon as the bottom
-  screen is not it (`Mapper::touch_on_fixed_`): released where it was (160, 120, logged 0.5 s
-  after the wrist hid in the script's timing), the flags back to 0x41 for all 121 samples,
+  screen is not it (`Mapper::touch_on_fixed_`): released where it was (160, 120) on the frame
+  the wrist hid, the flags back to 0x41 for all 121 samples,
   and the held trigger blocked (no ZR or L) until let go.
 
 ### The talk panel for reading only (AzaharFrame kiupanel)
@@ -697,6 +699,9 @@ off): one word, `b shadow_stub` at 0x57B054.
   and L: 23, 28, 13, 30 samples), no touch (0x43: 0). The wrist screen is the one to touch. With
   both switches the wrist wins while it is up (the bottom quad at the wrist, 0.10 x 0.075 m,
   0.415 m away) and the talk panel is back when it is down.
+- **On the committed build** (ffe6b52cf, FP_TALK=1 set): the same, the four pulls fire (ZR 26,
+  31, 16, 30 samples), no touch; land (fix5b) the same hold and drag numbers, and with FP_TALK
+  unset no 0.49 x 0.37 m quad was submitted in 1800 frames (the default is off).
 - **Still off by default** (`AZAHARFRAME_KIU_FP_TALK=1` to show it): the owner has not seen it on
   the headset and finds first person's view full already. A candidate for default on after that
   check.
