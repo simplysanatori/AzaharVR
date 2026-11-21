@@ -273,7 +273,7 @@ Other Games; the hooks' log line says why. The switches below still force their 
 | `AZAHARFRAME_KIU_FP_WIDE=0\|1\|2` | first person's scene camera (default 1): 1, as wide as the view and in its shape (the screen then needs no drawing past the frame); 2, as wide but in the game's own shape (square pixels; some of the picture falls outside the view across); 0, the game's own camera and the old draw-past-the-frame path ("The wide camera" below) |
 | `AZAHARFRAME_KIU_FP_2D=0\|1` | first person's sprites (default 1 in first person): the game's lock-on marks, hit numbers and other sprites drawn through its geometry shader turn with the world; 0 leaves them where the game's camera put them ("The game's sprites" below) |
 | `AZAHARFRAME_KIU_FP_TALK=0\|1`, `AZAHARFRAME_KIU_FP_TALK_AT=<down>,<width>` | first person's talk panel (default 0; 1 shows it): the Secondary Screen, where this game shows its talk, as a small panel with the head, its middle 24° below straight ahead, 34° wide, 0.8 m away (degrees; "The talk and the HUD in first person" below) |
-| `AZAHARFRAME_KIU_FP_FIELD=<percent>` | the share of the view's angle the picture fills (50 to 100, default 100): the wide camera that much narrower, the screen still at true size, a dark border around it (live; desktop, AzaharFrame kiufp3: the screen 126 × 112° at 100, 101 × 89° at 80, 76 × 67° at 60, a black border around it; kiuview's "no change" was its rig writing the switch before the app started) |
+| `AZAHARFRAME_KIU_FP_FIELD=<percent>` | the share of the view's angle the picture fills (50 to 100, default 100): the wide camera that much narrower, the screen still at true size, a dark border around it (live; desktop, AzaharFrame kiufp3: the screen 126 × 112° at 100, 101 × 89° at 80, 76 × 67° at 60, the scene camera 111.5°, 89.2° and 66.9° high, the game drawing 1.00× its frame each time, a black border around it; kiuview's "no change" was its rig writing the switch before the app started) |
 | `AZAHARFRAME_KIU_FP_EDGE=<percent>` | the picture's edge fades to black over that share of its half size (0 to 50, default 0); the projection path only, which needs the controller models' files (without them the models' pass is never made and the screen goes as quads: why kiuview's mock never drew it); at `FP_FIELD` 100 most of the edge is outside the view. Desktop, AzaharFrame kiufp3, `FP_FIELD=80`: the picture's brightness against no edge, across the left edge, reaches full at 15 % of the half width with 15 and at about 30 % with 30 (pictures reports/91/kiufp3/pics/edge-*); the HUD pieces at the edge fade with it |
 | `AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]` | over the shoulder: the eye this many metres behind, above and to the right of the first-person eye along the camera's level view (game units = metres × the leaning scale, 7.7 per metre at life size); `AZAHARFRAME_KIU_EYE_OFFSET` wins |
 | `AZAHARFRAME_KIU_WRIST_SCREEN=0\|1` | Angel's Aim's Secondary Screen on the off hand's wrist (default 0, off): shown while the wrist is turned up, touched by the aiming hand's beam without a shot ("The Secondary Screen on the wrist" below) |
@@ -565,7 +565,10 @@ off): one word, `b shadow_stub` at 0x57B054.
   program with a 256 x 256 texture) but were not seen on the desktop (I). AzaharFrame kiufp3
   looked again: Chapter 1's air battle (state 4), fire held 10 s with the head 20° left, the
   emulator's own screenshots every 0.4 s (25 of them): 16 kills (score 0 to 1920), hearts and
-  explosions drawn, no number at any kill. So no number to measure there; still unverified.
+  explosions drawn, no number at any kill. Charged shots (a tap every 1.6 s, as the owner's
+  "45.0" picture #21 of session 4, Chapter 1's air battle, at a charged shot's blast), 24
+  screenshots every 0.3 s: 7 kills (score 0 to 840), no number either. So no number to measure; still
+  unverified.
   (Dense mock dumps, four swapchains every 0.33 or 0.5 s, stalled the emulator 1 to 5 s a frame
   and froze the battle: use the RPC's screenshots for such runs.)
 - **The fix.** Each eye's world draw leaves its turn in clip space, H = P * (V' * V^-1) * P^-1
