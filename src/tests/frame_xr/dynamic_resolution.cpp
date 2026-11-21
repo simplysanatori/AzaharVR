@@ -1392,3 +1392,70 @@ TEST_CASE("Dynamic Resolution: a step for Black Frame Insertion is its own level
     factor.SetValue(was_factor);
     V::g_base = 0;
 }
+
+// AzaharFrame bfikit: Kid Icarus (30 pictures a second) with Black Frame Insertion asked for: it
+// never flashes (held for a slow game), so its seconds are judged by the line without it; a level
+// held that way is not the game's level with Black Frame Insertion (session 4 logged "6x
+// remembered for this game with Black Frame Insertion (held 60 s)" at 141 s with nothing
+// flashed). A level it held while flashing still is.
+TEST_CASE("Dynamic Resolution: a hold with Black Frame Insertion asked for but not flashing",
+          "[frame_xr][bfikit]") {
+    namespace V = VideoCore::DynamicResolution;
+    auto& setting = Settings::values.vr_dynamic_resolution;
+    auto& factor = Settings::values.resolution_factor;
+    const bool was = setting.GetValue();
+    const auto was_factor = factor.GetValue();
+    setting.SetValue(true);
+    factor.SetValue(4);
+    std::map<LevelKey, int> disk;
+    const uint64_t title = 0x0004000000030200ULL;
+    LevelStore store;
+    store.load = [&] { return LevelList(disk.begin(), disk.end()); };
+    store.save = [&](LevelList levels) {
+        disk = std::map<LevelKey, int>(levels.begin(), levels.end());
+    };
+    store.title = [&] { return title; };
+    SetLevelStore(store);
+    V::Apply(6); // a Full mode over 4x
+    Install();
+    Second held = Bfi(3.0);
+    held.bfi = false; // asked for, held for a slow game
+    for (int i = 0; i < kRememberAfter + 20; i++) {
+        NoteSecond(held);
+    }
+    CHECK(Drop() == 0);
+    CHECK(disk.count({title, true}) == 0);
+    CHECK(disk.count({title, false}) == 0);
+    // Flashing now: the same level held kRememberAfter flashing seconds is remembered with it.
+    const Second flashing = Bfi(3.0);
+    for (int i = 0; i < kRememberAfter - 1; i++) {
+        NoteSecond(flashing);
+    }
+    CHECK(disk.count({title, true}) == 0);
+    // One second held for the slow game starts the run again.
+    NoteSecond(held);
+    for (int i = 0; i < kRememberAfter - 1; i++) {
+        NoteSecond(flashing);
+    }
+    CHECK(disk.count({title, true}) == 0);
+    NoteSecond(flashing);
+    CHECK(disk.count({title, true}) == 1);
+    CHECK(RememberedFactor(title, true) == 6);
+    // Without Black Frame Insertion asked for, a hold is remembered as before.
+    Uninstall();
+    disk.clear();
+    SetLevelStore(store);
+    Install();
+    Second plain = Bfi(3.0);
+    plain.bfi = false;
+    plain.bfi_asked = false;
+    for (int i = 0; i < kRememberAfter + 1; i++) {
+        NoteSecond(plain);
+    }
+    CHECK(RememberedFactor(title, false) == 6);
+    Uninstall();
+    SetLevelStore({});
+    setting.SetValue(was);
+    factor.SetValue(was_factor);
+    V::g_base = 0;
+}
