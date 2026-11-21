@@ -1197,8 +1197,16 @@ bool RasterizerCache<T>::UploadCustomSurface(SurfaceId surface_id, SurfaceInterv
     if (!material) {
         return surface.IsCustom();
     }
+    // AzaharFrame sm3dltex: a file for a later level, in a pack that skips mipmaps, is not used
+    // (the base material's image brings its chain). True here would leave the game's pixels of
+    // the level out while nothing writes it: until the base replacement's image takes the slot
+    // (async loading without a finished preload: uploads are queued), or for good where it never
+    // does (no base file, or a format the GPU cannot sample). Draws sampled whatever was in
+    // memory. Super Mario 3D Land's 4K pack has such a file, for level 1 of a dirt path texture.
+    // The game's level is uploaded unless the replacement is in already.
     if (level != 0 && custom_tex_manager.SkipMipmaps()) {
-        return true;
+        custom_tex_manager.NoteUnusedLevelFile(*material, level);
+        return surface.IsCustom();
     }
     // AzaharFrame: a format this GPU cannot sample (logged once at start) keeps the guest
     // texture. The format is known once the material was read, also after it was released

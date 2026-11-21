@@ -113,6 +113,10 @@ public:
         return skip_mipmap;
     }
 
+    /// AzaharFrame sm3dltex: a line, once per file, for a pack file that replaces a later mip
+    /// level in a pack that skips mipmaps (it is not used)
+    void NoteUnusedLevelFile(const Material& material, u32 level);
+
     /// Returns true if the pack uses the new hashing method.
     bool UseNewHash() const noexcept {
         return use_new_hash;
@@ -154,6 +158,7 @@ private:
     Core::System& system;
     Frontend::ImageInterface& image_interface;
     std::unordered_set<u64> dumped_textures;
+    std::unordered_set<u64> unused_level_files; ///< AzaharFrame sm3dltex: hashes logged
     // AzaharFrame stall: surfaces the pack has no replacement for, logged as a count at most every
     // 10 s (a line per surface was 147k lines in a 20-minute session, most of them each frame).
     u64 missing_count = 0;
