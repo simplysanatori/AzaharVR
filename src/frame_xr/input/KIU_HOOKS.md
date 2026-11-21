@@ -450,7 +450,13 @@ screen. A ray that leaves the game's view holds the reticle at the screen's edge
 - **Lock-on marks over the shoulder (AzaharFrame kiufp3, desktop, Chapter 1's air battle,
   `SHOULDER=2.5,0.5`, projection path).** By eye the triangles stay above their enemies at rest,
   with the head 20° left and 15° down, Pit solid in front (pictures
-  reports/91/kiufp3/pics/t1-*); not measured to the pixel. The shots, the laser and the sprite correction follow the moved eye with no change
+  reports/91/kiufp3/pics/t1-*); not measured to the pixel.
+- **A wall behind (AzaharFrame kiufp3, desktop, Chapter 1's land alley, the camera turned with
+  the stick).** Nothing keeps the moved eye out of walls: at 1.5 and 3 m back it was still in the
+  alley; at 5 m it went through the wall behind, which is then not drawn (seen from its back),
+  so the picture shows the ground and trees outside, the game's green guide signs large, and
+  Pit small beyond (pictures reports/91/kiufp3/pics/w2-*). Not fixed: the offset is added
+  with no check against the level. The shots, the laser and the sprite correction follow the moved eye with no change
   (read from the code: the hand's ray is taken from the scene's eye, so shots start behind Pit
   and fly along the laser; not measured); the head and Right Stick turning turn about the moved eye. Not
   measured: the angle of shots off the ray, a wall between the eye and Pit.
