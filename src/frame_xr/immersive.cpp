@@ -2297,6 +2297,7 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
                 out.bottom_pose = Compose(g.view.head, in_view);
                 out.bottom_size = {p.width, p.height};
                 out.show_bottom = true;
+                out.bottom_pointable = false; // AzaharFrame kiupanel: for reading only
             }
         }
         out.head_driven = true; // AzaharFrame flash
@@ -2305,6 +2306,7 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
         if (g.wrist_shown && g.wrist_time == g.display_time && KiuFirstPerson()) {
             out.show_bottom = true;
             out.bottom_on_wrist = true;
+            out.bottom_pointable = true; // AzaharFrame kiupanel: over the talk panel
             out.bottom_pose = g.wrist_pose;
             out.bottom_size = g.wrist_size;
         }

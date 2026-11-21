@@ -78,4 +78,34 @@ private:
     bool shown_ = false;
 };
 
+/// AzaharFrame kiupanel: Angel's Aim's aim held while the aiming hand points at the wrist screen
+/// (live test switch AZAHARFRAME_KIU_WRIST_HOLD, on by default; "0", "off" or "false" turn it
+/// off). Pointing down at the wrist is still the aiming ray: unheld, first person's aim takes it
+/// and the reticle runs to the frame's lower-left edge (the mock, Chapter 1 land: from 203, 124
+/// to 58, 191 of 400 x 240). Held, the ray Direct Aim, the reticle and the shots take is the
+/// last one from before the beam reached the screen, until kGraceNs after it left (a tap
+/// released at the screen's edge, a hand on its way back), so the reticle stays and nothing
+/// turns.
+inline constexpr const char* kKiuWristHoldSwitch = "AZAHARFRAME_KIU_WRIST_HOLD";
+bool WristHoldSwitchOn(const std::optional<std::string>& value);
+
+class WristAimHold {
+public:
+    static constexpr int64_t kGraceNs = 250'000'000;
+    struct Out {
+        bool hold = false;    ///< publish the held ray, not this frame's
+        bool changed = false; ///< started or ended this frame (for the log)
+    };
+    /// `on_screen`: the aiming hand's beam is on the wrist screen as shown this frame (the hit
+    /// the touch takes); `now_ns`: this frame's time.
+    Out Update(bool on_screen, int64_t now_ns);
+    void Reset() {
+        *this = {};
+    }
+
+private:
+    bool holding_ = false;
+    int64_t last_on_ns_ = 0;
+};
+
 } // namespace FrameXr::Vis

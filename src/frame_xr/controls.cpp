@@ -1703,6 +1703,7 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
             wrist_screen.Update(wanted, off.active, off.aim, hand, beside_stats,
                                 ToInput(head_view.head).position);
         wrist_on = w.shown;
+        wrist_wanted = wanted; // AzaharFrame kiupanel
         Immersive::SetWristScreen(w.shown, ToXr(w.pose),
                                   {Vis::kWristScreenWidth, Vis::kWristScreenHeight},
                                   info.display_time);
@@ -1734,8 +1735,11 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         Immersive::Screens(info.local_space, info.view_space, place);
     const Input::PanelQuad main_slot{ToInput(shown.top_pose[0]), shown.top_size[0].width,
                                      shown.top_size[0].height, shown.show_top && shown.top_pointable};
+    // AzaharFrame kiupanel: a bottom screen for reading only (Angel's Aim's talk panel) is no
+    // target either.
     const Input::PanelQuad secondary_slot{ToInput(shown.bottom_pose), shown.bottom_size.width,
-                                          shown.bottom_size.height, shown.show_bottom};
+                                          shown.bottom_size.height,
+                                          shown.show_bottom && shown.bottom_pointable};
     Input::ScreenQuads quads = screen_view.Layout(main_slot, secondary_slot, managed);
     // AzaharFrame curve: the pointer, the touch and the drag hit the screens as they are drawn.
     if (screen_view.bottom_focus()) {
@@ -1905,7 +1909,26 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                 fp.direction = {ray.direction.x, ray.direction.y, ray.direction.z};
                 fp.muzzle = muzzle.has_value();
             }
-            Kiu::FirstPerson::PublishHand(fp);
+            // AzaharFrame kiupanel: the beam on Angel's Aim's wrist screen (the hit its touch
+            // takes) holds the aim, the reticle and the shots on the ray from before it got there
+            // (vis/wrist_screen.h WristAimHold, AZAHARFRAME_KIU_WRIST_HOLD).
+            const bool on_wrist =
+                shown.bottom_on_wrist && hand.active &&
+                Input::PanelUnderRay(Input::RayFromPose(hand.aim), panels) == Input::Panel::Bottom &&
+                Vis::WristHoldSwitchOn(Common::FrameTestSwitches::Value(Vis::kKiuWristHoldSwitch));
+            const Vis::WristAimHold::Out held =
+                wrist_aim_hold.Update(on_wrist, static_cast<int64_t>(info.display_time));
+            if (held.changed && wrist_logs < 200) {
+                wrist_logs++;
+                LOG_INFO(Frontend, "xr: Angel's Aim: the aim {} (the beam {} the wrist screen)",
+                         held.hold ? "held" : "free again", on_wrist ? "on" : "off");
+            }
+            if (held.hold && wrist_held_hand.valid) {
+                Kiu::FirstPerson::PublishHand(wrist_held_hand);
+            } else {
+                Kiu::FirstPerson::PublishHand(fp);
+                wrist_held_hand = fp;
+            }
         }
         // AzaharFrame kiuaim2: Check Aim (input/gyro_aim.h AimMap): the game's own map, read and
         // checked once per game, and its steps (a target over the top screen, the aiming
@@ -2143,7 +2166,8 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     bridge_live = true;
     // AzaharFrame kiuwrist: each touch of the wrist screen, where it lands in the Secondary
     // Screen's 320 x 240 pixels and whether a trigger reached the game with it (it never should).
-    if (shown.bottom_on_wrist) {
+    // AzaharFrame kiupanel: also once it is hidden (a touch it ends).
+    if (shown.bottom_on_wrist || wrist_wanted) {
         for (int i = 0; i < out.touch_event_count; i++) {
             const Input::TouchEvent& e = out.touch_events[static_cast<std::size_t>(i)];
             if (e.type != Input::TouchEventType::Moved && wrist_logs < 200) {

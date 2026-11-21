@@ -92,6 +92,11 @@ struct MapperConfig {
 
 enum class Panel : int { None = 0, Top = 1, Bottom = 2 };
 
+/// AzaharFrame kiupanel: the screen a pointing hand's beam (RayFromPose of its aim pose, as the
+/// touches and grabs take it) is on this frame: the nearer one it enters inside its rectangle,
+/// none behind the stats in front (PanelGeometry::occluder).
+Panel PanelUnderRay(const Ray& ray, const PanelGeometry& panels);
+
 enum class TouchEventType : int { Pressed, Moved, Released };
 
 /// A touch on the 3DS bottom screen in its native pixels (0..320 x 0..240).
@@ -311,6 +316,9 @@ private:
 
     // Touch in progress
     bool touch_active_ = false;
+    /// AzaharFrame kiupanel: it began on Angel's Aim's wrist screen (PanelGeometry::bottom_fixed);
+    /// when the bottom screen stops being it (the wrist turned away), the touch ends at once.
+    bool touch_on_fixed_ = false;
     Vec2f touch_last_px_;
 
     // Drag in progress (a grip held on a screen)
