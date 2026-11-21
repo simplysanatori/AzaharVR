@@ -34,6 +34,7 @@ inline Apply ApplyFor(std::string_view name) {
         "AZAHARFRAME_IMMERSIVE_TAG_OFFSET",     "AZAHARFRAME_IMMERSIVE_POSITION_SCALE",
         "AZAHARFRAME_XR_SINGLE_FLASH",          "AZAHARFRAME_XR_REFRESH_RATE",
         "AZAHARFRAME_XR_FLASH_BACKING", "AZAHARFRAME_XR_FLASH_SLOW", // AzaharFrame flash
+        "AZAHARFRAME_XR_FLASH_BY_CONTENT", // AzaharFrame bfikit
         "AZAHARFRAME_IMMERSIVE_HOLD",           "AZAHARFRAME_XR_IMAGE_LAG",
         "AZAHARFRAME_CSTICK_EDGE", // AzaharFrame kiugyro
         // AzaharFrame projscreen (vis/proj_screen.h)

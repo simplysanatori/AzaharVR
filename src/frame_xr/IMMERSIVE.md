@@ -847,6 +847,18 @@ rate; it is a late picture, lit on the beat. One hitch of 11 or 12 refreshes in 
 history made the mean over 3.0 and held the screen lit as a slow game: after Quick Load and at
 race starts (handoff report 70, session 573). A slower game is learnt from 8 such intervals in a
 row, each within 1 of the run's first (4 +-1 at 30 a second), and is held as before.
+AzaharFrame bfikit: a new picture is a top screen swap, so a game that swaps 60 times a second
+with 30 new pictures (a world redrawn at each VBlank, moved every other one, as a 60 fps mod may
+do) has each picture lit twice, 2 refreshes apart: anything the eye follows is seen twice. Each
+world upload's own uniforms (before the patch) are hashed, all of them and all but the camera's
+rows (`video_core/vr_content_repeat.h`), and every 10 s the `xr: perf` line says how many swaps
+had new ones (`game pictures: N top screen swaps, R with world uniforms read, X new, Y the same as
+the swap before (Z right after a new one), without the camera ...`; Z close to Y and to X is the
+30-in-60 pattern, a run of repeats with a small Z a still scene). `AZAHARFRAME_XR_FLASH_BY_CONTENT`
+(live, off by default; `1` or `all`: the game's uniforms; `scene`: all but its camera's rows) keys
+the scheduler to those new pictures instead of the swaps, so such a game is held as a 30 fps game
+(with `AZAHARFRAME_XR_FLASH_SLOW=twice`: 2 refreshes of each). The pacing, the pose tags and the
+image lag still go by swaps (each swap is still a new head pose).
 AzaharFrame flash3: a swapchain made anew (a Dynamic Resolution step, Internal Resolution changed)
 has no picture for 3 to 5 refreshes; its screen and backing were left out then, and the
 compositor's background blinked through. The old swapchain now stays on view with its last

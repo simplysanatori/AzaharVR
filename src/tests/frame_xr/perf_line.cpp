@@ -125,6 +125,21 @@ TEST_CASE("perf line: the line", "[frame_xr][bfidr]") {
     CHECK(b.find("XR pass -;") != std::string::npos);
     CHECK(b.find("drawn at") == std::string::npos);
     CHECK(b.find("others 0, process 0") != std::string::npos);
+    CHECK(b.find("game pictures") == std::string::npos); // bfikit: no uniforms read, no part
+    // AzaharFrame bfikit: the game's new pictures against its swaps (a world redrawn at 60, moved
+    // at 30, its camera turned with the head at every swap).
+    Window g = w;
+    g.swaps = 600;
+    g.swaps_read = 598;
+    g.swaps_same = 4;
+    g.swaps_same_alt = 1;
+    g.swaps_scene_same = 299;
+    g.swaps_scene_same_alt = 298;
+    CHECK(Format(g, true, c).find(
+              "the screen shows up to 7x; game pictures: 600 top screen swaps, 598 with world "
+              "uniforms read, 594 new, 4 the same as the swap before (1 right after a new one), "
+              "without the camera 299 new, 299 the same (298 right after a new one); CPU % of a "
+              "core:") != std::string::npos);
 }
 
 TEST_CASE("perf line: the memory note", "[frame_xr][bfidr]") {

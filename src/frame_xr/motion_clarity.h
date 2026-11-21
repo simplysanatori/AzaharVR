@@ -591,6 +591,44 @@ inline int32_t DimPermille(float dim) {
     return std::clamp(static_cast<int32_t>(std::lround(dim * 1000.0f)), 1, 999);
 }
 
+/// AzaharFrame bfikit: what a new picture is for the scheduler. By default each top screen swap
+/// (ShownPicture::picture). AZAHARFRAME_XR_FLASH_BY_CONTENT (live, a test switch for the owner's
+/// A/B): "1" or "all", a swap whose game uniforms differ from the swap before's
+/// (video_core/vr_content_repeat.h); "scene", the same without the camera's rows. A game that
+/// swaps 60 times a second with 30 new pictures (a world redrawn at 60, moved at 30) then has its
+/// pictures 4 refreshes apart: the rate rules hold it, as a 30 fps game (Slow::Hold; with
+/// AZAHARFRAME_XR_FLASH_SLOW=twice, 2 refreshes of 4), instead of lighting each picture twice.
+enum class ContentKey : uint8_t { Swap, All, Scene };
+inline ContentKey ContentKeyFrom(const std::optional<std::string>& v) {
+    if (v && (*v == "1" || *v == "all")) {
+        return ContentKey::All;
+    }
+    if (v && *v == "scene") {
+        return ContentKey::Scene;
+    }
+    return ContentKey::Swap;
+}
+inline const char* ContentKeyName(ContentKey k) {
+    switch (k) {
+    case ContentKey::All:
+        return "a new picture where the game's uniforms change";
+    case ContentKey::Scene:
+        return "a new picture where the game's uniforms but its camera's change";
+    default:
+        return "a new picture at each top screen swap";
+    }
+}
+/// AzaharFrame bfikit: content serials apart from swap numbers (no game swaps 2^40 times).
+inline constexpr uint64_t kContentBase = uint64_t{1} << 40;
+/// The picture for the scheduler: the swap's `picture` (ShownPicture::picture, 0 not known), or
+/// with a content key and the swap's content serial known (`content`), that serial.
+inline uint64_t KeyedPicture(ContentKey key, uint64_t picture, std::optional<uint64_t> content) {
+    if (key == ContentKey::Swap || picture == 0 || !content) {
+        return picture;
+    }
+    return kContentBase + *content;
+}
+
 /// The scheduler's picture id from what a release recorded: its game picture (ShownPicture::
 /// picture: the top screen swaps + 1; 0 not known) or, without one, the release serial itself
 /// (every release a new picture). Kept apart by the low bit; 0 only with neither.
