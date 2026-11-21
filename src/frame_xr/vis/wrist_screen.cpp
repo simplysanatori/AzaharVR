@@ -73,4 +73,29 @@ WristScreen::Out WristScreen::Update(bool wanted, bool tracked, const Posef& aim
     return out;
 }
 
+// AzaharFrame kiupanel
+bool WristHoldSwitchOn(const std::optional<std::string>& value) {
+    if (!value) {
+        return true;
+    }
+    std::string v = *value;
+    std::transform(v.begin(), v.end(), v.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return !(v == "0" || v == "off" || v == "false");
+}
+
+WristAimHold::Out WristAimHold::Update(bool on_screen, int64_t now_ns) {
+    Out out;
+    const bool was = holding_;
+    if (on_screen) {
+        holding_ = true;
+        last_on_ns_ = now_ns;
+    } else if (holding_ && now_ns - last_on_ns_ > kGraceNs) {
+        holding_ = false;
+    }
+    out.hold = holding_;
+    out.changed = holding_ != was;
+    return out;
+}
+
 } // namespace FrameXr::Vis

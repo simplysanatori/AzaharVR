@@ -73,6 +73,10 @@ struct ScreenLayers {
     /// AzaharFrame kiuwrist: the bottom screen is Angel's Aim's wrist screen (SetWristScreen):
     /// shown with first person engaged, on the off hand's wrist, its pose and size above.
     bool bottom_on_wrist = false;
+    /// AzaharFrame kiupanel: the bottom screen as shown takes the beam (touches, the cursor,
+    /// grabs). Not Angel's Aim's talk panel (AZAHARFRAME_KIU_FP_TALK): it is only for reading,
+    /// so a low shot through it fires; the wrist screen is the one to touch.
+    bool bottom_pointable = true;
     /// AzaharFrame flash: the top screen is the Full modes' screen, engaged: the game draws its
     /// picture for the head pose (modes 2 and 3, not paused by the menu or the bottom screen).
     /// Motion Clarity flashes it (motion_clarity.h).

@@ -74,7 +74,16 @@
 //                                     hand is the right one with Motion Controls' Left
 //                                     Controller, else the left. Angel's Aim in effect only (not
 //                                     with AZAHARFRAME_KIU_FIRST_PERSON alone). vis/wrist_screen.h,
-//                                     controls.cpp, immersive.cpp (Screens).
+//                                     controls.cpp, immersive.cpp (Screens). AzaharFrame
+//                                     kiupanel: a touch ends when the wrist turns away with the
+//                                     trigger still held (released where it was; the trigger
+//                                     fires nothing until let go; input/mapper.cpp).
+//   AZAHARFRAME_KIU_WRIST_HOLD=0|1    AzaharFrame kiupanel: with the wrist screen shown, the aim
+//                                     is held while the aiming hand's beam is on it and for 250
+//                                     ms after (default 1, on): the reticle, first person's aim
+//                                     and the shots keep the ray from before (no jump to the
+//                                     frame's edge). 0: the beam aims as anywhere else.
+//                                     vis/wrist_screen.h WristAimHold, controls.cpp.
 //   AZAHARFRAME_KIU_FP_TRACE=1|2      a line a second (2: a VBlank) with the transform's inputs
 //                                     and what it gives (kiu_hooks.cpp).
 //   AZAHARFRAME_KIU_FP_PROBE=<hex>    with the trace: the actor at that address, where it is in
@@ -95,8 +104,10 @@
 //                                     (where this game puts its talk: the portraits and the
 //                                     words, at the screen's top) is shown as a small panel that
 //                                     goes with the head, below the view's middle (default 0,
-//                                     hidden as before, until the headset shows whether the laser
-//                                     can touch it: controls.cpp makes it a pointable panel).
+//                                     hidden as before). AzaharFrame kiupanel: for reading only:
+//                                     the beam neither touches nor grabs it, so a shot through
+//                                     it fires (the wrist screen is the one to touch; while that
+//                                     shows, this does not).
 //   AZAHARFRAME_KIU_FP_TALK_AT=<down>,<width>
 //                                     the panel's middle in degrees below straight ahead and its
 //                                     width in degrees (defaults kTalkDownDeg, kTalkWidthDeg;

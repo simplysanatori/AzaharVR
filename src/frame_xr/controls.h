@@ -22,6 +22,7 @@
 #include "frame_xr/frame_xr.h"
 #include "frame_xr/immersive_layout.h" // 1.2.0 fix lane B: Layout::ScaleChord
 #include "frame_xr/input/actions.h"
+#include "frame_xr/kiu_first_person.h" // AzaharFrame kiupanel: Hand
 #include "frame_xr/input/chord_latch.h"
 #include "frame_xr/input/flat_vr_hold.h" // AzaharFrame flat
 #include "frame_xr/input/input_bridge.h"
@@ -287,6 +288,11 @@ private:
     Vis::WristScreen wrist_screen;
     bool wrist_on = false;
     int wrist_logs = 0;
+    /// AzaharFrame kiupanel: the switch on in Angel's Aim this frame; the aim held while the
+    /// beam is on the wrist screen, and the ray it holds (the last one published unheld).
+    bool wrist_wanted = false;
+    Vis::WristAimHold wrist_aim_hold;
+    Kiu::FirstPerson::Hand wrist_held_hand;
     Input::Recoil recoil;          ///< AzaharFrame kiugyro: Light Gun's recoil
     Input::ShotRecoil shot_recoil; ///< AzaharFrame kiuguns: Recoil on the game's own shots
     Vis::MuzzleFlash muzzle_flash; ///< AzaharFrame kiuflash: Muzzle Flash on the same shots

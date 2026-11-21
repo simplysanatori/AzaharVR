@@ -47,6 +47,10 @@ float Clamp01(float v) {
 
 } // namespace
 
+Panel PanelUnderRay(const Ray& ray, const PanelGeometry& panels) { // AzaharFrame kiupanel
+    return NearestInBounds(ray, panels).panel;
+}
+
 Mapper::Mapper(const MapperConfig& config) : config_(config) {}
 
 bool Mapper::Reset() {
@@ -84,6 +88,7 @@ bool Mapper::Reset() {
     swallow_menu_ = false;
     swallow_bumper_ = {};
     touch_active_ = false;
+    touch_on_fixed_ = false; // AzaharFrame kiupanel
     drag_active_ = false;
     drag_reanchor_ = false;
     drag_panel_ = Panel::None;
@@ -470,6 +475,7 @@ MapperOutput Mapper::Update(const InputFrame& frame, const PanelGeometry& panels
             if (target.panel == Panel::Bottom && !touch_active_) {
                 state.gesture = Gesture::Touch;
                 touch_active_ = true;
+                touch_on_fixed_ = panels.bottom_fixed; // AzaharFrame kiupanel
                 touch_last_px_ = HitToPixels(target.hit, kBottomScreenWidthPx,
                                              kBottomScreenHeightPx, true);
                 push_touch(TouchEventType::Pressed, touch_last_px_);
@@ -487,6 +493,15 @@ MapperOutput Mapper::Update(const InputFrame& frame, const PanelGeometry& panels
             state.gesture = Gesture::None;
         } else if (!pressed) {
             state.gesture = Gesture::None;
+        }
+        // AzaharFrame kiupanel: a touch of Angel's Aim's wrist screen ends when the screen goes
+        // (the wrist turned away while the trigger is still held): released where it last was,
+        // and the held trigger stays blocked (neither a drag elsewhere nor ZL/ZR) until let go.
+        if (state.gesture == Gesture::Touch && touch_on_fixed_ && !panels.bottom_fixed) {
+            touch_active_ = false;
+            touch_on_fixed_ = false;
+            push_touch(TouchEventType::Released, touch_last_px_);
+            state.gesture = Gesture::Blocked;
         }
 
         switch (state.gesture) {
