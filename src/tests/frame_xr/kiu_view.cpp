@@ -6,6 +6,7 @@
 // switches (kiu_first_person.h) and the field's share of the cover (immersive_layout.h).
 
 #include <cmath>
+#include <utility>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include "frame_xr/immersive_layout.h"
@@ -47,23 +48,6 @@ TEST_CASE("kiuview: the talk panel's switches and place", "[kiuview]") {
                                             std::cos(0.5f * p.pitch_rad)};
     const auto n = FrameXr::Input::KiuHooks::Rotate(q, {0.0f, 0.0f, 1.0f});
     CHECK_THAT(n.y * p.y + n.z * p.z, WithinAbs(-FP::kTalkDistanceM, 1e-4)); // n . middle
-}
-
-TEST_CASE("kiuview: first person's HUD Spacing", "[kiuview]") {
-    CHECK(FP::ParseFpHud(nullptr) == FP::HudPercent{});
-    CHECK(FP::ParseFpHud("0") == FP::HudPercent{});
-    CHECK(FP::ParseFpHud("junk") == FP::HudPercent{});
-    CHECK(FP::ParseFpHud("on") == FP::HudPercent{FP::kFpHudAcross, FP::kFpHudUpDown});
-    CHECK(FP::ParseFpHud("60") == FP::HudPercent{60, 60});
-    CHECK(FP::ParseFpHud("45,40") == FP::HudPercent{45, 40});
-    CHECK(FP::ParseFpHud("500,-3") == FP::HudPercent{150, 1});
-    const FP::HudPercent fp{45, 40};
-    // Off: the setting's own; on: first person's only while the setting is the game's own.
-    CHECK(FP::HudSpacingFor(false, 100, 100, fp) == FP::HudPercent{100, 100});
-    CHECK(FP::HudSpacingFor(true, 100, 100, fp) == fp);
-    CHECK(FP::HudSpacingFor(true, 90, 100, fp) == FP::HudPercent{90, 100});
-    CHECK(FP::HudSpacingFor(true, 100, 120, fp) == FP::HudPercent{100, 120});
-    CHECK(FP::HudSpacingFor(true, 100, 100, FP::HudPercent{}) == FP::HudPercent{100, 100});
 }
 
 TEST_CASE("kiuview: the field, the soft edge and the shoulder", "[kiuview]") {
@@ -121,4 +105,29 @@ TEST_CASE("kiuview: the field's share keeps the wide camera at factor 1", "[kiuv
     const L::KiuWide full = L::KiuWideCamera(view, 0.0f, 0.0f, 1.0f);
     const L::KiuWide less = L::KiuWideCamera(view, 0.0f, 0.0f, 0.8f);
     CHECK(less.fov_y_deg < full.fov_y_deg);
+}
+
+// AzaharFrame kiufp3: what the desktop logged live (126 x 112 degrees at 100, 101 x 89 at 80,
+// 76 x 67 at 60): the screen's angle on each axis is the share times the whole one.
+TEST_CASE("kiufp3: the field's share is the screen's angle", "[kiuview]") {
+    L::ViewFov view;
+    view.left = view.outer_left = -59.1f * L::kDegToRad;
+    view.right = view.outer_right = 59.1f * L::kDegToRad;
+    view.up = view.outer_up = 49.5f * L::kDegToRad;
+    view.down = view.outer_down = -60.0f * L::kDegToRad;
+    const auto angles = [&](float field) {
+        const L::KiuWide w = L::KiuWideCamera(view, 0.032f, 0.0f, field);
+        REQUIRE(w.ok);
+        const L::HeadLocked s = L::SolveKiuFirstPerson(w.fov_y_deg, w.aspect, view, 0.032f,
+                                                       L::kKiuFpFactorMax, 1.0f, field);
+        return std::pair{2.0 * std::atan(s.tan_half_y * s.aspect), 2.0 * std::atan(s.tan_half_y)};
+    };
+    const auto [across, high] = angles(1.0f);
+    for (const float field : {0.8f, 0.6f}) {
+        const auto [a, h] = angles(field);
+        CHECK_THAT(a, WithinAbs(field * across, 0.01)); // radians: about half a degree
+        CHECK_THAT(h, WithinAbs(field * high, 0.01));
+    }
+    // Unset (share 1): the whole view; 50 % is the least the switch takes.
+    CHECK(FP::ParseFieldShare("40") == 0.5f);
 }

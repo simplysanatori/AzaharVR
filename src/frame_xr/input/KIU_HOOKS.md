@@ -273,9 +273,8 @@ Other Games; the hooks' log line says why. The switches below still force their 
 | `AZAHARFRAME_KIU_FP_WIDE=0\|1\|2` | first person's scene camera (default 1): 1, as wide as the view and in its shape (the screen then needs no drawing past the frame); 2, as wide but in the game's own shape (square pixels; some of the picture falls outside the view across); 0, the game's own camera and the old draw-past-the-frame path ("The wide camera" below) |
 | `AZAHARFRAME_KIU_FP_2D=0\|1` | first person's sprites (default 1 in first person): the game's lock-on marks, hit numbers and other sprites drawn through its geometry shader turn with the world; 0 leaves them where the game's camera put them ("The game's sprites" below) |
 | `AZAHARFRAME_KIU_FP_TALK=0\|1`, `AZAHARFRAME_KIU_FP_TALK_AT=<down>,<width>` | first person's talk panel (default 0; 1 shows it): the Secondary Screen, where this game shows its talk, as a small panel with the head, its middle 24° below straight ahead, 34° wide, 0.8 m away (degrees; "The talk and the HUD in first person" below) |
-| `AZAHARFRAME_KIU_FP_HUD=0\|on\|<p>\|<across>,<up_down>` | HUD Spacing's scales in first person while the setting is the game's own (default off; an experiment, see below) |
-| `AZAHARFRAME_KIU_FP_FIELD=<percent>` | the share of the view's angle the picture fills (50 to 100, default 100): the wide camera that much narrower, the screen still at true size, a dark border around it (unit tested; on the mock, set live at 80 on land, no new screen line was logged: unproven) |
-| `AZAHARFRAME_KIU_FP_EDGE=<percent>` | the picture's edge fades to black over that share of its half size (0 to 50, default 0); the projection path only (only the shader compile test: never drawn on the mock) |
+| `AZAHARFRAME_KIU_FP_FIELD=<percent>` | the share of the view's angle the picture fills (50 to 100, default 100): the wide camera that much narrower, the screen still at true size, a dark border around it (live; desktop, AzaharFrame kiufp3: the screen 126 × 112° at 100, 101 × 89° at 80, 76 × 67° at 60, the scene camera 111.5°, 89.2° and 66.9° high, the game drawing 1.00× its frame each time, a black border around it; kiuview's "no change" was its rig writing the switch before the app started) |
+| `AZAHARFRAME_KIU_FP_EDGE=<percent>` | the picture's edge fades to black over that share of its half size (0 to 50, default 0); the projection path only, which needs the controller models' files (without them the models' pass is never made and the screen goes as quads: why kiuview's mock never drew it); at `FP_FIELD` 100 most of the edge is outside the view. Desktop, AzaharFrame kiufp3, `FP_FIELD=80`: the picture's brightness against no edge, across the left edge, reaches full at 15 % of the half width with 15 and at about 30 % with 30 (pictures reports/91/kiufp3/pics/edge-*); the HUD pieces at the edge fade with it |
 | `AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]` | over the shoulder: the eye this many metres behind, above and to the right of the first-person eye along the camera's level view (game units = metres × the leaning scale, 7.7 per metre at life size); `AZAHARFRAME_KIU_EYE_OFFSET` wins |
 | `AZAHARFRAME_KIU_WRIST_SCREEN=0\|1` | Angel's Aim's Secondary Screen on the off hand's wrist (default 0, off): shown while the wrist is turned up, touched by the aiming hand's beam without a shot ("The Secondary Screen on the wrist" below) |
 | `AZAHARFRAME_KIU_FP_FACTOR=<f>` | the most the game draws past its own frame on either axis in first person (1 to 8, default 6); past it the screen is smaller on that axis ("The screen in first person" below) |
@@ -432,8 +431,36 @@ screen. A ray that leaves the game's view holds the reticle at the screen's edge
   metres adds to the first-person eye (land 12.3 units up in his axes, air 3), along the
   camera's level view, so both keep their own height. Desktop: 2,0.6 in Chapter 1's air battle
   moved the eye offset from (0.2, 3.0, 0.0) to (-2.3, 7.6, 15.1) units (4.6 up, 15.3 back: 0.6
-  and 2.0 m) and shows Pit ahead and below, faded (why: not traced). On land (Chapter 1, by a
-  wall) 1.5,0.4 showed no clear change in the picture: unverified there. The shots, the laser and the sprite correction follow the moved eye with no change
+  and 2.0 m) and shows Pit ahead and below, faded. kiuview's land run (1.5,0.4) never took the
+  switch (its rig wrote it before the run began).
+- **Why Pit is faded (AzaharFrame kiufp3, V on the desktop, Practice Range).** The game fades
+  its player when the camera comes near him (V); that it does so to keep the view clear is
+  inferred (I). The shoulder eye is the scene's camera, so the same rule applies. With 0.5 m
+  up he is faded at 1, 1.5 and 2 m back (also at 2 m with the hand aimed 20° up, and at 1.5 m
+  with it 35° right or with 0.8 m to the side), solid at 2.3, 2.6, 4 and 8 m, and at 2 m back
+  with 0.8 m to the side (2.2 m away). At 2 m with the hand 35° right he was solid too: he had
+  turned to aim, so the distance the game measures moved. So the edge lies between 2.0 and
+  2.3 m back (about 16 to 18 units), and the aim's direction acts only through his pose. The
+  actor and its owner hold no word that differs between faded and solid (a memory diff of
+  0x1000 and 0x800 bytes), so the fade lives in the model's drawing; left as the game does it.
+  At `SHOULDER=1.5,0.5` he stays faded; `2.5,0.5` shows him solid on land and in the air.
+  Pictures: reports/91/kiufp3/pics/s1-*, s2-*, t1-*.
+- **Shots over the shoulder (AzaharFrame kiufp3, V on the desktop, Practice Range,
+  `SHOULDER=2.5,0.5`, charged shots, aa6dof2's method).** 0.00° off the hand's ray at head yaw
+  0, 20 and 40 right and 20 left with 15 down; each passes the aim point 0.00 units away (526
+  units on). The path each flew (its first to its last point, about 255 units, 29 to 31 points)
+  is 0.000° off the ray too, so no homing turned it. They start at the hand's place behind the moved eye (2.1 m behind Pit, 1.7 m up),
+  not at Pit: they fly from behind him, along the laser.
+- **Lock-on marks over the shoulder (AzaharFrame kiufp3, desktop, Chapter 1's air battle,
+  `SHOULDER=2.5,0.5`, projection path).** By eye the triangles stay above their enemies at rest,
+  with the head 20° left and 15° down, Pit solid in front (pictures
+  reports/91/kiufp3/pics/t1-*); not measured to the pixel.
+- **A wall behind (AzaharFrame kiufp3, desktop, Chapter 1's land alley, the camera turned with
+  the stick).** Nothing keeps the moved eye out of walls: at 1.5 and 3 m back it was still in the
+  alley; at 5 m it went through the wall behind, which is then not drawn (seen from its back),
+  so the picture shows the ground and trees outside, the game's green guide signs large, and
+  Pit small beyond (pictures reports/91/kiufp3/pics/w2-*). Not fixed: the offset is added
+  with no check against the level. The shots, the laser and the sprite correction follow the moved eye with no change
   (read from the code: the hand's ray is taken from the scene's eye, so shots start behind Pit
   and fly along the laser; not measured); the head and Right Stick turning turn about the moved eye. Not
   measured: the angle of shots off the ray, a wall between the eye and Pit.
@@ -535,7 +562,15 @@ off): one word, `b shadow_stub` at 0x57B054.
   the game's camera put them while the world turned with the head. Skipping the CPU-shaded
   draws takes every triangle away (V); the HUD is drawn on the host's GPU and is untouched.
   The hit numbers and score pop-ups are likely the same kind of draw (a second CPU-shaded
-  program with a 256 x 256 texture) but were not seen on the desktop (I).
+  program with a 256 x 256 texture) but were not seen on the desktop (I). AzaharFrame kiufp3
+  looked again: Chapter 1's air battle (state 4), fire held 10 s with the head 20° left, the
+  emulator's own screenshots every 0.4 s (25 of them): 16 kills (score 0 to 1920), hearts and
+  explosions drawn, no number at any kill. Charged shots (a tap every 1.6 s, as the owner's
+  "45.0" picture #21 of session 4, Chapter 1's air battle, at a charged shot's blast), 24
+  screenshots every 0.3 s: 7 kills (score 0 to 840), no number either. So no number to measure; still
+  unverified.
+  (Dense mock dumps, four swapchains every 0.33 or 0.5 s, stalled the emulator 1 to 5 s a frame
+  and froze the battle: use the RPC's screenshots for such runs.)
 - **The fix.** Each eye's world draw leaves its turn in clip space, H = P * (V' * V^-1) * P^-1
   (P the world projection, registers 86 to 89; V and V' the view rows as the game set them and
   as mode 3 drew them), and the CPU-shaded draws into that eye's colour buffer are turned by it
@@ -583,10 +618,15 @@ off): one word, `b shadow_stub` at 0x57B054.
   point at it and touch the Secondary Screen; hence off by default.
 - **The HUD's corners.** The wide camera's frame is 126° × 112° about the view's middle
   (−5.25°), so the life bar and the score (rows 5 to 30 of 240, 0 to 120 px from the sides)
-  sit about 42 to 50° above straight ahead and 38 to 63° to the side. HUD Spacing (`AZAHARFRAME_KIU_FP_HUD`) does move
-  them in, but they touch the frame's edge, whose corners the shader pins, so they stretch (the
-  life bar across the view, the score icon several times its size; the cause is read from the
-  shader's rule, not traced): off.
+  sit about 42 to 50° above straight ahead and 38 to 63° to the side. kiuview tried HUD Spacing
+  in first person (a switch, `AZAHARFRAME_KIU_FP_HUD`); AzaharFrame kiufp3 took it out. The life
+  bar and the score touch the frame's edge, and the shader's HUD rule (glsl_shader_gen.cpp
+  `VrFactor`) works on each vertex alone: a 2D vertex on the edge (|x| or |y| at least 0.999)
+  keeps its place, so full-screen passes stay whole. So their outer corners stayed put and their
+  inner ones moved in, and they stretched (the life bar across the view, the score icon several
+  times its size). A fix needs each element's whole draw, which a vertex shader does not see, and
+  would change HUD Spacing for every game. `AZAHARFRAME_KIU_FP_FIELD` brings the HUD in without
+  a stretch (it is part of the smaller picture).
 
 ### The Secondary Screen on the wrist (AzaharFrame kiuwrist)
 
