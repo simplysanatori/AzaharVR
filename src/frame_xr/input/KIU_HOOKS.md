@@ -574,7 +574,7 @@ off): one word, `b shadow_stub` at 0x57B054.
   bar and the score (emulator screenshots of both screens every 2 s, 16 of them). The Full modes
   never show the Secondary Screen (`Screens`: `show_bottom = false` in modes 2 and 3), so in
   Angel's Aim the talk was not on view at all.
-- **The talk panel** (`AZAHARFRAME_KIU_FP_TALK=1`; off by default, see the laser below): the Secondary
+- **The talk panel** (`AZAHARFRAME_KIU_FP_TALK=1`; off by default; kiupanel: for reading only, see "The talk panel for reading only" below): the Secondary
   Screen as a quad with the head, its middle 24° below straight ahead (18.75° below the view's
   middle on the desktop mock), 34° wide and 25.9° high at 0.8 m, nearer than first person's
   screen so it is drawn over it. Its words run from about 11° to 16° below straight ahead. The angles
@@ -647,7 +647,59 @@ off): one word, `b shadow_stub` at 0x57B054.
   the beam was on the wrist. In the air nothing turned; **on land the reticle past the aim box
   turns the camera (the clamp above), not run on the desktop**: a tap there may turn the view.
   Next step if it does: hold Direct Aim's reticle (and the 6DoF aim) where it was while the beam
-  is on the wrist screen.
+  is on the wrist screen. (kiupanel: run on land, it did not turn; the hold is in, see "The
+  wrist screen holds the aim".)
+
+### The wrist screen holds the aim (AzaharFrame kiupanel)
+
+- **Land, measured (mock, Chapter 1's land battle, state slot 5, Direct Aim with the right hand,
+  `AZAHARFRAME_KIU_WRIST_SCREEN=1`; the land camera's yaw at cam `+0x2AC` polled every 10 ms).**
+  Before (integ17): the yaw did not move at all (0.00 deg in every phase: head down 40 deg, the
+  wrist up, three taps, the wrist turned away, a held trigger); the reading's own check, the
+  right stick held right for 1 s, turned it 90.25 deg. Why no turn: in first person the aim box
+  hook (`AimBox`) makes the land aim box the whole screen, so the game's clamp never turns the
+  camera, and Right Stick turning (on in first person) stops the Turn Zone (`kiu_probe.cpp`:
+  `out.turning = false`); the probe's own line reads "air, box 0.5 to 399.5" on land for that
+  reason. Even at the frame's edge (the reticle at 74, 239.5) the yaw stayed. What did happen:
+  the reticle ran from 203.5, 124.5 to the lower left with each tap (57.9, 190.8; 78.6, 191.7;
+  51.3, 207.8; 108.3, 175.8 of 400 x 240).
+- **The hold** (`AZAHARFRAME_KIU_WRIST_HOLD`, default on; `vis/wrist_screen.h` WristAimHold,
+  controls.cpp): while the aiming hand's beam is on the wrist screen as the touch takes it
+  (`Input::PanelUnderRay` of its aim pose: the same hit as the touch), the ray first person
+  aims and shoots with (`FirstPerson::PublishHand`) is the last one from before, republished
+  each frame; 250 ms after the beam leaves, it is free again. After (fix5, the same script):
+  the reticle stayed at 126.3, 163.1 through the three taps (it had moved there on the hand's
+  way in: the script's three poses between rest and the tap, before the beam reached the
+  screen); the taps landed at 160, 120 / 80, 180 / 272, 48 with no ZR or L; the yaw 0.00 deg
+  all through; "the aim held" logged as the beam reached the screen and "free again" 250 ms
+  after the wrist hid. On the headset the hand sweeps in, so the hold starts where the beam
+  enters the screen: the reticle follows the beam until then.
+- **The stray drag.** A trigger still held when the wrist turned past 40 deg kept the touch:
+  before, the aim object's flags stayed 0x43 (a touch) for all 121 samples of the 2 s after the
+  wrist hid. Now the mapper ends a touch that began on the wrist screen as soon as the bottom
+  screen is not it (`Mapper::touch_on_fixed_`): released where it was (160, 120, logged 0.5 s
+  after the wrist hid in the script's timing), the flags back to 0x41 for all 121 samples,
+  and the held trigger blocked (no ZR or L) until let go.
+
+### The talk panel for reading only (AzaharFrame kiupanel)
+
+- **Its pose, measured (mock, Chapter 1's air, the head level at the origin,
+  `MOCK_XR_TRACE_POSE=5`):** the bottom quad at 0.000, -0.325, -0.731 m, turned -24.0 deg
+  about x, 0.489 x 0.367 m: 0.800 m away, 24.0 deg below straight ahead, 34.0 x 25.8 deg (what
+  the code computes).
+- **Before, it took the beam** (it was controls.cpp's pointable Secondary slot): a trigger
+  pulled with the hand held low and centred (0.08, -0.35, -0.30 m) pointing straight ahead
+  touched the Secondary Screen (flags 0x43, 32 samples) and fired nothing (ZR 0); aimed at the
+  panel's middle or its lower part, the same. The rest hand (0.25 m to the side) straight ahead
+  missed it and fired.
+- **Now** (`ScreenLayers::bottom_pointable` false for it): the panel is drawn but is no target
+  (no touch, cursor or grab). Measured with the panel shown (talkfix): all four pulls fire (ZR
+  and L: 23, 28, 13, 30 samples), no touch (0x43: 0). The wrist screen is the one to touch. With
+  both switches the wrist wins while it is up (the bottom quad at the wrist, 0.10 x 0.075 m,
+  0.415 m away) and the talk panel is back when it is down.
+- **Still off by default** (`AZAHARFRAME_KIU_FP_TALK=1` to show it): the owner has not seen it on
+  the headset and finds first person's view full already. A candidate for default on after that
+  check.
 
 ### Not done, risks
 
