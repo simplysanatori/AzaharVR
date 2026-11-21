@@ -6,6 +6,7 @@
 // switches (kiu_first_person.h) and the field's share of the cover (immersive_layout.h).
 
 #include <cmath>
+#include <utility>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include "frame_xr/immersive_layout.h"
@@ -104,4 +105,29 @@ TEST_CASE("kiuview: the field's share keeps the wide camera at factor 1", "[kiuv
     const L::KiuWide full = L::KiuWideCamera(view, 0.0f, 0.0f, 1.0f);
     const L::KiuWide less = L::KiuWideCamera(view, 0.0f, 0.0f, 0.8f);
     CHECK(less.fov_y_deg < full.fov_y_deg);
+}
+
+// AzaharFrame kiufp3: what the desktop logged live (126 x 112 degrees at 100, 101 x 89 at 80,
+// 76 x 67 at 60): the screen's angle on each axis is the share times the whole one.
+TEST_CASE("kiufp3: the field's share is the screen's angle", "[kiuview]") {
+    L::ViewFov view;
+    view.left = view.outer_left = -59.1f * L::kDegToRad;
+    view.right = view.outer_right = 59.1f * L::kDegToRad;
+    view.up = view.outer_up = 49.5f * L::kDegToRad;
+    view.down = view.outer_down = -60.0f * L::kDegToRad;
+    const auto angles = [&](float field) {
+        const L::KiuWide w = L::KiuWideCamera(view, 0.032f, 0.0f, field);
+        REQUIRE(w.ok);
+        const L::HeadLocked s = L::SolveKiuFirstPerson(w.fov_y_deg, w.aspect, view, 0.032f,
+                                                       L::kKiuFpFactorMax, 1.0f, field);
+        return std::pair{2.0 * std::atan(s.tan_half_y * s.aspect), 2.0 * std::atan(s.tan_half_y)};
+    };
+    const auto [across, high] = angles(1.0f);
+    for (const float field : {0.8f, 0.6f}) {
+        const auto [a, h] = angles(field);
+        CHECK_THAT(a, WithinAbs(field * across, 0.01)); // radians: about half a degree
+        CHECK_THAT(h, WithinAbs(field * high, 0.01));
+    }
+    // Unset (share 1): the whole view; 50 % is the least the switch takes.
+    CHECK(FP::ParseFieldShare("40") == 0.5f);
 }

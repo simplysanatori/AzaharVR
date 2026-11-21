@@ -95,12 +95,19 @@
 //                                     axis (kMinFieldPercent to 100; default 100, the whole
 //                                     view). Below 100 the game's camera is that much narrower
 //                                     and the screen still at true size, so a dark border shows
-//                                     around it (Layout::ShareCover).
+//                                     around it (Layout::ShareCover). AzaharFrame kiufp3: works
+//                                     live (desktop: the screen 126 x 112 degrees at 100, 101 x 89
+//                                     at 80, 76 x 67 at 60); kiuview's "no change" was its rig
+//                                     writing the switch before the run began.
 //   AZAHARFRAME_KIU_FP_EDGE=<percent>
 //                                     AzaharFrame kiuview: the picture's edge fades to black over
 //                                     this share of its half width and half height in first
 //                                     person (0 to kMaxEdgePercent; default 0, a hard edge). On
-//                                     the projection path only (vis/proj_screen.h kScreenFrag).
+//                                     the projection path only (vis/proj_screen.h kScreenFrag),
+//                                     which needs the controller models' files: without them the
+//                                     models' pass is never made and the screen goes as quads
+//                                     (AzaharFrame kiufp3: why kiuview never saw it on the mock).
+//                                     At FP_FIELD 100 most of the edge is outside the view.
 //   AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]
 //                                     AzaharFrame kiuview: an over-the-shoulder view in first
 //                                     person: the eye moved this many metres behind, above and
