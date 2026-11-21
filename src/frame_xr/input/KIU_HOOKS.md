@@ -552,7 +552,12 @@ off): one word, `b shadow_stub` at 0x57B054.
   the game's camera put them while the world turned with the head. Skipping the CPU-shaded
   draws takes every triangle away (V); the HUD is drawn on the host's GPU and is untouched.
   The hit numbers and score pop-ups are likely the same kind of draw (a second CPU-shaded
-  program with a 256 x 256 texture) but were not seen on the desktop (I).
+  program with a 256 x 256 texture) but were not seen on the desktop (I). AzaharFrame kiufp3
+  looked again: Chapter 1's air battle (state 4), fire held 10 s with the head 20° left, the
+  emulator's own screenshots every 0.4 s (25 of them): 16 kills (score 0 to 1920), hearts and
+  explosions drawn, no number at any kill. So no number to measure there; still unverified.
+  (Dense mock dumps, four swapchains every 0.33 or 0.5 s, stalled the emulator 1 to 5 s a frame
+  and froze the battle: use the RPC's screenshots for such runs.)
 - **The fix.** Each eye's world draw leaves its turn in clip space, H = P * (V' * V^-1) * P^-1
   (P the world projection, registers 86 to 89; V and V' the view rows as the game set them and
   as mode 3 drew them), and the CPU-shaded draws into that eye's colour buffer are turned by it
