@@ -79,18 +79,6 @@
 //                                     and what it gives (kiu_hooks.cpp).
 //   AZAHARFRAME_KIU_FP_PROBE=<hex>    with the trace: the actor at that address, where it is in
 //                                     the world and in the head's view.
-//   AZAHARFRAME_KIU_FP_HUD=0|<p>|<across>,<up_down>
-//                                     AzaharFrame kiuview: the game's flat 2D (its HUD, the
-//                                     talk box with its portraits and words at the bottom) drawn
-//                                     nearer the view's middle in first person: HUD Spacing's
-//                                     scales (video_core/vr_hud_spacing.h) in percent of the
-//                                     game's own, 1 to 150 (one number: both); "on":
-//                                     kFpHudAcross, kFpHudUpDown. Default off. Only while the HUD Spacing
-//                                     setting is the game's own (100 %, 100 %): a value chosen
-//                                     there wins (HudSpacingFor). 0: the game's own placement.
-//                                     An experiment: on the desktop the life bar and the score
-//                                     icon, which touch the frame's edge, stretch (their edge
-//                                     corners stay put), so it is off.
 //   AZAHARFRAME_KIU_FP_TALK=0|1       AzaharFrame kiuview: in first person the Secondary Screen
 //                                     (where this game puts its talk: the portraits and the
 //                                     words, at the screen's top) is shown as a small panel that
@@ -254,46 +242,6 @@ inline TalkPlace TalkPanelInView(const Talk& t, float aspect, float distance = k
     p.height = aspect > 0.1f ? p.width / aspect : p.width * 0.75f;
     return p;
 }
-
-/// AzaharFrame kiuview: first person's HUD Spacing (AZAHARFRAME_KIU_FP_HUD), percent of the
-/// game's own: the life bar and the score sit in the Primary Screen's corners, which the wide
-/// camera's frame puts about 42 to 50 degrees above straight ahead and 38 to 63 to the side
-/// (KIU_HOOKS.md "The talk and the HUD in first person").
-inline constexpr int kFpHudAcross = 45;
-inline constexpr int kFpHudUpDown = 40;
-struct HudPercent {
-    int across = 100;
-    int up_down = 100;
-    constexpr bool operator==(const HudPercent&) const = default;
-};
-/// The HUD Spacing in use: the setting's (`set_*`) unless first person is on and the setting is
-/// the game's own (100 %, 100 %); then first person's (`fp`).
-constexpr HudPercent HudSpacingFor(bool first_person, int set_across, int set_up_down,
-                                   HudPercent fp) {
-    if (!first_person || set_across != 100 || set_up_down != 100) {
-        return {set_across, set_up_down};
-    }
-    return fp;
-}
-/// AZAHARFRAME_KIU_FP_HUD's text: null (unset), "0" or unreadable the game's own (100, 100), "on"
-/// the defaults, one number both axes, two numbers across and up and down; each within 1 to 150.
-inline HudPercent ParseFpHud(const char* text) {
-    if (!text) {
-        return {};
-    }
-    if (std::string_view{text} == "on") {
-        return {kFpHudAcross, kFpHudUpDown};
-    }
-    float v[2] = {};
-    const int n = Input::KiuHooks::ParseFloats(text, v, 2);
-    if (n < 1 || (n == 1 && v[0] == 0.0f)) {
-        return {}; // the game's own
-    }
-    const auto pct = [](float f) { return static_cast<int>(std::clamp(std::lround(f), 1L, 150L)); };
-    return {pct(v[0]), pct(n == 2 ? v[1] : v[0])};
-}
-/// The switch, live. Any thread.
-HudPercent FpHud();
 
 /// AzaharFrame kiuview: AZAHARFRAME_KIU_FP_FIELD, a share of the view's angle (0.5 to 1).
 inline constexpr int kMinFieldPercent = 50;

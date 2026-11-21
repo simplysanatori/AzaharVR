@@ -38,7 +38,6 @@ constexpr const char* kSwitchShots6Dof = "AZAHARFRAME_KIU_SHOTS_6DOF";
 constexpr const char* kSwitchFactor = "AZAHARFRAME_KIU_FP_FACTOR"; // AzaharFrame kiufov
 constexpr const char* kSwitchWide = "AZAHARFRAME_KIU_FP_WIDE";     // AzaharFrame kiuwide
 // AzaharFrame kiuview
-constexpr const char* kSwitchHud = "AZAHARFRAME_KIU_FP_HUD";
 constexpr const char* kSwitchField = "AZAHARFRAME_KIU_FP_FIELD";
 constexpr const char* kSwitchEdge = "AZAHARFRAME_KIU_FP_EDGE";
 constexpr const char* kSwitchTalk = "AZAHARFRAME_KIU_FP_TALK";
@@ -302,12 +301,6 @@ float GameAspect() {
 }
 
 // AzaharFrame kiuview
-
-HudPercent FpHud() {
-    const auto text = Common::FrameTestSwitches::Value(kSwitchHud);
-    return ParseFpHud(text ? text->c_str() : nullptr);
-}
-
 
 Talk TalkNow() {
     if (!On()) {

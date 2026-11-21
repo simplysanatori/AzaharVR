@@ -1689,15 +1689,8 @@ void OnFrame(const FrameInfo& info) {
         // AzaharFrame hudmove: HUD Spacing, the Full modes only, eased off with mode 2's menu
         // rule (video_core/vr_hud_spacing.h); logged when the setting changes.
         {
-            // AzaharFrame kiuview: in first person, while the setting is the game's own, the
-            // first-person values (AZAHARFRAME_KIU_FP_HUD; kiu_first_person.h): the talk box
-            // and the HUD nearer the view's middle.
-            const Kiu::FirstPerson::HudPercent hud = Kiu::FirstPerson::HudSpacingFor(
-                KiuFirstPerson(), Settings::values.vr_immersive_hud_spacing_x.GetValue(),
-                Settings::values.vr_immersive_hud_spacing_y.GetValue(),
-                KiuFirstPerson() ? Kiu::FirstPerson::FpHud() : Kiu::FirstPerson::HudPercent{});
-            const int spacing_x = hud.across;
-            const int spacing_y = hud.up_down;
+            const int spacing_x = Settings::values.vr_immersive_hud_spacing_x.GetValue();
+            const int spacing_y = Settings::values.vr_immersive_hud_spacing_y.GetValue();
             data.hud = VideoCore::HudSpacing::ForFrame(true, mode, spacing_x, spacing_y,
                                                        g.menu_exact.Weight());
             const ImmersivePreset* preset = FindImmersivePreset(g.title_id);

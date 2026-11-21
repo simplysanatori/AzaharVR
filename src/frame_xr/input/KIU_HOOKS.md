@@ -273,7 +273,6 @@ Other Games; the hooks' log line says why. The switches below still force their 
 | `AZAHARFRAME_KIU_FP_WIDE=0\|1\|2` | first person's scene camera (default 1): 1, as wide as the view and in its shape (the screen then needs no drawing past the frame); 2, as wide but in the game's own shape (square pixels; some of the picture falls outside the view across); 0, the game's own camera and the old draw-past-the-frame path ("The wide camera" below) |
 | `AZAHARFRAME_KIU_FP_2D=0\|1` | first person's sprites (default 1 in first person): the game's lock-on marks, hit numbers and other sprites drawn through its geometry shader turn with the world; 0 leaves them where the game's camera put them ("The game's sprites" below) |
 | `AZAHARFRAME_KIU_FP_TALK=0\|1`, `AZAHARFRAME_KIU_FP_TALK_AT=<down>,<width>` | first person's talk panel (default 0; 1 shows it): the Secondary Screen, where this game shows its talk, as a small panel with the head, its middle 24° below straight ahead, 34° wide, 0.8 m away (degrees; "The talk and the HUD in first person" below) |
-| `AZAHARFRAME_KIU_FP_HUD=0\|on\|<p>\|<across>,<up_down>` | HUD Spacing's scales in first person while the setting is the game's own (default off; an experiment, see below) |
 | `AZAHARFRAME_KIU_FP_FIELD=<percent>` | the share of the view's angle the picture fills (50 to 100, default 100): the wide camera that much narrower, the screen still at true size, a dark border around it (unit tested; on the mock, set live at 80 on land, no new screen line was logged: unproven) |
 | `AZAHARFRAME_KIU_FP_EDGE=<percent>` | the picture's edge fades to black over that share of its half size (0 to 50, default 0); the projection path only (only the shader compile test: never drawn on the mock) |
 | `AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]` | over the shoulder: the eye this many metres behind, above and to the right of the first-person eye along the camera's level view (game units = metres × the leaning scale, 7.7 per metre at life size); `AZAHARFRAME_KIU_EYE_OFFSET` wins |
@@ -583,10 +582,15 @@ off): one word, `b shadow_stub` at 0x57B054.
   point at it and touch the Secondary Screen; hence off by default.
 - **The HUD's corners.** The wide camera's frame is 126° × 112° about the view's middle
   (−5.25°), so the life bar and the score (rows 5 to 30 of 240, 0 to 120 px from the sides)
-  sit about 42 to 50° above straight ahead and 38 to 63° to the side. HUD Spacing (`AZAHARFRAME_KIU_FP_HUD`) does move
-  them in, but they touch the frame's edge, whose corners the shader pins, so they stretch (the
-  life bar across the view, the score icon several times its size; the cause is read from the
-  shader's rule, not traced): off.
+  sit about 42 to 50° above straight ahead and 38 to 63° to the side. kiuview tried HUD Spacing
+  in first person (a switch, `AZAHARFRAME_KIU_FP_HUD`); AzaharFrame kiufp3 took it out. The life
+  bar and the score touch the frame's edge, and the shader's HUD rule (glsl_shader_gen.cpp
+  `VrFactor`) works on each vertex alone: a 2D vertex on the edge (|x| or |y| at least 0.999)
+  keeps its place, so full-screen passes stay whole. So their outer corners stayed put and their
+  inner ones moved in, and they stretched (the life bar across the view, the score icon several
+  times its size). A fix needs each element's whole draw, which a vertex shader does not see, and
+  would change HUD Spacing for every game. `AZAHARFRAME_KIU_FP_FIELD` brings the HUD in without
+  a stretch (it is part of the smaller picture).
 
 ### The Secondary Screen on the wrist (AzaharFrame kiuwrist)
 

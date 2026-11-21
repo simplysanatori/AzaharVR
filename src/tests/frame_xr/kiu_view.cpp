@@ -49,23 +49,6 @@ TEST_CASE("kiuview: the talk panel's switches and place", "[kiuview]") {
     CHECK_THAT(n.y * p.y + n.z * p.z, WithinAbs(-FP::kTalkDistanceM, 1e-4)); // n . middle
 }
 
-TEST_CASE("kiuview: first person's HUD Spacing", "[kiuview]") {
-    CHECK(FP::ParseFpHud(nullptr) == FP::HudPercent{});
-    CHECK(FP::ParseFpHud("0") == FP::HudPercent{});
-    CHECK(FP::ParseFpHud("junk") == FP::HudPercent{});
-    CHECK(FP::ParseFpHud("on") == FP::HudPercent{FP::kFpHudAcross, FP::kFpHudUpDown});
-    CHECK(FP::ParseFpHud("60") == FP::HudPercent{60, 60});
-    CHECK(FP::ParseFpHud("45,40") == FP::HudPercent{45, 40});
-    CHECK(FP::ParseFpHud("500,-3") == FP::HudPercent{150, 1});
-    const FP::HudPercent fp{45, 40};
-    // Off: the setting's own; on: first person's only while the setting is the game's own.
-    CHECK(FP::HudSpacingFor(false, 100, 100, fp) == FP::HudPercent{100, 100});
-    CHECK(FP::HudSpacingFor(true, 100, 100, fp) == fp);
-    CHECK(FP::HudSpacingFor(true, 90, 100, fp) == FP::HudPercent{90, 100});
-    CHECK(FP::HudSpacingFor(true, 100, 120, fp) == FP::HudPercent{100, 120});
-    CHECK(FP::HudSpacingFor(true, 100, 100, FP::HudPercent{}) == FP::HudPercent{100, 100});
-}
-
 TEST_CASE("kiuview: the field, the soft edge and the shoulder", "[kiuview]") {
     CHECK(FP::ParseFieldShare(nullptr) == 1.0f);
     CHECK(FP::ParseFieldShare("x") == 1.0f);
