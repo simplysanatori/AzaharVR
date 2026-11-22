@@ -3315,8 +3315,11 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
     CHECK(LabelFor(Id::KiuBottomReset) == "Reset Bottom Screen Position");
     // AzaharFrame kiu133: Over the Shoulder is one of Camera's choices.
     CHECK(LabelFor(Id::KiuOverShoulder) == "Camera");
+    // AzaharFrame 1.3.0: the Game's Camera is not offered yet (kGameCameraOffered).
     CHECK(OptionsFor(Id::KiuOverShoulder) ==
-          std::vector<std::string>{"First Person", "Over the Shoulder", "Game's Camera"});
+          (FrameXr::Menu::kGameCameraOffered
+               ? std::vector<std::string>{"First Person", "Over the Shoulder", "Game's Camera"}
+               : std::vector<std::string>{"First Person", "Over the Shoulder"}));
     CHECK(LabelFor(Id::KiuSnapTurn) == "Turning");
     CHECK(LabelFor(Id::WristSide) == "Wrist Side");
     CHECK(LabelFor(Id::KiuReticleSize) == "Reticle Size");
@@ -5050,7 +5053,7 @@ TEST_CASE("Angel's Aim settings: drawn in the segment, each control a target",
     CHECK(hit(Id::KiuSnapTurn, 4));
     CHECK(hit(Id::WristSide, 1));
     CHECK(hit(Id::Recoil, -1));
-    CHECK(hit(Id::KiuOverShoulder, 2)); // AzaharFrame kiu133: Camera's Game's Camera
+    CHECK(hit(Id::KiuOverShoulder, FrameXr::Menu::kGameCameraOffered ? 2 : 1)); // AzaharFrame kiu133: Camera's last choice
     CHECK(hit(Id::ImmersiveMode, -1));
     CHECK(hit(Id::KiuBottomReset, -1));
     CHECK(hit(Id::AngelsAimSettings, -1));
