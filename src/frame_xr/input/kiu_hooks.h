@@ -923,6 +923,23 @@ inline int ParseFloats(const char* text, float* out, int max) {
     return n;
 }
 
+/// AzaharFrame kiu130: how far along the hand's ray, past its origin (the weapon in hand's
+/// muzzle), first person's shots start, in game units (AZAHARFRAME_KIU_SHOT_AHEAD, live). The
+/// game draws each new bullet where it starts, at the world's life size: started at the muzzle,
+/// the rapid-fire bullet (a blade's is a silver arrowhead) sits on the weapon in hand's tip and
+/// reads as a second weapon in front of it. Started this far out it is clear of the tip from its
+/// first frame; it still flies along the ray. "0" starts them at the muzzle (as before), for an
+/// A/B; a value past kShotAheadMax, or one that is not a number, gives the default.
+inline constexpr float kShotAheadDefault = 6.0f;
+inline constexpr float kShotAheadMax = 30.0f;
+inline float ShotAheadFor(const char* text) {
+    float v = 0.0f;
+    if (!text || ParseFloats(text, &v, 1) != 1 || v < 0.0f || v > kShotAheadMax) {
+        return kShotAheadDefault;
+    }
+    return v;
+}
+
 /// AzaharFrame kiuperf: a group that first person (Angel's Aim) puts in by itself, with its test
 /// switch: "1" puts it in in any mode, "0" keeps it out even in first person (an A/B), anything
 /// else (or no line) leaves the mode's choice `by_mode`.

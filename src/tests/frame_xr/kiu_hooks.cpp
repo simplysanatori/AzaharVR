@@ -1265,6 +1265,29 @@ TEST_CASE("Kid Icarus hooks: filling the mailbox", "[frame_xr][kiuhook]") {
     }
 }
 
+// AzaharFrame kiu130: first person's shots start a little past the weapon in hand's muzzle, so the
+// game's new bullet is not drawn on its tip; the switch moves it, "0" puts it back on the muzzle.
+TEST_CASE("Kid Icarus hooks: how far ahead of the muzzle shots start", "[frame_xr][kiuhook][kiuweapon]") {
+    CHECK(ShotAheadFor(nullptr) == kShotAheadDefault);
+    CHECK(kShotAheadDefault > 0.0f);
+    CHECK(kShotAheadDefault <= kShotAheadMax);
+    CHECK(ShotAheadFor("0") == 0.0f);
+    CHECK(ShotAheadFor("3.5") == Approx(3.5f));
+    CHECK(ShotAheadFor("30") == Approx(30.0f));
+    CHECK(ShotAheadFor("31") == kShotAheadDefault);
+    CHECK(ShotAheadFor("-2") == kShotAheadDefault);
+    CHECK(ShotAheadFor("ahead") == kShotAheadDefault);
+    CHECK(ShotAheadFor("") == kShotAheadDefault);
+    // The start stays on the ray: the muzzle plus the ray's direction times the distance.
+    const Vec3 muzzle{0.2f, -3.2f, -2.5f};
+    const Vec3 dir{0.0f, 0.6f, 0.8f};
+    const ShotRequest r = ShotAlongRay(Normalized({0.0f, 0.3f, 0.0f, 0.95f}),
+                                       muzzle + dir * ShotAheadFor("5"), false);
+    CHECK(r.offset.x == Approx(0.2f));
+    CHECK(r.offset.y == Approx(-0.2f));
+    CHECK(r.offset.z == Approx(1.5f));
+}
+
 TEST_CASE("Kid Icarus hooks: hiding the player and the switch values", "[frame_xr][kiuhook]") {
     const uint32_t one = std::bit_cast<uint32_t>(1.0f);
     const uint32_t tiny = std::bit_cast<uint32_t>(0.001f);

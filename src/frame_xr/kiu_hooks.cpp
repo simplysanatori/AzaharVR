@@ -44,6 +44,7 @@ constexpr const char* kSwitchHide = "AZAHARFRAME_KIU_HIDE_PLAYER";
 constexpr const char* kSwitchShot = "AZAHARFRAME_KIU_SHOT_TEST";
 constexpr const char* kSwitchShotNoLock = "AZAHARFRAME_KIU_SHOT_NO_LOCK";
 constexpr const char* kSwitchShotLock = "AZAHARFRAME_KIU_SHOT_LOCK"; // AzaharFrame aa6dof2
+constexpr const char* kSwitchShotAhead = "AZAHARFRAME_KIU_SHOT_AHEAD"; // AzaharFrame kiu130
 constexpr const char* kSwitchEnemyKeep = "AZAHARFRAME_KIU_ENEMY_KEEP";
 constexpr const char* kSwitchEnemyKeepS = "AZAHARFRAME_KIU_ENEMY_KEEP_S";
 constexpr const char* kSwitchGroupKeep = "AZAHARFRAME_KIU_GROUP_KEEP";
@@ -254,12 +255,16 @@ FirstPersonNow ReadFirstPerson(const KH::GameMemory& mem, int64_t host_now) {
 /// bullet's scatter). AzaharFrame aa6dof2: no lock target, so no shot bends off the ray to an
 /// enemy beside it; AZAHARFRAME_KIU_SHOT_LOCK=1 keeps the game's lock (KH::ShotAlongRay).
 /// Without a hand or a view: nothing (the game's own).
+/// AzaharFrame kiu130: the start is moved along the ray past the muzzle (KH::ShotAheadFor,
+/// AZAHARFRAME_KIU_SHOT_AHEAD), so a new bullet is not drawn on the weapon in hand's tip.
 KH::ShotRequest ShotFromHand(const FirstPersonNow& now, const KH::Mailbox& eye_mailbox) {
     if (!now.ray.ok || !eye_mailbox.eye_on) {
         return {};
     }
+    const auto ahead_text = Switch(kSwitchShotAhead);
+    const float ahead = KH::ShotAheadFor(ahead_text ? ahead_text->c_str() : nullptr);
     return KH::ShotAlongRay(KR::ShotQuat(now.ray.direction),
-                            eye_mailbox.eye_offset + now.ray.from_eye,
+                            eye_mailbox.eye_offset + now.ray.from_eye + now.ray.direction * ahead,
                             SwitchIs(kSwitchShotLock, "1"));
 }
 
