@@ -546,13 +546,20 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
                                                        {Id::KiuBottomSize, "vr_kiu_bottom_size"},
                                                        {Id::KiuBottomOpacity, "vr_kiu_bottom_opacity"},
                                                        {Id::KiuReticleSize, "vr_kiu_reticle_size"},
-                                                       {Id::KiuOverShoulder, "vr_kiu_over_shoulder"},
+                                                       {Id::KiuPitOpacity, "vr_kiu_pit_opacity"},
                                                        {Id::KiuSnapTurn, "vr_kiu_snap_turn"}};
     for (const auto& [id, key] : rows) {
         INFO(key);
         CHECK(std::find(labels.begin(), labels.end(), key) != labels.end());
         CHECK(FrameXr::PerGame::KeysOf(id) == std::vector<std::string>{key});
     }
+    // AzaharFrame kiu133: Camera is two keys: Over the Shoulder's, as before, and the Game's
+    // Camera's.
+    CHECK(FrameXr::PerGame::KeysOf(Id::KiuOverShoulder) ==
+          std::vector<std::string>{"vr_kiu_over_shoulder", "vr_kiu_game_camera"});
+    CHECK(std::find(labels.begin(), labels.end(), "vr_kiu_game_camera") != labels.end());
+    CHECK_FALSE(Settings::values.vr_kiu_game_camera.GetDefault());
+    CHECK(Settings::values.vr_kiu_pit_opacity.GetDefault() == 100u);
     CHECK_FALSE(Settings::values.vr_kiu_wrist_screen.GetDefault());
     CHECK_FALSE(Settings::values.vr_kiu_talk_panel.GetDefault());
     CHECK_FALSE(Settings::values.vr_kiu_over_shoulder.GetDefault());
