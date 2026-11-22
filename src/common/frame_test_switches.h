@@ -294,8 +294,12 @@ private:
         struct stat st {};
         if (!path.empty() && ::stat(path.c_str(), &st) == 0) {
             s.exists = true;
+#ifdef _WIN32 // AzaharVR: the CRT's stat has whole seconds only
+            s.mtime_ns = static_cast<long long>(st.st_mtime) * 1'000'000'000LL;
+#else
             s.mtime_ns = static_cast<long long>(st.st_mtim.tv_sec) * 1'000'000'000LL +
                          static_cast<long long>(st.st_mtim.tv_nsec);
+#endif
             s.size = static_cast<long long>(st.st_size);
         }
         return s;
@@ -342,7 +346,11 @@ inline void Load() {
             env_names.insert(name); // the environment wins
             continue;
         }
+#ifdef _WIN32 // AzaharVR: not set above when already in the environment, as setenv's 0
+        if (_putenv_s(name.c_str(), value.c_str()) == 0) {
+#else
         if (setenv(name.c_str(), value.c_str(), 0) == 0) {
+#endif
             FromFile().push_back(name);
         }
     }
