@@ -1344,6 +1344,26 @@ TEST_CASE("Kid Icarus hooks: first person hides the player on land", "[frame_xr]
     CHECK_FALSE(HideWrite(one, hide(false, "yes")).has_value());
 }
 
+// AzaharFrame kiu131: first person hides the player by his model's drawn byte (+0xB5 of the model
+// node), land and air, whatever the aiming; the kiupit scale write is the A/B (HIDE_BY=scale).
+TEST_CASE("Kid Icarus hooks: the player's model hidden by its draw", "[frame_xr][kiuhook][kiu131]") {
+    CHECK(HideByDrawInFirstPerson(true, false));
+    CHECK_FALSE(HideByDrawInFirstPerson(false, false)); // not first person
+    CHECK_FALSE(HideByDrawInFirstPerson(true, true));   // over the shoulder: to see him
+    CHECK(HideByFrom(nullptr) == HideBy::Draw);
+    CHECK(HideByFrom("draw") == HideBy::Draw);
+    CHECK(HideByFrom("scale") == HideBy::Scale);
+    const uint32_t drawn = 0x14010101u, hidden = 0x14010001u;
+    CHECK(ModelDrawWrite(drawn, true, false) == hidden);
+    CHECK_FALSE(ModelDrawWrite(hidden, true, true).has_value()); // already hidden
+    CHECK(ModelDrawWrite(hidden, false, true) == drawn);         // ours: drawn again
+    CHECK_FALSE(ModelDrawWrite(hidden, false, false).has_value()); // the game's: left
+    CHECK_FALSE(ModelDrawWrite(drawn, false, true).has_value());   // nothing to do
+    CHECK_FALSE(ModelDrawWrite(0x14010201u, true, false).has_value()); // not 0 or 1: the game's
+    CHECK(kActorModel == 0x34Cu);
+    CHECK(kModelDrawnWord + kModelDrawnShift / 8 == 0xB5u);
+}
+
 // AzaharFrame kiupit: the trace's count of the game's round shadows.
 TEST_CASE("Kid Icarus hooks: the round shadows' count", "[frame_xr][kiuhook]") {
     FakeMemory m;

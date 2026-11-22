@@ -41,6 +41,7 @@ constexpr const char* kSwitchEye = "AZAHARFRAME_KIU_EYE";
 constexpr const char* kSwitchEyeOffset = "AZAHARFRAME_KIU_EYE_OFFSET";
 constexpr const char* kSwitchShoulder = "AZAHARFRAME_KIU_SHOULDER"; // AzaharFrame kiuview
 constexpr const char* kSwitchHide = "AZAHARFRAME_KIU_HIDE_PLAYER";
+constexpr const char* kSwitchHideBy = "AZAHARFRAME_KIU_HIDE_BY"; // AzaharFrame kiu131
 constexpr const char* kSwitchShot = "AZAHARFRAME_KIU_SHOT_TEST";
 constexpr const char* kSwitchShotNoLock = "AZAHARFRAME_KIU_SHOT_NO_LOCK";
 constexpr const char* kSwitchShotLock = "AZAHARFRAME_KIU_SHOT_LOCK"; // AzaharFrame aa6dof2
@@ -138,6 +139,10 @@ struct State {
     KH::SyncResult last;
     KH::PlayerGuard last_guard = KH::PlayerGuard::NoRoot;
     bool hidden = false;
+    /// AzaharFrame kiu131: the model node whose drawn byte this app cleared (0: none), and
+    /// whether the first look of this run (a save state made while hidden) was made.
+    uint32_t model_hidden = 0;
+    bool model_looked = false;
     int64_t poll_ns = 0;
     int64_t trace_ns = 0;
     int64_t fp_trace_ns = 0; ///< AzaharFrame kiuvr
@@ -553,7 +558,7 @@ void Hook(int64_t ticks) {
         // Nothing asked for. A save state made with a switch on brings our words (and a hidden
         // player) back: take them out; otherwise only look.
         const bool look = s.idle_vblanks++ % kIdleLookVBlanks == 0;
-        if (!KH::AnyOurs(mem) && !(s.hidden || look)) {
+        if (!KH::AnyOurs(mem) && !(s.hidden || s.model_hidden != 0 || look)) {
             return;
         }
     } else {
@@ -688,10 +693,16 @@ void Hook(int64_t ticks) {
     // AzaharFrame kiupit: in first person on land the game's see-through Pit about the eye (his
     // head; his body looking down) goes the same way (KH::HideInFirstPerson);
     // AZAHARFRAME_KIU_HIDE_PLAYER=0 keeps him, for an A/B; =1 hides him land and air, as before.
+    // AzaharFrame kiu131: by default first person hides him by his model's draw instead, land
+    // and air (KH::ModelDrawWrite): the scale write left his weapon drawn, full size, while he
+    // fired. AZAHARFRAME_KIU_HIDE_BY=scale is the kiupit way, for an A/B.
+    const auto hide_by_text = Switch(kSwitchHideBy);
+    const KH::HideBy hide_by = KH::HideByFrom(hide_by_text ? hide_by_text->c_str() : nullptr);
     if (p.actor != 0) {
         const bool eye_moved =
             eye.own_axes || eye.extra.x != 0.0f || eye.extra.y != 0.0f || eye.extra.z != 0.0f;
-        const bool by_mode = KH::HideInFirstPerson(first_person, p.land, shots_6dof, eye_moved);
+        const bool by_mode = hide_by == KH::HideBy::Scale &&
+                             KH::HideInFirstPerson(first_person, p.land, shots_6dof, eye_moved);
         const bool hide =
             KH::GroupWanted(by_mode, hide_text ? hide_text->c_str() : nullptr) && p.Ok();
         if (const auto bits = KH::HideWrite(p.local_scale_bits, hide)) {
@@ -703,6 +714,33 @@ void Hook(int64_t ticks) {
             }
         } else if (!hide) {
             s.hidden = false;
+        }
+        // AzaharFrame kiu131: his model's draw. AZAHARFRAME_KIU_HIDE_PLAYER set ("1": the scale
+        // above; "0": keep him) leaves it drawn.
+        uint32_t model = 0, vt = 0, word = 0;
+        if (mem.Read32(p.actor + KH::kActorModel, model) && model != 0 && (model & 3u) == 0 &&
+            mem.Read32(model, vt) && vt == KH::kModelVtable &&
+            mem.Read32(model + KH::kModelDrawnWord, word)) {
+            const bool hide_draw = hide_by == KH::HideBy::Draw && !hide_text &&
+                                   KH::HideByDrawInFirstPerson(first_person, eye_moved) && p.Ok();
+            // Ours to put back: the node this app cleared, or (once a run, playing) a cleared
+            // byte a save state brought.
+            const bool ours = s.model_hidden == model || (!s.model_looked && p.Ok());
+            if (p.Ok()) {
+                s.model_looked = true;
+            }
+            if (const auto w = KH::ModelDrawWrite(word, hide_draw, ours)) {
+                if (mem.WriteData(model + KH::kModelDrawnWord, *w)) {
+                    s.model_hidden = hide_draw ? model : 0;
+                    LOG_INFO(Frontend, "xr: Kid Icarus hooks: the player's model {} ({}, {})",
+                             hide_draw ? "hidden by its draw" : "drawn again",
+                             first_person ? "first person" : "not first person",
+                             p.land ? "land" : "air");
+                }
+            } else if (!hide_draw && s.model_hidden == model &&
+                       ((word >> KH::kModelDrawnShift) & 0xFFu) != 0u) {
+                s.model_hidden = 0; // drawn again by the game itself
+            }
         }
     }
 

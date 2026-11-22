@@ -36,6 +36,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <optional>
+#include <string_view>
 #include "frame_xr/input/kiu_hooks_stubs.h"
 #include "frame_xr/input/kiu_turn.h"
 
@@ -795,6 +796,43 @@ inline std::optional<uint32_t> HideWrite(uint32_t scale_bits, bool want) {
 inline bool HideInFirstPerson(bool first_person, bool land, bool shots_from_hand,
                               bool eye_moved) {
     return first_person && land && shots_from_hand && !eye_moved;
+}
+
+/// AzaharFrame kiu131: the player's model hidden by its draw, not its size. The actor's model
+/// node ([actor + 0x34C], class 0xD1E990) has a "drawn" byte at +0xB5 (1 drawn, 0 not; the word
+/// at +0xB4 read 0x14010101 on land, the game never wrote it back in the desktop runs). Cleared,
+/// nothing of him is drawn: body, wings and the weapon he holds, also while he fires (his
+/// weapon's node then takes its bone's place without his scale: the scale write left a
+/// full-size see-through weapon from his feet to the reticle on land; KIU_HOOKS.md, "The doubled
+/// weapon"). His size, hurt boxes and bones are untouched, so it is used in the air too.
+inline constexpr uint32_t kActorModel = 0x34C;
+inline constexpr uint32_t kModelVtable = 0xD1E990;
+inline constexpr uint32_t kModelDrawnWord = 0xB4;
+inline constexpr uint32_t kModelDrawnShift = 8;
+/// The word to write at the model's +0xB4, if anything: hide clears a drawn byte of 1; show
+/// sets a byte of 0 back to 1 (only what this app cleared: `ours`). Any other byte value is the
+/// game's and stays.
+inline std::optional<uint32_t> ModelDrawWrite(uint32_t word, bool hide, bool ours) {
+    const uint32_t drawn = (word >> kModelDrawnShift) & 0xFFu;
+    if (hide && drawn == 1u) {
+        return word & ~(0xFFu << kModelDrawnShift);
+    }
+    if (!hide && ours && drawn == 0u) {
+        return word | (1u << kModelDrawnShift);
+    }
+    return std::nullopt;
+}
+/// AZAHARFRAME_KIU_HIDE_BY=scale: first person hides him the kiupit way (the scale write, land
+/// only, with the shots from the hand), for an A/B; anything else (default): by his draw.
+enum class HideBy : uint8_t { Draw, Scale };
+inline HideBy HideByFrom(const char* text) {
+    return text && std::string_view{text} == "scale" ? HideBy::Scale : HideBy::Draw;
+}
+/// First person hides his model by its draw on land and in the air, whatever the aiming (the
+/// game's own shot start, his weapon's muzzle, does not move: his bones are untouched), with the
+/// eye at his middle (not over the shoulder or moved by EYE_OFFSET: there he is to be seen).
+inline bool HideByDrawInFirstPerson(bool first_person, bool eye_moved) {
+    return first_person && !eye_moved;
 }
 
 /// AzaharFrame kiupit: the circle-shadow renderer's singleton (KIU_HOOKS.md, "The player's round
