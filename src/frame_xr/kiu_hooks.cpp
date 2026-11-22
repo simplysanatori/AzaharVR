@@ -731,11 +731,16 @@ void Hook(int64_t ticks) {
             }
             if (const auto w = KH::ModelDrawWrite(word, hide_draw, ours)) {
                 if (mem.WriteData(model + KH::kModelDrawnWord, *w)) {
-                    s.model_hidden = hide_draw ? model : 0;
-                    LOG_INFO(Frontend, "xr: Kid Icarus hooks: the player's model {} ({}, {})",
-                             hide_draw ? "hidden by its draw" : "drawn again",
-                             first_person ? "first person" : "not first person",
-                             p.land ? "land" : "air");
+                    // Logged when it changes, not at each re-clear (on land the game draws him
+                    // again every game frame).
+                    const uint32_t now_hidden = hide_draw ? model : 0;
+                    if (now_hidden != s.model_hidden) {
+                        LOG_INFO(Frontend, "xr: Kid Icarus hooks: the player's model {} ({}, {})",
+                                 hide_draw ? "hidden by its draw" : "drawn again",
+                                 first_person ? "first person" : "not first person",
+                                 p.land ? "land" : "air");
+                    }
+                    s.model_hidden = now_hidden;
                 }
             } else if (!hide_draw && s.model_hidden == model &&
                        ((word >> KH::kModelDrawnShift) & 0xFFu) != 0u) {
