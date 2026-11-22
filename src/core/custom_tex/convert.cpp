@@ -144,7 +144,13 @@ bool LinkOrCopy(const std::string& src, const std::string& out) {
     if (Lexists(tmp)) {
         fs::remove(tmp, ec);
     }
+#ifdef _WIN32 // AzaharVR: a hard link through the standard library
+    std::error_code link_ec;
+    fs::create_hard_link(src, tmp, link_ec);
+    if (link_ec) {
+#else
     if (::linkat(AT_FDCWD, src.c_str(), AT_FDCWD, tmp.c_str(), AT_SYMLINK_FOLLOW) != 0) {
+#endif
         fs::copy_file(src, tmp, fs::copy_options::overwrite_existing, ec);
         if (ec) {
             return false;
