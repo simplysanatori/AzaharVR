@@ -173,6 +173,7 @@ r12; its own early exit changes r2 and the flags too).
 | `AZAHARFRAME_KIU_EYE=1` | the scene camera's eye at the player; the view direction the game's |
 | `AZAHARFRAME_KIU_EYE_OFFSET=x,y,z` | the eye's offset in the player's own axes (default 0,12.3,0) |
 | `AZAHARFRAME_KIU_HIDE_PLAYER=1` | the actor's local scale 1 → 0.001 (a data write; exactly 0.001 goes back to 1 when off, or when not playing). AzaharFrame kiupit: first person does it by itself on land ("Pit's own model in first person" below); `=0` keeps him drawn there |
+| `AZAHARFRAME_KIU_HIDE_BY=draw\|scale` | how first person hides Pit (AzaharFrame kiu131; default `draw`): `draw` clears his model's "drawn" byte (land and air, body, wings and weapon); `scale` is the kiupit local-scale write, land only (the A/B: his weapon shows while he fires) ("Pit's own model, by its draw" below) |
 | `AZAHARFRAME_KIU_SHOT_TEST=yaw,pitch[,dx,dy,dz]` | the player's shots turned by that many degrees from the game's aim (yaw about the world's up axis: positive is to the left; pitch up about the game camera's level side axis) and, with the last three, started at the player's position + dx to the side (positive: to the right), dy up, dz ahead of the game camera's level view |
 | `AZAHARFRAME_KIU_SHOT_NO_LOCK=1` | with SHOT_TEST: no lock target (no homing) |
 | `AZAHARFRAME_KIU_ENEMY_KEEP=1` | passed fliers fly their path again, for good |
@@ -272,11 +273,11 @@ Other Games; the hooks' log line says why. The switches below still force their 
 | `AZAHARFRAME_KIU_SHOTS_6DOF=1` | with first person: the game's own shots from the hand's ray; turns the bullet keep on |
 | `AZAHARFRAME_KIU_FP_WIDE=0\|1\|2` | first person's scene camera (default 1): 1, as wide as the view and in its shape (the screen then needs no drawing past the frame); 2, as wide but in the game's own shape (square pixels; some of the picture falls outside the view across); 0, the game's own camera and the old draw-past-the-frame path ("The wide camera" below) |
 | `AZAHARFRAME_KIU_FP_2D=0\|1` | first person's sprites (default 1 in first person): the game's lock-on marks, hit numbers and other sprites drawn through its geometry shader turn with the world; 0 leaves them where the game's camera put them ("The game's sprites" below) |
-| `AZAHARFRAME_KIU_FP_TALK=0\|1`, `AZAHARFRAME_KIU_FP_TALK_AT=<down>,<width>` | first person's talk panel (default 0; 1 shows it; unset: the setting Talk Panel, `vr_kiu_talk_panel`, AzaharFrame kiutoggles): the Secondary Screen, where this game shows its talk, as a small panel with the head, its middle 24° below straight ahead, 34° wide, 0.8 m away (degrees; "The talk and the HUD in first person" below) |
+| `AZAHARFRAME_KIU_FP_TALK=0\|1`, `AZAHARFRAME_KIU_FP_TALK_AT=<down>,<width>` | first person's talk panel (default 0; 1 shows it; unset: the setting Bottom Screen's Persistent, `vr_kiu_bottom_screen`, AzaharFrame kiu131; before it Talk Panel): the Secondary Screen, where this game shows its talk, as a small panel with the head, its middle 24° below straight ahead, 34° wide, 0.8 m away (degrees; "The talk and the HUD in first person" below) |
 | `AZAHARFRAME_KIU_FP_FIELD=<percent>` | the share of the view's angle the picture fills (50 to 100, default 100): the wide camera that much narrower, the screen still at true size, a dark border around it (live; desktop, AzaharFrame kiufp3: the screen 126 × 112° at 100, 101 × 89° at 80, 76 × 67° at 60, the scene camera 111.5°, 89.2° and 66.9° high, the game drawing 1.00× its frame each time, a black border around it; kiuview's "no change" was its rig writing the switch before the app started) |
 | `AZAHARFRAME_KIU_FP_EDGE=<percent>` | the picture's edge fades to black over that share of its half size (0 to 50, default 0); the projection path only, which needs the controller models' files (without them the models' pass is never made and the screen goes as quads: why kiuview's mock never drew it); at `FP_FIELD` 100 most of the edge is outside the view. Desktop, AzaharFrame kiufp3, `FP_FIELD=80`: the picture's brightness against no edge, across the left edge, reaches full at 15 % of the half width with 15 and at about 30 % with 30 (pictures reports/91/kiufp3/pics/edge-*); the HUD pieces at the edge fade with it |
 | `AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]` | over the shoulder (unset: the setting Over the Shoulder, `vr_kiu_over_shoulder`, 2.5 m back and 0.5 m up when on; `0` off whatever the setting; AzaharFrame kiutoggles): the eye this many metres behind, above and to the right of the first-person eye along the camera's level view (game units = metres × the leaning scale, 7.7 per metre at life size); `AZAHARFRAME_KIU_EYE_OFFSET` wins |
-| `AZAHARFRAME_KIU_WRIST_SCREEN=0\|1` | Angel's Aim's Secondary Screen on the off hand's wrist (default 0, off; unset: the setting Secondary Screen on Wrist, `vr_kiu_wrist_screen`, AzaharFrame kiutoggles): shown while the wrist is turned up, touched by the aiming hand's beam without a shot ("The Secondary Screen on the wrist" below) |
+| `AZAHARFRAME_KIU_WRIST_SCREEN=0\|1` | Angel's Aim's Secondary Screen on the off hand's wrist (default 0, off; unset: the setting Bottom Screen's Wrist, `vr_kiu_bottom_screen`, AzaharFrame kiu131; before it Secondary Screen on Wrist; `1` wins over Persistent): shown while the wrist is turned up, touched by the aiming hand's beam without a shot ("The Secondary Screen on the wrist" below) |
 | `AZAHARFRAME_KIU_FP_FACTOR=<f>` | the most the game draws past its own frame on either axis in first person (1 to 8, default 6); past it the screen is smaller on that axis ("The screen in first person" below) |
 | `AZAHARFRAME_KIU_FP_TRACE=1\|2`, `AZAHARFRAME_KIU_FP_PROBE=<hex>` | a line of `key=value` words a second (2: a VBlank): the scene camera, the view register, the rest pose, the head, the hand's ray in the world, the reticle, the mailbox; and an actor's place in the world and in the head's view. AzaharFrame kiupit: `cam_node_44=` the scene camera node's ten words from +0x44, as floats (to find its near plane) |
 
@@ -869,3 +870,82 @@ the game's picture, not this app's layer.
   stub from the caller's frame.)
 - Shots outside the one spawn call (dash shots, melee, powers) are not hooked.
 - Whether the rail's axes always are the world's (they were in Chapter 1's air section).
+
+### Angel's Aim for 1.3.0 (AzaharFrame kiu131)
+
+#### Pit's own model, by its draw: the doubled weapon
+
+- **What it was (V, desktop).** Pit's own weapon, not a bullet. The actor's model node
+  (`[actor + 0x34C]`, class vtable 0xD1E990) has child nodes (class 0xD1E880, `+0x1C` = the
+  model + 4) for the arm and the weapon. While he fires they get world scale 1 even with the
+  actor's local scale at 0.001 (kiupit's hide), so on land a full-size see-through blade showed
+  from his feet to the reticle. In the air he was never hidden, so his raised weapon's tip
+  showed ahead of the eye. `SHOT_AHEAD` 0, 6 and 15 gave the same ghost; `HIDE_PLAYER=0` showed
+  him whole. The scene camera's near plane (0xE14BBC: 6, 10, 16) and the node's `+0x3C` flags did
+  nothing.
+- **The fix.** The model's word `+0xB4`, byte `+0xB5` (e.g. 0x14010101): 1 drawn, 0 not.
+  Clearing it hides his body, wings and weapon. On land the game sets it again about every game
+  frame (median 33 ms), so the VBlank pass clears it each time. In the air the game rarely sets
+  it again. Done in first person, land and air, unless Over the Shoulder or the eye offset
+  moves the eye (`KH::HideByDrawInFirstPerson`, `KH::ModelDrawWrite`). It puts the byte back only
+  on a node it cleared (or, once a run, one a save state brought cleared). The log says it once
+  per change: `the player's model hidden by its draw (first person, land)` / `drawn again`.
+- **Measured (V, mock).** On land (the owner's Chapter 2 state, the blade, firing), no ghost
+  with `draw`; with `HIDE_BY=scale`, the ghost. In the air (Chapter 1, the palm, 6 s of fire),
+  `draw` against `HIDE_PLAYER=0`: the same scores (0/360/600/720/720/960) and HP (89), and the
+  same picture brightness.
+- **Not checked.** The blade in the air (no such state here); the palm's ghostly hand on its own.
+  Hits on Pit are not drawn and are not changed.
+
+#### Bottom Screen (`vr_kiu_bottom_screen`: Off, Persistent, Wrist)
+
+One per-game row replaces Talk Panel and Secondary Screen on Wrist
+(`Kiu::FirstPerson::BottomScreenNow`). While it is Off, the two old keys still decide (the wrist
+wins), so old files keep what they had. Choosing it in the menu clears them. The test
+switches `FP_TALK` and `WRIST_SCREEN` act on top (`BottomScreenWithSwitches`).
+
+- **Persistent.** The talk panel's place (24° below, 34° wide, 0.8 m) moved by
+  `vr_kiu_bottom_x` / `_y`: degrees right of and below it (`PersistentInView`: always 0.8 m away,
+  facing the eye). It is for reading only: no touch, cursor or shot, as kiupanel. Either grip
+  pressed with its beam on it holds it (`Vis::StatsGrab` in the head's frame). While held,
+  that hand's grip does not reach the game (so Grip Frees Aim and grip turns do not happen
+  then). When it is let go, the place is saved for the game (MenuSetting KiuBottomX/Y, in
+  tenths of a degree, taken while the menu is closed). Reset Bottom Screen Position (a menu
+  button) puts both back to 0. V, mock (land, `MOCK_XR_TRACE_POSE=5`): the beam on it, grip,
+  hand turned 20° right and 10° up, let go at 12.1° right and 5.0° up. The game's file then
+  had `vr_kiu_bottom_x=12.1`, `vr_kiu_bottom_y=-5`, and the next start showed it there.
+- **Wrist.** As kiuwrist, on the Wrist Side (below), 10 × 7.5 cm times the size.
+- **Bottom Screen Size** (50 to 200 %): the Persistent panel's angular width, capped at 100°.
+  On the wrist, its metres (up to 20 cm). V: 60 % 0.29 m and 150 % 0.76 m wide at 0.8 m; the
+  wrist at 200 % 0.20 m wide, still beside the stats.
+- **Bottom Screen Opacity** (20 to 100 %): the XR present shader writes the opacity as alpha,
+  colour premultiplied (`layer` push constant / 1000; `layer` % 1000 is still the dim). The
+  bottom quad gets `XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT` below 100 %. V: the
+  dumped bottom swapchain's alpha is 0.60 and 0.30 at 60 and 30 %. That the Frame's runtime
+  blends it is not checked here (the mock does not composite).
+
+#### Wrist Side (`vr_wrist_side`, global: Back, Inside)
+
+For both wrist displays: the Bottom Screen on the wrist, and Stats Position On Wrist in every
+game (`Vis::WristLocalPose(side)`). Inside is the kiuwrist place (the palm side,
+`x = 0.022`). Back mirrors it across the handle's middle (`x = −0.0135`) to `x = −0.049`,
+facing out, tilted 10° the same way, so it is the same distance from the wrist. It still reads
+toward the hand, so it is upright and reads left to right with the forearm across the body.
+The right wrist is the left one mirrored, as before. The facing rule is unchanged (shown under
+35°, hidden past 40°), so each side shows in its own pose. Back shows with the back of the
+hand to the eyes (the watch pose) and Inside with the palm to the face; the other pose and
+the playing pose hide both. Unit tests: `[kiu131]` in `kiu_wrist_screen.cpp`.
+V, mock, both sides, both wrists (Motion Controls' Left Controller for the right): shown and
+hidden as above. With the stats on the left wrist, the screen sits 11 cm (more when larger)
+toward the elbow, not overlapping. The left-hand poses come from the test's `aim_for`.
+
+#### The reticle's size (not done)
+
+The game's reticle (the ring and diamond) is not one of the CPU-shaded draws that kiu2d turns.
+Scaling every CPU-shaded sprite 2.5× about its middle grew the shots' sparks and glow, but the
+reticle ring stayed the same size. The CPU-shaded draws near the middle while firing use small
+effect textures only (64 × 32, 64 × 128, 128 × 64). So the reticle is drawn on the host GPU with
+the game's own shaders, like the HUD, and the clip-space correction cannot reach it. A later
+lane would need to find its draw (its texture while aiming) and scale that draw's model
+uniform, or a scale in the game's own layout. Scaling the aim object's (`[[0xE14504] + 8] −
+0x10`) floats near 1 one by one changed the camera, not the ring.
