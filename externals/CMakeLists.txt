@@ -385,6 +385,12 @@ else()
     # Azahar for Frame: LibreSSL 4.x, vendored without its apps, tests and manual pages
     set(LIBRESSL_APPS OFF CACHE BOOL "" FORCE)
     set(LIBRESSL_TESTS OFF CACHE BOOL "" FORCE)
+    if (MSVC)
+        # AzaharVR: LibreSSL 4.x puts a getopt_long into crypto when the system has none (only its
+        # apps use it, and they are not built); that clashes with externals/getopt, which the room
+        # server and the CLI link. With this its own check is skipped and no copy is built.
+        set(HAVE_GETOPT ON)
+    endif()
     add_subdirectory(libressl EXCLUDE_FROM_ALL)
     target_include_directories(ssl INTERFACE ./libressl/include)
     target_disable_warnings(ssl)
