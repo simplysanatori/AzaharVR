@@ -5,6 +5,7 @@
 // AzaharFrame ui3: see optimize.h.
 
 #include "core/custom_tex/optimize.h"
+#include "common/folder_link.h" // AzaharVR: junctions on Windows
 
 #include <charconv>
 #include <filesystem>
@@ -188,7 +189,7 @@ RemoveCheck CheckRemoveOriginal(const std::string& optimized, const std::vector<
         r.error = "Original Not Found";
         return r;
     }
-    if (fs::is_symlink(st)) {
+    if (Common::FS::IsLink(st)) { // AzaharVR: a junction too
         r.error = "Original Is a Link"; // never followed out of the texture folders
         return r;
     }

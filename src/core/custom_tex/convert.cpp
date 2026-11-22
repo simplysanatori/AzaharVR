@@ -28,6 +28,7 @@
 #include <sys/syscall.h>
 #endif
 #include "core/custom_tex/optimize.h"
+#include "common/folder_link.h" // AzaharVR: junctions on Windows
 
 namespace CustomTex::Convert {
 
@@ -85,9 +86,9 @@ std::string Relpath(const std::string& path, const std::string& start) {
 #endif
 }
 
-#ifdef _WIN32 // AzaharVR: a link to a folder on Windows is a folder link, its target spelt with '\'
+#ifdef _WIN32 // AzaharVR: a junction, which needs no Developer Mode (common/folder_link.h)
 void CreateFolderLink(const std::string& target, const fs::path& link, std::error_code& ec) {
-    fs::create_directory_symlink(fs::path(target).make_preferred(), link, ec);
+    Common::FS::CreateFolderLink(fs::path(target), link, ec);
 }
 #endif
 
@@ -207,7 +208,7 @@ bool SwapLink(const std::string& link, const std::string& target) {
         return false;
     }
     fs::path old_target;
-    if (fs::is_symlink(fs::symlink_status(link, ec))) {
+    if (Common::FS::IsLink(link, ec)) { // a symlink or a junction
         old_target = fs::read_symlink(link, ec);
         fs::remove(link, ec);
     }
@@ -217,7 +218,7 @@ bool SwapLink(const std::string& link, const std::string& target) {
         std::error_code ignore;
         fs::remove(tmp, ignore);
         if (!old_target.empty()) {
-            fs::create_directory_symlink(old_target, link, ignore);
+            Common::FS::CreateFolderLink(old_target, link, ignore);
         }
         return false;
     }
@@ -756,7 +757,7 @@ bool Activate(const std::string& link_in, const std::string& out_dir_in, std::st
     const std::string out_dir = Abspath(out_dir_in);
     std::error_code ec;
     std::string source;
-    if (fs::is_symlink(link, ec)) {
+    if (Common::FS::IsLink(link, ec)) { // AzaharVR: a junction too
         source = Realpath(link);
         if (!SwapLink(link, out_dir)) {
             *error = link + ": cannot be repointed";
@@ -831,7 +832,7 @@ bool Restore(const std::string& link_in, std::string* message, std::string* erro
         *error = "the original pack (" + source_trim + ") is missing";
         return false;
     }
-    if (!fs::is_symlink(link, ec)) {
+    if (!Common::FS::IsLink(link, ec)) { // AzaharVR: a junction too
         *error = link + " is not a symlink; nothing was changed";
         return false;
     }

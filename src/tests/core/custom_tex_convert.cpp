@@ -14,6 +14,7 @@
 #include <thread>
 #include <vector>
 #include <catch2/catch_test_macros.hpp>
+#include "common/folder_link.h" // AzaharVR: a junction is a link too
 #ifdef _WIN32 // AzaharVR: getpid
 #include <process.h>
 #else
@@ -331,7 +332,7 @@ TEST_CASE("convert: Activate and Restore", "[texparts][convert]") {
     REQUIRE(r.code == C::kOk);
     std::string error;
     REQUIRE(C::Activate(link.string(), r.output, &error));
-    CHECK(fs::is_symlink(link));
+    CHECK(Common::FS::IsLink(fs::symlink_status(link)));
     CHECK(fs::exists(root / "textures" / "0004000000033500-original" / "a.png"));
     CHECK(fs::exists(link / "a.ktx"));
     CHECK(Read(link / C::kMarker).find("\"source\": \"../0004000000033500-original\"") != std::string::npos);
@@ -342,7 +343,7 @@ TEST_CASE("convert: Activate and Restore", "[texparts][convert]") {
 
     std::string message;
     REQUIRE(C::Restore(link.string(), &message, &error));
-    CHECK_FALSE(fs::is_symlink(link));
+    CHECK_FALSE(Common::FS::IsLink(fs::symlink_status(link)));
     CHECK(fs::exists(link / "a.png"));
     CHECK(fs::exists(root / "textures" / "0004000000033500-astc4x4" / "a.ktx"));
     // Nothing to restore now

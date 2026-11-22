@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <catch2/catch_test_macros.hpp>
+#include "common/folder_link.h" // AzaharVR: a junction is a link too
 #include "core/custom_tex/packs.h"
 
 namespace fs = std::filesystem;
@@ -150,7 +151,7 @@ TEST_CASE("custom_tex: switch by symlink, active flag, deactivate", "[core][cust
     const Pack p1080 = *Find(packs, "1080p");
 
     REQUIRE(Activate(paths, kTitle, p4k).ok);
-    REQUIRE(fs::is_symlink(LoadFolder(paths, kTitle)));
+    REQUIRE(Common::FS::IsLink(fs::symlink_status(LoadFolder(paths, kTitle))));
     REQUIRE(ActivePack(paths, kTitle)->id == p4k.id);
     REQUIRE(fs::exists(fs::path(LoadFolder(paths, kTitle)) / "a.ktx"));
 
@@ -189,7 +190,7 @@ TEST_CASE("custom_tex: a real folder is moved into the library, not deleted", "[
     const Result r = Activate(paths, kTitle, other);
     REQUIRE(r.ok);
     REQUIRE(r.backed_up == (t.load() / "texture-packs" / kTid / "Hand Made").generic_string());
-    REQUIRE(fs::is_symlink(LoadFolder(paths, kTitle)));
+    REQUIRE(Common::FS::IsLink(fs::symlink_status(LoadFolder(paths, kTitle))));
     std::ifstream f(fs::path(r.backed_up) / "a.png");
     std::string content;
     f >> content;
@@ -216,7 +217,7 @@ TEST_CASE("custom_tex: an empty real folder is just removed", "[core][custom_tex
     const Result r = Activate(paths, kTitle, p);
     REQUIRE(r.ok);
     REQUIRE(r.backed_up.empty());
-    REQUIRE(fs::is_symlink(LoadFolder(paths, kTitle)));
+    REQUIRE(Common::FS::IsLink(fs::symlink_status(LoadFolder(paths, kTitle))));
 }
 
 TEST_CASE("custom_tex: sizes are lazy and cached", "[core][custom_tex]") {
@@ -250,3 +251,37 @@ TEST_CASE("custom_tex: roots file", "[core][custom_tex]") {
     REQUIRE(roots[1] == "/c/textures-*");
     REQUIRE_FALSE(kReloadSupported);
 }
+
+#ifdef _WIN32 // AzaharVR: junctions, which need no Developer Mode
+TEST_CASE("Texture packs: a junction is the link on Windows, and removing it keeps the pack",
+          "[texpacks][pcvr]") {
+    const fs::path root = fs::temp_directory_path() / "azaharvr-junction";
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    fs::create_directories(root / "pack" / "sub");
+    std::ofstream(root / "pack" / "sub" / "a.png") << "x";
+
+    REQUIRE(Common::FS::CreateJunction(root / "pack", root / "link", ec));
+    CHECK(fs::symlink_status(root / "link").type() == fs::file_type::junction);
+    CHECK(Common::FS::IsLink(fs::symlink_status(root / "link")));
+    CHECK(fs::exists(root / "link" / "sub" / "a.png"));
+    CHECK(fs::equivalent(fs::read_symlink(root / "link"), root / "pack"));
+
+    // A relative target is taken from the link's folder
+    REQUIRE(Common::FS::CreateJunction("pack", root / "link2", ec));
+    CHECK(fs::exists(root / "link2" / "sub" / "a.png"));
+
+    // remove and remove_all take the junction only
+    fs::remove(root / "link", ec);
+    CHECK_FALSE(ec);
+    CHECK(fs::remove_all(root / "link2", ec) == 1);
+    CHECK_FALSE(fs::exists(fs::symlink_status(root / "link")));
+    CHECK(fs::exists(root / "pack" / "sub" / "a.png"));
+
+    // CreateFolderLink makes a junction first
+    Common::FS::CreateFolderLink(root / "pack", root / "link3", ec);
+    CHECK_FALSE(ec);
+    CHECK(fs::symlink_status(root / "link3").type() == fs::file_type::junction);
+    fs::remove_all(root, ec);
+}
+#endif

@@ -18,6 +18,7 @@
 #include <system_error>
 #include <httplib.h>
 #include "common/atomic_file.h"
+#include "common/folder_link.h" // AzaharVR: junctions on Windows
 #ifdef _WIN32 // AzaharVR
 #include "common/windows_ca_bundle.h"
 #endif
@@ -1989,7 +1990,7 @@ Result Downloader::Delete(u64 title_id, const std::string& folder) {
     }
     const fs::path dir = fs::path(PacksRoot(load_dir_, title_id)) / folder;
     std::error_code ec;
-    if (!fs::is_directory(dir, ec) || fs::is_symlink(dir, ec) || !HasMarker(dir)) {
+    if (!fs::is_directory(dir, ec) || Common::FS::IsLink(dir, ec) || !HasMarker(dir)) {
         result.error = "Not a downloaded pack";
         return result;
     }

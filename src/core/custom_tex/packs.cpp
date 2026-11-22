@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 #include <json.hpp>
 #include "common/file_util.h"
+#include "common/folder_link.h" // AzaharVR: junctions on Windows
 #include "common/logging/log.h"
 #include "common/settings.h"
 #include "core/custom_tex/packs.h"
@@ -199,7 +200,7 @@ Result ClearLoadPlace(const Paths& paths, u64 title_id, const fs::path& load_pat
     if (!fs::exists(st)) {
         return {true, {}, {}};
     }
-    if (fs::is_symlink(st)) {
+    if (Common::FS::IsLink(st)) { // AzaharVR: a junction too
         return {true, {}, {}};
     }
     if (fs::is_directory(st)) {
@@ -505,7 +506,7 @@ std::optional<Pack> ActivePack(const Paths& paths, u64 title_id) {
         return std::nullopt;
     }
     const std::string tid = TitleFolder(title_id);
-    if (fs::is_symlink(st)) {
+    if (Common::FS::IsLink(st)) { // AzaharVR: a junction too
         const fs::path target = fs::canonical(load, ec);
         if (ec) {
             return std::nullopt;
@@ -585,16 +586,14 @@ Result Activate(const Paths& paths, u64 title_id, const Pack& pack) {
         r.error = "Could not create " + load.parent_path().generic_string() + ": " + ec.message();
         return r;
     }
-#ifdef _WIN32 // AzaharVR: a folder link needs Developer Mode (or admin); find out before anything
-              // is moved away
+#ifdef _WIN32 // AzaharVR: find out that a link can be made before anything is moved away
     {
         const fs::path probe = load.parent_path() / ("." + TitleFolder(title_id) + ".probe");
         fs::remove(probe, ec);
         ec.clear();
-        fs::create_directory_symlink(fs::path(target).make_preferred(), probe, ec);
+        Common::FS::CreateFolderLink(fs::path(target), probe, ec);
         if (ec) {
-            r.error = "Could not create the link (turn on Developer Mode in Windows' settings): " +
-                      ec.message();
+            r.error = "Could not create the link: " + ec.message();
             return r;
         }
         fs::remove(probe, ec);
@@ -615,14 +614,14 @@ Result Activate(const Paths& paths, u64 title_id, const Pack& pack) {
     const fs::path tmp = load.parent_path() / ("." + TitleFolder(title_id) + ".tmp");
     fs::remove(tmp, ec);
     ec.clear();
-#ifdef _WIN32 // AzaharVR: the target spelt with '\'; Windows renames nothing over a folder link
-    fs::create_directory_symlink(fs::path(link_target).make_preferred(), tmp, ec);
+#ifdef _WIN32 // AzaharVR: a junction (no Developer Mode); Windows renames nothing over a link
+    Common::FS::CreateFolderLink(fs::path(link_target), tmp, ec);
     if (ec) {
         r.error = "Could not create the link: " + ec.message();
         return r;
     }
     fs::path old_target;
-    if (fs::is_symlink(fs::symlink_status(load, ec))) {
+    if (Common::FS::IsLink(load, ec)) {
         old_target = fs::read_symlink(load, ec);
         fs::remove(load, ec);
     }
@@ -632,7 +631,7 @@ Result Activate(const Paths& paths, u64 title_id, const Pack& pack) {
         std::error_code ignore;
         fs::remove(tmp, ignore);
         if (!old_target.empty()) {
-            fs::create_directory_symlink(old_target, load, ignore);
+            Common::FS::CreateFolderLink(old_target, load, ignore);
         }
         r.error = "Could not switch the pack: " + ec.message();
         return r;
@@ -664,7 +663,7 @@ Result Deactivate(const Paths& paths, u64 title_id) {
     if (!fs::exists(st)) {
         return {true, {}, {}};
     }
-    if (fs::is_symlink(st)) {
+    if (Common::FS::IsLink(st)) { // AzaharVR: a junction too
         fs::remove(load, ec); // the link only, never what it points at
         if (ec) {
             return {false, "Could not remove the link: " + ec.message(), {}};
