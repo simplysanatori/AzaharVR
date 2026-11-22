@@ -585,6 +585,22 @@ Result Activate(const Paths& paths, u64 title_id, const Pack& pack) {
         r.error = "Could not create " + load.parent_path().generic_string() + ": " + ec.message();
         return r;
     }
+#ifdef _WIN32 // AzaharVR: a folder link needs Developer Mode (or admin); find out before anything
+              // is moved away
+    {
+        const fs::path probe = load.parent_path() / ("." + TitleFolder(title_id) + ".probe");
+        fs::remove(probe, ec);
+        ec.clear();
+        fs::create_directory_symlink(fs::path(target).make_preferred(), probe, ec);
+        if (ec) {
+            r.error = "Could not create the link (turn on Developer Mode in Windows' settings): " +
+                      ec.message();
+            return r;
+        }
+        fs::remove(probe, ec);
+        ec.clear();
+    }
+#endif
     // The pack must not be the real folder we are about to move away
     Result clear = ClearLoadPlace(paths, title_id, load);
     if (!clear.ok) {
@@ -605,17 +621,30 @@ Result Activate(const Paths& paths, u64 title_id, const Pack& pack) {
         r.error = "Could not create the link: " + ec.message();
         return r;
     }
+    fs::path old_target;
     if (fs::is_symlink(fs::symlink_status(load, ec))) {
+        old_target = fs::read_symlink(load, ec);
         fs::remove(load, ec);
     }
     ec.clear();
+    fs::rename(tmp, load, ec);
+    if (ec) { // the pack in use stays in use
+        std::error_code ignore;
+        fs::remove(tmp, ignore);
+        if (!old_target.empty()) {
+            fs::create_directory_symlink(old_target, load, ignore);
+        }
+        r.error = "Could not switch the pack: " + ec.message();
+        return r;
+    }
+    r.ok = true;
+    return r;
 #else
     fs::create_directory_symlink(link_target, tmp, ec);
     if (ec) {
         r.error = "Could not create the link: " + ec.message();
         return r;
     }
-#endif
     fs::rename(tmp, load, ec); // atomic: replaces an existing link
     if (ec) {
         std::error_code ignore;
@@ -625,6 +654,7 @@ Result Activate(const Paths& paths, u64 title_id, const Pack& pack) {
     }
     r.ok = true;
     return r;
+#endif
 }
 
 Result Deactivate(const Paths& paths, u64 title_id) {

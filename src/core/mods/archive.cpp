@@ -695,8 +695,9 @@ RunResult Run(const std::string& tool, const std::vector<std::string>& args, int
     InitializeProcThreadAttributeList(nullptr, 1, 0, &attr_size);
     std::vector<char> attr_buf(attr_size);
     auto* attrs = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attr_buf.data());
+    const bool attrs_initialized = InitializeProcThreadAttributeList(attrs, 1, 0, &attr_size);
     const bool attrs_ok =
-        InitializeProcThreadAttributeList(attrs, 1, 0, &attr_size) &&
+        attrs_initialized &&
         UpdateProcThreadAttribute(attrs, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, inherit,
                                   null_in != INVALID_HANDLE_VALUE ? sizeof(inherit) : sizeof(HANDLE),
                                   nullptr, nullptr);
@@ -717,7 +718,7 @@ RunResult Run(const std::string& tool, const std::vector<std::string>& args, int
     const BOOL ok = attrs_ok && CreateProcessW(exe.c_str(), cmd.data(), nullptr, nullptr, TRUE,
                                                CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT,
                                                nullptr, nullptr, &si.StartupInfo, &pi);
-    if (attrs_ok) {
+    if (attrs_initialized) {
         DeleteProcThreadAttributeList(attrs);
     }
     CloseHandle(write_end);
@@ -766,7 +767,19 @@ RunResult Run(const std::string& tool, const std::vector<std::string>& args, int
         r.output.append(buf, n);
     }
     CloseHandle(read_end);
-    WaitForSingleObject(pi.hProcess, INFINITE);
+    // A tool that closed its output but runs on still answers to the time limit and to Cancel
+    for (;;) {
+        if (WaitForSingleObject(pi.hProcess, 50) != WAIT_TIMEOUT) {
+            break;
+        }
+        if (!killed && std::chrono::steady_clock::now() >= deadline) {
+            stop(r.timed_out);
+        } else if (!killed && cancel != nullptr && cancel->load()) {
+            stop(r.cancelled);
+        }
+    }
+    // Windows' tools write CR LF; the listings are read line by line as on Linux
+    r.output.erase(std::remove(r.output.begin(), r.output.end(), ''), r.output.end());
     DWORD code = 0;
     if (!killed && GetExitCodeProcess(pi.hProcess, &code)) {
         r.status = static_cast<int>(code);

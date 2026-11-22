@@ -86,19 +86,30 @@ const char* WindowsCaBundle() {
         FileUtil::CreateFullPath(dir);
         const std::string out = dir + "ca-bundle.pem";
         const fs::path out_w(UTF8ToUTF16W(out));
-        const fs::path tmp_w(UTF8ToUTF16W(out + ".tmp"));
+        // A temporary name of this process's own, so two copies starting together do not share it
+        const fs::path tmp_w(UTF8ToUTF16W(out + "." + std::to_string(GetCurrentProcessId()) + ".tmp"));
+        std::error_code ec;
         {
             std::ofstream f(tmp_w, std::ios::binary | std::ios::trunc);
             f.write(pem.data(), static_cast<std::streamsize>(pem.size()));
             if (!f) {
-                LOG_ERROR(Common, "certificates: could not write {}", out);
-                return;
+                ec = std::make_error_code(std::errc::io_error);
             }
         }
-        std::error_code ec;
-        fs::rename(tmp_w, out_w, ec);
+        if (!ec) {
+            fs::rename(tmp_w, out_w, ec);
+        }
         if (ec) {
-            LOG_ERROR(Common, "certificates: could not write {} ({})", out, ec.message());
+            std::error_code ignore;
+            fs::remove(tmp_w, ignore);
+            // Another copy of the program holds it open, or wrote it a moment ago: use that one
+            if (fs::is_regular_file(out_w, ignore) && fs::file_size(out_w, ignore) > 0) {
+                LOG_WARNING(Common, "certificates: could not write {} ({}); using the one there",
+                            out, ec.message());
+                path = out;
+            } else {
+                LOG_ERROR(Common, "certificates: could not write {} ({})", out, ec.message());
+            }
             return;
         }
         LOG_INFO(Common, "certificates: {} ({}the Mozilla roots, {} from Windows' store)", out,

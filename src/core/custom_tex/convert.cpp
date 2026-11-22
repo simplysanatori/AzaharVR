@@ -73,8 +73,13 @@ std::string Realpath(const std::string& path) {
 /// os.path.relpath of two absolute paths (lexical).
 std::string Relpath(const std::string& path, const std::string& start) {
     const fs::path r = fs::path(path).lexically_relative(start);
-#ifdef _WIN32 // AzaharVR: '/', as Abspath (the marker's "source" reads the same on every system)
-    return r.empty() ? std::string(".") : r.generic_string();
+#ifdef _WIN32 // AzaharVR: '/', as Abspath (the marker's "source" reads the same on every system).
+              // On another drive there is no relative path: the absolute one (joined to a folder,
+              // it stays itself)
+    if (r.empty()) {
+        return fs::path(path).generic_string();
+    }
+    return r.generic_string();
 #else
     return r.empty() ? std::string(".") : r.string();
 #endif
@@ -201,18 +206,30 @@ bool SwapLink(const std::string& link, const std::string& target) {
     if (ec) {
         return false;
     }
+    fs::path old_target;
     if (fs::is_symlink(fs::symlink_status(link, ec))) {
+        old_target = fs::read_symlink(link, ec);
         fs::remove(link, ec);
     }
     ec.clear();
+    fs::rename(tmp, link, ec);
+    if (ec) { // the old link back, so the pack in use stays in use
+        std::error_code ignore;
+        fs::remove(tmp, ignore);
+        if (!old_target.empty()) {
+            fs::create_directory_symlink(old_target, link, ignore);
+        }
+        return false;
+    }
+    return true;
 #else
     fs::create_symlink(Relpath(target, fs::path(link).parent_path().string()), tmp, ec);
     if (ec) {
         return false;
     }
-#endif
     fs::rename(tmp, link, ec);
     return !ec;
+#endif
 }
 
 } // namespace
@@ -756,8 +773,15 @@ bool Activate(const std::string& link_in, const std::string& out_dir_in, std::st
             *error = link + ": " + ec.message();
             return false;
         }
-#ifdef _WIN32 // AzaharVR: a folder link
+#ifdef _WIN32 // AzaharVR: a folder link; when it cannot be made (no Developer Mode), the
+              // textures folder goes back where it was
         CreateFolderLink(Relpath(out_dir, fs::path(link).parent_path().string()), link, ec);
+        if (ec) {
+            *error = link + ": " + ec.message();
+            std::error_code ignore;
+            fs::rename(source, link, ignore);
+            return false;
+        }
 #else
         fs::create_symlink(Relpath(out_dir, fs::path(link).parent_path().string()), link, ec);
 #endif
