@@ -289,6 +289,17 @@ void TraceFirstPerson(State& s, const KH::GameMemory& mem, const KH::Player& p,
         line += fmt::format(" cam_eye={} cam_look={} cam_up={} cam_q={} fov={:.5f} aspect={:.5f}",
                             Csv(camera.eye), Csv(look_at), Csv(up), Csv(camera.q),
                             now.scene.projection.fov_y, now.scene.projection.aspect);
+        // AzaharFrame kiupit: the node's words after the shape (+0x44 to +0x68), as floats: its
+        // near plane was never found (moved out, it could cut Pit away in the air too).
+        std::string node_words;
+        for (uint32_t off = 0x44; off <= 0x68; off += 4) {
+            uint32_t w = 0;
+            node_words += fmt::format("{}{}", off == 0x44 ? "" : ",",
+                                      mem.Read32(KH::kSceneNode + off, w)
+                                          ? fmt::format("{:.4g}", std::bit_cast<float>(w))
+                                          : std::string{"-"});
+        }
+        line += fmt::format(" cam_node_44={}", node_words);
         // The view register of the last world draw against that camera: how far the register's
         // axes are from the camera's (degrees) and its eye from the camera's (game units).
         float rows[12];
@@ -467,6 +478,9 @@ void Hook(int64_t ticks) {
         KH::GroupWanted(first_person, nocull_text ? nocull_text->c_str() : nullptr);
     const bool want_keep = shots_6dof || SwitchIs(kSwitchBulletKeep, "1");
     const bool want_eye = first_person || SwitchIs(kSwitchEye, "1");
+    // AzaharFrame kiupit: first person also hides the player on land (below, once he is known);
+    // first person alone keeps `any` true.
+    const auto hide_text = Switch(kSwitchHide);
     const bool want_hide = SwitchIs(kSwitchHide, "1");
     const auto shot_text = Switch(kSwitchShot);
     float shot_values[5] = {};
@@ -666,13 +680,21 @@ void Hook(int64_t ticks) {
 
     // The player's model: a data write into his actor, only while every guard holds; put back
     // whenever it is not wanted and the actor is known.
+    // AzaharFrame kiupit: in first person on land the game's see-through Pit about the eye (his
+    // head; his body looking down) goes the same way (KH::HideInFirstPerson);
+    // AZAHARFRAME_KIU_HIDE_PLAYER=0 keeps him, for an A/B; =1 hides him land and air, as before.
     if (p.actor != 0) {
-        const bool hide = want_hide && p.Ok();
+        const bool eye_moved =
+            eye.own_axes || eye.extra.x != 0.0f || eye.extra.y != 0.0f || eye.extra.z != 0.0f;
+        const bool by_mode = KH::HideInFirstPerson(first_person, p.land, shots_6dof, eye_moved);
+        const bool hide =
+            KH::GroupWanted(by_mode, hide_text ? hide_text->c_str() : nullptr) && p.Ok();
         if (const auto bits = KH::HideWrite(p.local_scale_bits, hide)) {
             if (mem.WriteData(p.actor + KH::kActorLocalScale, *bits)) {
                 s.hidden = hide;
-                LOG_INFO(Frontend, "xr: Kid Icarus hooks: the player's model {}",
-                         hide ? "hidden (local scale 0.001)" : "shown again (local scale 1)");
+                LOG_INFO(Frontend, "xr: Kid Icarus hooks: the player's model {}{}",
+                         hide ? "hidden (local scale 0.001)" : "shown again (local scale 1)",
+                         hide && !want_hide ? " (first person, on land)" : "");
             }
         } else if (!hide) {
             s.hidden = false;
@@ -726,6 +748,11 @@ void Hook(int64_t ticks) {
     if (mailbox.keep_seconds > 0.0f) {
         box += fmt::format("; fliers kept {:.1f} s", mailbox.keep_seconds);
     }
+    // AzaharFrame kiupit: the round shadows in the game's list (the player's is not among them
+    // while "player shadow" is in; "scale 0.0010" above: his model hidden).
+    const int shadows = KH::RoundShadowCount(mem);
+    box += fmt::format("; round shadows {}",
+                       shadows < 0 ? std::string{"-"} : std::to_string(shadows));
     LOG_INFO(Frontend, "xr: Kid Icarus hooks: t {:.4f} [{}] {}{}", TicksToS(ticks), groups, player,
              box);
 }

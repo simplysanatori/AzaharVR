@@ -1293,6 +1293,55 @@ TEST_CASE("Kid Icarus hooks: hiding the player and the switch values", "[frame_x
     CHECK(ParseFloats("1,nan", v, 5) == 0);
 }
 
+// AzaharFrame kiupit: first person hides Pit's see-through model on land, with the shots from
+// the hand and the eye at his middle; AZAHARFRAME_KIU_HIDE_PLAYER at "1" or "0" wins.
+TEST_CASE("Kid Icarus hooks: first person hides the player on land", "[frame_xr][kiuhook]") {
+    // first_person, land, shots_from_hand, eye_moved
+    CHECK(HideInFirstPerson(true, true, true, false));
+    CHECK_FALSE(HideInFirstPerson(false, true, true, false)); // not first person
+    CHECK_FALSE(HideInFirstPerson(true, false, true, false)); // the air: the haze, less damage
+    CHECK_FALSE(HideInFirstPerson(true, true, false, false)); // the game's own shots
+    CHECK_FALSE(HideInFirstPerson(true, true, true, true));   // over the shoulder: to see him
+
+    const uint32_t one = std::bit_cast<uint32_t>(1.0f);
+    const uint32_t tiny = std::bit_cast<uint32_t>(0.001f);
+    const auto hide = [](bool by_mode, const char* value) {
+        return GroupWanted(by_mode, value);
+    };
+    // No switch: first person's choice, both ways (in on land, out again in the air).
+    CHECK(HideWrite(one, hide(HideInFirstPerson(true, true, true, false), nullptr)) == tiny);
+    CHECK(HideWrite(tiny, hide(HideInFirstPerson(true, false, true, false), nullptr)) == one);
+    // HIDE_PLAYER=0 keeps him drawn in first person; a hidden one comes back.
+    CHECK_FALSE(HideWrite(one, hide(true, "0")).has_value());
+    CHECK(HideWrite(tiny, hide(true, "0")) == one);
+    // HIDE_PLAYER=1 hides him anywhere, as before (the air too).
+    CHECK(HideWrite(one, hide(HideInFirstPerson(true, false, true, false), "1")) == tiny);
+    CHECK(HideWrite(one, hide(false, "1")) == tiny);
+    // Another value: as no switch.
+    CHECK_FALSE(HideWrite(one, hide(false, "yes")).has_value());
+}
+
+// AzaharFrame kiupit: the trace's count of the game's round shadows.
+TEST_CASE("Kid Icarus hooks: the round shadows' count", "[frame_xr][kiuhook]") {
+    FakeMemory m;
+    CHECK(RoundShadowCount(m) == -1); // no singleton
+    m.Set32(kRoundShadows, 0);
+    CHECK(RoundShadowCount(m) == -1); // not made yet
+    m.Set32(kRoundShadows, 0x0F000002);
+    CHECK(RoundShadowCount(m) == -1); // not aligned
+    const uint32_t renderer = 0x0F000000;
+    m.Set32(kRoundShadows, renderer);
+    CHECK(RoundShadowCount(m) == -1); // its count not mapped
+    m.Set32(renderer + kRoundShadowCount, 0);
+    CHECK(RoundShadowCount(m) == 0);
+    m.Set32(renderer + kRoundShadowCount, 4);
+    CHECK(RoundShadowCount(m) == 4);
+    m.Set32(renderer + kRoundShadowCount, 64);
+    CHECK(RoundShadowCount(m) == 64);
+    m.Set32(renderer + kRoundShadowCount, 65);
+    CHECK(RoundShadowCount(m) == -1); // more than the list holds
+}
+
 // AzaharFrame kiuperf: inside Angel's Aim each group it puts in by itself can be kept out for an
 // A/B (AZAHARFRAME_KIU_NOCULL=0, _NO_PLAYER_SHADOW=0, _ENEMY_KEEP=0 or _ENEMY_KEEP_S=0).
 TEST_CASE("Kid Icarus hooks: switches at 0 keep Angel's Aim's groups out", "[frame_xr][kiuhook]") {

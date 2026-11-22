@@ -13,7 +13,9 @@
 // person (On) the eye hook, the culls off, the follow off, Right Stick turning, the land aim
 // box, the aim and the shots from the hand (both with Aiming = Direct Aim only) and the bullet
 // keep, the timed enemy keep
-// (kAngelsAimEnemyKeepS) and the screen at true size; and it supplies this game's registers
+// (kAngelsAimEnemyKeepS), the player's own round shadow out, his see-through model hidden on
+// land with the shots from the hand (AzaharFrame kiupit; kiu_hooks.h) and the screen at true
+// size; and it supplies this game's registers
 // (view 90, eye indicator 87,2) in memory only (Settings::RunSuppliedSetting): none of it is
 // written into the settings, so a save during play stores mode 4 and nothing else. Another mode
 // chosen during play turns all of it off at the next VBlank (live).
