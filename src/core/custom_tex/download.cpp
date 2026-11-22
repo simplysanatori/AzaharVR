@@ -885,7 +885,11 @@ std::string UpdatedText(const std::string& iso_in) {
 std::string TodayIso() {
     const std::time_t now = std::time(nullptr);
     std::tm local{};
+#if defined(_WIN32) // AzaharVR
+    localtime_s(&local, &now);
+#else
     localtime_r(&now, &local);
+#endif
     return fmt::format("{:04}-{:02}-{:02}", local.tm_year + 1900, local.tm_mon + 1, local.tm_mday);
 }
 
@@ -1675,7 +1679,11 @@ std::string Downloader::FetchSource(const Entry& entry, const Source& source, co
             if (updated > 0) {
                 const std::time_t tt = static_cast<std::time_t>(updated);
                 std::tm tm{};
+#if defined(_WIN32) // AzaharVR
+                gmtime_s(&tm, &tt);
+#else
                 gmtime_r(&tt, &tm);
+#endif
                 live_updated_ = fmt::format("{:04}-{:02}-{:02}", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday);
             }
             long long newest = -1, newest_unknown = -1;

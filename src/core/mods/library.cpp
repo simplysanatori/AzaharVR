@@ -222,7 +222,11 @@ std::string DayOfUnix(long long t) {
     }
     const std::time_t tt = static_cast<std::time_t>(t);
     std::tm tm{};
+#if defined(_WIN32) // AzaharVR
+    gmtime_s(&tm, &tt);
+#else
     gmtime_r(&tt, &tm);
+#endif
     return fmt::format("{:04}-{:02}-{:02}", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday);
 }
 

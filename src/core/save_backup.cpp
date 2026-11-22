@@ -40,7 +40,11 @@ std::string Root(const std::string& user_dir, u64 title_id) {
 std::string Stamp(s64 unix_seconds) {
     const std::time_t t = static_cast<std::time_t>(unix_seconds);
     std::tm tm{};
+#if defined(_WIN32) // AzaharVR
+    localtime_s(&tm, &t);
+#else
     localtime_r(&t, &tm);
+#endif
     char buf[32];
     std::strftime(buf, sizeof(buf), "%Y%m%d-%H%M%S", &tm);
     return buf;
