@@ -99,7 +99,7 @@ std::string SliderText(Id id, float value) {
         id == Id::WeaponScale || id == Id::ProjectileSize || id == Id::ProjectileSpeed ||
         id == Id::WeaponOpacity || id == Id::ProjectileOpacity ||
         id == Id::MuzzleFlashSize || id == Id::HudSpacingX || id == Id::HudSpacingY ||
-        id == Id::KiuBottomSize || id == Id::KiuBottomOpacity) { // AzaharFrame kiugyro: "10%" (kiufix: the strengths, the scale; kiuopacity: the opacities; kiuweap2: the flash's size)
+        id == Id::KiuBottomSize || id == Id::KiuBottomOpacity || id == Id::KiuReticleSize) { // AzaharFrame kiugyro: "10%" (kiufix: the strengths, the scale; kiuopacity: the opacities; kiuweap2: the flash's size)
         return Format("%.0f%%", value);
     }
     if (id == Id::AutosaveEvery) { // AzaharFrame autosave: the stop's minutes
@@ -250,6 +250,7 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
             rows.push_back(row(Id::KiuSnapTurn, RowKind::Segmented,
                                std::clamp(m.kiu_snap_turn, 0,
                                           static_cast<int>(kSnapTurnDegrees.size()) - 1)));
+            slider(Id::KiuReticleSize, m.kiu_reticle_size);
         }
         Row fov = full(row(Id::GameFov, RowKind::Slider));
         const SliderRange fr = SliderFor(Id::GameFov);
@@ -373,6 +374,7 @@ SettingsSection SectionOf(Id id) {
     case Id::KiuBottomSize:
     case Id::KiuBottomOpacity:
     case Id::KiuBottomReset:
+    case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
     case Id::KiuSnapTurn:
         return SettingsSection::Immersive;
@@ -447,6 +449,7 @@ bool PerGameSetting(Id id) {
     case Id::KiuBottomScreen: // AzaharFrame kiutoggles, kiu131
     case Id::KiuBottomSize:
     case Id::KiuBottomOpacity:
+    case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
     case Id::KiuSnapTurn:
         return true;
@@ -842,6 +845,8 @@ std::string LabelFor(Id id) {
         return kBottomScreenResetRow;
     case Id::WristSide:
         return kWristSideRow;
+    case Id::KiuReticleSize:
+        return kReticleSizeRow;
     case Id::KiuOverShoulder:
         return kOverShoulderRow;
     case Id::KiuSnapTurn:
@@ -1221,6 +1226,8 @@ std::string ExplainFor(Id id) {
         return kBottomScreenResetTip;
     case Id::WristSide:
         return kWristSideTip;
+    case Id::KiuReticleSize:
+        return kReticleSizeTip;
     case Id::KiuOverShoulder:
         return kOverShoulderTip;
     case Id::KiuSnapTurn:
@@ -1336,6 +1343,9 @@ SliderRange SliderFor(Id id) {
     }
     if (id == Id::KiuBottomOpacity) { // 20 to 100 %, as Weapon Opacity
         return {20.0f, 100.0f, 10.0f};
+    }
+    if (id == Id::KiuReticleSize) { // 30 to 150 %
+        return {30.0f, 150.0f, 10.0f};
     }
     return {};
 }

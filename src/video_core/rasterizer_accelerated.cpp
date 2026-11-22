@@ -358,7 +358,32 @@ void RasterizerAccelerated::SetVRFactorY(float factor_y) {
     }
 }
 
+bool RasterizerAccelerated::ReticleDraw() const {
+    return regs.texturing.main_config.texture0_enable != 0 &&
+           VideoCore::Immersive::ReticleScaled(regs.texturing.texture0.GetPhysicalAddress());
+}
+
 void RasterizerAccelerated::TurnSoftwareVertices() {
+    // AzaharFrame kiu131: Reticle Size: the reticle's draw about its middle on the screen.
+    if (!vertex_batch.empty() && ReticleDraw()) {
+        const float k = VideoCore::Immersive::g_reticle_scale.load(std::memory_order_relaxed);
+        float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f;
+        for (const auto& v : vertex_batch) {
+            if (v.position.w > 0.0f) {
+                x0 = std::min(x0, v.position.x / v.position.w);
+                x1 = std::max(x1, v.position.x / v.position.w);
+                y0 = std::min(y0, v.position.y / v.position.w);
+                y1 = std::max(y1, v.position.y / v.position.w);
+            }
+        }
+        if (x0 <= x1) {
+            const float cx = 0.5f * (x0 + x1), cy = 0.5f * (y0 + y1);
+            for (auto& v : vertex_batch) {
+                v.position.x = (cx + (v.position.x / v.position.w - cx) * k) * v.position.w;
+                v.position.y = (cy + (v.position.y / v.position.w - cy) * k) * v.position.w;
+            }
+        }
+    }
     if (vertex_batch.empty() ||
         !VideoCore::Immersive::g_soft_draw_turn.load(std::memory_order_relaxed)) {
         return;

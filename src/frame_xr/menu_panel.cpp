@@ -358,6 +358,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::KiuBottomOpacity;
     case Id::WristSide:
         return MenuSetting::WristSide;
+    case Id::KiuReticleSize:
+        return MenuSetting::KiuReticleSize;
     case Id::KiuOverShoulder:
         return MenuSetting::KiuOverShoulder;
     case Id::KiuSnapTurn:
@@ -1101,6 +1103,8 @@ void MenuPanel::BuildModel(const Host& host) {
         static_cast<int>(std::clamp<u32>(v.vr_kiu_bottom_opacity.GetValue(), 20, 100));
     m.kiu_bottom_moved = v.vr_kiu_bottom_x.GetValue() != 0.0f || v.vr_kiu_bottom_y.GetValue() != 0.0f;
     m.wrist_side = static_cast<int>(std::min<u32>(v.vr_wrist_side.GetValue(), 1));
+    m.kiu_reticle_size =
+        static_cast<int>(std::clamp<u32>(v.vr_kiu_reticle_size.GetValue(), 30, 150));
     m.kiu_over_shoulder = v.vr_kiu_over_shoulder.GetValue();
     m.kiu_snap_turn = Menu::SnapTurnIndexOf(static_cast<int>(v.vr_kiu_snap_turn.GetValue()));
     m.angels_intro_shown = v.vr_angels_aim_intro_shown.GetValue();
@@ -1637,6 +1641,11 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.setting = MenuSetting::KiuBottomY;
         break;
     }
+    case Id::KiuReticleSize:
+        r.value = std::clamp(value, 30, 150);
+        Apply(v.vr_kiu_reticle_size, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuReticleSize;
+        break;
     case Id::WristSide: // global, every wrist display
         Apply(v.vr_wrist_side, std::min<u32>(u, 1), false);
         r.setting = MenuSetting::WristSide;

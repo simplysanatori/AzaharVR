@@ -1513,15 +1513,17 @@ int main(int argc, char** argv) {
         kv.hover = {Id::KiuSnapTurn, kLabelIndex};
         kv.tooltip = Id::KiuSnapTurn;
         ok &= shot("kiutoggles-4-turning-tooltip", ka, kv);
-        // Persistent: the reset button too; each new row's tooltip.
+        // Persistent: the reset button too; each new row's tooltip; Reticle Size at 70 %.
         ka.kiu_bottom_screen = 1;
+        ka.kiu_reticle_size = 70;
         kv.hover = {};
         kv.tooltip = Id::None;
         ok &= shot("kiu131-1-bottom-screen-persistent", ka, kv);
-        const Id tips[] = {Id::KiuBottomSize, Id::KiuBottomOpacity, Id::KiuBottomReset};
+        const Id tips[] = {Id::KiuBottomSize, Id::KiuBottomOpacity, Id::KiuBottomReset,
+                           Id::KiuReticleSize};
         const char* const names[] = {"kiu131-2-size-tooltip", "kiu131-3-opacity-tooltip",
-                                     "kiu131-4-reset-tooltip"};
-        for (int i = 0; i < 3; i++) {
+                                     "kiu131-4-reset-tooltip", "kiu131-5-reticle-size-tooltip"};
+        for (int i = 0; i < 4; i++) {
             kv.hover = {tips[i], tips[i] == Id::KiuBottomReset ? -1 : kLabelIndex};
             kv.tooltip = tips[i];
             ok &= shot(names[i], ka, kv);

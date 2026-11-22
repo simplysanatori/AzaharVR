@@ -5731,6 +5731,9 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::KiuBottomY:
         set(v.vr_kiu_bottom_y, std::clamp(static_cast<float>(r.value) / 10.0f, -60.0f, 60.0f));
         break;
+    case S::KiuReticleSize:
+        set(v.vr_kiu_reticle_size, std::clamp<u32>(u, 30, 150));
+        break;
     case S::WristSide: // global
         set(v.vr_wrist_side, std::min<u32>(u, 1));
         break;

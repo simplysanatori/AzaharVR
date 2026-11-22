@@ -209,6 +209,9 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::KiuBottomOpacity:
         f(v.vr_kiu_bottom_opacity);
         return true;
+    case Id::KiuReticleSize:
+        f(v.vr_kiu_reticle_size);
+        return true;
     case Id::KiuOverShoulder:
         f(v.vr_kiu_over_shoulder);
         return true;

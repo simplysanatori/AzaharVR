@@ -99,7 +99,7 @@ inline constexpr const char* kTriggerLayoutOriginalTip =
 /// Immersive Mode is Angel's Aim; vr_kiu_wrist_screen, vr_kiu_talk_panel, vr_kiu_over_shoulder,
 /// vr_kiu_snap_turn). Approved by the owner (1.3.0), the Turning choices too. All of them are here.
 /// AzaharFrame kiu131: Bottom Screen (replaces Secondary Screen on Wrist and Talk Panel), its
-/// size, opacity and place, and Wrist Side (the Stats tab, every wrist display).
+/// size, opacity and place, Reticle Size, and Wrist Side (the Stats tab, every wrist display).
 /// "Bottom Screen" is the owner's own name (a hardware-bound exception, as Bottom Screen
 /// Reticle). PROPOSED strings: they need the owner's approval.
 inline constexpr const char* kBottomScreenRow = "Bottom Screen";
@@ -116,6 +116,8 @@ inline constexpr const char* kBottomScreenOpacityTip =
     "How solid the Bottom Screen looks. Lower lets you see through it.";
 inline constexpr const char* kBottomScreenResetRow = "Reset Bottom Screen Position";
 inline constexpr const char* kBottomScreenResetTip = "Puts the Bottom Screen back below your view.";
+inline constexpr const char* kReticleSizeRow = "Reticle Size";
+inline constexpr const char* kReticleSizeTip = "How big the game's reticle is.";
 inline constexpr const char* kWristSideRow = "Wrist Side";
 inline constexpr const char* kWristSideBack = "Back";
 inline constexpr const char* kWristSideInside = "Inside";

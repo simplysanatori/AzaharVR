@@ -68,6 +68,8 @@ private:
     QCheckBox* show_stats_check;       ///< AzaharFrame vrvis, global only
     QWidget* stats_position_row;       ///< AzaharFrame statspos, global only
     QComboBox* stats_position_combo;
+    QWidget* wrist_side_row;           ///< AzaharFrame kiu131, global only
+    QComboBox* wrist_side_combo;
     QWidget* shape_row;
     QComboBox* shape_combo;
     QWidget* mode_row;

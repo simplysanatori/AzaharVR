@@ -218,6 +218,16 @@ ConfigureFrameVr::ConfigureFrameVr(QWidget* parent, u64 title_id) : QGroupBox(pa
                                  tr("Where the stats show: in front of you, or on your left wrist."),
                                  {stats_position_combo});
     layout->addWidget(stats_position_row);
+    // AzaharFrame kiu131: global only. Values 0..1 are Settings::values.vr_wrist_side
+    // (frame_xr/vis/stats_place.h WristSide): every wrist display.
+    wrist_side_combo = new QComboBox(this);
+    wrist_side_combo->addItem(tr("Back"));
+    wrist_side_combo->addItem(tr("Inside"));
+    wrist_side_row = MakeRow(
+        this, QStringLiteral("frame_vr_wrist_side_row"), tr("Wrist Side"),
+        tr("Where wrist displays sit: on the back of your wrist like a watch, or on the inside."),
+        {wrist_side_combo});
+    layout->addWidget(wrist_side_row);
 
     // AzaharFrame curve: global only. The items are the steps of Settings::values.vr_screen_curve
     // (frame_xr/input/screen_rig.h kCurveStepsDeg); another value in the file shows as the
@@ -534,6 +544,7 @@ void ConfigureFrameVr::SetupPerGameUI() {
     controllers_in_front_row->setVisible(Settings::IsConfiguringGlobal()); // AzaharFrame ctrlfront
     show_stats_check->setVisible(Settings::IsConfiguringGlobal());       // AzaharFrame vrvis
     stats_position_row->setVisible(Settings::IsConfiguringGlobal()); // AzaharFrame statspos
+    wrist_side_row->setVisible(Settings::IsConfiguringGlobal());     // AzaharFrame kiu131
     if (Settings::IsConfiguringGlobal()) {
         register_scope->setVisible(false);
         eye_scope->setVisible(false);
@@ -725,6 +736,8 @@ void ConfigureFrameVr::SetConfiguration() {
         show_stats_check->setChecked(Settings::values.vr_show_stats.GetValue());
         stats_position_combo->setCurrentIndex(
             static_cast<int>(Settings::values.vr_stats_position.GetValue())); // statspos
+        wrist_side_combo->setCurrentIndex(static_cast<int>(
+            std::min<u32>(Settings::values.vr_wrist_side.GetValue(), 1))); // AzaharFrame kiu131
         window_scale_combo->setCurrentIndex(std::clamp(
             (static_cast<int>(Settings::values.vr_window_scale.GetValue()) - 100 + 25) / 50, 0, 2));
         curve_combo->setCurrentIndex(CurveIndex(Settings::values.vr_screen_curve.GetValue()));
@@ -916,6 +929,8 @@ void ConfigureFrameVr::ApplyConfiguration() {
         Settings::values.vr_show_stats.SetValue(show_stats_check->isChecked());
         Settings::values.vr_stats_position.SetValue(
             static_cast<u32>(stats_position_combo->currentIndex())); // AzaharFrame statspos
+        Settings::values.vr_wrist_side.SetValue(
+            static_cast<u32>(wrist_side_combo->currentIndex())); // AzaharFrame kiu131
         // AzaharFrame curve: kept as it is while the item shown is still its nearest one.
         if (CurveIndex(Settings::values.vr_screen_curve.GetValue()) != curve_combo->currentIndex()) {
             Settings::values.vr_screen_curve.SetValue(

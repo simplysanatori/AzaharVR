@@ -1464,3 +1464,19 @@ TEST_CASE("Kid Icarus hooks: switches at 0 keep Angel's Aim's groups out", "[fra
     CHECK(r.Of(Group::EnemyKeep) == GroupState::Out);
     CHECK_FALSE(AnyOurs(m));
 }
+
+// AzaharFrame kiu131: Reticle Size: the switch's percent when set, else the setting's, 30 to
+// 150; the reticle's texture, the switch's hex address when set.
+TEST_CASE("Kid Icarus hooks: Reticle Size's scale and texture", "[frame_xr][kiuhook][kiu131]") {
+    namespace KH = FrameXr::Input::KiuHooks;
+    CHECK(KH::ReticleScaleFor(nullptr, 100) == 1.0f);
+    CHECK(KH::ReticleScaleFor(nullptr, 70) == Catch::Approx(0.7f));
+    CHECK(KH::ReticleScaleFor(nullptr, 10) == Catch::Approx(0.3f));
+    CHECK(KH::ReticleScaleFor("50", 100) == Catch::Approx(0.5f));
+    CHECK(KH::ReticleScaleFor("400", 100) == Catch::Approx(1.5f));
+    CHECK(KH::ReticleScaleFor("", 80) == Catch::Approx(0.8f));
+    CHECK(KH::ReticleScaleFor("x", 80) == Catch::Approx(0.8f));
+    CHECK(KH::ReticleTextureFor(nullptr) == KH::kReticleTexture);
+    CHECK(KH::ReticleTextureFor("1810AF00") == 0x1810AF00u);
+    CHECK(KH::ReticleTextureFor("0") == 0u);
+}

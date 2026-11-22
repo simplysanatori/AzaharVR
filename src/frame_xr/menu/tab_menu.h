@@ -299,6 +299,7 @@ enum class Id : int {
     KiuBottomOpacity, ///< AzaharFrame kiu131: a slider, 20 to 100 (percent), with it not Off
     KiuBottomReset,   ///< a button: Persistent back to its place (vr_kiu_bottom_x, _y)
     WristSide,        ///< index: 0 Back, 1 Inside (vr_wrist_side), global, the Stats tab
+    KiuReticleSize,   ///< a slider, 30 to 150 (percent): the game's reticle in first person
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -463,6 +464,7 @@ struct MenuModel {
     int kiu_bottom_opacity = 100;   ///< percent (20 to 100)
     bool kiu_bottom_moved = false;  ///< Persistent is off its default place
     int wrist_side = 0;             ///< 0 Back, 1 Inside (global)
+    int kiu_reticle_size = 100;     ///< percent (30 to 150)
     bool kiu_over_shoulder = false; ///< vr_kiu_over_shoulder
     int kiu_snap_turn = 0;          ///< Turning's shown index (SnapTurnIndexOf), 0 Smooth
     bool angels_intro_shown = false; ///< AzaharFrame kiuweap2: vr_angels_aim_intro_shown

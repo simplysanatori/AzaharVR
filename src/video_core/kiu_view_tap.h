@@ -52,4 +52,16 @@ inline WorldViewTap g_world_view_tap;
 /// first person (frame_xr/kiu_hooks.cpp; AZAHARFRAME_KIU_FP_2D=0 keeps it off); off elsewhere.
 inline std::atomic<bool> g_soft_draw_turn{false};
 
+/// AzaharFrame kiu131: Reticle Size. The draws with this texture (the game's reticle; 0: none)
+/// are shaded on the CPU and scaled by g_reticle_scale about their middle on the screen, before
+/// any kiu2d turn. Set each VBlank by Kid Icarus: Uprising's first person; 0 and 1 elsewhere.
+inline std::atomic<u32> g_reticle_texture{0};
+inline std::atomic<float> g_reticle_scale{1.0f};
+/// Whether the draw with this texture (texture 0's address, 0 when it is off) is the reticle
+/// and is to be scaled.
+inline bool ReticleScaled(u32 texture0) {
+    const u32 t = g_reticle_texture.load(std::memory_order_relaxed);
+    return t != 0 && texture0 == t && g_reticle_scale.load(std::memory_order_relaxed) != 1.0f;
+}
+
 } // namespace VideoCore::Immersive

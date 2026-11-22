@@ -3296,9 +3296,9 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
           "[frame_xr][tabmenu][kiutoggles][kiu131]") {
     // AzaharFrame kiu131: Bottom Screen (Off, Persistent, Wrist) replaces Secondary Screen on
     // Wrist and Talk Panel; its size and opacity show while it is not Off, the reset with
-    // Persistent.
+    // Persistent; Reticle Size last.
     const std::vector<Id> ids{Id::KiuBottomScreen, Id::KiuBottomSize, Id::KiuBottomOpacity,
-                              Id::KiuOverShoulder, Id::KiuSnapTurn};
+                              Id::KiuOverShoulder, Id::KiuSnapTurn, Id::KiuReticleSize};
     for (const Id id : ids) {
         INFO("id " << static_cast<int>(id));
         CHECK(PerGameSetting(id));
@@ -3316,6 +3316,9 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
     CHECK(LabelFor(Id::KiuOverShoulder) == "Over the Shoulder");
     CHECK(LabelFor(Id::KiuSnapTurn) == "Turning");
     CHECK(LabelFor(Id::WristSide) == "Wrist Side");
+    CHECK(LabelFor(Id::KiuReticleSize) == "Reticle Size");
+    CHECK(SliderFor(Id::KiuReticleSize).min == 30.0f);
+    CHECK(SliderFor(Id::KiuReticleSize).max == 150.0f);
     CHECK(OptionsFor(Id::WristSide) == std::vector<std::string>{"Back", "Inside"});
     CHECK_FALSE(PerGameSetting(Id::WristSide));
     CHECK(SliderFor(Id::KiuBottomSize).min == 50.0f);
@@ -3328,6 +3331,7 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
     CHECK(defaults.kiu_bottom_size == 100);
     CHECK(defaults.kiu_bottom_opacity == 100);
     CHECK(defaults.wrist_side == 0);
+    CHECK(defaults.kiu_reticle_size == 100);
     CHECK(AngelsAimRowsShown(true, 4));
     CHECK_FALSE(AngelsAimRowsShown(false, 4));
     CHECK_FALSE(AngelsAimRowsShown(true, 3));
@@ -3345,7 +3349,7 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
                 v.tab = Tab::Settings;
                 v.section = SettingsSection::Immersive;
                 bool seen_bottom[3] = {}, size = false, opacity = false, reset = false,
-                     under_mode = false;
+                     reticle = false, under_mode = false;
                 for (float scroll = 0.0f; scroll <= 3000.0f; scroll += kRowH) {
                     v.scroll[static_cast<int>(Tab::Settings)] = scroll;
                     d.Draw(m, v);
@@ -3355,6 +3359,7 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
                     size |= FindHit(d, Id::KiuBottomSize, kLabelIndex) != nullptr;
                     opacity |= FindHit(d, Id::KiuBottomOpacity, kLabelIndex) != nullptr;
                     reset |= FindHit(d, Id::KiuBottomReset, -1) != nullptr;
+                    reticle |= FindHit(d, Id::KiuReticleSize, kLabelIndex) != nullptr;
                     const auto* mode_row = FindHit(d, Id::ImmersiveMode, kLabelIndex);
                     const auto* first = FindHit(d, Id::KiuBottomScreen, kLabelIndex);
                     if (mode_row && first) {
@@ -3373,6 +3378,7 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
                 CHECK(size == (shown && bottom != 0));
                 CHECK(opacity == (shown && bottom != 0));
                 CHECK(reset == (shown && bottom == 1));
+                CHECK(reticle == shown);
                 if (shown) {
                     CHECK(under_mode);
                     Audit a;

@@ -939,13 +939,26 @@ V, mock, both sides, both wrists (Motion Controls' Left Controller for the right
 hidden as above. With the stats on the left wrist, the screen sits 11 cm (more when larger)
 toward the elbow, not overlapping. The left-hand poses come from the test's `aim_for`.
 
-#### The reticle's size (not done)
+#### The reticle's size (Reticle Size, `vr_kiu_reticle_size`)
 
-The game's reticle (the ring and diamond) is not one of the CPU-shaded draws that kiu2d turns.
-Scaling every CPU-shaded sprite 2.5× about its middle grew the shots' sparks and glow, but the
-reticle ring stayed the same size. The CPU-shaded draws near the middle while firing use small
-effect textures only (64 × 32, 64 × 128, 128 × 64). So the reticle is drawn on the host GPU with
-the game's own shaders, like the HUD, and the clip-space correction cannot reach it. A later
-lane would need to find its draw (its texture while aiming) and scale that draw's model
-uniform, or a scale in the game's own layout. Scaling the aim object's (`[[0xE14504] + 8] −
-0x10`) floats near 1 one by one changed the camera, not the ring.
+- **Where the reticle is drawn (V, desktop).** It is not one of the CPU-shaded sprites that
+  kiu2d turns. Scaling every CPU-shaded draw 2.5× about its middle grew the shots' sparks and
+  glow, but the ring stayed the same size. The draws seen only while firing (a per-second
+  count of texture 0 per draw, air) include one GPU draw with a 64 × 64 texture at 0x1810AF00
+  (format 9), 3 a frame in each eye's buffer: the reticle (ring, diamond). The same address is
+  the reticle on land too (the owner's Chapter 2 state).
+- **The scale.** In first person, the draws with that texture (`KH::kReticleTexture`;
+  `AZAHARFRAME_KIU_RETICLE_TEX=<hex>` for another) are not accelerated. They go through the
+  software vertex path, and their vertices are scaled about the draw's middle on the screen
+  (`RasterizerAccelerated::TurnSoftwareVertices`, before the kiu2d turn;
+  `video_core/kiu_view_tap.h` `g_reticle_texture`, `g_reticle_scale`). At 100 % nothing changes
+  (the draw stays on the GPU). The aim, the shots and the lock-on marks are not touched.
+  `AZAHARFRAME_KIU_RETICLE_SIZE=<percent>` (live, 30 to 150) wins over the setting.
+- **Measured (mock).** Air (Chapter 1), firing, live 100 → 50 → 150 → 100: the ring half and
+  one and a half times as wide; the lock-on triangles the same; the score kept rising (480,
+  840, 1080, 1560). Head turned 20° left and 10° down, 99 % (the CPU path) against 100 % (the
+  GPU): the ring in the same place, within a few pixels. Land (Chapter 2, the blade): 50 and
+  150 % the same way.
+- **Not checked.** Other reticles (a charged shot's, other weapons' if they differ): one with
+  another texture keeps its size. The address is the game's VRAM layout, so another chapter
+  could load it elsewhere (then Reticle Size does nothing there).

@@ -1151,6 +1151,9 @@ struct Values {
     // Persistent's place moved by the grip: degrees right of and below its default place.
     SwitchableSetting<float, true> vr_kiu_bottom_x{0.f, -60.f, 60.f, "vr_kiu_bottom_x"};
     SwitchableSetting<float, true> vr_kiu_bottom_y{0.f, -60.f, 60.f, "vr_kiu_bottom_y"};
+    // AzaharFrame kiu131: Reticle Size: the game's own reticle in Angel's Aim's first person, in
+    // percent about its middle.
+    SwitchableSetting<u32, true> vr_kiu_reticle_size{100, 30, 150, "vr_kiu_reticle_size"};
     // AzaharFrame kiu: in a game's own file only: the Controls preset's values already decided
     // for this game (FrameXr::ControlsPresetField bits). A value the preset gave, or the game
     // already had, is never given again, so a later choice (Use Global Value too) stays.

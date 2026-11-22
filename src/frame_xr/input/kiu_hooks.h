@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cmath>
@@ -825,6 +826,35 @@ inline std::optional<uint32_t> ModelDrawWrite(uint32_t word, bool hide, bool our
 /// AZAHARFRAME_KIU_HIDE_BY=scale: first person hides him the kiupit way (the scale write, land
 /// only, with the shots from the hand), for an A/B; anything else (default): by his draw.
 enum class HideBy : uint8_t { Draw, Scale };
+
+/// AzaharFrame kiu131: Reticle Size. The game's reticle (its ring and diamond, drawn on the GPU
+/// with the game's own shaders while aiming) is the draws with this texture (texture 0's
+/// physical address: VRAM, 64 x 64; KIU_HOOKS.md, "The reticle's size"). Those draws are shaded
+/// on the CPU instead and scaled about their middle on the screen.
+inline constexpr uint32_t kReticleTexture = 0x1810AF00;
+/// The scale: the switch's percent when set (30 to 150), else the setting's.
+inline float ReticleScaleFor(const char* text, uint32_t setting_percent) {
+    long percent = static_cast<long>(setting_percent);
+    if (text && *text) {
+        char* end = nullptr;
+        const long v = std::strtol(text, &end, 10);
+        if (end != text) {
+            percent = v;
+        }
+    }
+    return static_cast<float>(std::clamp(percent, 30L, 150L)) / 100.0f;
+}
+/// The reticle's texture: the switch's hex address when set, else kReticleTexture.
+inline uint32_t ReticleTextureFor(const char* text) {
+    if (text && *text) {
+        char* end = nullptr;
+        const unsigned long v = std::strtoul(text, &end, 16);
+        if (end != text) {
+            return static_cast<uint32_t>(v);
+        }
+    }
+    return kReticleTexture;
+}
 inline HideBy HideByFrom(const char* text) {
     return text && std::string_view{text} == "scale" ? HideBy::Scale : HideBy::Draw;
 }

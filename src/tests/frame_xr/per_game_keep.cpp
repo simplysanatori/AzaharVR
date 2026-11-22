@@ -541,10 +541,11 @@ TEST_CASE("Per-Game: a save during Angel's Aim stores mode 4 and no registers",
 // default as their test switches were, kept like the others.
 TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_xr][kiutoggles]") {
     const std::vector<std::string> labels = Labels();
-    // AzaharFrame kiu131: Bottom Screen, its size and opacity.
+    // AzaharFrame kiu131: Bottom Screen, its size and opacity, Reticle Size.
     const std::vector<std::pair<Id, const char*>> rows{{Id::KiuBottomScreen, "vr_kiu_bottom_screen"},
                                                        {Id::KiuBottomSize, "vr_kiu_bottom_size"},
                                                        {Id::KiuBottomOpacity, "vr_kiu_bottom_opacity"},
+                                                       {Id::KiuReticleSize, "vr_kiu_reticle_size"},
                                                        {Id::KiuOverShoulder, "vr_kiu_over_shoulder"},
                                                        {Id::KiuSnapTurn, "vr_kiu_snap_turn"}};
     for (const auto& [id, key] : rows) {
@@ -560,6 +561,7 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
     CHECK(Settings::values.vr_kiu_bottom_size.GetDefault() == 100u);
     CHECK(Settings::values.vr_kiu_bottom_opacity.GetDefault() == 100u);
     CHECK(Settings::values.vr_wrist_side.GetDefault() == 0u); // Back
+    CHECK(Settings::values.vr_kiu_reticle_size.GetDefault() == 100u);
     for (const char* key : {"vr_kiu_bottom_x", "vr_kiu_bottom_y", "vr_kiu_wrist_screen",
                             "vr_kiu_talk_panel"}) {
         INFO(key);

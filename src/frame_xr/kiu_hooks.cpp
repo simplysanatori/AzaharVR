@@ -52,6 +52,8 @@ constexpr const char* kSwitchGroupKeep = "AZAHARFRAME_KIU_GROUP_KEEP";
 constexpr const char* kSwitchNoFollow = "AZAHARFRAME_KIU_NO_FOLLOW";
 constexpr const char* kSwitchNoPlayerShadow = "AZAHARFRAME_KIU_NO_PLAYER_SHADOW"; // kiuperf
 constexpr const char* kSwitchFp2d = "AZAHARFRAME_KIU_FP_2D"; // AzaharFrame kiu2d
+constexpr const char* kSwitchReticleSize = "AZAHARFRAME_KIU_RETICLE_SIZE"; // AzaharFrame kiu131
+constexpr const char* kSwitchReticleTexture = "AZAHARFRAME_KIU_RETICLE_TEX";
 constexpr const char* kSwitchTrace = "AZAHARFRAME_KIU_HOOK_TRACE";
 // AzaharFrame kiuvr (kiu_first_person.h)
 constexpr const char* kSwitchFpTrace = "AZAHARFRAME_KIU_FP_TRACE";
@@ -141,6 +143,8 @@ struct State {
     bool hidden = false;
     /// AzaharFrame kiu131: the model node whose drawn byte this app cleared (0: none), and
     /// whether the first look of this run (a save state made while hidden) was made.
+    float reticle_scale_logged = 1.0f; // AzaharFrame kiu131: Reticle Size, as last logged
+    uint32_t reticle_tex_logged = 0;
     uint32_t model_hidden = 0;
     bool model_looked = false;
     int64_t poll_ns = 0;
@@ -432,6 +436,7 @@ void Hook(int64_t ticks) {
     if (!system.IsPoweredOn()) {
         s.process = nullptr;
         VideoCore::Immersive::g_soft_draw_turn.store(false, std::memory_order_relaxed); // kiu2d
+        VideoCore::Immersive::g_reticle_texture.store(0, std::memory_order_relaxed); // kiu131
         return;
     }
     std::shared_ptr<Kernel::Process> process;
@@ -446,6 +451,7 @@ void Hook(int64_t ticks) {
         Kiu::FirstPerson::SetGameCode(0, false); // AzaharFrame kiumode
         Kiu::FirstPerson::SupplyRegisters(false);
         VideoCore::Immersive::g_soft_draw_turn.store(false, std::memory_order_relaxed); // kiu2d
+        VideoCore::Immersive::g_reticle_texture.store(0, std::memory_order_relaxed); // kiu131
         return;
     }
     const uint64_t title = process->codeset->program_id;
@@ -534,6 +540,24 @@ void Hook(int64_t ticks) {
     VideoCore::Immersive::g_soft_draw_turn.store(
         KH::GroupWanted(first_person, fp2d_text ? fp2d_text->c_str() : nullptr),
         std::memory_order_relaxed);
+    // AzaharFrame kiu131: Reticle Size: the game's reticle's draws (its texture) scaled about
+    // their middle, in first person (video_core/kiu_view_tap.h).
+    {
+        const auto size_text = Switch(kSwitchReticleSize);
+        const auto tex_text = Switch(kSwitchReticleTexture);
+        const float scale = KH::ReticleScaleFor(
+            size_text ? size_text->c_str() : nullptr, Settings::values.vr_kiu_reticle_size.GetValue());
+        const uint32_t tex = KH::ReticleTextureFor(tex_text ? tex_text->c_str() : nullptr);
+        VideoCore::Immersive::g_reticle_scale.store(scale, std::memory_order_relaxed);
+        VideoCore::Immersive::g_reticle_texture.store(first_person ? tex : 0u,
+                                                      std::memory_order_relaxed);
+        if (first_person && (scale != s.reticle_scale_logged || tex != s.reticle_tex_logged)) {
+            s.reticle_scale_logged = scale;
+            s.reticle_tex_logged = tex;
+            LOG_INFO(Frontend, "xr: Kid Icarus hooks: Reticle Size {:.0f}% (the reticle's texture {:08X})",
+                     scale * 100.0f, tex);
+        }
+    }
     // AzaharFrame kiumode: why Angel's Aim plays as Full (6DoF): Other Games here.
     const char* const as_other =
         fp_wanted && !first_person ? "; Angel's Aim plays as Full (6DoF): Other Games" : "";
