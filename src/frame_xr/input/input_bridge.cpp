@@ -21,8 +21,19 @@ const MapperOutput& InputBridge::Process(const InputFrame& frame, const PanelGeo
                                          const ReticleSample* reticle,
                                          const GyroAimFrame* gyro_aim) {
     const bool by_position = Settings::values.vr_face_buttons.GetValue() == 0;
-    mapper_.SetFaceButtonsByPosition(by_position);
-    last_ = mapper_.Update(frame, panels);
+    if (pc_.active()) {
+        // AzaharVR: a PC controller scheme: its buttons by label; grips, Menu and the stick
+        // clicks its own way (pc_scheme.h), the rest through the mapper as on the Frame.
+        mapper_.SetFaceButtonsByPosition(by_position &&
+                                         !SchemeTable(pc_.scheme()).face_buttons_by_label);
+        const InputFrame game = pc_.Game(frame, pc_out_);
+        last_ = mapper_.Update(game, panels);
+        PcScheme::Merge(pc_out_, last_);
+    } else {
+        pc_out_ = {};
+        mapper_.SetFaceButtonsByPosition(by_position);
+        last_ = mapper_.Update(frame, panels);
+    }
     // AzaharFrame pads: the other gamepads join the virtual pad (through the controls profile's
     // routes), and give Touchpad Touch its touchpad.
     const TouchpadMode touch_mode = TouchpadModeFrom(Settings::values.vr_touchpad_touch.GetValue());
@@ -190,6 +201,8 @@ const MapperOutput& InputBridge::Process(const InputFrame& frame, const PanelGeo
 
 void InputBridge::Release() {
     const bool mapper_touching = mapper_.Reset();
+    pc_.Reset(); // AzaharVR
+    pc_out_ = {};
     if (touchpad_.Reset() || mapper_touching) { // AzaharFrame touchpad
         InputCommon::FrameXr::SendTouchReleased();
     }

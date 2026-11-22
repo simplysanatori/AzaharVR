@@ -6,6 +6,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include "common/frame_product.h" // AzaharVR
 #include "common/logging/log.h"
 #include "frame_xr/input/actions.h"
 #include "frame_xr/input/pose_guard.h" // AzaharFrame ctrlglitch: TrackBits
@@ -41,6 +42,9 @@ struct Actions::Impl {
     XrAction dpad_down = XR_NULL_HANDLE;
     XrAction dpad_left = XR_NULL_HANDLE;
     XrAction dpad_right = XR_NULL_HANDLE;
+    // AzaharVR: the Index trackpads (PC builds only; null on the Frame's).
+    XrAction trackpad = XR_NULL_HANDLE;
+    XrAction trackpad_force = XR_NULL_HANDLE;
 
     std::array<XrSpace, kNumHands> aim_space{};
     bool created_set = false;
@@ -117,6 +121,60 @@ bool PoseActive(XrSession session, XrAction action, XrPath sub) {
 
 using Bindings = std::vector<XrActionSuggestedBinding>;
 
+#ifdef AZAHARVR_PC
+// AzaharVR: the suggested bindings of the PC controllers, as data (docs/PCVR_PLAN.md section 3.3).
+// Which role each action plays is the scheme's (default_bindings.h kControllerSchemes).
+enum class Act : uint8_t {
+    Stick, StickClick, Trigger, Squeeze, A, B, X, Y, Menu, Aim, Trackpad, TrackpadForce
+};
+struct SuggestedPath {
+    Act act;
+    const char* path;
+};
+/// Valve Index: left A and B are X and Y (X lower, Y upper, as on Touch); the grips from
+/// squeeze/force (squeeze/value rises from simply holding it); the trackpads, read as the D-pad
+/// (left) and the Menu role (right) by the scheme. The System buttons belong to SteamVR.
+constexpr SuggestedPath kIndexPaths[] = {
+    {Act::Stick, "/user/hand/left/input/thumbstick"},
+    {Act::Stick, "/user/hand/right/input/thumbstick"},
+    {Act::StickClick, "/user/hand/left/input/thumbstick/click"},
+    {Act::StickClick, "/user/hand/right/input/thumbstick/click"},
+    {Act::Trigger, "/user/hand/left/input/trigger/value"},
+    {Act::Trigger, "/user/hand/right/input/trigger/value"},
+    {Act::Squeeze, "/user/hand/left/input/squeeze/force"},
+    {Act::Squeeze, "/user/hand/right/input/squeeze/force"},
+    {Act::A, "/user/hand/right/input/a/click"},
+    {Act::B, "/user/hand/right/input/b/click"},
+    {Act::X, "/user/hand/left/input/a/click"},
+    {Act::Y, "/user/hand/left/input/b/click"},
+    {Act::Trackpad, "/user/hand/left/input/trackpad"},
+    {Act::Trackpad, "/user/hand/right/input/trackpad"},
+    {Act::TrackpadForce, "/user/hand/left/input/trackpad/force"},
+    {Act::TrackpadForce, "/user/hand/right/input/trackpad/force"},
+    {Act::Aim, "/user/hand/left/input/aim/pose"},
+    {Act::Aim, "/user/hand/right/input/aim/pose"},
+};
+/// Vive Focus 3 and XR Elite: Touch's layout (X, Y and Menu on the left). squeeze/value came in
+/// the extension's second revision; squeeze/click is the fallback.
+constexpr SuggestedPath kFocus3Paths[] = {
+    {Act::Stick, "/user/hand/left/input/thumbstick"},
+    {Act::Stick, "/user/hand/right/input/thumbstick"},
+    {Act::StickClick, "/user/hand/left/input/thumbstick/click"},
+    {Act::StickClick, "/user/hand/right/input/thumbstick/click"},
+    {Act::Trigger, "/user/hand/left/input/trigger/value"},
+    {Act::Trigger, "/user/hand/right/input/trigger/value"},
+    {Act::Squeeze, "/user/hand/left/input/squeeze/value"},
+    {Act::Squeeze, "/user/hand/right/input/squeeze/value"},
+    {Act::A, "/user/hand/right/input/a/click"},
+    {Act::B, "/user/hand/right/input/b/click"},
+    {Act::X, "/user/hand/left/input/x/click"},
+    {Act::Y, "/user/hand/left/input/y/click"},
+    {Act::Menu, "/user/hand/left/input/menu/click"},
+    {Act::Aim, "/user/hand/left/input/aim/pose"},
+    {Act::Aim, "/user/hand/right/input/aim/pose"},
+};
+#endif
+
 bool Suggest(XrInstance instance, const char* profile, const Bindings& bindings) {
     XrInteractionProfileSuggestedBinding suggested{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
     suggested.interactionProfile = ToPath(instance, profile);
@@ -133,7 +191,7 @@ Actions::~Actions() {
     Destroy();
 }
 
-bool Actions::Create(XrInstance instance, bool has_frame_controller) {
+bool Actions::Create(XrInstance instance, bool has_frame_controller, bool has_focus3) {
     Destroy();
     impl_ = new Impl;
     Impl& s = *impl_;
@@ -143,7 +201,8 @@ bool Actions::Create(XrInstance instance, bool has_frame_controller) {
 
     XrActionSetCreateInfo set_info{XR_TYPE_ACTION_SET_CREATE_INFO};
     std::strcpy(set_info.actionSetName, "azaharframe_input");
-    std::strcpy(set_info.localizedActionSetName, "Azahar for Frame");
+    std::snprintf(set_info.localizedActionSetName, sizeof(set_info.localizedActionSetName), "%s",
+                  Common::FrameProduct::kName); // AzaharVR
     if (XR_FAILED(xrCreateActionSet(instance, &set_info, &action_set_))) {
         LOG_ERROR(Input, "xrCreateActionSet failed");
         return false;
@@ -172,6 +231,14 @@ bool Actions::Create(XrInstance instance, bool has_frame_controller) {
     s.dpad_right = MakeAction(action_set_, "dpad_right", "D-Pad Right",
                               XR_ACTION_TYPE_BOOLEAN_INPUT, nullptr, 0);
 
+#ifdef AZAHARVR_PC
+    s.trackpad = MakeAction(action_set_, "trackpad", "Trackpad", XR_ACTION_TYPE_VECTOR2F_INPUT,
+                            hands, 2);
+    s.trackpad_force = MakeAction(action_set_, "trackpad_force", "Trackpad Press",
+                                  XR_ACTION_TYPE_FLOAT_INPUT, hands, 2);
+#else
+    (void)has_focus3;
+#endif
     const XrAction all[] = {s.trigger, s.squeeze,  s.bumper,   s.stick,    s.stick_click, s.aim_pose,
                             s.a,       s.b,        s.x,        s.y,        s.menu,        s.view,
                             s.dpad_up, s.dpad_down, s.dpad_left, s.dpad_right};
@@ -265,7 +332,89 @@ bool Actions::Create(XrInstance instance, bool has_frame_controller) {
     } else {
         Suggest(instance, kTouch, touch_bindings);
     }
+#ifdef AZAHARVR_PC
+    // AzaharVR: Index and Vive Focus 3, from the tables above.
+    const auto action_of = [&](Act act) {
+        switch (act) {
+        case Act::Stick:
+            return s.stick;
+        case Act::StickClick:
+            return s.stick_click;
+        case Act::Trigger:
+            return s.trigger;
+        case Act::Squeeze:
+            return s.squeeze;
+        case Act::A:
+            return s.a;
+        case Act::B:
+            return s.b;
+        case Act::X:
+            return s.x;
+        case Act::Y:
+            return s.y;
+        case Act::Menu:
+            return s.menu;
+        case Act::Aim:
+            return s.aim_pose;
+        case Act::Trackpad:
+            return s.trackpad;
+        case Act::TrackpadForce:
+            return s.trackpad_force;
+        }
+        return XrAction{XR_NULL_HANDLE};
+    };
+    // `squeeze_from` / `squeeze_to`: a squeeze path's ending swapped (the Focus 3 fallback).
+    const auto table = [&](const auto& paths, const char* squeeze_from, const char* squeeze_to) {
+        Bindings b;
+        for (const SuggestedPath& p : paths) {
+            const XrAction action = action_of(p.act);
+            if (action == XR_NULL_HANDLE) {
+                continue;
+            }
+            std::string text = p.path;
+            const std::size_t at = squeeze_from ? text.find(squeeze_from) : std::string::npos;
+            if (p.act == Act::Squeeze && at != std::string::npos) {
+                text.replace(at, std::strlen(squeeze_from), squeeze_to);
+            }
+            b.push_back({action, path(text.c_str())});
+        }
+        return b;
+    };
+    constexpr const char* kIndex = "/interaction_profiles/valve/index_controller";
+    if (!Suggest(instance, kIndex, with_haptic(table(kIndexPaths, nullptr, nullptr)))) {
+        Suggest(instance, kIndex, table(kIndexPaths, nullptr, nullptr));
+    }
+    if (has_focus3) {
+        constexpr const char* kFocus3 = "/interaction_profiles/htc/vive_focus3_controller";
+        if (!Suggest(instance, kFocus3, with_haptic(table(kFocus3Paths, nullptr, nullptr))) &&
+            !Suggest(instance, kFocus3,
+                     with_haptic(table(kFocus3Paths, "squeeze/value", "squeeze/click")))) {
+            Suggest(instance, kFocus3, table(kFocus3Paths, "squeeze/value", "squeeze/click"));
+        }
+    }
+#endif
     return true;
+}
+
+std::string Actions::CurrentProfile(XrSession session) const { // AzaharVR
+    if (impl_ == nullptr || session == XR_NULL_HANDLE) {
+        return {};
+    }
+    for (const int h : {1, 0}) {
+        XrInteractionProfileState state{XR_TYPE_INTERACTION_PROFILE_STATE};
+        if (XR_FAILED(xrGetCurrentInteractionProfile(
+                session, impl_->hand_path[static_cast<std::size_t>(h)], &state)) ||
+            state.interactionProfile == XR_NULL_PATH) {
+            continue;
+        }
+        char text[XR_MAX_PATH_LENGTH] = {};
+        uint32_t length = 0;
+        if (XR_SUCCEEDED(xrPathToString(impl_->instance, state.interactionProfile, sizeof(text),
+                                        &length, text))) {
+            return text;
+        }
+    }
+    return {};
 }
 
 bool Actions::Pulse(XrSession session, int hand, int64_t duration_ns, float amplitude) {
@@ -351,6 +500,10 @@ bool Actions::Sync(XrSession session, XrSpace base, XrTime time, InputFrame& out
         hand.bumper = GetBool(session, s.bumper, sub);
         hand.stick = GetVec2(session, s.stick, sub);
         hand.stick_click = GetBool(session, s.stick_click, sub);
+        if (s.trackpad != XR_NULL_HANDLE) { // AzaharVR: PC builds only
+            hand.trackpad = GetVec2(session, s.trackpad, sub);
+            hand.trackpad_force = GetFloat(session, s.trackpad_force, sub);
+        }
 
         if (PoseActive(session, s.aim_pose, sub) && s.aim_space[i] != XR_NULL_HANDLE) {
             XrSpaceLocation location{XR_TYPE_SPACE_LOCATION};

@@ -39,6 +39,7 @@
 #include "frame_xr/vis/beam.h" // AzaharFrame kiuaim2: Check Aim's target size
 #include "input_common/frame_xr.h" // AzaharFrame padsui
 #include "common/frame_crash.h" // AzaharFrame crashreport
+#include "common/frame_product.h" // AzaharVR
 
 namespace FrameXr {
 
@@ -91,6 +92,36 @@ void SaveAimMap(uint64_t title, const Input::AimMap& m) {
     }
     LOG_INFO(Frontend, "xr: Check Aim: saved for this game: {}",
              m.set ? Input::AimMapText(m) : std::string{"reset (an older build's line kept)"});
+}
+// AzaharVR: the left stick's D-pad mode (Touch, Vive Focus 3), per game: config/custom/<title
+// id>.dpad, "1" for the D-pad (beside Check Aim's file). No file: the Circle Pad.
+std::string DpadModePath(uint64_t title) {
+    return FileUtil::GetUserPath(FileUtil::UserPath::ConfigDir) + "custom/" +
+           fmt::format("{:016X}", title) + ".dpad";
+}
+
+bool LoadDpadMode(uint64_t title) {
+    if (title == 0) {
+        return false;
+    }
+    std::ifstream f(DpadModePath(title));
+    std::string line;
+    return std::getline(f, line) && line == "1";
+}
+
+void SaveDpadMode(uint64_t title, bool dpad) {
+    if (title == 0) {
+        return;
+    }
+    const std::string path = DpadModePath(title);
+    if (!dpad) {
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+        return;
+    }
+    if (!Common::WriteFileAtomic(path, "1\n")) {
+        LOG_WARNING(Frontend, "xr: could not write {}", path);
+    }
 }
 } // namespace
 
@@ -275,7 +306,8 @@ bool VrUi::Create(Runtime& rt) {
     chord_down = false;
     SwallowHeld(); // the buttons of the chord that made this session are still held
     mode_latch.Arm();
-    actions_ok = actions.Create(rt.instance, rt.HasExtension(Input::Actions::kFrameControllerExtension));
+    actions_ok = actions.Create(rt.instance, rt.HasExtension(Input::Actions::kFrameControllerExtension),
+                                rt.HasExtension("XR_HTC_vive_focus3_controller_interaction")); // AzaharVR
     cylinder_ok = rt.HasExtension(XR_KHR_COMPOSITION_LAYER_CYLINDER_EXTENSION_NAME); // AzaharFrame curve
     if (actions_ok) {
         actions_ok = actions.Attach(rt.session);
@@ -672,6 +704,7 @@ void VrUi::FlatFrame(int64_t now_ns) {
         in.head = ToInput(view.head);
     }
     Watchdog::FlatPhase("the game's controls"); // AzaharFrame flatfix
+    bridge.pc().SetScheme(Input::ControllerScheme::Frame); // AzaharVR: gamepads, not a scheme
     const Input::MapperOutput& out = bridge.Process(in, panels);
     bridge_live = true;
     LogFlatGameButtons(out.controls);
@@ -1465,7 +1498,22 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
     const bool have_input = focused && actions_ok &&
                             actions.Sync(info.session, info.local_space, info.display_time, in, true,
                                          info.display_period); // AzaharFrame ctrlglitch
+    // AzaharVR: the controller scheme of the profile in use, looked up when it changes (PC
+    // builds; the Frame's build keeps the Frame's scheme whatever the profile).
+    if (rt.profile_changes != profile_changes_seen) {
+        profile_changes_seen = rt.profile_changes;
+        const std::string profile = actions_ok ? actions.CurrentProfile(info.session) : std::string{};
+        const Input::ControllerScheme scheme = Common::FrameProduct::kPc
+                                                   ? Input::SchemeForProfile(profile)
+                                                   : Input::ControllerScheme::Frame;
+        LOG_INFO(Frontend, "xr: controllers: {} -> the {} scheme",
+                 profile.empty() ? std::string{"none"} : profile,
+                 Input::SchemeTable(scheme).name);
+        controller_scheme = scheme;
+    }
+    bridge.pc().SetScheme(controller_scheme);
     if (have_input) {
+        bridge.pc().Normalize(in); // AzaharVR: nothing with the Frame's scheme
         mode_latch.Filter(in); // the chord that made this session stays away until let go
     }
     MouseTick(info, in, have_input); // AzaharFrame padsui
@@ -1534,6 +1582,15 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
         keyboard.Hide(); // AzaharFrame keyboard
         Input::InputFrame game_in = window_in; // AzaharFrame statspos: without a stats grab
         FilterAfterMenu(game_in);
+        // AzaharVR: a PC scheme's grips are L and R: nothing on the way grabs with them (the
+        // screens, the immersive screen, the scale chord, Grip Frees Aim); the bridge gets them back.
+        pc_grips = {};
+        if (bridge.pc().active()) {
+            for (int h = 0; h < Input::kNumHands; h++) {
+                pc_grips[static_cast<std::size_t>(h)] = game_in.hand[static_cast<std::size_t>(h)].grip;
+                game_in.hand[static_cast<std::size_t>(h)].grip = 0.0f;
+            }
+        }
         GameFrame(rt, info, game_in, have_input, layers);
     } else {
         if (bridge_live) {
@@ -2160,10 +2217,26 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         game_in.head_active = view.valid;
         game_in.head = ToInput(view.head);
     }
+    // AzaharVR: a PC scheme: its grips back (L and R), and this game's left-stick D-pad mode.
+    if (bridge.pc().active()) {
+        for (int h = 0; h < Input::kNumHands; h++) {
+            game_in.hand[static_cast<std::size_t>(h)].grip = pc_grips[static_cast<std::size_t>(h)];
+        }
+        if (dpad_mode_title != GameTitleId()) {
+            dpad_mode_title = GameTitleId();
+            bridge.pc().SetDpadMode(LoadDpadMode(dpad_mode_title));
+        }
+    }
     // AzaharFrame pads: the other gamepads play too (the raw `in` tells Steam's echo of the Frame).
     const Input::MapperOutput& out =
         bridge.Process(game_in, panels, &in, &mouse_frame, &reticle_sample, &gyro_aim_frame);
     bridge_live = true;
+    if (bridge.pc_out().dpad_mode_changed) { // AzaharVR: the left stick click (Touch, Focus 3)
+        const bool dpad = bridge.pc().dpad_mode();
+        SaveDpadMode(dpad_mode_title, dpad);
+        ShowToastText(dpad ? "Left Stick: D-Pad" : "Left Stick: Circle Pad");
+        LOG_INFO(Frontend, "xr: the left stick is the {} now", dpad ? "D-pad" : "Circle Pad");
+    }
     // AzaharFrame kiuwrist: each touch of the wrist screen, where it lands in the Secondary
     // Screen's 320 x 240 pixels and whether a trigger reached the game with it (it never should).
     // AzaharFrame kiupanel: also once it is hidden (a touch it ends).

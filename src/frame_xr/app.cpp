@@ -355,6 +355,11 @@ bool Runtime::PollEvents() {
             }
             break;
         }
+        case XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED: // AzaharVR
+            // The controls look the profile up (xrGetCurrentInteractionProfile) at their next
+            // frame and pick the controller scheme from it.
+            profile_changes++;
+            break;
         default:
             // Interaction profile changes and the like: for the input code's
             // state callbacks to look up with their own calls.

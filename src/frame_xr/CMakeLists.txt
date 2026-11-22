@@ -76,6 +76,8 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     input/flat_vr_hold.h # AzaharFrame flat
     instance_policy.h # AzaharFrame flat2
     input/mapper.cpp
+    input/pc_scheme.cpp # AzaharVR
+    input/pc_scheme.h # AzaharVR
     input/mapper.h
     input/motion.cpp
     input/motion.h

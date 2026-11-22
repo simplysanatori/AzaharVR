@@ -278,6 +278,9 @@ public:
     /// of the setting vr_xr_image_lag and the live switch AZAHARFRAME_XR_IMAGE_LAG).
     std::atomic<uint32_t> image_lag{ImageLag::kDefaultLag};
     std::string runtime_name; ///< AzaharFrame imglag: "SteamVR/OpenXR 2.19.3", for the log
+    /// AzaharVR: InteractionProfileChanged events so far; the controls look the profile up anew
+    /// when it moves (XR thread).
+    std::atomic<uint32_t> profile_changes{0};
     /// AzaharFrame imglag: the image lag from the setting and the switch, logged when it changes
     /// (with the runtime's name and version, as the lag is the runtime's).
     void UpdateImageLag(const char* why);

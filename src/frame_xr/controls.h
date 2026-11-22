@@ -232,6 +232,14 @@ private:
     Input::ScreenRig::PlacementFile placement_file;
     bool placement_file_read = false;
     bool actions_ok = false;
+    /// AzaharVR: the controller scheme of the interaction profile in use (the Frame's on the
+    /// Frame's build, and until a profile is known), the profile-change count it was looked up
+    /// at, the game whose left-stick D-pad mode the scheme holds, and a PC scheme's grips taken
+    /// out of the game's frame until the bridge reads them (they are L and R, never a grab).
+    Input::ControllerScheme controller_scheme = Input::ControllerScheme::Frame;
+    uint32_t profile_changes_seen = 0;
+    uint64_t dpad_mode_title = 0;
+    std::array<float, Input::kNumHands> pc_grips{};
     bool bridge_live = false;
 
     OverlayUploader uploader;

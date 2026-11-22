@@ -45,7 +45,11 @@ struct StartOptions {
     std::vector<std::string> optional_extensions{"XR_FB_display_refresh_rate",
                                                  "XR_VALVE_frame_controller_interaction",
                                                  "XR_KHR_composition_layer_cylinder",
-                                                 "XR_KHR_composition_layer_color_scale_bias"};
+                                                 "XR_KHR_composition_layer_color_scale_bias",
+#ifdef AZAHARVR_PC // AzaharVR: the Vive Focus 3 and XR Elite controllers' profile
+                                                 "XR_HTC_vive_focus3_controller_interaction",
+#endif
+    };
     /// True: VR at once (the session too). False: flat first (no session until SetVr(true)).
     bool vr = true;
 };

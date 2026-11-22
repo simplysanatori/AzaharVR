@@ -8,6 +8,7 @@
 #include "frame_xr/input/kiu_trigger_layout.h" // AzaharFrame kiufire
 #include "frame_xr/input/mapper.h"
 #include "frame_xr/input/motion.h"
+#include "frame_xr/input/pc_scheme.h" // AzaharVR
 #include "frame_xr/input/mouse.h"
 #include "frame_xr/input/touchpad_touch.h"
 
@@ -56,6 +57,17 @@ public:
         return mapper_;
     }
 
+    /// AzaharVR: the controller scheme in front of the mapper (pc_scheme.h). The Frame's scheme
+    /// (the default) passes everything through. Process runs its Game step; the caller runs its
+    /// Normalize on the frame first (VrUi::Frame).
+    PcScheme& pc() {
+        return pc_;
+    }
+    /// AzaharVR: the scheme's own part of the last Process (empty with the Frame's scheme).
+    const PcSchemeOut& pc_out() const {
+        return pc_out_;
+    }
+
     /// AzaharFrame touchpad: the pad's or the mouse's dot of the last Process (never visible
     /// while the beam holds the touch, or with the bottom screen hidden).
     const TouchpadCursor& touchpad_cursor() const {
@@ -79,6 +91,8 @@ public:
 
 private:
     Mapper mapper_;
+    PcScheme pc_;        ///< AzaharVR
+    PcSchemeOut pc_out_; ///< AzaharVR
     MotionTracker motion_;
     GyroAimTracker gyro_aim_; ///< AzaharFrame kiugyro
     bool light_gun_on_ = false;

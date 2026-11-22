@@ -29,6 +29,11 @@ struct HandInput {
     bool bumper = false;
     Vec2f stick;
     bool stick_click = false;
+    /// AzaharVR: the Index trackpad (-1..1 each way; zero without one) and how hard it is pressed
+    /// (0..1). Read on PC builds only; a scheme's adapter turns them into the D-pad or the Menu
+    /// role (pc_scheme.h).
+    Vec2f trackpad;
+    float trackpad_force = 0.0f;
     /// AzaharFrame padsui: the mouse's ray stands in for this hand (Mouse Mode: Pointer): no
     /// controller to draw, no beam, its trigger only clicks (mouse_pointer.h).
     bool mouse = false;

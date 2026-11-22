@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 #include "frame_xr/xr_includes.h" // AzaharFrame: OpenXR without prototypes
 #include "frame_xr/input/input_frame.h"
 
@@ -31,7 +32,15 @@ public:
     /// Creates the action set and actions and suggests the bindings. Call after xrCreateInstance
     /// and before xrAttachSessionActionSets (Attach does that). `has_frame_controller` is whether
     /// kFrameControllerExtension was enabled. Returns false when an action could not be made.
-    bool Create(XrInstance instance, bool has_frame_controller);
+    /// AzaharVR: `has_focus3` is whether XR_HTC_vive_focus3_controller_interaction was enabled.
+    /// PC builds (AZAHARVR_PC) also suggest the Index and Vive Focus 3 bindings and read the
+    /// Index trackpads; the Frame's build makes exactly the actions and suggestions it did.
+    bool Create(XrInstance instance, bool has_frame_controller, bool has_focus3 = false);
+
+    /// AzaharVR: the interaction profile the runtime uses for the right controller (else the left
+    /// one), as a path ("/interaction_profiles/oculus/touch_controller"); empty for none. Call
+    /// after the session's action sets are attached (after InteractionProfileChanged).
+    std::string CurrentProfile(XrSession session) const;
 
     /// Creates the aim spaces and attaches the action set to the session. The session may attach
     /// action sets only once: if the XR core has its own action sets, attach them all in one call using
