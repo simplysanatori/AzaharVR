@@ -38,7 +38,11 @@ struct TempDir {
         const fs::path p = path / rel;
         fs::create_directories(p.parent_path());
         std::ofstream(p, std::ios::binary) << content;
+#ifdef _WIN32 // AzaharVR: spelt as FindGameFiles gives it on Windows
+        return p.lexically_normal().make_preferred().string();
+#else
         return p.string();
+#endif
     }
     std::string Str() const {
         return path.string();

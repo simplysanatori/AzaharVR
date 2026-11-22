@@ -102,7 +102,11 @@ std::string Lower(std::string s) {
 }
 
 std::string BaseName(const std::string& path) {
+#ifdef _WIN32 // AzaharVR: paths from std::filesystem use '\' on Windows
+    const auto slash = path.find_last_of("/\\");
+#else
     const auto slash = path.find_last_of('/');
+#endif
     return slash == std::string::npos ? path : path.substr(slash + 1);
 }
 

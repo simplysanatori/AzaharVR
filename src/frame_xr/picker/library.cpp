@@ -16,6 +16,12 @@ namespace frame_xr::picker {
 
 namespace fs = std::filesystem;
 
+#ifdef _WIN32 // AzaharVR: paths from std::filesystem use '\' on Windows
+constexpr const char* kSlashes = "/\\";
+#else
+constexpr const char* kSlashes = "/";
+#endif
+
 namespace {
 
 std::string Lower(std::string s) {
@@ -86,7 +92,7 @@ const std::vector<std::string>& SupportedExtensions() {
 }
 
 bool HasSupportedExtension(const std::string& path) {
-    const size_t slash = path.find_last_of('/');
+    const size_t slash = path.find_last_of(kSlashes);
     const size_t dot = path.find_last_of('.');
     if (dot == std::string::npos || (slash != std::string::npos && dot < slash)) {
         return false;
@@ -97,7 +103,7 @@ bool HasSupportedExtension(const std::string& path) {
 }
 
 std::string FileStem(const std::string& path) {
-    const size_t slash = path.find_last_of('/');
+    const size_t slash = path.find_last_of(kSlashes);
     std::string name = slash == std::string::npos ? path : path.substr(slash + 1);
     const size_t dot = name.find_last_of('.');
     if (dot != std::string::npos && dot > 0) {
@@ -112,7 +118,11 @@ std::vector<std::string> FindGameFiles(const std::vector<GameDir>& dirs,
     std::set<std::string> seen;
 
     const auto add = [&](const fs::path& p) {
+#ifdef _WIN32 // AzaharVR: one spelling per file ("D:/roms\a" and "D:/roms/a" are the same file)
+        std::string s = p.lexically_normal().make_preferred().string();
+#else
         std::string s = p.string();
+#endif
         if (HasSupportedExtension(s) && seen.insert(s).second) {
             found.push_back(std::move(s));
         }
