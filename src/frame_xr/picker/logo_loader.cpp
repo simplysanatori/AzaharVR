@@ -9,6 +9,12 @@
 #include <iterator>
 
 #include <lodepng.h>
+#ifdef _WIN32 // AzaharVR: the program's own path
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace frame_xr::picker {
 
@@ -20,7 +26,20 @@ std::string FindArtFile(const std::string& name) {
         dirs.emplace_back(env);
     }
     std::error_code ec;
+#ifdef _WIN32 // AzaharVR: no /proc on Windows
+    fs::path exe;
+    {
+        wchar_t buf[32768];
+        const DWORD n = GetModuleFileNameW(nullptr, buf, static_cast<DWORD>(std::size(buf)));
+        if (n == 0 || n >= std::size(buf)) {
+            ec = std::make_error_code(std::errc::no_such_file_or_directory);
+        } else {
+            exe = fs::path(std::wstring(buf, n));
+        }
+    }
+#else
     const fs::path exe = fs::read_symlink("/proc/self/exe", ec);
+#endif
     if (!ec) {
         const fs::path dir = exe.parent_path();
         dirs.push_back(dir / "art");
