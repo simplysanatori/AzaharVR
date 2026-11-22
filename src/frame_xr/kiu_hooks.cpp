@@ -12,6 +12,7 @@
 #include "common/frame_emu_poll.h"
 #include "common/frame_test_switches.h"
 #include "common/logging/log.h"
+#include "common/settings.h" // AzaharFrame kiutoggles: Over the Shoulder
 #include "core/core.h"
 #include "core/core_timing.h"
 #include "core/hle/kernel/process.h"
@@ -566,11 +567,15 @@ void Hook(int64_t ticks) {
     }
     // AzaharFrame kiuview: the over-the-shoulder view (AZAHARFRAME_KIU_SHOULDER, metres back, up
     // and right of the first-person eye along the camera's level view); EYE_OFFSET wins.
+    // AzaharFrame kiutoggles: or Over the Shoulder's setting (vr_kiu_over_shoulder, a fixed
+    // place) when the switch is not set; the switch, when set, wins.
     if (first_person && !Switch(kSwitchEyeOffset)) {
         float back = 0.0f, up = 0.0f, side = 0.0f;
         const auto text = Switch(kSwitchShoulder);
         KH::Vec3 eye_at, look_at;
-        if (text && Kiu::FirstPerson::ParseShoulder(text->c_str(), back, up, side) &&
+        if (Kiu::FirstPerson::ShoulderFor(text ? text->c_str() : nullptr,
+                                          Settings::values.vr_kiu_over_shoulder.GetValue(), back,
+                                          up, side) &&
             KH::ReadVec3(mem, KH::kSceneEye, eye_at) &&
             KH::ReadVec3(mem, KH::kSceneLookAt, look_at)) {
             eye.extra = KH::Rotate(KH::LevelYawAxes(look_at - eye_at),

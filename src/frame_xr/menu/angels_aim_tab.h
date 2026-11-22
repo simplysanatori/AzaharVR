@@ -94,6 +94,27 @@ inline constexpr const char* kTriggerLayoutFireAndPowerTip =
     "pick it.";
 inline constexpr const char* kTriggerLayoutOriginalTip =
     "Both triggers fire and also press the game's own buttons, as before.";
+/// AzaharFrame kiutoggles: Angel's Aim's first-person options, once test switches only (the
+/// Settings tab's Immersive section, under Immersive Mode, while Kid Icarus: Uprising is open and
+/// Immersive Mode is Angel's Aim; vr_kiu_wrist_screen, vr_kiu_talk_panel, vr_kiu_over_shoulder,
+/// vr_kiu_snap_turn). PROPOSED strings: they need the owner's approval. All of them are here.
+inline constexpr const char* kWristScreenRow = "Secondary Screen on Wrist";
+inline constexpr const char* kWristScreenTip =
+    "Shows the Secondary Screen on your free hand's wrist. Turn your wrist up to see it, and point "
+    "at it to touch.";
+inline constexpr const char* kTalkPanelRow = "Talk Panel";
+inline constexpr const char* kTalkPanelTip =
+    "Shows the Secondary Screen, where the characters talk, as a small panel below your view.";
+inline constexpr const char* kOverShoulderRow = "Over the Shoulder";
+inline constexpr const char* kOverShoulderTip =
+    "Moves your view behind and above Pit, so you can see him.";
+inline constexpr const char* kTurningRow = "Turning";
+inline constexpr const char* kTurningSmooth = "Smooth";
+/// Turning's snap choices after Smooth (Menu::kSnapTurnDegrees' 30, 45, 60, 90).
+inline constexpr const char* kTurningSnaps[] = {"30\xC2\xB0", "45\xC2\xB0", "60\xC2\xB0",
+                                                "90\xC2\xB0"};
+inline constexpr const char* kTurningTip =
+    "How the right stick turns you: smoothly, or in steps of the chosen angle.";
 inline constexpr const char* kAngelsAimNotSent = "Couldn't Send Report";
 inline constexpr const char* kAngelsAimNotSentHint = "Try Again, or Use Report an Issue.";
 /// Report an Issue's page: a new issue, titled and labelled for Angel's Aim (GitHub ignores a

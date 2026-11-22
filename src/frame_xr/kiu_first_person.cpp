@@ -310,7 +310,10 @@ Talk TalkNow() {
     }
     const auto on = Common::FrameTestSwitches::Value(kSwitchTalk);
     const auto at = Common::FrameTestSwitches::Value(kSwitchTalkAt);
-    return ParseTalk(on ? on->c_str() : nullptr, at ? at->c_str() : nullptr);
+    Talk t = ParseTalk(on ? on->c_str() : nullptr, at ? at->c_str() : nullptr);
+    // AzaharFrame kiutoggles: Talk Panel's setting when the switch is not set.
+    t.on = TalkOnFor(on ? on->c_str() : nullptr, Settings::values.vr_kiu_talk_panel.GetValue());
+    return t;
 }
 
 

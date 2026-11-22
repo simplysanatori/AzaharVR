@@ -1480,6 +1480,28 @@ int main(int argc, char** argv) {
                          {::FrameXr::Immersive::Names::kScreenAsPanelOnToast,
                           ::FrameXr::Immersive::Names::kScreenAsPanelOffToast});
     }
+    {
+        // AzaharFrame kiutoggles: Angel's Aim's first-person rows under Immersive Mode (Kid
+        // Icarus: Uprising open, Angel's Aim chosen): all off and Smooth (the defaults), then on
+        // with Turning at 45 degrees, and a tooltip.
+        MenuModel ka = pg;
+        ka.game_title = "Kid Icarus: Uprising";
+        ka.mods.angels_aim.shown = true;
+        ka.immersive_mode = 4;
+        MenuView kv = settings(SettingsSection::Immersive);
+        ok &= shot("kiutoggles-1-angels-aim-rows-default", ka, kv);
+        ka.kiu_wrist_screen = true;
+        ka.kiu_talk_panel = true;
+        ka.kiu_over_shoulder = true;
+        ka.kiu_snap_turn = SnapTurnIndexOf(45);
+        ok &= shot("kiutoggles-2-angels-aim-rows-on", ka, kv);
+        kv.hover = {Id::KiuWristScreen, kLabelIndex};
+        kv.tooltip = Id::KiuWristScreen;
+        ok &= shot("kiutoggles-3-wrist-screen-tooltip", ka, kv);
+        kv.hover = {Id::KiuSnapTurn, kLabelIndex};
+        kv.tooltip = Id::KiuSnapTurn;
+        ok &= shot("kiutoggles-4-turning-tooltip", ka, kv);
+    }
     MenuModel gv = m; // Global chosen, the game has its own Immersive Mode
     gv.locked[static_cast<std::size_t>(Id::ImmersiveMode)] = Lock::GameValue;
     v = settings(SettingsSection::Immersive);

@@ -1124,6 +1124,20 @@ struct Values {
     // trigger only fires, the other uses the selected power, the bumpers pick it;
     // input/kiu_trigger_layout.h). A plain new key: older builds ignore it.
     SwitchableSetting<u32, true> vr_kiu_trigger_layout{0, 0, 1, "vr_kiu_trigger_layout"};
+    // AzaharFrame kiutoggles: Angel's Aim's first-person options (Kid Icarus: Uprising, Immersive
+    // Mode's Angel's Aim; per game too), each once a test switch only. The switch, when set,
+    // still wins over the setting (kiu_first_person.h, kiu_turn.h, vis/wrist_screen.h). Off by
+    // default, as the switches were. Plain new keys: older builds ignore them.
+    // The Secondary Screen on the off hand's wrist (AZAHARFRAME_KIU_WRIST_SCREEN).
+    SwitchableSetting<bool> vr_kiu_wrist_screen{false, "vr_kiu_wrist_screen"};
+    // The talk panel: the Secondary Screen with the head, below the view (AZAHARFRAME_KIU_FP_TALK).
+    SwitchableSetting<bool> vr_kiu_talk_panel{false, "vr_kiu_talk_panel"};
+    // Over the shoulder: the eye 2.5 m behind and 0.5 m above first person's
+    // (AZAHARFRAME_KIU_SHOULDER, which also takes other distances).
+    SwitchableSetting<bool> vr_kiu_over_shoulder{false, "vr_kiu_over_shoulder"};
+    // Right Stick turning's snap angle in degrees: 30, 45, 60 or 90; 0 (or anything else) smooth
+    // (AZAHARFRAME_KIU_SNAP_TURN).
+    SwitchableSetting<u32, true> vr_kiu_snap_turn{0, 0, 90, "vr_kiu_snap_turn"};
     // AzaharFrame kiu: in a game's own file only: the Controls preset's values already decided
     // for this game (FrameXr::ControlsPresetField bits). A value the preset gave, or the game
     // already had, is never given again, so a later choice (Use Global Value too) stays.

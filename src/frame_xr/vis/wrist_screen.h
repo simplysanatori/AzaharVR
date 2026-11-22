@@ -40,6 +40,11 @@ namespace FrameXr::Vis {
 inline constexpr const char* kKiuWristScreenSwitch = "AZAHARFRAME_KIU_WRIST_SCREEN";
 /// The switch's value: "1" (or "on", "true") turns it on; anything else, or none, leaves it off.
 bool WristScreenSwitchOn(const std::optional<std::string>& value);
+/// AzaharFrame kiutoggles: wanted by the switch when it is set (on or off), else by the setting
+/// (Settings::values.vr_kiu_wrist_screen, off by default).
+inline bool WristScreenOn(const std::optional<std::string>& value, bool setting) {
+    return value ? WristScreenSwitchOn(value) : setting;
+}
 
 /// Its size on the wrist (the Secondary Screen's 320 x 240 shape).
 constexpr float kWristScreenWidth = 0.10f;

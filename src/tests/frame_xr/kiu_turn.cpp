@@ -413,6 +413,17 @@ TEST_CASE("Kiu turn: smooth turning", "[frame_xr][kiuturn]") {
     REQUIRE(SnapDegreesFrom("45") == 45);
     REQUIRE(SnapDegreesFrom("90") == 90);
     REQUIRE(SnapDegreesFrom("50") == 0);
+    // AzaharFrame kiutoggles: Turning's setting (degrees) when the switch is not set; the switch,
+    // when set, wins ("0" smooth with the setting on 45).
+    REQUIRE(SnapDegreesFor(nullptr, 0) == 0);
+    for (const uint32_t d : {30u, 45u, 60u, 90u}) {
+        REQUIRE(SnapDegreesFor(nullptr, d) == static_cast<int>(d));
+    }
+    REQUIRE(SnapDegreesFor(nullptr, 50) == 0);
+    REQUIRE(SnapDegreesFor("0", 45) == 0);
+    REQUIRE(SnapDegreesFor("90", 45) == 90);
+    REQUIRE(SnapDegreesFor("30", 0) == 30);
+    REQUIRE(SnapDegreesFor("fast", 45) == 0);
 }
 
 // PrimedFrame's snap turn tests (tests/port_vr_snap_turn.cpp), without the head zone.

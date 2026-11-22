@@ -244,7 +244,12 @@ inline Talk ParseTalk(const char* on_text, const char* at_text) {
     }
     return t;
 }
-/// Live, with first person on (off otherwise). Any thread.
+/// AzaharFrame kiutoggles: the panel is shown: by the switch when it is set ("1" on, anything else
+/// off), else by the setting (Settings::values.vr_kiu_talk_panel, off by default).
+constexpr bool TalkOnFor(const char* on_text, bool setting) {
+    return on_text ? std::string_view{on_text} == "1" : setting;
+}
+/// Live, with first person on (off otherwise): the switches, or the setting. Any thread.
 Talk TalkNow();
 /// The panel in the head's frame (x right, y up, -z ahead): its middle, its pitch (about x; it
 /// faces the eye) and its size for a picture of `aspect` (width over height).
@@ -307,6 +312,26 @@ inline bool ParseShoulder(const char* text, float& back_m, float& up_m, float& s
     up_m = std::clamp(v[1], -kMaxShoulderM, kMaxShoulderM);
     side_m = n == 3 ? std::clamp(v[2], -kMaxShoulderM, kMaxShoulderM) : 0.0f;
     return back_m != 0.0f || up_m != 0.0f || side_m != 0.0f;
+}
+/// AzaharFrame kiutoggles: Over the Shoulder (Settings::values.vr_kiu_over_shoulder) puts the eye
+/// this far behind and above first person's: Pit drawn solid (the game fades him at 2 m back or
+/// less with 0.5 m up; KIU_HOOKS.md, kiufp3).
+inline constexpr float kShoulderSettingBackM = 2.5f;
+inline constexpr float kShoulderSettingUpM = 0.5f;
+/// The over-the-shoulder offset in use: the switch's text when it is set (ParseShoulder: "0" or
+/// anything unreadable is off), else the setting's fixed place; false when off.
+inline bool ShoulderFor(const char* switch_text, bool setting, float& back_m, float& up_m,
+                        float& side_m) {
+    if (switch_text) {
+        return ParseShoulder(switch_text, back_m, up_m, side_m);
+    }
+    if (!setting) {
+        return false;
+    }
+    back_m = kShoulderSettingBackM;
+    up_m = kShoulderSettingUpM;
+    side_m = 0.0f;
+    return true;
 }
 /// The eye's extra offset in game units along the camera's level view (x right, y up, z ahead:
 /// the axes of Input::KiuHooks::LevelYawAxes), from metres back, up and right at

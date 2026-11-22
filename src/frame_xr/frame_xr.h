@@ -388,6 +388,10 @@ enum class MenuSetting {
                      ///< (vr_light_gun_muzzle_flash_size)
     TriggerLayout,   ///< AzaharFrame kiufire: `value` 0 Original, 1 Fire and Power
                      ///< (vr_kiu_trigger_layout)
+    KiuWristScreen,  ///< AzaharFrame kiutoggles: `value` 0 or 1 (vr_kiu_wrist_screen)
+    KiuTalkPanel,    ///< `value` 0 or 1 (vr_kiu_talk_panel)
+    KiuOverShoulder, ///< `value` 0 or 1 (vr_kiu_over_shoulder)
+    KiuSnapTurn,     ///< `value` degrees: 0 Smooth, 30, 45, 60 or 90 (vr_kiu_snap_turn)
     AngelsAimIntroShown, ///< AzaharFrame kiuweap2: `value` 1 (vr_angels_aim_intro_shown, global)
     /// AzaharFrame bfidr: what Black Frame Insertion turned on (bfi_helpers.h): `value` bit 0
     /// vr_bfi_set_dynamic_resolution, bit 1 vr_bfi_set_panel
