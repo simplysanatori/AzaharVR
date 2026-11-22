@@ -23,8 +23,10 @@
 #include <utility>
 #include <vector>
 
+#ifndef _WIN32 // AzaharVR: /proc is Linux's; on Windows the perf line has no per-thread CPU
 #include <dirent.h> // AzaharFrame bfidr: the perf line
 #include <unistd.h>
+#endif
 
 #include <fmt/format.h>
 #include "common/logging/log.h"
@@ -433,6 +435,7 @@ std::chrono::steady_clock::time_point g_perf_at{};
 
 std::map<int, PerfLine::TaskTimes> ReadTasks() {
     std::map<int, PerfLine::TaskTimes> out;
+#ifndef _WIN32 // AzaharVR
     if (DIR* d = opendir("/proc/self/task")) {
         while (dirent* e = readdir(d)) {
             const int tid = std::atoi(e->d_name);
@@ -448,7 +451,17 @@ std::map<int, PerfLine::TaskTimes> ReadTasks() {
         }
         closedir(d);
     }
+#endif
     return out;
+}
+
+/// Clock ticks per second of /proc's times (unused on Windows, where there are none).
+long ClockTicks() {
+#ifdef _WIN32
+    return 100; // AzaharVR
+#else
+    return sysconf(_SC_CLK_TCK);
+#endif
 }
 
 } // namespace
@@ -466,7 +479,7 @@ void Runtime::PerfRead(std::optional<PerfLine::Window> window) {
             if (window && g_perf_at != std::chrono::steady_clock::time_point{}) {
                 const double secs = std::chrono::duration<double>(now - g_perf_at).count();
                 const PerfLine::CpuShares cpu =
-                    PerfLine::Shares(g_perf_tasks, tasks, secs, sysconf(_SC_CLK_TCK));
+                    PerfLine::Shares(g_perf_tasks, tasks, secs, ClockTicks());
                 const auto slurp = [](const char* path) {
                     std::string text;
                     if (std::FILE* f = std::fopen(path, "r")) {
