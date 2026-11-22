@@ -78,6 +78,20 @@ std::vector<std::string> CStickModFiles(const std::vector<Mods::ModInfo>& mods) 
             files.insert(files.end(), m.files.begin(), m.files.end());
         }
     }
+    // A code replacement put in by hand is listed by file ("exefs/code.bin" and "exheader.bin"
+    // are items of their own): its exheader describes that code, so it goes out with it.
+    const auto has = [&files](std::string_view f) {
+        return std::find(files.begin(), files.end(), f) != files.end();
+    };
+    if ((has("exefs/code.bin") || has("code.bin")) && !has("exheader.bin")) {
+        for (const Mods::ModInfo& m : mods) {
+            if (m.state == Mods::ModState::Active && !m.managed &&
+                std::find(m.files.begin(), m.files.end(), "exheader.bin") != m.files.end()) {
+                files.push_back("exheader.bin");
+                break;
+            }
+        }
+    }
     return files;
 }
 

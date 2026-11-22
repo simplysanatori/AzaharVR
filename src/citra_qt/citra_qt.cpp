@@ -3683,6 +3683,7 @@ void GMainWindow::BootGame(const QString& filename) {
     // loader (FileSys::ModSkip), with the mod library left as it is; any other run loads it.
     FileSys::ModSkip::Clear();
     FrameXr::Kiu::FirstPerson::SetCStickMod(false, false);
+    bool frame_cstick_left_out = false;
     if (Loader::ResultStatus::Success == res && FrameXr::Kiu::IsKidIcarus(title_id)) {
         const std::vector<std::string> cstick_files =
             FrameXr::CStickModFiles(Mods::Default().ListLoaded(title_id));
@@ -3706,6 +3707,7 @@ void GMainWindow::BootGame(const QString& filename) {
                      cstick_files.size(), mode, in_vr ? "in VR" : "not in VR");
         }
         FrameXr::Kiu::FirstPerson::SetCStickMod(!cstick_files.empty() && !leave_out, leave_out);
+        frame_cstick_left_out = leave_out;
     }
 #endif
 
@@ -3713,7 +3715,9 @@ void GMainWindow::BootGame(const QString& filename) {
     FrameXr::SetGameTitleId(Loader::ResultStatus::Success == res ? title_id : 0);
     // AzaharFrame fixes7: Screen Shape: Automatic starts at the shape the game's turned-on mods
     // are made for (their catalog "aspect"), until the game camera is measured.
-    FrameXr::AutoShape::SetHint(Loader::ResultStatus::Success == res
+    // AzaharFrame kiu132: not from a widescreen C-Stick mod left out of this run (the game draws
+    // its own shape then).
+    FrameXr::AutoShape::SetHint(Loader::ResultStatus::Success == res && !frame_cstick_left_out
                                     ? Mods::EnabledModsAspectHint(title_id).value_or(0.0f)
                                     : 0.0f);
     FrameHomebrew::ApplyBootSettings(filename); // AzaharFrame emerald: e.g. HLE audio

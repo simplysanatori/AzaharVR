@@ -93,8 +93,9 @@ std::vector<int> AngelsAimModRows(const ModsListModel& m) {
     for (std::size_t i = 0; i < m.available.size(); i++) {
         // AzaharFrame kiu132: and hosiniku's region builds of kiu-cstick-aim (the catalogue's
         // "kiu-cstick-aim-usa", "-eur", "-jpn"), as FrameXr::IsCStickModId.
+        // (Only this game's region of those: the other regions' entries stay in Install Mods.)
         const std::string& id = m.available[i].id;
-        bool cstick = id.rfind("kiu-cstick-aim-", 0) == 0;
+        bool cstick = id.rfind("kiu-cstick-aim-", 0) == 0 && !m.available[i].mismatch;
         for (const char* known : kAngelsAimModIds) {
             cstick = cstick || id == known;
         }

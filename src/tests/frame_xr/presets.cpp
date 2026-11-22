@@ -849,6 +849,13 @@ TEST_CASE("FrameXr C-Stick mods: the files a run in Angel's Aim leaves out",
     CHECK(CStickModFiles({MakeMod("unmanaged:exefs", false, ModState::Active,
                                   {"exefs/code.bin", "exheader.bin"})})
               .size() == 2); // by hand: a full code replacement
+    // By hand as the library lists it: one item per file; the exheader goes with the code.
+    CHECK(CStickModFiles({MakeMod("unmanaged:exefs/code.bin", false, ModState::Active,
+                                  {"exefs/code.bin"}),
+                          MakeMod("unmanaged:exheader.bin", false, ModState::Active,
+                                  {"exheader.bin"}),
+                          MakeMod("unmanaged:romfs", false, ModState::Active, {"romfs/a"})}) ==
+          std::vector<std::string>{"exefs/code.bin", "exheader.bin"});
     CHECK(CStickModFiles({MakeMod("kiu-cd-quality-soundtrack", true, ModState::Active,
                                   {"romfs/s.bcstm"})})
               .empty());
