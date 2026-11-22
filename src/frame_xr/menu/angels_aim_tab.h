@@ -12,16 +12,18 @@
 //   [↗ Report an Issue]
 //   Bug reports and feature ideas welcome.
 //   ─────────────────────────────────────────────────────────────
-//   Required                                                         (title)
+//   Settings                                    [Global | Per-Game] ⋮  (AzaharFrame kiu132)
+//   Aiming / View / Bottom Screen / Weapon        (group titles; each Angel's Aim option, the
+//                                                  same Id as its other place: AngelsAimGroups)
+//   Mods & Pack                                                      (group title)
+//   Required for Single-Screen Modes                                 (title)
+//   Not used in the Angel's Aim immersive mode: ...                  (kiu132 note)
 //   Darkshade's C-Stick & Gyro Mod                     Installed / Not Installed
 //   (the catalog's C-Stick & Gyro rows, as Install Mods draws them: Install, its versions)
 //   ─────────────────────────────────────────────────────────────
 //   Suggested                                                        (title)
 //   Kid Icarus Uprising Weapons HD                     Installed / Not Installed
 //   (the catalog's weapons and effects texture pack: installed and on in the game's packs)
-//   ─────────────────────────────────────────────────────────────
-//   Settings                                                         (title)
-//   [Aiming Settings]   (the Controls tab, scrolled to Aiming: no second copy of the rows)
 //
 // The values come from the Qt side (citra_qt/frame_mods.cpp, FrameXr::SetInGameMenuAngelsAim).
 // Report an Issue asks "Open GitHub?" first, then sends OpenUrl with `report_url`: the app's
@@ -40,6 +42,9 @@ namespace FrameXr::Menu {
 struct AngelsAimModel {
     bool shown = false;         ///< Kid Icarus: Uprising is open
     bool recommended = false;   ///< the badge: Angel's Aim is mapped for this copy (Europe only)
+    /// AzaharFrame kiu132: Angel's Aim's first person works in this copy (the European game,
+    /// FrameXr::Kiu::IsAngelsAimTitle): its rows show only then
+    bool mapped = false;
     bool mod_installed = false; ///< a C-Stick & Gyro mod (FrameXr::CStickModInstalled)
     bool textures_pack = false; ///< the catalog's weapons and effects pack is on (kAngelsAimPackIds)
     std::string report_url;     ///< Report an Issue's page ("" none)
@@ -58,7 +63,22 @@ inline constexpr const char* kAngelsAimAbout1 =
 inline constexpr const char* kAngelsAimAbout2 =
     "It's the first step of a bigger project: full 6DOF aiming.";
 inline constexpr const char* kAngelsAimReportLine = "Bug reports and feature ideas welcome.";
-inline constexpr const char* kAngelsAimRequired = "Required";
+/// AzaharFrame kiu132: "Required" until 1.3.0. PROPOSED strings (kiu132): they need the owner's
+/// approval. The C-Stick mods are needed for the single-screen modes and are left out of a run
+/// in Angel's Aim's immersive mode (FrameXr::Kiu::FirstPerson::LeaveOutCStickModFor).
+inline constexpr const char* kAngelsAimRequired = "Required for Single-Screen Modes";
+inline constexpr const char* kAngelsAimModNote =
+    "Not used in the Angel's Aim immersive mode: it's left out when the game starts in it.";
+/// The toasts: the mod was left out of this run; the mode was chosen while the mod is loaded.
+inline constexpr const char* kCStickModLeftOutToast = "Angel's Aim: C-Stick Mod Not Loaded";
+inline constexpr const char* kCStickModRestartToast =
+    "C-Stick Mod Loaded: Restart the Game for Angel's Aim";
+/// AzaharFrame kiu132: the settings' group titles (PROPOSED). "Bottom Screen" is the owner's.
+inline constexpr const char* kAngelsAimGroupAiming = "Aiming";
+inline constexpr const char* kAngelsAimGroupView = "View";
+inline constexpr const char* kAngelsAimGroupBottomScreen = "Bottom Screen";
+inline constexpr const char* kAngelsAimGroupWeapon = "Weapon";
+inline constexpr const char* kAngelsAimGroupModsAndPack = "Mods & Pack";
 inline constexpr const char* kAngelsAimModName = "Darkshade's C-Stick & Gyro Mod";
 inline constexpr const char* kAngelsAimSuggested = "Suggested";
 /// One row for the weapons and effects textures, named as the catalog names the pack.

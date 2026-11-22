@@ -300,6 +300,9 @@ enum class Id : int {
     KiuBottomReset,   ///< a button: Persistent back to its place (vr_kiu_bottom_x, _y)
     WristSide,        ///< index: 0 Back, 1 Inside (vr_wrist_side), global, the Stats tab
     KiuReticleSize,   ///< a slider, 30 to 150 (percent): the game's reticle in first person
+    /// AzaharFrame kiu132: a group's title in the Angel's Aim segment's settings (no action;
+    /// index: AngelsAimGroupKind)
+    AngelsAimGroup,
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -395,6 +398,10 @@ constexpr int SnapTurnDegreesAt(int index) {
 constexpr bool AngelsAimRowsShown(bool kiu_open, int immersive_mode) {
     return kiu_open && immersive_mode == 4;
 }
+
+/// AzaharFrame kiu132: the Angel's Aim segment's settings come in these groups, in this order
+/// (Mods & Pack, the segment's own catalogue rows, is drawn after them).
+enum class AngelsAimGroupKind : int { Aiming, View, BottomScreen, Weapon, ModsAndPack, Count };
 
 /// AzaharFrame kiuweap2: Aiming turned on: from Off (`stored_before`, vr_gyro_aim's 0) to Direct
 /// Aim or Gyro Aim (`index_after`, the shown index 1 or 2), while Kid Icarus: Uprising is open
@@ -563,6 +570,26 @@ const std::vector<Id>& ControlsScopeRows();
 bool KiuOnlyControlsRow(Id id);
 /// ControlsScopeRows without the Kid Icarus: Uprising rows when `kiu` is false.
 std::vector<Id> ControlsScopeRows(bool kiu);
+/// AzaharFrame kiu132: the Controls tab's Aiming rows as they show now (Aiming, then what its
+/// value and switches bring), the Kid Icarus: Uprising ones only while it is the game. The
+/// Controls tab and the Angel's Aim segment draw the same list.
+std::vector<Id> AimingRows(const MenuModel& model);
+/// AzaharFrame kiu132: Angel's Aim's first-person rows as they show now (the Settings tab's
+/// Immersive section under Immersive Mode, and the Angel's Aim segment): only while the European
+/// Kid Icarus: Uprising is the game (MenuModel::mods.angels_aim.recommended, the one copy Angel's
+/// Aim is mapped for) and Immersive Mode is Angel's Aim.
+std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& model);
+/// AzaharFrame kiu132: the Angel's Aim segment's settings, one list in groups: each option that
+/// is Kid Icarus: Uprising's or Angel's Aim's, wherever else it is (the same setting, the same
+/// Id, so a change in one place is the other's at once, at the menu's scope). Empty groups are
+/// left out; nothing while Kid Icarus: Uprising is not the game.
+struct AngelsAimRowGroup {
+    AngelsAimGroupKind kind;
+    std::vector<Id> rows;
+};
+std::vector<AngelsAimRowGroup> AngelsAimGroups(const MenuModel& model);
+/// The group's title.
+const char* AngelsAimGroupName(AngelsAimGroupKind kind);
 /// AzaharFrame kiurec: the Immersive Mode choice that carries the Recommended badge (name_chip.h):
 /// Angel's Aim (index 3) while Kid Icarus: Uprising is the game and the menu is on its Per-Game
 /// scope (MenuModel::mods.angels_aim.shown, scope 1); -1 in every other game and in Global.
@@ -677,6 +704,8 @@ struct MenuLayout {
     float SliderAt(Id id, float x) const;
 };
 
+struct Row; ///< AzaharFrame kiu132: a settings row as drawn (tab_menu.cpp)
+
 class TabMenu {
 public:
     /// Draws the controller diagram of `page` into `area` (dp) on the Controls tab (Edit
@@ -767,10 +796,25 @@ private:
     void DrawZipButton(Kit& kit, const MenuView& view, const Rect& area, ZipTarget target,
                        bool enabled);
     void DrawRows(Kit& kit, const MenuModel& model, const MenuView& view, const Rect& pane);
+    /// AzaharFrame kiu132: DrawRows' rows from `y` in `list` (`c` the content's edges, controls
+    /// from `control_x0`); a menu button with its menu open leaves its place in `open_anchor`.
+    /// Returns where the rows end. DrawOpenMenu draws that menu over everything, last.
+    float DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& view,
+                       const std::vector<Row>& rows, const Rect& c, const Rect& list, float y,
+                       float control_x0, Rect& open_anchor, int& open_selected);
+    void DrawOpenMenu(Kit& kit, const MenuModel& model, const MenuView& view, const Rect& pane,
+                      const Rect& open_anchor, int open_selected);
+    /// AzaharFrame kiu132: the Angel's Aim segment's settings (AngelsAimGroups) from `y`: its
+    /// title with the scope control, then each group's title and rows; returns where they end.
+    /// AngelsAimSettingsHeight is how tall they are.
+    float DrawAngelsAimSettings(Kit& kit, const MenuModel& model, const MenuView& view,
+                                const Rect& c, const Rect& list, float y, Rect& open_anchor,
+                                int& open_selected);
+    static float AngelsAimSettingsHeight(const MenuModel& model);
     /// AzaharFrame reticle: the scope control at the top right of `c` (the pane's content);
     /// returns its left edge. DrawScopeMenu draws its ⋮ menu when open (last, over the rest).
     float DrawScope(Kit& kit, const MenuModel& model, const MenuView& view, const Rect& c,
-                    const Rect& pane);
+                    const Rect& pane, const Rect* clip = nullptr); // kiu132: hits within `clip`
     void DrawScopeMenu(Kit& kit, const MenuModel& model, const MenuView& view, const Rect& pane);
     void DrawTooltip(Kit& kit, const MenuView& view, const Rect& pane);
     /// AzaharFrame scroll: the scrollbar of the list in `list` (hanging off `right`), only when

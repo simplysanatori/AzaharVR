@@ -3343,6 +3343,7 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
                 Drawn d;
                 MenuModel m = Sample();
                 m.mods.angels_aim.shown = kiu;
+                m.mods.angels_aim.mapped = kiu; // AzaharFrame kiu132: the European game
                 m.immersive_mode = mode;
                 m.kiu_bottom_screen = bottom;
                 MenuView v;
@@ -4891,4 +4892,177 @@ TEST_CASE("Tab menu: Angel's Aim is Recommended only in Kid Icarus: Uprising", "
     const Shot chosen_plain = shoot(false, 1, 4);
     const Shot chosen_badge = shoot(true, 1, 4);
     CHECK(chosen_plain.px != chosen_badge.px);
+}
+
+// AzaharFrame kiu132: the Angel's Aim segment's settings: every Kid Icarus: Uprising / Angel's
+// Aim option in one list in groups, the same Id (the same setting) as its other place.
+namespace {
+MenuModel KiuModel(bool mapped, int mode) {
+    MenuModel m = Sample();
+    m.game_title = "Kid Icarus: Uprising";
+    m.mods.angels_aim.shown = true;
+    m.mods.angels_aim.mapped = mapped;
+    m.immersive_mode = mode;
+    m.scope = 1;
+    m.gyro_aim = 2; // Direct Aim: every Aiming row on
+    m.recoil = m.weapon_in_hand = m.muzzle_flash = m.projectiles = true;
+    m.kiu_bottom_screen = 1; // Persistent: Size, Opacity and Reset too
+    return m;
+}
+std::vector<Id> HubIds(const MenuModel& m) {
+    std::vector<Id> ids;
+    for (const AngelsAimRowGroup& g : AngelsAimGroups(m)) {
+        ids.insert(ids.end(), g.rows.begin(), g.rows.end());
+    }
+    return ids;
+}
+bool Has(const std::vector<Id>& ids, Id id) {
+    return std::find(ids.begin(), ids.end(), id) != ids.end();
+}
+} // namespace
+
+TEST_CASE("Angel's Aim settings: every option of its other places, in groups",
+          "[frame_xr][tabmenu][kiu132]") {
+    const MenuModel m = KiuModel(true, 4);
+    const auto groups = AngelsAimGroups(m);
+    REQUIRE(groups.size() == 4);
+    CHECK(groups[0].kind == AngelsAimGroupKind::Aiming);
+    CHECK(groups[1].kind == AngelsAimGroupKind::View);
+    CHECK(groups[2].kind == AngelsAimGroupKind::BottomScreen);
+    CHECK(groups[3].kind == AngelsAimGroupKind::Weapon);
+    CHECK(std::string(AngelsAimGroupName(AngelsAimGroupKind::ModsAndPack)) == "Mods & Pack");
+    const auto hub = HubIds(m);
+    for (const Id id : AimingRows(m)) { // the Controls tab's Aiming rows, all of them
+        INFO(LabelFor(id));
+        CHECK(Has(hub, id));
+    }
+    for (const Id id : AngelsAimFirstPersonRows(m)) { // the Settings tab's first-person rows
+        INFO(LabelFor(id));
+        CHECK(Has(hub, id));
+    }
+    for (const Id id : {Id::WristSide, Id::ImmersiveMode, Id::AngelsAimSettings,
+                        Id::TriggerLayout, Id::CalibrateAim, Id::KiuReticleSize}) {
+        INFO(LabelFor(id));
+        CHECK(Has(hub, id));
+    }
+    // Each once.
+    std::vector<Id> sorted = hub;
+    std::sort(sorted.begin(), sorted.end());
+    CHECK(std::adjacent_find(sorted.begin(), sorted.end()) == sorted.end());
+    // The weapon's rows in Weapon, the aim's in Aiming.
+    CHECK(Has(groups[3].rows, Id::Recoil));
+    CHECK(Has(groups[3].rows, Id::ProjectileSpeed));
+    CHECK(Has(groups[0].rows, Id::TurnZone));
+    CHECK(Has(groups[2].rows, Id::KiuBottomReset));
+    // The scope's count and Use Global Values for All: the segment's per-game rows (not Wrist
+    // Side, which is global).
+    MenuModel g = m;
+    g.game_value[static_cast<std::size_t>(Id::KiuBottomScreen)] = true;
+    g.game_value[static_cast<std::size_t>(Id::WeaponScale)] = true;
+    g.game_value[static_cast<std::size_t>(Id::WristSide)] = true;
+    CHECK(GameValueRows(g, Tab::Mods) == std::vector<Id>{Id::KiuBottomScreen, Id::WeaponScale});
+}
+
+TEST_CASE("Angel's Aim settings: Kid Icarus only, first person in the European game",
+          "[frame_xr][tabmenu][kiu132]") {
+    // Another game, or none: no segment, no groups, no Kid Icarus-only row anywhere.
+    MenuModel other = KiuModel(true, 4);
+    other.mods.angels_aim = {};
+    CHECK(AngelsAimGroups(other).empty());
+    CHECK(AngelsAimFirstPersonRows(other).empty());
+    for (const Id id : AimingRows(other)) {
+        INFO(LabelFor(id));
+        CHECK_FALSE(KiuOnlyControlsRow(id));
+    }
+    CHECK(ModsSegmentsShown(other.mods).size() == 3);
+    // Kid Icarus in another region: its rows, but not first person's (it is mapped for the
+    // European game only), in the segment and on the Settings tab alike.
+    const MenuModel usa = KiuModel(false, 4);
+    CHECK(AngelsAimFirstPersonRows(usa).empty());
+    const auto hub = HubIds(usa);
+    CHECK(Has(hub, Id::WeaponInHand));
+    CHECK(Has(hub, Id::TriggerLayout));
+    CHECK(Has(hub, Id::WristSide));
+    CHECK_FALSE(Has(hub, Id::KiuBottomScreen));
+    CHECK_FALSE(Has(hub, Id::KiuReticleSize));
+    // Another mode: the first-person rows go from both places, Immersive Mode stays.
+    const MenuModel wide = KiuModel(true, 1);
+    CHECK(AngelsAimFirstPersonRows(wide).empty());
+    CHECK(Has(HubIds(wide), Id::ImmersiveMode));
+    CHECK_FALSE(Has(HubIds(wide), Id::KiuOverShoulder));
+    // The Settings tab draws the same first-person rows (European game, mode 4 only).
+    for (const auto& [mm, expect] : {std::pair{KiuModel(true, 4), true},
+                                     std::pair{KiuModel(false, 4), false},
+                                     std::pair{other, false}}) {
+        Drawn d;
+        MenuView v;
+        v.tab = Tab::Settings;
+        v.section = SettingsSection::Immersive;
+        d.Draw(mm, v);
+        CHECK((FindHit(d, Id::KiuBottomScreen, 0) != nullptr) == expect);
+    }
+}
+
+TEST_CASE("Angel's Aim settings: drawn in the segment, each control a target",
+          "[frame_xr][tabmenu][kiu132]") {
+    const MenuModel m = KiuModel(true, 4);
+    Drawn d;
+    Audit a;
+    MenuView v;
+    v.tab = Tab::Mods;
+    v.mods_segment = ModsSegment::AngelsAim;
+    std::vector<Target> seen;
+    std::vector<Id> sliders;
+    float max_scroll = 0.0f;
+    for (float scroll = 0.0f; scroll <= 6000.0f; scroll += 48.0f) {
+        v.scroll[static_cast<std::size_t>(Tab::Mods)] = scroll;
+        d.Draw(m, v);
+        max_scroll = d.menu.MaxScroll();
+        for (const auto& h : d.menu.Hits()) {
+            if (h.r.y0 >= 0.0f && h.r.y1 <= kPanelH) {
+                seen.push_back(h.t);
+            }
+        }
+        for (const auto& s : d.menu.Layout().sliders) {
+            sliders.push_back(s.id);
+        }
+        if (static_cast<int>(scroll) % 480 == 0) {
+            a.Draw(m, v);
+            a.Check("Mods, Angel's Aim, its settings");
+        }
+        if (scroll >= max_scroll) {
+            break;
+        }
+    }
+    CHECK(max_scroll > 2000.0f); // the groups make the page long: one list to scroll
+    const auto hit = [&](Id id, int index) {
+        return std::find(seen.begin(), seen.end(), Target{id, index}) != seen.end();
+    };
+    CHECK(hit(Id::Scope, 0));
+    CHECK(hit(Id::Scope, 1));
+    CHECK(hit(Id::GyroAim, 1));
+    CHECK(hit(Id::TriggerLayout, 0));
+    CHECK(hit(Id::KiuBottomScreen, 2));
+    CHECK(hit(Id::KiuSnapTurn, 4));
+    CHECK(hit(Id::WristSide, 1));
+    CHECK(hit(Id::Recoil, -1));
+    CHECK(hit(Id::KiuOverShoulder, -1));
+    CHECK(hit(Id::ImmersiveMode, -1));
+    CHECK(hit(Id::KiuBottomReset, -1));
+    CHECK(hit(Id::AngelsAimSettings, -1));
+    CHECK(hit(Id::AngelsAimReport, -1));
+    for (const Id id : {Id::GyroSensitivity, Id::KiuBottomSize, Id::KiuReticleSize,
+                        Id::WeaponScale, Id::ProjectileSpeed}) {
+        INFO(LabelFor(id));
+        CHECK(Has(sliders, id));
+    }
+    // Immersive Mode's menu opens over the segment, its items targets.
+    v.open_menu = Id::ImmersiveMode;
+    bool opened = false;
+    for (float scroll = 0.0f; scroll <= max_scroll && !opened; scroll += 48.0f) {
+        v.scroll[static_cast<std::size_t>(Tab::Mods)] = scroll;
+        d.Draw(m, v);
+        opened = FindHit(d, Id::ImmersiveMode, 3) != nullptr;
+    }
+    CHECK(opened);
 }

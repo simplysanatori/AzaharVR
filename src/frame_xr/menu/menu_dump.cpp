@@ -1497,6 +1497,7 @@ int main(int argc, char** argv) {
         MenuModel ka = pg;
         ka.game_title = "Kid Icarus: Uprising";
         ka.mods.angels_aim.shown = true;
+        ka.mods.angels_aim.mapped = true; // AzaharFrame kiu132: the European game's rows
         ka.immersive_mode = 4;
         MenuView kv = settings(SettingsSection::Immersive);
         ok &= shot("kiutoggles-1-angels-aim-rows-default", ka, kv);
@@ -2938,6 +2939,106 @@ int main(int argc, char** argv) {
         MenuModel kn = ka;
         kn.mods.angels_aim.report_url.clear();
         ok &= shot("aa-8-report-unavailable", kn, kv);
+    }
+    // AzaharFrame kiu132: the Angel's Aim segment's settings (Kid Icarus: Uprising, European, in
+    // Angel's Aim, Direct Aim and everything on), down the page; and the Kid Icarus-only rows
+    // in Kid Icarus against another game, another region and no game.
+    {
+        MenuModel kh = m;
+        kh.game_title = "Kid Icarus: Uprising";
+        kh.scope = 1;
+        kh.mods.angels_aim.shown = true;
+        kh.mods.angels_aim.mapped = true;
+        kh.mods.angels_aim.recommended = true;
+        kh.mods.angels_aim.report_url = std::string(kAngelsAimIssuesUrl) + "&body=App%3A%201.3.0";
+        kh.immersive_mode = 4;
+        kh.gyro_aim = 2;
+        kh.recoil = kh.weapon_in_hand = kh.muzzle_flash = kh.projectiles = true;
+        kh.kiu_bottom_screen = 1;
+        kh.trigger_layout = 1;
+        MenuView hv;
+        hv.tab = Tab::Mods;
+        hv.mods_segment = ModsSegment::AngelsAim;
+        const float steps[] = {0.0f, 440.0f, 880.0f, 1320.0f, 1760.0f, 2200.0f, 2640.0f,
+                               3080.0f, 3520.0f, 1.0e5f};
+        for (std::size_t i = 0; i < std::size(steps); i++) {
+            hv.scroll[static_cast<int>(Tab::Mods)] = steps[i];
+            ok &= shot("kiu132-hub-" + std::to_string(i + 1) + "-at-" +
+                           (steps[i] > 1.0e4f ? std::string("end")
+                                              : std::to_string(static_cast<int>(steps[i]))),
+                       kh, hv);
+        }
+        // Immersive Mode's menu open from the View group; another mode (no first-person rows).
+        hv.scroll[static_cast<int>(Tab::Mods)] = 1320.0f;
+        hv.open_menu = Id::ImmersiveMode;
+        ok &= shot("kiu132-hub-11-immersive-mode-menu", kh, hv);
+        hv.open_menu = Id::None;
+        MenuModel kw = kh;
+        kw.immersive_mode = 1;
+        kw.gyro_aim = 0;
+        hv.scroll[static_cast<int>(Tab::Mods)] = 440.0f;
+        ok &= shot("kiu132-hub-12-wide-mode-aiming-off", kw, hv);
+        // Global chosen while the game has its own values: those rows locked, as elsewhere.
+        MenuModel kg = kh;
+        kg.scope = 0;
+        for (const Id id : {Id::GyroAim, Id::KiuBottomScreen, Id::WeaponScale}) {
+            kg.locked[static_cast<std::size_t>(id)] = Lock::GameValue;
+            kg.game_value[static_cast<std::size_t>(id)] = true;
+        }
+        hv.scroll[static_cast<int>(Tab::Mods)] = 440.0f;
+        hv.hover = {Id::GyroAim, kLabelIndex};
+        hv.tooltip = Id::GyroAim;
+        ok &= shot("kiu132-hub-13-global-locked", kg, hv);
+        hv.hover = {};
+        hv.tooltip = Id::None;
+        // The C-Stick mods' section with the catalogue's rows (the note above them).
+        MenuModel kc = kh;
+        ModOffer o;
+        o.id = "kiu-cstick-gyro";
+        o.name = "C-Stick & Gyro";
+        o.author = "Darkshade";
+        o.url = "https://gamebanana.com/members/1";
+        kc.mods.mods.available = {o};
+        o.id = "kiu-cstick-aim-eur";
+        o.name = "C-Stick Aim";
+        o.author = "hosiniku";
+        kc.mods.mods.available.push_back(o);
+        kc.mods.mods.catalog = CatalogState::Ready;
+        hv.scroll[static_cast<int>(Tab::Mods)] = 1.0e5f;
+        ok &= shot("kiu132-hub-14-cstick-mods-end", kc, hv);
+
+        // Kid Icarus-only rows: the same views in Kid Icarus (European), Kid Icarus (USA),
+        // another game and no game.
+        MenuModel usa = kh;
+        usa.mods.angels_aim.mapped = false;
+        usa.mods.angels_aim.recommended = false;
+        MenuModel other = kh;
+        other.game_title = "The Legend of Zelda: Ocarina of Time 3D";
+        other.mods.angels_aim = {};
+        MenuModel none = other;
+        none.game_title.clear();
+        none.scope = 0;
+        none.locked[static_cast<std::size_t>(Id::Scope)] = Lock::NoGame;
+        const std::pair<const char*, const MenuModel*> games[] = {
+            {"kiu-eur", &kh}, {"kiu-usa", &usa}, {"other-game", &other}, {"no-game", &none}};
+        for (const auto& [name, gm] : games) {
+            const std::string n = name;
+            MenuView sv = settings(SettingsSection::Immersive);
+            ok &= shot("kiu132-vis-" + n + "-1-settings-immersive", *gm, sv);
+            MenuView cv;
+            cv.tab = Tab::Controls;
+            cv.scroll[static_cast<int>(Tab::Controls)] = 480.0f;
+            ok &= shot("kiu132-vis-" + n + "-2-controls-aiming", *gm, cv);
+            cv.scroll[static_cast<int>(Tab::Controls)] = 1.0e5f;
+            ok &= shot("kiu132-vis-" + n + "-3-controls-end", *gm, cv);
+            MenuView st;
+            st.tab = Tab::Stats;
+            ok &= shot("kiu132-vis-" + n + "-4-stats", *gm, st);
+            MenuView mv;
+            mv.tab = Tab::Mods;
+            mv.mods_segment = ModsSegment::AngelsAim; // falls back to Cheats outside the game
+            ok &= shot("kiu132-vis-" + n + "-5-mods", *gm, mv);
+        }
     }
     { // AzaharFrame docs: the README's pictures (--only readme-)
         MenuModel rm = m;

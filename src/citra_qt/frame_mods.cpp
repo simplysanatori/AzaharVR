@@ -693,6 +693,7 @@ void FrameMods::RefreshAngelsAim() {
             Menu::AngelsAimModel m;
             m.shown = true;
             m.recommended = FrameXr::Kiu::IsAngelsAimTitle(tid); // kiufix2: Europe only
+            m.mapped = m.recommended; // AzaharFrame kiu132: first person's rows (Europe only)
             m.mod_installed = FrameXr::CStickModInstalled(tid);
             m.textures_pack = AngelsAimPackOn(tid);
             m.report_url = Menu::AngelsAimReportUrl(AppVersion(), game, m.mod_installed);

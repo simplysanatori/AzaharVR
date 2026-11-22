@@ -28,6 +28,7 @@ constexpr float kButtonH = 40.0f;
 constexpr float kItemH = 56.0f;  ///< a one-line list item with its trailing text
 constexpr float kTitleH = 40.0f; ///< a section's title
 constexpr float kDividerH = 16.0f;
+constexpr float kNoteLine = 20.0f; ///< AzaharFrame kiu132: a line of the C-Stick mods' note
 
 
 std::vector<std::string> Wrap(const Kit& kit, const std::string& s, float size, float width) {
@@ -90,11 +91,15 @@ bool IsAngelsAimReportUrl(const std::string& url) {
 std::vector<int> AngelsAimModRows(const ModsListModel& m) {
     std::vector<int> out;
     for (std::size_t i = 0; i < m.available.size(); i++) {
-        for (const char* id : kAngelsAimModIds) {
-            if (m.available[i].id == id) {
-                out.push_back(static_cast<int>(i));
-                break;
-            }
+        // AzaharFrame kiu132: and hosiniku's region builds of kiu-cstick-aim (the catalogue's
+        // "kiu-cstick-aim-usa", "-eur", "-jpn"), as FrameXr::IsCStickModId.
+        const std::string& id = m.available[i].id;
+        bool cstick = id.rfind("kiu-cstick-aim-", 0) == 0;
+        for (const char* known : kAngelsAimModIds) {
+            cstick = cstick || id == known;
+        }
+        if (cstick) {
+            out.push_back(static_cast<int>(i));
         }
     }
     return out;
@@ -120,13 +125,15 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
     for (const auto& p : paras) {
         content += kBodyLine * static_cast<float>(p.size()) + 8.0f;
     }
+    // AzaharFrame kiu132: the C-Stick mods' note under Required (single-screen modes only).
+    const std::vector<std::string> mod_note = Wrap(kit, kAngelsAimModNote, kSmall, c.W());
     content += kButtonH + 24.0f + kDividerH;                    // Report, its line
-    content += kTitleH + kItemH;                                // Required, the mod
+    content += AngelsAimSettingsHeight(model);                  // kiu132: the settings, Mods & Pack
+    content += kTitleH + kNoteLine * static_cast<float>(mod_note.size()) + kItemH; // Required
     if (!rows.empty()) {
         content += OfferListHeight(kit, model.mods.mods, c, rows, opt);
     }
-    content += kDividerH + kTitleH + kItemH;                     // Suggested, the pack
-    content += kDividerH + kTitleH + kButtonH + 16.0f;           // Settings
+    content += kDividerH + kTitleH + kItemH + 16.0f;             // Suggested, the pack
     const float max_scroll = std::max(0.0f, content - (shown.y1 - c.y0));
     const float scroll =
         std::clamp(view.scroll[static_cast<std::size_t>(view.tab)], 0.0f, max_scroll);
@@ -202,8 +209,19 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
     }
     divider();
 
-    // ---- Required: the mod, the catalog's rows ----
+    // ---- AzaharFrame kiu132: the settings, one list in groups (the same rows as their other
+    // places), then Mods & Pack's title ----
+    Rect open_anchor{};
+    int open_selected = -1;
+    y = DrawAngelsAimSettings(kit, model, view, c, shown, y, open_anchor, open_selected);
+
+    // ---- Required (in the single-screen modes): the mod, the catalog's rows ----
     title(kAngelsAimRequired);
+    for (const std::string& l : mod_note) {
+        kit.TextSized(c.x0, y + kNoteLine * 0.5f + kit.CapHeightSized(kSmall, false) * 0.5f,
+                      kSmall, false, Tok::kOnSurfaceVariant, l);
+        y += kNoteLine;
+    }
     status_item(kAngelsAimModName, m.mod_installed);
     if (!rows.empty()) {
         opt.page_top = y;
@@ -215,20 +233,13 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
     // ---- Suggested: the catalog's weapons and effects texture pack, one row ----
     title(kAngelsAimSuggested);
     status_item(kAngelsAimTexturesPack, m.textures_pack);
-    divider();
-
-    // ---- Settings: the Controls tab at Aiming (the rows live there only) ----
-    title(kAngelsAimSettings);
-    {
-        const std::string label = LabelFor(Id::AngelsAimSettings);
-        const float w = kit.TextWidth(Type::Label, label) + 28.0f + 48.0f;
-        const Rect b{c.x0, y, c.x0 + w, y + kButtonH};
-        kit.Button(b, ButtonStyle::Tonal, Sym::kTune, label, StateOf(view, {Id::AngelsAimSettings}));
-        AddHit({b.x0, b.Cy() - 24.0f, b.x1, b.Cy() + 24.0f}, {Id::AngelsAimSettings}, shown);
-        y += kButtonH + 16.0f;
-    }
+    y += 16.0f;
+    // (AzaharFrame kiu132: Aiming Settings, the Controls tab at Aiming, is the Aiming group's
+    // last row now.)
     kit.ClearClip();
     DrawScrollbar(kit, view, shown, area.x1, content, max_scroll, scroll);
+    DrawOpenMenu(kit, model, view, area, open_anchor, open_selected); // kiu132: Immersive Mode's
+    DrawScopeMenu(kit, model, view, area);
     DrawModsDialog(kit, ModsDialogFor(model, view), view);
 }
 
