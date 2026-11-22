@@ -596,6 +596,25 @@ if(ENABLE_FFMPEG)
     )
 endif()
 
+# AzaharVR: MSVC takes no string literal this big (C2026), so on MSVC the two built-in catalogs are
+# compiled from a copy with the literal cut into pieces (CMakeModules/MsvcSplitRawString.cmake);
+# the files themselves, and every other compiler, are unchanged.
+if (MSVC)
+    foreach(catalog mods/catalog_default.cpp custom_tex/download_default.cpp)
+        set(catalog_in ${CMAKE_CURRENT_SOURCE_DIR}/${catalog})
+        set(catalog_out ${CMAKE_CURRENT_BINARY_DIR}/msvc_split/${catalog})
+        add_custom_command(
+            OUTPUT ${catalog_out}
+            COMMAND ${CMAKE_COMMAND} -DIN=${catalog_in} -DOUT=${catalog_out}
+                    -P ${PROJECT_SOURCE_DIR}/CMakeModules/MsvcSplitRawString.cmake
+            DEPENDS ${catalog_in} ${PROJECT_SOURCE_DIR}/CMakeModules/MsvcSplitRawString.cmake
+            COMMENT "Splitting the string of ${catalog} for MSVC"
+            VERBATIM)
+        set_source_files_properties(${catalog} PROPERTIES HEADER_FILE_ONLY ON)
+        target_sources(citra_core PRIVATE ${catalog_out})
+    endforeach()
+endif()
+
 create_target_directory_groups(citra_core)
 
 target_link_libraries(citra_core PUBLIC citra_common PRIVATE audio_core network video_core input_common)
