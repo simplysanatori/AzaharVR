@@ -1747,11 +1747,13 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     // AzaharFrame kiuwrist: Angel's Aim's Secondary Screen on the off hand's wrist (test switch
     // AZAHARFRAME_KIU_WRIST_SCREEN=1; vis/wrist_screen.h), shown while it faces the eyes. Set
     // before the screens are asked for: they put the bottom screen there for this frame.
+    // AzaharFrame kiutoggles: or its setting (vr_kiu_wrist_screen); the switch, when set, wins.
     {
         const ViewPose head_view = LatestViewPose();
         const bool wanted =
             Kiu::FirstPerson::AngelsAim() && head_view.valid &&
-            Vis::WristScreenSwitchOn(Common::FrameTestSwitches::Value(Vis::kKiuWristScreenSwitch));
+            Vis::WristScreenOn(Common::FrameTestSwitches::Value(Vis::kKiuWristScreenSwitch),
+                               Settings::values.vr_kiu_wrist_screen.GetValue());
         const Input::Hand hand =
             Vis::WristScreenHand(Settings::values.vr_motion_controls.GetValue());
         const Input::HandInput& off = in.hand[static_cast<std::size_t>(Input::HandIndex(hand))];

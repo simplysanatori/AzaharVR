@@ -80,6 +80,28 @@ TEST_CASE("kiuview: the field, the soft edge and the shoulder", "[kiuview]") {
     CHECK_THAT(back.z, WithinAbs(0.0, 1e-5));
 }
 
+// AzaharFrame kiutoggles: Talk Panel's and Over the Shoulder's settings when their switches are
+// not set; a switch, when set, wins either way.
+TEST_CASE("kiutoggles: the talk panel and the shoulder, switch or setting", "[kiuview][kiutoggles]") {
+    CHECK_FALSE(FP::TalkOnFor(nullptr, false));
+    CHECK(FP::TalkOnFor(nullptr, true));
+    CHECK(FP::TalkOnFor("1", false));
+    CHECK_FALSE(FP::TalkOnFor("0", true));
+
+    float b = 9.0f, u = 9.0f, s = 9.0f;
+    CHECK_FALSE(FP::ShoulderFor(nullptr, false, b, u, s));
+    REQUIRE(FP::ShoulderFor(nullptr, true, b, u, s));
+    CHECK((b == FP::kShoulderSettingBackM && u == FP::kShoulderSettingUpM && s == 0.0f));
+    CHECK(FP::kShoulderSettingBackM == 2.5f); // Pit solid at 2.3 m back or more (kiufp3)
+    CHECK(FP::kShoulderSettingUpM == 0.5f);
+    REQUIRE(FP::ShoulderFor("1.5,0.4", false, b, u, s)); // the switch's own place
+    CHECK((b == 1.5f && u == 0.4f && s == 0.0f));
+    REQUIRE(FP::ShoulderFor("2,0.6,0.2", true, b, u, s)); // the switch wins over the setting
+    CHECK((b == 2.0f && u == 0.6f && s == 0.2f));
+    CHECK_FALSE(FP::ShoulderFor("0", true, b, u, s)); // set to 0: off, whatever the setting
+    CHECK_FALSE(FP::ShoulderFor("", true, b, u, s));
+}
+
 TEST_CASE("kiuview: the field's share keeps the wide camera at factor 1", "[kiuview]") {
     L::ViewFov view;
     view.left = view.outer_left = -59.1f * L::kDegToRad;

@@ -509,6 +509,17 @@ inline int SnapDegreesFrom(const char* text) {
     const int v = std::atoi(text);
     return v == 30 || v == 45 || v == 60 || v == 90 ? v : 0;
 }
+/// AzaharFrame kiutoggles: the snap angle in use: the switch's when it is set (SnapDegreesFrom: "0"
+/// or anything else is smooth), else the setting's (Settings::values.vr_kiu_snap_turn, degrees: 30,
+/// 45, 60 or 90; anything else, 0 the default, smooth).
+inline int SnapDegreesFor(const char* switch_text, uint32_t setting) {
+    if (switch_text) {
+        return SnapDegreesFrom(switch_text);
+    }
+    return setting == 30 || setting == 45 || setting == 60 || setting == 90
+               ? static_cast<int>(setting)
+               : 0;
+}
 
 /// PrimedFrame's snap turn (platform/include/vr/vr_snap_turn.h, PrimedGun's UpdateSnapTurn),
 /// without its head zone (Kid Icarus has no visor gesture).

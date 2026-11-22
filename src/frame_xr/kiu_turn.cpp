@@ -12,6 +12,7 @@
 #include "common/frame_emu_poll.h"
 #include "common/frame_test_switches.h"
 #include "common/logging/log.h"
+#include "common/settings.h" // AzaharFrame kiutoggles: Turning
 #include "core/core.h"
 #include "core/core_timing.h"
 #include "core/hle/kernel/process.h"
@@ -285,8 +286,10 @@ void Hook(int64_t ticks, bool vblank) {
     float add = 0.0f;
     int snap_deg = 0;
     if (on) {
+        // AzaharFrame kiutoggles: the switch when set, else Turning's setting (vr_kiu_snap_turn).
         const auto snap_text = Common::FrameTestSwitches::Value(kSwitchSnap);
-        snap_deg = KT::SnapDegreesFrom(snap_text ? snap_text->c_str() : nullptr);
+        snap_deg = KT::SnapDegreesFor(snap_text ? snap_text->c_str() : nullptr,
+                                      Settings::values.vr_kiu_snap_turn.GetValue());
         float cap = KT::kSmoothCapRad;
         if (snap_deg > 0 && !fresh) {
             // No fresh stick (a hitch, the menu): the tracker keeps its state, so a stick held

@@ -57,6 +57,13 @@ TEST_CASE("FrameXr kiuwrist: the switch and the off hand", "[frame_xr][kiuwrist]
     REQUIRE_FALSE(Vis::WristScreenSwitchOn(std::string("")));
     REQUIRE(Vis::WristScreenSwitchOn(std::string("1")));
     REQUIRE(Vis::WristScreenSwitchOn(std::string("On")));
+    // AzaharFrame kiutoggles: the setting (Secondary Screen on Wrist) when the switch is not set;
+    // the switch, when set, wins either way.
+    REQUIRE_FALSE(Vis::WristScreenOn(std::nullopt, false));
+    REQUIRE(Vis::WristScreenOn(std::nullopt, true));
+    REQUIRE(Vis::WristScreenOn(std::string("1"), false));
+    REQUIRE_FALSE(Vis::WristScreenOn(std::string("0"), true));
+    REQUIRE_FALSE(Vis::WristScreenOn(std::string(""), true));
     // Motion Controls: 0 off, 1 right, 2 left, 3 headset. The aiming hand is the left one only
     // with Left Controller; the screen goes on the other.
     REQUIRE(Vis::WristScreenHand(0) == Hand::Left);
