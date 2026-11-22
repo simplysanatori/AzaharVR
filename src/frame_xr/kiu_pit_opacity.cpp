@@ -19,7 +19,8 @@ namespace KM = Input::KiuModel;
 /// VBlanks: before the first look (the view settles), and each phase (two game frames at 30).
 constexpr int kSettle = 6;
 constexpr int kPhase = 4;
-constexpr int kHiddenSkip = 3; ///< VBlanks hidden before the draws are looked at
+constexpr int kHiddenSkip = 3; ///< VBlanks hidden before the draws are looked at (+2 a retry)
+constexpr int kTries = 3;
 
 enum class Phase { Idle, Settle, Drawn, Hidden };
 
@@ -29,6 +30,8 @@ struct State {
     uint32_t model = 0;      ///< the model the phases are for
     uint32_t found_for = 0;  ///< the model whose draws are known (0: none)
     bool cleared = false;    ///< this app cleared his drawn byte (phase Hidden)
+    uint32_t tried_for = 0;  ///< the model the failed tries are for
+    int tries = 0;           ///< failed tries for it (each skips longer; kTries at most)
 };
 State s;
 
@@ -103,7 +106,7 @@ void OnVBlank(KH::GameMemory& mem, uint32_t model, bool outside, uint32_t percen
         if (--s.left <= 0) {
             Collect(0); // the frames already on their way still have him: not looked at
             s.phase = Phase::Hidden;
-            s.left = kPhase + kHiddenSkip;
+            s.left = kPhase + kHiddenSkip + 2 * (s.tried_for == model ? s.tries : 0);
         }
         break; // the byte is cleared from here on (below)
     case Phase::Hidden:
@@ -127,12 +130,16 @@ void OnVBlank(KH::GameMemory& mem, uint32_t model, bool outside, uint32_t percen
                      pit.size(), drawn.size(), hidden.size(), ok ? "" : "; not used");
             if (!ok) {
                 pit.clear();
+                s.tries = s.tried_for == model ? s.tries + 1 : 1;
+                s.tried_for = model;
             }
             {
                 std::scoped_lock lock{d.mutex};
                 d.pit = std::move(pit);
             }
-            s.found_for = model;
+            if (ok || s.tries >= kTries) { // else tried again from the next VBlank
+                s.found_for = model;
+            }
             s.phase = Phase::Idle;
             return;
         }

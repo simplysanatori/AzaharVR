@@ -1062,7 +1062,8 @@ view is the Game's Camera; otherwise `over_shoulder` decides
   - It skips 3 VBlanks, then collects for 4 more with his drawn byte cleared.
   - His draws are the ones only in the first set (`KiuModel::PitDrawsFrom`). More than 48 means
     the calibration failed, and none are used.
-  - The log line is `Pit Opacity: N of his draws found`.
+  - The log line is `Pit Opacity: N of his draws found`. A failed try (none, or more than 48)
+    is tried again, up to 3 times, each skipping 2 VBlanks more.
   - He blinks out for about 7 VBlanks (~0.1 s) the first time an outside view below 100 % is
     in effect for a model node (a new battle or a save state load brings a new node).
 - **The blend (`vk_rasterizer.cpp`, `kiu_view_tap.h` `PitDraws`).** Those of his draws that the
@@ -1074,6 +1075,9 @@ view is the Game's Camera; otherwise `over_shoulder` decides
 - **Measured (mock, the Practice Range).** The Game's Camera at 100, 50 and 20 %, then Over the
   Shoulder at 20 %: his body, wings and legs are see-through, and the floor and the target
   show through him. 6 draws were found, with 64 draws while drawn and 18 while hidden.
+  The owner's air state, firing, 50 % from the start: 5 found (108 with him, 42 without); in
+  the Game's Camera and then Over the Shoulder he is see-through, and the enemies, the lock-on
+  marks and the shots stay solid. No weapon in hand in either view.
 - **Risks.** The addresses are learnt once per model node. If the game moves his vertex data
   later (another weapon, a power), he stays solid until the next model node. A depth-writing see-through draw hides his own parts behind it (a back arm), as in any
   one-pass blend.

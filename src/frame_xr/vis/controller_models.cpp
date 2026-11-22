@@ -3070,9 +3070,10 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
     // AzaharFrame kiuweapon: AZAHARFRAME_KIU_WEAPON_DRAW=0 (live): the weapon's model left out
     // (weapon_fit.h kWeaponDrawSwitch); its flash and shots as before.
     // AzaharFrame kiu130: and while the view is over the shoulder, where the game draws Pit with
-    // his own weapon (WeaponModelDrawnFor; run time only, no setting changes).
+    // his own weapon (WeaponModelDrawnFor; run time only, no setting changes). kiu133: and the
+    // Game's Camera.
     const bool weapon_model = WeaponModelDrawnFor(
-        Common::FrameTestSwitches::Value(kWeaponDrawSwitch), Kiu::FirstPerson::ShoulderOn());
+        Common::FrameTestSwitches::Value(kWeaponDrawSwitch), Kiu::FirstPerson::OutsideViewOn());
     for (int e = 0; e < 2; e++) {
         const vk::Viewport vp{static_cast<float>(g.eye_w * e), 0.0f, static_cast<float>(g.eye_w),
                               static_cast<float>(g.eye_h), 0.0f, 1.0f};
