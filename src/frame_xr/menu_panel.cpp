@@ -888,6 +888,11 @@ void MenuPanel::BuildModel(const Host& host) {
     { // AzaharFrame cheatstab
         std::scoped_lock lock{g_mods_mutex};
         m.mods = g_mods;
+        // AzaharFrame kiuusa: first person's rows also where the hooks found a mapped build's code
+        // (USA Rev 1; the European game's rows show by its title, citra_qt/frame_mods.cpp).
+        if (m.mods.angels_aim.shown && Kiu::FirstPerson::CodeMapped()) {
+            m.mods.angels_aim.mapped = true;
+        }
         m.homebrew = g_homebrew; // AzaharFrame emerald
         m.notice = g_notice;     // AzaharFrame savestate
         m.autosaves = g_autosaves; // AzaharFrame autosave

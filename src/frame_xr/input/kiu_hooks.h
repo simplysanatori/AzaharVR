@@ -383,6 +383,165 @@ inline constexpr std::array<Context, 75> kContext{{
     {Group::WideCamera, 0xB4FB40, 0xED919A05},     // vldr s18, [r1, #0x14] (the shape)
 }};
 
+// ---- USA Rev 1 (AzaharFrame kiuusa; KIU_HOOKS.md, "The builds") ----
+//
+// The same code as the European game's, relocated: every site and context word below is the
+// European row's, at the place the USA Rev 1 code holds the same instructions (found by matching
+// the two games' text segments, every branch's target mapped the same way; reports/96/kiuusa).
+// The words are the same but for relative branches whose two ends moved apart. The code cave
+// stays where it is: USA Rev 1's text ends at 0xC950F0, so 0xC95370-0xC96000 lies in its unused
+// tail too (all zero, nothing refers to it), and the image and the mailbox keep their addresses.
+
+/// The stubs' image for other code: kImage with the literals that name the game's code replaced
+/// (the stubs reach everything outside the image through these, so nothing else changes).
+struct StubTargets {
+    uint32_t sink_continue, spawn, path_restart, path_vanish, shadow_continue, fov_continue;
+};
+constexpr std::array<uint32_t, Stubs::kImage.size()> ImageFor(const StubTargets& t) {
+    std::array<uint32_t, Stubs::kImage.size()> image = Stubs::kImage;
+    image[Stubs::kLitSinkContinue / 4] = t.sink_continue;
+    image[Stubs::kLitSpawn / 4] = t.spawn;
+    image[Stubs::kLitPathRestart / 4] = t.path_restart;
+    image[Stubs::kLitPathVanish / 4] = t.path_vanish;
+    image[Stubs::kLitShadowContinue / 4] = t.shadow_continue;
+    image[Stubs::kLitFovContinue / 4] = t.fov_continue;
+    return image;
+}
+inline constexpr StubTargets kStubTargetsEur{Stubs::kSinkContinue, Stubs::kSpawn,
+                                              Stubs::kPathRestart,   Stubs::kPathVanish,
+                                              Stubs::kShadowContinue, Stubs::kFovContinue};
+static_assert(ImageFor(kStubTargetsEur) == Stubs::kImage, "the European image is the generated one");
+inline constexpr StubTargets kStubTargetsUsaRev1{0x633F54, 0x4855A0, 0x3E8C44,
+                                                  0x3E8C68, 0x57AF88, 0x45DFB8};
+inline constexpr std::array<uint32_t, Stubs::kImage.size()> kImageUsaRev1 =
+    ImageFor(kStubTargetsUsaRev1);
+
+/// kPatches' rows, in order.
+inline constexpr std::array<Patch, 14> kPatchesUsaRev1{{
+    {Group::NoCull, 0x77D9AC, 0xE20100FF, B(0x77D9AC, 0x77DAB4)},
+    {Group::NoCull, 0x7730FC, 0xE1A01004, B(0x7730FC, 0x7730E8)},
+    {Group::BulletKeep, 0x41FE84, 0xEB0331B9, kMovR0One}, // bl 0x4EC570
+    {Group::BulletKeep, 0x40BCD4, 0xEB038225, kMovR0One}, // bl 0x4EC570
+    {Group::Eye, 0x633F50, 0xE92D4070, B(0x633F50, kEyeStub)},
+    {Group::Shot, 0x504314, 0xEBFE04A1, Bl(0x504314, kShotStub)}, // bl 0x4855A0
+    {Group::EnemyKeep, 0x3E8C04, 0x0A000017, Beq(0x3E8C04, 0x3E8C44)},
+    {Group::EnemyKeepTimed, 0x3E8C04, 0x0A000017, Beq(0x3E8C04, kKeepStub)},
+    {Group::GroupKeep, 0xA42E7C, 0xE92D4FF8, kBxLr},
+    {Group::NoFollow, 0x703E84, 0xEB031897, kNop}, // bl 0x7CA0E8
+    {Group::AimHold, 0x6D2010, 0x0A000002, B(0x6D2010, 0x6D2020)},
+    {Group::AimBox, 0x6D1534, 0x0A00001F, B(0x6D1534, 0x6D15B8)},
+    {Group::PlayerShadow, 0x57AF84, 0xE92D4030, B(0x57AF84, kShadowStub)},
+    {Group::WideCamera, 0x45DFB4, 0xEDD00A0F, B(0x45DFB4, kFovStub)},
+}};
+/// kContext's rows, in order (the same instructions; see kContext for what each is).
+inline constexpr std::array<Context, 75> kContextUsaRev1{{
+    {Group::NoCull, 0x77D98C, 0xE24DD00C},
+    {Group::NoCull, 0x77DAB4, 0xE1C401D8},
+    {Group::NoCull, 0x77DAB8, 0xE28DD00C},
+    {Group::NoCull, 0x77DABC, 0xE3A020FF},
+    {Group::NoCull, 0x7730D8, 0xE5940014},
+    {Group::NoCull, 0x7730E8, 0xE3C00010},
+    {Group::NoCull, 0x7730EC, 0xE5840014},
+    {Group::NoCull, 0x7730F4, 0xE3A00001},
+    {Group::BulletKeep, 0x41FE88, 0xE3500000},
+    {Group::BulletKeep, 0x41FE8C, 0xE5D60020},
+    {Group::BulletKeep, 0x40BCD8, 0xE3500000},
+    {Group::BulletKeep, 0x40BCDC, 0xE5D50000},
+    {Group::Eye, 0x633F54, 0xE2821004},
+    {Group::Eye, 0x633F58, 0xE1A04000},
+    {Group::Eye, 0x633F5C, 0xEC910A07},
+    {Group::Eye, 0x633F68, 0xE2821014},
+    {Group::Eye, 0x633F70, 0xE1A0500D},
+    {Group::Shot, 0x5042F8, 0xE8830404},
+    {Group::Shot, 0x504304, 0xE88D1040},
+    {Group::Shot, 0x50430C, 0xE1A02007},
+    {Group::Shot, 0x4855A0, 0xE92D4FFF},
+    {Group::Shot, 0x5042F0, 0xE28D204C},
+    {Group::Shot, 0x503EC8, 0xE24DD08C},
+    {Group::Shot, 0x503ECC, 0xE28D3070},
+    {Group::Shot, 0x503F44, 0xE12FFF3C},
+    {Group::Shot, 0x5042FC, 0xE28DC058},
+    {Group::EnemyKeep, 0x3E8B9C, 0xE92D40F8},
+    {Group::EnemyKeep, 0x3E8BA0, 0xE1A04000},
+    {Group::EnemyKeep, 0x3E8C00, 0xE1B01A21},
+    {Group::EnemyKeep, 0x3E8C44, 0xE3A05000},
+    {Group::EnemyKeep, 0x3E8C64, 0xE8BD80F8},
+    {Group::EnemyKeepTimed, 0x3E8B9C, 0xE92D40F8},
+    {Group::EnemyKeepTimed, 0x3E8BA0, 0xE1A04000},
+    {Group::EnemyKeepTimed, 0x3E8C00, 0xE1B01A21},
+    {Group::EnemyKeepTimed, 0x3E8C44, 0xE3A05000},
+    {Group::EnemyKeepTimed, 0x3E8C68, 0xE5945030},
+    {Group::GroupKeep, 0xA42E80, 0xE280106C},
+    {Group::NoFollow, 0x703E80, 0xE58D0050},
+    {Group::NoFollow, 0x704024, 0xE59D3050},
+    {Group::NoFollow, 0x704038, 0xEB031B7C},
+    {Group::AimHold, 0x6D200C, 0xE24DD0B0},
+    {Group::AimHold, 0x6D2014, 0xE5D400D5},
+    {Group::AimHold, 0x6D2020, 0xE5C45208},
+    {Group::AimHold, 0x6D2024, 0xE28DD0B0},
+    {Group::AimBox, 0x6D1530, 0xE3510000},
+    {Group::AimBox, 0x6D15B8, 0xED9F0A6D},
+    {Group::AimBox, 0x6D15BC, 0xEDDF0A6D},
+    {Group::AimBox, 0x6D15C0, 0xE28400F0},
+    {Group::AimBox, 0x6D15C4, 0xEC800A02},
+    {Group::AimBox, 0x6D15C8, 0xEA00001D},
+    {Group::AimBox, 0x6D1774, 0x3F800000},
+    {Group::AimBox, 0x6D1778, 0xBF800000},
+    {Group::AimHold, 0x6D2050, 0xEB055118}, // bl 0x8264B8 (EUR EB05512B)
+    {Group::AimHold, 0x6D26C0, 0xEB10FED4}, // bl 0xB12218 (EUR EB10FF21)
+    {Group::AimHold, 0x6D2E30, 0xE594008C},
+    {Group::PlayerShadow, 0x57AF88, 0xE1A04000},
+    {Group::PlayerShadow, 0x57AF8C, 0xED2D8B02},
+    {Group::PlayerShadow, 0x57AF90, 0xE24DD02C},
+    {Group::PlayerShadow, 0x57AF94, 0xE59020AC},
+    {Group::PlayerShadow, 0x57AFBC, 0xE5945030},
+    {Group::PlayerShadow, 0x57B004, 0xEA00DD71}, // b 0x5B25D0 (EUR EA00DD74)
+    {Group::PlayerShadow, 0x57B0C0, 0xEBFE2869},
+    {Group::PlayerShadow, 0x57B0C8, 0xECBD8B02},
+    {Group::PlayerShadow, 0x57B0CC, 0xE8BD8030},
+    {Group::WideCamera, 0x45DFB8, 0xEEF40A40},
+    {Group::WideCamera, 0x45DFBC, 0xEEF1FA10},
+    {Group::WideCamera, 0x45DFC0, 0x0A000003},
+    {Group::WideCamera, 0x45DFC4, 0xED800A0F},
+    {Group::WideCamera, 0x45DFC8, 0xE590106C},
+    {Group::WideCamera, 0x45DFCC, 0xE3C1105C},
+    {Group::WideCamera, 0x45DFD0, 0xE580106C},
+    {Group::WideCamera, 0x45DFD4, 0xE12FFF1E},
+    {Group::WideCamera, 0x45DF5C, 0xED841A10},
+    {Group::WideCamera, 0xB4F8B8, 0xED910A04},
+    {Group::WideCamera, 0xB4F8C0, 0xED919A05},
+}};
+// The game's own words, from the encoders (the USA Rev 1 places).
+static_assert(Bl(0x504314, kStubTargetsUsaRev1.spawn) == 0xEBFE04A1);
+static_assert(Bl(0x41FE84, 0x4EC570) == 0xEB0331B9 && Bl(0x40BCD4, 0x4EC570) == 0xEB038225);
+static_assert(B(0x77D9AC, 0x77DAB4) == 0xEA000040 && B(0x7730FC, 0x7730E8) == 0xEAFFFFF9);
+static_assert(Bl(0x703E84, 0x7CA0E8) == 0xEB031897);
+static_assert(Beq(0x6D2010, 0x6D2020) == 0x0A000002 && Beq(0x6D1534, 0x6D15B8) == 0x0A00001F);
+static_assert(Beq(0x3E8C04, kStubTargetsUsaRev1.path_vanish) == 0x0A000017);
+static_assert(Beq(0x3E8C04, kStubTargetsUsaRev1.path_restart) == 0x0A00000E);
+static_assert(B(0x57B004, 0x5B25D0) == 0xEA00DD71 && Bl(0x57B0C0, 0x50526C) == 0xEBFE2869);
+static_assert(kStubTargetsUsaRev1.sink_continue == 0x633F50 + 4 &&
+              kStubTargetsUsaRev1.shadow_continue == 0x57AF84 + 4 &&
+              kStubTargetsUsaRev1.fov_continue == 0x45DFB4 + 4);
+
+/// One build's code tables (its addresses in the data segments: KiuTurn::Build).
+struct Code {
+    const KiuTurn::Build* build;
+    const std::array<Patch, 14>* patches;
+    const std::array<Context, 75>* context;
+    const std::array<uint32_t, Stubs::kImage.size()>* image;
+};
+inline constexpr Code kCodeEur{&KiuTurn::kBuildEur, &kPatches, &kContext, &Stubs::kImage};
+inline constexpr Code kCodeUsaRev1{&KiuTurn::kBuildUsaRev1, &kPatchesUsaRev1, &kContextUsaRev1,
+                                    &kImageUsaRev1};
+/// The code tables of a build (EUR's for nullptr: the caller has checked the build).
+constexpr const Code& CodeFor(const KiuTurn::Build* build) {
+    return build == &KiuTurn::kBuildUsaRev1 ? kCodeUsaRev1 : kCodeEur;
+}
+static_assert(KiuTurn::kBuildEur.owner_vtable == kOwnerVtable &&
+              KiuTurn::kBuildEur.actor_vtable == kActorVtable &&
+              KiuTurn::kBuildUsaRev1.actor_vtable == Stubs::kActorVtable);
+
 // ---- Small maths (float, as the game's) ----
 
 struct Vec3 {
@@ -584,7 +743,7 @@ inline bool ReadQuat(const Reader& m, uint32_t addr, Quat& q) {
 /// [owner + 0x30], the actor's two transform blocks, and last the playing flag: with every
 /// other guard passed and the flag down (a pause, a cutscene) the actor is still named
 /// (`actor`), so the player can be shown again, but nothing acts on him.
-inline Player FindPlayer(const Reader& m) {
+inline Player FindPlayer(const Reader& m, const KiuTurn::Build& build = KiuTurn::kBuildEur) {
     namespace KT = KiuTurn;
     Player p;
     uint8_t b = 0;
@@ -596,22 +755,23 @@ inline Player FindPlayer(const Reader& m) {
     }
     const uint32_t aim = next - KT::kAimBack;
     uint32_t vtable = 0;
-    if (!m.Read32(aim, vtable) || (vtable != KT::kAimVtableLand && vtable != KT::kAimVtableAir)) {
+    if (!m.Read32(aim, vtable) ||
+        (vtable != build.aim_vtable_land && vtable != build.aim_vtable_air)) {
         p.guard = PlayerGuard::NoAim;
         return p;
     }
     p.aim = aim;
-    p.land = vtable == KT::kAimVtableLand;
+    p.land = vtable == build.aim_vtable_land;
     uint32_t owner = 0;
     if (!m.Read32(aim + KT::kAimOwner, owner) || owner == 0 || (owner & 3u) != 0 ||
-        !m.Read32(owner, vtable) || vtable != kOwnerVtable) {
+        !m.Read32(owner, vtable) || vtable != build.owner_vtable) {
         p.guard = PlayerGuard::NoOwner;
         return p;
     }
     p.owner = owner;
     uint32_t actor = 0, name = 0;
     if (!m.Read32(owner + kOwnerActor, actor) || actor == 0 || (actor & 3u) != 0 ||
-        !m.Read32(actor, vtable) || vtable != kActorVtable ||
+        !m.Read32(actor, vtable) || vtable != build.actor_vtable ||
         !m.Read32(actor + kActorName, name) || name == 0) {
         p.guard = PlayerGuard::NoActor;
         return p;
@@ -808,6 +968,7 @@ inline bool HideInFirstPerson(bool first_person, bool land, bool shots_from_hand
 /// weapon"). His size, hurt boxes and bones are untouched, so it is used in the air too.
 inline constexpr uint32_t kActorModel = 0x34C;
 inline constexpr uint32_t kModelVtable = 0xD1E990;
+static_assert(KiuTurn::kBuildEur.model_vtable == kModelVtable);
 inline constexpr uint32_t kModelDrawnWord = 0xB4;
 inline constexpr uint32_t kModelDrawnShift = 8;
 /// The word to write at the model's +0xB4, if anything: hide clears a drawn byte of 1; show
@@ -832,6 +993,7 @@ enum class HideBy : uint8_t { Draw, Scale };
 /// physical address: VRAM, 64 x 64; KIU_HOOKS.md, "The reticle's size"). Those draws are shaded
 /// on the CPU instead and scaled about their middle on the screen.
 inline constexpr uint32_t kReticleTexture = 0x1810AF00;
+static_assert(KiuTurn::kBuildEur.reticle_texture == kReticleTexture);
 /// The scale: the switch's percent when set (30 to 150), else the setting's.
 inline float ReticleScaleFor(const char* text, uint32_t setting_percent) {
     long percent = static_cast<long>(setting_percent);
@@ -844,8 +1006,8 @@ inline float ReticleScaleFor(const char* text, uint32_t setting_percent) {
     }
     return static_cast<float>(std::clamp(percent, 30L, 150L)) / 100.0f;
 }
-/// The reticle's texture: the switch's hex address when set, else kReticleTexture.
-inline uint32_t ReticleTextureFor(const char* text) {
+/// The reticle's texture: the switch's hex address when set, else the build's (kReticleTexture).
+inline uint32_t ReticleTextureFor(const char* text, uint32_t build_texture = kReticleTexture) {
     if (text && *text) {
         char* end = nullptr;
         const unsigned long v = std::strtoul(text, &end, 16);
@@ -853,7 +1015,7 @@ inline uint32_t ReticleTextureFor(const char* text) {
             return static_cast<uint32_t>(v);
         }
     }
-    return kReticleTexture;
+    return build_texture;
 }
 inline HideBy HideByFrom(const char* text) {
     return text && std::string_view{text} == "scale" ? HideBy::Scale : HideBy::Draw;
@@ -1109,14 +1271,15 @@ struct SyncResult {
     }
 };
 
-inline Cave LookAtCave(const Reader& m) {
+inline Cave LookAtCave(const Reader& m, const Code& code = kCodeEur) {
+    const auto& image = *code.image;
     bool ours = true;
-    for (std::size_t i = 0; i < Stubs::kImage.size(); ++i) {
+    for (std::size_t i = 0; i < image.size(); ++i) {
         uint32_t v = 0;
         if (!m.Read32(kImageBase + static_cast<uint32_t>(i) * 4u, v)) {
             return Cave::Unreadable;
         }
-        if (v != Stubs::kImage[i]) {
+        if (v != image[i]) {
             ours = false;
             break;
         }
@@ -1160,13 +1323,15 @@ constexpr bool BranchesIntoImage(uint32_t addr, uint32_t word) {
 /// mailbox, the site words last) and the others out. `wanted` is a mask of Bit(group). Writes
 /// nothing when everything already is as wanted (apart from the mailbox while a stub group is
 /// in). The caller has checked the title and the game's code (GameCodeMatches).
-inline SyncResult Sync(GameMemory& m, uint32_t wanted, const Mailbox& mailbox) {
+inline SyncResult Sync(GameMemory& m, uint32_t wanted, const Mailbox& mailbox,
+                       const Code& code = kCodeEur) {
+    const auto& patches = *code.patches;
     SyncResult r;
     enum : uint8_t { kGame, kOurs, kSibling, kOther, kUnmapped };
     // What a site holds for patch `p`: the game's word, this patch's, the word of another patch
     // of ours at the same address (two groups may share a site; one of them is wanted at most),
     // or something else.
-    const auto look = [&m](const Patch& p, uint32_t& v) -> uint8_t {
+    const auto look = [&m, &patches](const Patch& p, uint32_t& v) -> uint8_t {
         if (!m.Read32(p.addr, v)) {
             return kUnmapped;
         }
@@ -1176,7 +1341,7 @@ inline SyncResult Sync(GameMemory& m, uint32_t wanted, const Mailbox& mailbox) {
         if (v == p.patched) {
             return kOurs;
         }
-        for (const Patch& q : kPatches) {
+        for (const Patch& q : patches) {
             if (q.addr == p.addr && q.patched == v) {
                 return kSibling;
             }
@@ -1186,7 +1351,7 @@ inline SyncResult Sync(GameMemory& m, uint32_t wanted, const Mailbox& mailbox) {
     // A site that jumps into the image but is none of our words is a patch of an older image
     // version (a state made by another build): its stub entry may have moved, so before the
     // image is rewritten it goes back to the game's word and goes in again as this build's.
-    for (const Patch& p : kPatches) {
+    for (const Patch& p : patches) {
         uint32_t v = 0;
         if (look(p, v) == kOther && BranchesIntoImage(p.addr, v)) {
             r.code_writes += m.WriteCode(p.addr, p.original) ? 1 : 0;
@@ -1202,7 +1367,7 @@ inline SyncResult Sync(GameMemory& m, uint32_t wanted, const Mailbox& mailbox) {
             r.different_word = word;
         }
     };
-    for (const Patch& p : kPatches) {
+    for (const Patch& p : patches) {
         const auto g = static_cast<std::size_t>(p.group);
         uint32_t v = 0;
         const uint8_t state = look(p, v);
@@ -1216,7 +1381,7 @@ inline SyncResult Sync(GameMemory& m, uint32_t wanted, const Mailbox& mailbox) {
             }
         }
     }
-    for (const Context& c : kContext) {
+    for (const Context& c : *code.context) {
         if ((wanted & Bit(c.group)) == 0) {
             continue; // only a group about to go in needs its surroundings checked
         }
@@ -1234,11 +1399,12 @@ inline SyncResult Sync(GameMemory& m, uint32_t wanted, const Mailbox& mailbox) {
     }
     bool cave_ok = false;
     if (stubs_wanted) {
-        r.cave = LookAtCave(m);
+        r.cave = LookAtCave(m, code);
         if (r.cave == Cave::Empty || r.cave == Cave::Older) {
             bool wrote = true;
-            for (std::size_t i = 0; i < Stubs::kImage.size() && wrote; ++i) {
-                wrote = m.WriteCode(kImageBase + static_cast<uint32_t>(i) * 4u, Stubs::kImage[i]);
+            const auto& image = *code.image;
+            for (std::size_t i = 0; i < image.size() && wrote; ++i) {
+                wrote = m.WriteCode(kImageBase + static_cast<uint32_t>(i) * 4u, image[i]);
                 r.code_writes += wrote ? 1 : 0;
                 r.image_writes += wrote ? 1 : 0;
             }
@@ -1267,7 +1433,7 @@ inline SyncResult Sync(GameMemory& m, uint32_t wanted, const Mailbox& mailbox) {
         go_in[g] = (wanted & Bit(group)) != 0 && usable[g] && (!UsesStubs(group) || cave_ok);
     }
     for (const bool in : {false, true}) {
-        for (const Patch& p : kPatches) {
+        for (const Patch& p : patches) {
             if (go_in[static_cast<std::size_t>(p.group)] != in) {
                 continue;
             }
@@ -1284,7 +1450,7 @@ inline SyncResult Sync(GameMemory& m, uint32_t wanted, const Mailbox& mailbox) {
         const auto group = static_cast<Group>(g);
         const bool want = (wanted & Bit(group)) != 0;
         bool all_in = true;
-        for (const Patch& p : kPatches) {
+        for (const Patch& p : patches) {
             uint32_t v = 0;
             if (p.group == group) {
                 all_in = all_in && look(p, v) == kOurs;
@@ -1307,8 +1473,8 @@ inline SyncResult Sync(GameMemory& m, uint32_t wanted, const Mailbox& mailbox) {
 }
 
 /// True when a site still holds one of our words (a pass with nothing wanted puts them back).
-inline bool AnyOurs(const Reader& m) {
-    for (const Patch& p : kPatches) {
+inline bool AnyOurs(const Reader& m, const Code& code = kCodeEur) {
+    for (const Patch& p : *code.patches) {
         uint32_t v = 0;
         if (m.Read32(p.addr, v) && v == p.patched) {
             return true;

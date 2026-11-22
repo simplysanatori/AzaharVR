@@ -97,6 +97,7 @@ struct State {
     uint32_t run = 0; ///< AzaharFrame kiufix2: Kiu::FirstPerson::RunCount() when this began
     bool checked = false;
     bool code_ok = false;
+    const KT::Build* build = &KT::kBuildEur; ///< AzaharFrame kiuusa: the one whose code matched
     std::string note;
     KT::Ledger ledger;
     KT::Snap::Tracker snap;
@@ -227,10 +228,8 @@ void Hook(int64_t ticks, bool vblank) {
         s.code_ok = false;
         Idle(s);
     }
-    if (title != KT::kTitleEur) {
-        Note(s, fmt::format("off: only the European game (0004000000030200) is mapped, this is "
-                            "{:016X}",
-                            title));
+    if (!KT::IsMappedTitle(title)) { // AzaharFrame kiuusa: the European game or USA Rev 1
+        Note(s, fmt::format("off: only {} are mapped, this is {:016X}", KT::kMappedList, title));
         Idle(s);
         return;
     }
@@ -238,16 +237,21 @@ void Hook(int64_t ticks, bool vblank) {
     const GuestReader reader(memory, *process);
     if (!s.checked) {
         s.checked = true;
-        s.code_ok = KT::CodeMatches(reader);
-        Note(s, s.code_ok ? "the game's code matches (European game)"
-                          : "off: the game's code differs from the European game's at the camera "
-                            "update (0x704178, 0x703894, 0x703D4C)");
+        const KT::Build* build = KT::MatchBuild(title, reader);
+        s.code_ok = build != nullptr;
+        s.build = build ? build : &KT::kBuildEur;
+        const KT::Build& b = KT::BuildOfTitle(title);
+        Note(s, s.code_ok ? fmt::format("the game's code matches ({})", s.build->name)
+                          : fmt::format("off: the game's code differs from {} at the camera "
+                                        "update (0x{:06X}, 0x{:06X}, 0x{:06X})",
+                                        KT::BuildsCode(b), b.code_check[0].addr,
+                                        b.code_check[4].addr, b.code_check[8].addr));
     }
     if (!s.code_ok) {
         Idle(s);
         return;
     }
-    const KT::Camera c = KT::FindCamera(reader);
+    const KT::Camera c = KT::FindCamera(reader, *s.build);
     const int64_t host_now = NowNs();
     const double game_s = TicksToS(ticks);
     if (!vblank) {

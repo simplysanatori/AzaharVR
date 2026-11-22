@@ -58,8 +58,11 @@ TEST_CASE("Angel's Aim: first person's truth table", "[frame_xr][kiumode]") {
     // In effect: mode 4, the European game, its code the mapped one.
     CHECK(FP::AngelsAimFor(4, kEur, true, true));
     CHECK(!FP::AngelsAimFor(4, kEur, false, true)); // code not checked yet, or another code
-    CHECK(!FP::AngelsAimFor(4, kUsa, true, true));  // other regions: plays as Other Games
-    CHECK(!FP::AngelsAimFor(4, kJpnMod, true, true));
+    // AzaharFrame kiuusa: the USA title with its code the mapped one (USA Rev 1); with another
+    // code (Rev 0, a mod) it plays as Other Games.
+    CHECK(FP::AngelsAimFor(4, kUsa, true, true));
+    CHECK(!FP::AngelsAimFor(4, kUsa, false, true));
+    CHECK(!FP::AngelsAimFor(4, kJpnMod, true, true)); // other regions: plays as Other Games
     CHECK(!FP::AngelsAimFor(4, kAsphalt, true, true)); // a stored 4 elsewhere: as 3
     for (u32 m : {0u, 1u, 2u, 3u}) {
         CHECK(!FP::AngelsAimFor(m, kEur, true, true)); // Other Games is not first person
@@ -71,7 +74,8 @@ TEST_CASE("Angel's Aim: first person's truth table", "[frame_xr][kiumode]") {
     // On: Angel's Aim in effect, or the developer switch (whatever the mode).
     CHECK(FP::OnFor(false, 4, kEur, true, true));
     CHECK(!FP::OnFor(false, 3, kEur, true, true));
-    CHECK(!FP::OnFor(false, 4, kUsa, true, true));
+    CHECK(FP::OnFor(false, 4, kUsa, true, true)); // AzaharFrame kiuusa: USA Rev 1's code
+    CHECK(!FP::OnFor(false, 4, kUsa, false, true));
     CHECK(!FP::OnFor(false, 4, kEur, false, true));
     CHECK(FP::OnFor(true, 0, kEur, true, true));
     CHECK(FP::OnFor(true, 3, kUsa, false, true));

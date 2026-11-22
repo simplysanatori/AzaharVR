@@ -169,6 +169,11 @@ void SetGameCode(uint64_t title, bool code_ok) {
     g_code_title.store(code_ok ? title : 0, std::memory_order_relaxed);
 }
 
+bool CodeMapped() {
+    const uint64_t title = GameTitleId();
+    return title != 0 && g_code_title.load(std::memory_order_relaxed) == title;
+}
+
 void SupplyRegisters(bool on) {
     if (g_registers.exchange(on, std::memory_order_relaxed) == on) {
         return;
@@ -288,7 +293,7 @@ AimNow AimThroughCamera(const Input::KiuHooks::Reader& mem, uint32_t aim,
 }
 
 bool ForTitle(uint64_t title) {
-    return title == Input::KiuTurn::kTitleEur && On();
+    return Input::KiuTurn::IsMappedTitle(title) && On(); // AzaharFrame kiuusa
 }
 
 float UnitsPerMetre() {

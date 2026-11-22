@@ -60,6 +60,8 @@ struct Probe {
     /// (AZAHARFRAME_KIU_AIM_NO_MOD / _AIM_6DOF); the game's code was checked for it.
     bool original = false;
     bool code_checked = false, code_ok = false;
+    /// AzaharFrame kiuusa: the build whose code matched (code_ok).
+    const Input::KiuTurn::Build* build = &Input::KiuTurn::kBuildEur;
     Kiu::FirstPerson::AimNow last_aim6; ///< the last 6DoF aim (the trace)
     uint64_t held_writes = 0; ///< times the reticle's "held" flags were put back
     Input::DirectAim aim; ///< AzaharFrame kiuaim2 (was the relative loop)
@@ -260,26 +262,29 @@ bool ReadReticle(Probe& p, Input::ReticleReading& r, std::string& why) {
     uint32_t original_object = 0;
     if (!p.addr.found) {
         namespace KT = Input::KiuTurn;
-        if (!Kiu::FirstPerson::AimNoModWanted() || title != KT::kTitleEur) {
+        if (!Kiu::FirstPerson::AimNoModWanted() || !KT::IsMappedTitle(title)) {
             why = "the C-Stick & Gyro mod's code was not found";
             return false;
         }
         const ProbeReader reader(memory, *process);
         if (!p.code_checked) {
             p.code_checked = true;
-            p.code_ok = KT::CodeMatches(reader);
+            const KT::Build* build = KT::MatchBuild(title, reader);
+            p.code_ok = build != nullptr;
+            p.build = build ? build : &KT::kBuildEur;
         }
         uint8_t playing = 0;
         uint32_t root = 0, next = 0, vt = 0;
         if (!p.code_ok) {
-            why = "no mod, and the game's code is not the European game's";
+            why = title == KT::kTitleEur ? "no mod, and the game's code is not the European game's"
+                                         : "no mod, and the game's code is not USA Rev 1's";
             return false;
         }
         if (!reader.Read8(KT::kPlaying, playing) || playing != 1 ||
             !reader.Read32(KT::kAimRoot, root) || root == 0 ||
             !reader.Read32(root + KT::kAimRootNext, next) || next < KT::kAimBack ||
             !reader.Read32(next - KT::kAimBack, vt) ||
-            (vt != KT::kAimVtableLand && vt != KT::kAimVtableAir)) {
+            (vt != p.build->aim_vtable_land && vt != p.build->aim_vtable_air)) {
             why = "no mod, and no battle's aim object now";
             return false;
         }
