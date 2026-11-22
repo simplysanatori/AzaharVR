@@ -1535,7 +1535,7 @@ int main(int argc, char** argv) {
         // AzaharFrame kiu133: Camera's Game's Camera with Pit Opacity under it at 50 %, their
         // tooltips, and Over the Shoulder with it.
         ka.kiu_bottom_screen = 0;
-        ka.kiu_view = 2;
+        ka.kiu_view = 1; // AzaharFrame 1.3.0: the Game's Camera not offered yet
         ka.kiu_pit_opacity = 50;
         kv.scroll[static_cast<int>(Tab::Settings)] = 0.0f;
         kv.hover = {};
@@ -3027,7 +3027,7 @@ int main(int argc, char** argv) {
         ok &= shot("kiu132-hub-14-cstick-mods-end", kc, hv);
         // AzaharFrame kiu133: the View group with Camera's Game's Camera and Pit Opacity.
         MenuModel kv133 = kh;
-        kv133.kiu_view = 2;
+        kv133.kiu_view = 1; // AzaharFrame 1.3.0: the Game's Camera not offered yet
         kv133.kiu_pit_opacity = 60;
         hv.scroll[static_cast<int>(Tab::Mods)] = 1320.0f;
         ok &= shot("kiu133-hub-view", kv133, hv);

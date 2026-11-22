@@ -1121,3 +1121,5 @@ view is the Game's Camera; otherwise `over_shoulder` decides
 - **Risks.** The addresses are learnt once per model node. If the game moves his vertex data
   later (another weapon, a power), he stays solid until the next model node. A depth-writing see-through draw hides his own parts behind it (a back arm), as in any
   one-pass blend.
+
+**1.3.0: the Game's Camera is held back.** Its view was broken on the headset (Pit far off in the air; the camp's view wrong). `Menu::kGameCameraOffered` (`menu/angels_aim_tab.h`) is false: Camera lists First Person and Over the Shoulder, and a saved `vr_kiu_game_camera` is not used. `AZAHARFRAME_KIU_GAME_CAMERA=1` still turns it on for work on it.

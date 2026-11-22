@@ -228,7 +228,7 @@ Row RowFor(Id id, const MenuModel& m) {
         slider(m.kiu_bottom_opacity);
         break;
     case Id::KiuOverShoulder: // AzaharFrame kiu133: Camera
-        segmented(std::clamp(m.kiu_view, 0, 2));
+        segmented(std::clamp(m.kiu_view, 0, kGameCameraOffered ? 2 : 1));
         break;
     case Id::KiuPitOpacity:
         slider(m.kiu_pit_opacity);
@@ -946,7 +946,9 @@ const std::vector<std::string>& OptionsFor(Id id) {
     case Id::KiuOverShoulder: { // AzaharFrame kiu133: Camera, Kiu::FirstPerson::ViewFor's order
         static const std::vector<std::string> kView{kCameraFirstPerson, kOverShoulderRow,
                                                     kCameraGame};
-        return kView;
+        // AzaharFrame 1.3.0: the Game's Camera not offered yet (kGameCameraOffered).
+        static const std::vector<std::string> kViewTwo{kCameraFirstPerson, kOverShoulderRow};
+        return kGameCameraOffered ? kView : kViewTwo;
     }
     case Id::KiuBottomScreen: { // AzaharFrame kiu131: the stored order
         static const std::vector<std::string> kBottom{kBottomScreenOff, kBottomScreenPersistent,
@@ -1501,7 +1503,7 @@ std::string ExplainFor(Id id) {
     case Id::KiuReticleSize:
         return kReticleSizeTip;
     case Id::KiuOverShoulder: // AzaharFrame kiu133
-        return kCameraTip;
+        return kGameCameraOffered ? kCameraTipGame : kCameraTip;
     case Id::KiuPitOpacity:
         return kPitOpacityTip;
     case Id::KiuSnapTurn:

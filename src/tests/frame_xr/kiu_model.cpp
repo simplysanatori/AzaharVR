@@ -103,13 +103,20 @@ TEST_CASE("Kid Icarus: Camera's two keys", "[frame_xr][kiu133]") {
     // A file from before keeps its meaning: Over the Shoulder alone is 1, nothing is 0.
     CHECK(ViewFor(false, false) == 0);
     CHECK(ViewFor(true, false) == 1);
-    CHECK(ViewFor(false, true) == 2);
-    CHECK(ViewFor(true, true) == 2); // the Game's Camera wins
-    for (const int v : {0, 1, 2}) {
-        CHECK(ViewFor(ViewOverShoulder(v), ViewGameCamera(v)) == v);
-    }
-    CHECK(GameCameraFor(nullptr, true));
     CHECK_FALSE(GameCameraFor(nullptr, false));
     CHECK(GameCameraFor("1", false));
     CHECK_FALSE(GameCameraFor("0", true)); // the switch wins
+    if constexpr (kGameCameraOffered) {
+        CHECK(ViewFor(false, true) == 2);
+        CHECK(ViewFor(true, true) == 2); // the Game's Camera wins
+        for (const int v : {0, 1, 2}) {
+            CHECK(ViewFor(ViewOverShoulder(v), ViewGameCamera(v)) == v);
+        }
+        CHECK(GameCameraFor(nullptr, true));
+    } else {
+        // AzaharFrame 1.3.0: not offered yet: a saved Game's Camera is not used; the switch still is.
+        CHECK(ViewFor(false, true) == 0);
+        CHECK(ViewFor(true, true) == 1);
+        CHECK_FALSE(GameCameraFor(nullptr, true));
+    }
 }

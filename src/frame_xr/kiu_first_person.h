@@ -151,6 +151,7 @@
 #include "frame_xr/input/kiu_room.h"
 #include "frame_xr/input/kiu_turn.h"
 #include "frame_xr/kiu_scan.h"
+#include "frame_xr/menu/angels_aim_tab.h" // AzaharFrame 1.3.0: kGameCameraOffered
 
 namespace FrameXr::Kiu::FirstPerson {
 
@@ -490,19 +491,21 @@ inline bool ShoulderFor(const char* switch_text, bool setting, float& back_m, fl
     side_m = 0.0f;
     return true;
 }
+/// AzaharFrame 1.3.0: whether the Game's Camera is offered (Menu::kGameCameraOffered).
+inline constexpr bool kGameCameraOffered = Menu::kGameCameraOffered;
 /// AzaharFrame kiu133: the Game's Camera from AZAHARFRAME_KIU_GAME_CAMERA's text when it is set
-/// ("1" on, anything else off), else the setting.
+/// ("1" on, anything else off), else the setting (while kGameCameraOffered).
 inline bool GameCameraFor(const char* switch_text, bool setting) {
     if (switch_text) {
         return switch_text[0] == '1' && switch_text[1] == '\0';
     }
-    return setting;
+    return kGameCameraOffered && setting;
 }
 /// AzaharFrame kiu133: the View row (Angel's Aim) from its two keys: 0 First Person, 1 Over the
 /// Shoulder (vr_kiu_over_shoulder, as before), 2 the Game's Camera (vr_kiu_game_camera, which
 /// wins). Choosing writes both: Over the Shoulder only for 1, the Game's Camera only for 2.
 constexpr int ViewFor(bool over_shoulder, bool game_camera) {
-    return game_camera ? 2 : over_shoulder ? 1 : 0;
+    return game_camera && kGameCameraOffered ? 2 : over_shoulder ? 1 : 0;
 }
 constexpr bool ViewOverShoulder(int view) {
     return view == 1;

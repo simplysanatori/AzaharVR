@@ -150,9 +150,15 @@ inline constexpr const char* kOverShoulderTip =
 /// tip, approved, are its choice name), with First Person and the Game's Camera; Pit Opacity for
 /// the two views from outside Pit. PROPOSED strings: they need the owner's approval.
 inline constexpr const char* kCameraRow = "Camera";
+/// AzaharFrame 1.3.0: the Game's Camera is not offered yet (its view is broken on the headset):
+/// Camera lists First Person and Over the Shoulder only, and a saved vr_kiu_game_camera is not
+/// used. AZAHARFRAME_KIU_GAME_CAMERA=1 still turns it on, for work on it.
+inline constexpr bool kGameCameraOffered = false;
 inline constexpr const char* kCameraFirstPerson = "First Person";
 inline constexpr const char* kCameraGame = "Game's Camera";
-inline constexpr const char* kCameraTip =
+inline constexpr const char* kCameraTip = "Where you see from: Pit's eyes, or behind and above Pit.";
+/// The tip once the Game's Camera is offered (Kiu::FirstPerson::kGameCameraOffered).
+inline constexpr const char* kCameraTipGame =
     "Where you see from: Pit's eyes, behind and above Pit, or where the game itself puts its "
     "camera.";
 inline constexpr const char* kPitOpacityRow = "Pit Opacity";
