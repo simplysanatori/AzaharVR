@@ -617,6 +617,9 @@ looks like his head.
 
 ### The doubled weapon (AzaharFrame kiu130)
 
+AzaharFrame kiu131 found the cause: Pit's own weapon, not the bullet ("Pit's own model, by its
+draw" below). What follows is kiu130's reading.
+
 The owner's report: a second weapon-like thing in front of the weapon in hand, with some weapons.
 In the owner's PC pictures (an air battle, the First Blade) a silver arrowhead sits on the
 blade's tip, and two seconds later one lies further along the line from the muzzle to the
@@ -734,7 +737,8 @@ the game's picture, not this app's layer.
 
 - **Where.** On the off hand's wrist like a watch: the right hand with Motion Controls' Left
   Controller, else the left one (as the aiming hand is picked). The left wrist is the wrist
-  stats' place (`vis/stats_place.cpp` WristLocalPose: along the forearm on the inner side, 2.3 cm
+  stats' place (AzaharFrame kiu131: now Wrist Side's, Back by default, "Wrist Side" below;
+  `vis/stats_place.cpp` WristLocalPose: along the forearm on the inner side, 2.3 cm
   clear of the controller, turned 10 degrees up); the right wrist is it mirrored, turned so the
   picture is upright and reads left to right (`vis/wrist_screen.cpp`). With Stats On Wrist (the
   left controller) and the screen on the left wrist, the screen moves 11 cm along the forearm
@@ -960,5 +964,6 @@ toward the elbow, not overlapping. The left-hand poses come from the test's `aim
   GPU): the ring in the same place, within a few pixels. Land (Chapter 2, the blade): 50 and
   150 % the same way.
 - **Not checked.** Other reticles (a charged shot's, other weapons' if they differ): one with
-  another texture keeps its size. The address is the game's VRAM layout, so another chapter
-  could load it elsewhere (then Reticle Size does nothing there).
+  another texture keeps its size. The address is the game's VRAM layout, which another chapter
+  could change: the reticle then keeps its size, or (a risk) whatever other texture sits at
+  that address is scaled instead. Off 100 % only.

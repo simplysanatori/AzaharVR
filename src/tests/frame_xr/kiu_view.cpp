@@ -13,6 +13,7 @@
 #include "frame_xr/input/kiu_hooks.h"
 #include "frame_xr/kiu_first_person.h"
 #include "frame_xr/input/geometry.h"
+#include "common/settings.h"
 
 namespace FP = FrameXr::Kiu::FirstPerson;
 namespace L = FrameXr::Immersive::Layout;
@@ -200,4 +201,23 @@ TEST_CASE("kiu131: Bottom Screen's choice, migration, switches and place", "[kiu
     CHECK_THAT(front.x, WithinAbs(-m.x / 0.8f, 1e-4));
     CHECK_THAT(front.y, WithinAbs(-m.y / 0.8f, 1e-4));
     CHECK_THAT(front.z, WithinAbs(-m.z / 0.8f, 1e-4));
+}
+
+// AzaharFrame kiu131: choosing Bottom Screen clears the two settings it replaced at both scopes
+// (the game's own value and the global one), so neither decides again.
+TEST_CASE("kiu131: the old Bottom Screen keys cleared at both scopes", "[kiuview][kiu131]") {
+    auto& w = Settings::values.vr_kiu_wrist_screen;
+    auto& t = Settings::values.vr_kiu_talk_panel;
+    w.SetGlobal(true);
+    w.SetValue(true); // global: on
+    t.SetGlobal(false);
+    t.SetValue(true); // the game's own: on
+    CHECK(FP::ClearOldBottomKeys());
+    CHECK(w.UsingGlobal());
+    CHECK_FALSE(w.GetValue());
+    CHECK_FALSE(t.UsingGlobal()); // still the game's own, now off
+    CHECK_FALSE(t.GetValue());
+    t.SetGlobal(true);
+    CHECK_FALSE(t.GetValue()); // and the global one off
+    CHECK_FALSE(FP::ClearOldBottomKeys()); // nothing of the game's own left
 }

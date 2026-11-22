@@ -1617,9 +1617,9 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
     case Id::KiuBottomScreen: // AzaharFrame kiu131: live; the two settings it replaced cleared
         r.value = std::clamp(value, 0, 2);
         Apply(v.vr_kiu_bottom_screen, static_cast<u32>(r.value), per_game);
-        Apply(v.vr_kiu_wrist_screen, false, per_game);
-        Apply(v.vr_kiu_talk_panel, false, per_game);
-        r.setting = MenuSetting::KiuBottomScreen; // the Qt side clears them too
+        // At both scopes (the game's own value and the global one), so neither decides again.
+        Kiu::FirstPerson::ClearOldBottomKeys();
+        r.setting = MenuSetting::KiuBottomScreen; // the Qt side clears and saves them too
         break;
     case Id::KiuBottomSize:
         r.value = std::clamp(value, 50, 200);
@@ -1631,8 +1631,8 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         Apply(v.vr_kiu_bottom_opacity, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::KiuBottomOpacity;
         break;
-    case Id::KiuBottomReset: { // both offsets back to 0, at the scope Bottom Screen has
-        const bool game = scope == 1 && PerGameSetting(Id::KiuBottomScreen);
+    case Id::KiuBottomReset: { // both offsets back to 0 where the grip saves them: the game's
+        const bool game = GameTitleId() != 0;
         Apply(v.vr_kiu_bottom_x, 0.0f, game);
         Apply(v.vr_kiu_bottom_y, 0.0f, game);
         send(MenuSetting::KiuBottomX, 0, game);

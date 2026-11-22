@@ -147,6 +147,7 @@
 #include <cmath>
 #include <cstdint>
 #include <string_view>
+#include "common/settings.h" // AzaharFrame kiu131: ClearOldBottomKeys
 #include "frame_xr/input/kiu_room.h"
 #include "frame_xr/input/kiu_turn.h"
 #include "frame_xr/kiu_scan.h"
@@ -322,6 +323,27 @@ constexpr float BottomAlphaFor(uint32_t percent) {
 inline constexpr float kBottomMaxRightDeg = 60.0f;
 inline constexpr float kBottomMaxUpDeg = 45.0f;   ///< up: a negative down offset
 inline constexpr float kBottomMaxDownDeg = 36.0f; ///< its middle at most 60 deg below ahead
+/// The two settings Bottom Screen replaced (vr_kiu_wrist_screen, vr_kiu_talk_panel) off, the
+/// global value and the game's own (if it has one), once Bottom Screen is chosen. True when the
+/// game had its own value of either (its file is then to be saved too).
+inline bool ClearOldBottomKeys() {
+    bool game_own = false;
+    const auto clear = [&game_own](Settings::SwitchableSetting<bool>& s) {
+        const bool global = s.UsingGlobal();
+        if (!global) {
+            s.SetValue(false); // the game's own
+            game_own = true;
+        }
+        s.SetGlobal(true);
+        s.SetValue(false); // the global one
+        s.SetGlobal(global);
+    };
+    auto& v = Settings::values;
+    clear(v.vr_kiu_wrist_screen);
+    clear(v.vr_kiu_talk_panel);
+    return game_own;
+}
+
 struct BottomNow {
     BottomScreen mode = BottomScreen::Off;
     float scale = 1.0f; ///< Bottom Screen Size

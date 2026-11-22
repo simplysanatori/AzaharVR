@@ -207,6 +207,7 @@ Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin);
 #include "frame_xr/controls_presets.h" // AzaharFrame reticle
 #include "frame_xr/kiu_scan.h"          // AzaharFrame kiuguns: IsKidIcarus
 #include "frame_xr/kiu_hooks.h"         // AzaharFrame kiuhook
+#include "frame_xr/kiu_first_person.h"   // AzaharFrame kiu131: Bottom Screen's old keys
 #include "core/mods/aspect.h"           // AzaharFrame fixes7
 #include "frame_xr/presets.h" // AzaharFrame vrqol
 #include "frame_xr/render_margin.h" // AzaharFrame fovaxis
@@ -5714,10 +5715,13 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::TriggerLayout: // AzaharFrame kiufire: 0 Original, 1 Fire and Power
         set(v.vr_kiu_trigger_layout, std::min<u32>(u, 1));
         break;
-    case S::KiuBottomScreen: // AzaharFrame kiu131: the two settings it replaced cleared
+    case S::KiuBottomScreen: // AzaharFrame kiu131: the two settings it replaced cleared, at
+        // both scopes; the global file saved here, the game's below when it had its own.
         set(v.vr_kiu_bottom_screen, std::min<u32>(u, 2));
-        set(v.vr_kiu_wrist_screen, false);
-        set(v.vr_kiu_talk_panel, false);
+        if (FrameXr::Kiu::FirstPerson::ClearOldBottomKeys()) {
+            per_game_setting = true;
+        }
+        config->Save();
         break;
     case S::KiuBottomSize:
         set(v.vr_kiu_bottom_size, std::clamp<u32>(u, 50, 200));
