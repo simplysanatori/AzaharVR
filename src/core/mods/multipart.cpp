@@ -19,6 +19,9 @@
 #endif
 #include <fmt/format.h>
 #include "common/request_path.h"
+#ifdef _WIN32 // AzaharVR
+#include "common/windows_ca_bundle.h"
+#endif
 #include "core/mods/multipart.h"
 #include "core/mods/transfer.h" // AzaharFrame fixes7
 
@@ -302,6 +305,14 @@ PriorityBackend RealPriorityBackend() {
     b.set_io_priority = [](int which, int who, int ioprio) {
         return static_cast<long>(::syscall(SYS_ioprio_set, which, who, ioprio));
     };
+#elif defined(_WIN32) // AzaharVR: the calling thread's lowest priority, and background I/O
+    b.thread_id = [] { return 0; }; // the calls below act on the calling thread
+    b.set_priority = [](int, int, int) {
+        return SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_LOWEST) ? 0 : -1;
+    };
+    b.set_io_priority = [](int, int, int) {
+        return SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN) ? 0L : -1L;
+    };
 #else
     b.thread_id = [] { return 0; };
     b.set_priority = [](int, int, int) { return -1; };
@@ -329,6 +340,9 @@ bool LowerThisThreadPriority() {
 
 namespace {
 const char* CaBundle() {
+#ifdef _WIN32 // AzaharVR: no such file on Windows (common/windows_ca_bundle.h)
+    return Common::WindowsCaBundle();
+#else
     static constexpr std::array<const char*, 4> candidates{
         "/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt", "/etc/ssl/cert.pem",
         "/etc/ssl/ca-bundle.pem"};
@@ -339,6 +353,7 @@ const char* CaBundle() {
         }
     }
     return nullptr;
+#endif
 }
 } // namespace
 

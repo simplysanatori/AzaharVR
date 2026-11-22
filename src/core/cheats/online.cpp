@@ -9,6 +9,9 @@
 #include <set>
 #include <httplib.h>
 #include "common/request_path.h"
+#ifdef _WIN32 // AzaharVR
+#include "common/windows_ca_bundle.h"
+#endif
 #include <json.hpp>
 #include <fmt/format.h>
 #include "common/file_util.h"
@@ -200,6 +203,9 @@ MergeResult Merge(const std::vector<Fetched>& fetched, const std::vector<std::st
 // The static LibreSSL has no CA store of its own; SteamOS and the common distributions keep one of
 // these.
 static const char* CaBundle() {
+#ifdef _WIN32 // AzaharVR: no such file on Windows (common/windows_ca_bundle.h)
+    return Common::WindowsCaBundle();
+#else
     static constexpr std::array<const char*, 4> candidates{
         "/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt",
         "/etc/ssl/cert.pem", "/etc/ssl/ca-bundle.pem"};
@@ -209,6 +215,7 @@ static const char* CaBundle() {
         }
     }
     return nullptr;
+#endif
 }
 
 HttpResult HttpsGet(const std::string& host, const std::string& path) {

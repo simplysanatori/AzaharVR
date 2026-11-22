@@ -18,6 +18,9 @@
 #include <system_error>
 #include <httplib.h>
 #include "common/atomic_file.h"
+#ifdef _WIN32 // AzaharVR
+#include "common/windows_ca_bundle.h"
+#endif
 #include "common/request_path.h"
 #include <json.hpp>
 #include <cryptopp/sha.h>
@@ -191,6 +194,9 @@ bool IsAncestorOrSelf(const std::string& ancestor, const std::string& dir) {
 }
 
 const char* CaBundle() {
+#ifdef _WIN32 // AzaharVR: no such file on Windows (common/windows_ca_bundle.h)
+    return Common::WindowsCaBundle();
+#else
     static constexpr std::array<const char*, 4> candidates{
         "/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt", "/etc/ssl/cert.pem",
         "/etc/ssl/ca-bundle.pem"};
@@ -200,6 +206,7 @@ const char* CaBundle() {
         }
     }
     return nullptr;
+#endif
 }
 
 std::string JStr(const nlohmann::json& o, const char* key) {

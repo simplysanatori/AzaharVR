@@ -5,6 +5,9 @@
 // AzaharFrame emerald: see net.h.
 
 #include "core/homebrew/net.h"
+#ifdef _WIN32 // AzaharVR
+#include "common/windows_ca_bundle.h"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -38,6 +41,9 @@ std::string HexDigest(Hash& hash) {
 }
 
 const char* CaBundle() {
+#ifdef _WIN32 // AzaharVR: no such file on Windows (common/windows_ca_bundle.h)
+    return Common::WindowsCaBundle();
+#else
     static constexpr std::array<const char*, 4> candidates{
         "/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt",
         "/etc/ssl/cert.pem", "/etc/ssl/ca-bundle.pem"};
@@ -47,6 +53,7 @@ const char* CaBundle() {
         }
     }
     return nullptr;
+#endif
 }
 
 bool SplitUrl(const std::string& url, std::string& host, std::string& path) {

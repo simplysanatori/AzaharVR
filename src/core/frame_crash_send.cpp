@@ -5,6 +5,9 @@
 // AzaharFrame crashreport: Send Report through sentry-native (frame_crash_send.h).
 
 #include "core/frame_crash_send.h"
+#ifdef _WIN32 // AzaharVR
+#include "common/windows_ca_bundle.h"
+#endif
 
 #include <array>
 #include <filesystem>
@@ -108,6 +111,9 @@ bool ParseDsn(const std::string& dsn, Dsn& out) {
 }
 
 const char* CaBundle() {
+#ifdef _WIN32 // AzaharVR: no such file on Windows (common/windows_ca_bundle.h)
+    return Common::WindowsCaBundle();
+#else
     static constexpr std::array<const char*, 4> candidates{
         "/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt",
         "/etc/ssl/cert.pem", "/etc/ssl/ca-bundle.pem"};
@@ -118,6 +124,7 @@ const char* CaBundle() {
         }
     }
     return nullptr;
+#endif
 }
 
 struct Transport {

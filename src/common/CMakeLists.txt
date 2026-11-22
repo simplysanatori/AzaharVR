@@ -150,6 +150,11 @@ if (ANDROID AND NOT ENABLE_LIBRETRO)
   )
 endif()
 
+if (WIN32) # AzaharVR: the certificates OpenSSL trusts on Windows
+  target_sources(citra_common PRIVATE windows_ca_bundle.cpp windows_ca_bundle.h)
+  target_link_libraries(citra_common PRIVATE crypt32)
+endif()
+
 if (MSVC)
   target_compile_options(citra_common PRIVATE
     /W4

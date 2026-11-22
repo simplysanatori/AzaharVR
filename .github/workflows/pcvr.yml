@@ -127,6 +127,8 @@ jobs:
           cp "$(find D:/a/_temp/openxr -path '*/x64/bin/*' -name openxr_loader.dll | head -1)" build/bundle/
           mkdir -p build/bundle/art artifacts
           cp steam-frame/art/*.png steam-frame/art/CREDITS.md dist/pcvr/art/NotoSans-* build/bundle/art/
+          mkdir -p build/bundle/certs
+          cp dist/pcvr/certs/cacert.pem build/bundle/certs/
           (cd build/bundle && 7z a -tzip "$GITHUB_WORKSPACE/artifacts/azahar-vr-windows-x86_64.zip" . > /dev/null)
       - name: Upload
         if: ${{ matrix.frame_xr == 'ON' }}
