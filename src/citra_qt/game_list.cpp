@@ -1258,7 +1258,12 @@ void GameList::LoadInterfaceLayout() {
 
     // We are using the name column to display icons and titles
     // so make it as large as possible as default.
+#ifdef AZAHARVR_PC // AzaharVR: the header is not laid out yet here (a fresh install got 120 px);
+                   // at least the Frame's width, 448 px
+    header->resizeSection(COLUMN_NAME, header->width() > 448 ? header->width() : 448);
+#else
     header->resizeSection(COLUMN_NAME, header->width());
+#endif
 }
 
 const QStringList GameList::supported_file_extensions = {

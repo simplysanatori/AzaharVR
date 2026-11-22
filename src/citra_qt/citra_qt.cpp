@@ -192,6 +192,13 @@ Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin);
 #include "common/frame_flat.h" // AzaharFrame flat3: flat mode's own screen layout
 #include "core/frontend/emu_window.h"
 #include "frame_xr/frame_xr.h"
+#ifdef AZAHARVR_PC // AzaharVR: EnsureControllerModels; the Frame's font
+#include <QFont>
+#include <QFontDatabase>
+#include "citra_qt/frame_tools.h"
+#include "frame_xr/picker/logo_loader.h"
+#include "frame_xr/vis/controller_models.h"
+#endif
 #include "frame_xr/immersive.h"
 #include "frame_xr/immersive_layout.h" // AzaharFrame natural: NaturalDepthPercent
 #include "frame_xr/immersive_names.h"
@@ -1183,6 +1190,9 @@ GMainWindow::GMainWindow(Core::System& system_)
 #endif
 
 #ifdef ENABLE_FRAME_XR // AzaharFrame: the XR session starts before any game boots.
+#ifdef AZAHARVR_PC // AzaharVR: the controller models from the player's SteamVR, once
+    FrameTools::EnsureControllerModels(FrameXr::Vis::ControllerModelDir());
+#endif
     if (g_frame_xr_requested) {
         FrameXr::StartOptions xr_options;
         xr_options.window_type = FrameXrWindowSystemType();
@@ -8477,6 +8487,20 @@ int LaunchQtFrontend(int argc, char* argv[]) {
 #endif
 
     QApplication app(argc, argv);
+
+#ifdef AZAHARVR_PC // AzaharVR: Qt looks as on the Frame, whose launcher leaves Qt its own theme:
+                   // the Fusion style and "Sans Serif" 9 pt, which there is Noto Sans (the files
+                   // in the art folder are the Frame's own)
+    QApplication::setStyle(QStringLiteral("Fusion"));
+    for (const char* name : {"NotoSans-Regular.ttf", "NotoSans-Bold.ttf"}) {
+        if (const std::string path = frame_xr::picker::FindArtFile(name); !path.empty()) {
+            QFontDatabase::addApplicationFont(QString::fromStdString(path));
+        }
+    }
+    if (QFontDatabase::families().contains(QStringLiteral("Noto Sans"))) {
+        QApplication::setFont(QFont(QStringLiteral("Noto Sans"), 9));
+    }
+#endif
 
     // Required when using .qrc resources from within a static library.
     // See https://doc.qt.io/qt-5/resources.html#using-resources-in-a-library

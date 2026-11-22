@@ -14,10 +14,17 @@
 #pragma once
 
 #include <optional>
+#include <string>
 
 namespace FrameTools {
 
 /// The exit code when argv holds one of the modes (it was run), else nullopt.
 std::optional<int> Run(int argc, char* argv[]);
+
+#ifdef AZAHARVR_PC // AzaharVR
+/// Makes OUT_DIR's frame_controller_{left,right}.model from the player's own SteamVR install when
+/// either is missing (on a PC no installer does). Logs what it did; a failure only leaves the beams.
+void EnsureControllerModels(const std::string& out_dir);
+#endif
 
 } // namespace FrameTools
