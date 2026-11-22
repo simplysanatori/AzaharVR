@@ -1685,7 +1685,7 @@ TEST_CASE("Kid Icarus hooks: the player's model through the actor's model link",
     CHECK(FindModel(m, actor, KT::kBuildUsaRev1) == 0u);
     m.Set32(actor + kActorModel, model);
     CHECK(FindModel(m, actor, KT::kBuildUsaRev1) == model);
-    // The European game, Chapter 1 air: the link at +0x328, the model also at [actor + 0x34C].
+    // The European game, an air state: the link at +0x328, the model also at [actor + 0x34C].
     FakeMemory e;
     const uint32_t eactor = 0x141E0228, elink = eactor + 0x328, emodel = 0x141DF988;
     e.Set32(eactor + kActorModelLink, elink);

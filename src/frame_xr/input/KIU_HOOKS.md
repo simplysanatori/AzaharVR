@@ -1033,8 +1033,10 @@ other build is off.
   0xC96000 is all zero with no word referring to it.
 - **Seen on the mock (V, USA Rev 1, mode 4):**
   - every group goes in;
-  - shots follow the hand's ray (0.00° on land; 0.00–0.21° in the air);
-  - Reticle Size, Over the Shoulder and the Bottom Screen (Persistent, Wrist, talk) work;
+  - shots follow the hand's ray (0.00° on land; 0.00–0.21° for three shots in the air);
+  - the 2D sprites turn with the head;
+  - Reticle Size works (the same texture, 0x1810AF00), and so does Over the Shoulder;
+  - the Bottom Screen's talk and wrist test switches work, and the touch reaches the game;
   - a 345 s session ran without a crash.
 - **Not mapped for USA Rev 1:** the C-Stick & Gyro mod leave-out and the Recommended preset are
   for the European game only. `kiu_range.h` (unused) is not mapped either.
