@@ -127,6 +127,10 @@ FrameMirror::FrameMirror(QWidget* main_window) : QObject(main_window), main(main
 
     // The window gets the panel's size (also on the desktop), unless maximised.
     ApplyWindowSize();
+#ifdef _WIN32 // AzaharVR: Windows' own file and colour pickers are windows the panel cannot draw;
+              // in VR, Qt's own (as on the Frame)
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs, vr_showing);
+#endif
     qApp->installEventFilter(this);
     for (QWidget* w : QApplication::topLevelWidgets()) {
         KeepOffscreen(w); // AzaharFrame vrfocus: (VR is the start state)
@@ -177,6 +181,9 @@ FrameMirror::~FrameMirror() {
     FrameXr::SetHomePanel({});
     FrameXr::SetKeyboardHandler({}); // AzaharFrame keyboard
     qApp->removeEventFilter(this);
+#ifdef _WIN32 // AzaharVR: Windows' own pickers again
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs, false);
+#endif
 }
 
 void FrameMirror::SetGameRunning(bool running) {
@@ -207,6 +214,9 @@ void FrameMirror::SetVrShowing(bool showing) {
         return;
     }
     vr_showing = showing;
+#ifdef _WIN32 // AzaharVR: Qt's own pickers in VR (the panel draws them), Windows' own in flat
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs, showing);
+#endif
     if (showing) {
         // Windows that exist already (menus and dialogs shown again and again) were polished
         // before; take the hidden ones off the screen now.
