@@ -15,3 +15,5 @@
 ^src/core/homebrew/xz/	Lasse Collin <lasse\.collin@tukaani\.org>
 # The menu dump's comment names the game's USA version as its dumps label it (a game name, not a file).
 ^src/frame_xr/menu/menu_dump\.cpp$	Kid Icarus \(USA\)
+# An earlier commit's debug print in the relocation tool named USA Rev 1 with a bracketed tag (reworded since).
+^tools/kiu_hooks/relocate/resolve\.py$	cave \(USA\)
