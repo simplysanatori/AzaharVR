@@ -225,7 +225,7 @@ ConfigureFrameVr::ConfigureFrameVr(QWidget* parent, u64 title_id) : QGroupBox(pa
     wrist_side_combo->addItem(tr("Inside"));
     wrist_side_row = MakeRow(
         this, QStringLiteral("frame_vr_wrist_side_row"), tr("Wrist Side"),
-        tr("Where wrist displays sit: on the back of your wrist like a watch, or on the inside."),
+        tr("Where wrist displays sit: on the back of your wrist, or on the inside."),
         {wrist_side_combo});
     layout->addWidget(wrist_side_row);
 

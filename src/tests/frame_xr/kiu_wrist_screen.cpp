@@ -241,7 +241,7 @@ TEST_CASE("FrameXr kiuwrist: the aiming hand's beam touches the wrist screen, fi
 // watch face; Inside: the palm side (as before). Each side shows only in its own reading pose:
 // the back of the hand toward the eyes (the forearm across the body) for Back, the palm toward
 // the face for Inside; the other pose turns it away. Both wrists, both sizes.
-TEST_CASE("FrameXr kiu131: Wrist Side, Back like a watch and Inside, each in its own pose",
+TEST_CASE("FrameXr kiu131: Wrist Side, Back and Inside, each in its own pose",
           "[frame_xr][kiuwrist][kiu131]") {
     using Vis::WristSide;
     REQUIRE(Vis::WristSideFrom(0) == WristSide::Back);

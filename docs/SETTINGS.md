@@ -130,7 +130,7 @@ Shows a small panel while a game runs: the game's frame rate, the emulation spee
 Where the stats show. The in-game menu has the same choice on its **Stats** tab, under **Show Stats**.
 
 - **In Front**: the panel appears about 1 m ahead of where you look, a little below eye level, and stays there. It is never placed behind a screen: if a screen is nearer, it goes just in front of it. Grab it with a grip to move it; while you hold it, that hand's stick moves it nearer or farther (up or down) and makes it bigger or smaller (sideways). Turning the stats off and on, a new game or a recentre puts it in front of you again. It hides while the in-game menu is open.
-- **On Wrist**: the panel sits on the left controller like a watch. It shows only when you turn your wrist toward your face, and hides when the left controller loses tracking.
+- **On Wrist**: the panel sits on the left controller. It shows only when you turn your wrist toward your face, and hides when the left controller loses tracking.
 
 ## Screen Layout
 

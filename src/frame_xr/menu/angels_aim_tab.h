@@ -128,7 +128,7 @@ inline constexpr const char* kBottomScreenPersistent = "Persistent";
 inline constexpr const char* kBottomScreenWrist = "Wrist";
 inline constexpr const char* kBottomScreenTip =
     "Persistent: always in view, below it; grab it with a grip to move it. Wrist: on your free "
-    "hand's wrist; look at it like a watch, and point at it to touch.";
+    "hand's wrist; turn your wrist to see it, and point at it to touch.";
 inline constexpr const char* kBottomScreenSizeRow = "Bottom Screen Size";
 inline constexpr const char* kBottomScreenSizeTip = "How big the Bottom Screen is, in view or on your wrist.";
 inline constexpr const char* kBottomScreenOpacityRow = "Bottom Screen Opacity";
@@ -142,7 +142,7 @@ inline constexpr const char* kWristSideRow = "Wrist Side";
 inline constexpr const char* kWristSideBack = "Back";
 inline constexpr const char* kWristSideInside = "Inside";
 inline constexpr const char* kWristSideTip =
-    "Where wrist displays sit: on the back of your wrist like a watch, or on the inside.";
+    "Where wrist displays sit: on the back of your wrist, or on the inside.";
 inline constexpr const char* kOverShoulderRow = "Over the Shoulder";
 inline constexpr const char* kOverShoulderTip =
     "Moves your view behind and above Pit, so you can see him.";
