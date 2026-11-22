@@ -93,6 +93,15 @@ enum class HoldPick : uint8_t { Idle, Shot };
 inline constexpr const char* kHoldSwitch = "AZAHARFRAME_KIU_HOLD";
 HoldPick HoldPickFor(int cls, const std::optional<std::string>& value);
 
+/// AzaharFrame kiuweapon: a test switch for the doubled weapon reported with Weapon Scale
+/// (docs/handoff/kiu-weapon-doubling.md), live: AZAHARFRAME_KIU_WEAPON_DRAW=0 leaves the
+/// weapon's model out of the image (the controller is not drawn in its place either), while its
+/// fit, muzzle, Laser Sight, muzzle flash, the game's shots from the hand and the projectiles go
+/// on as before. A weapon that still shows is not this app's model (it is the game's own). Unset
+/// or anything but "0": drawn, as before.
+inline constexpr const char* kWeaponDrawSwitch = "AZAHARFRAME_KIU_WEAPON_DRAW";
+bool WeaponModelDrawn(const std::optional<std::string>& value);
+
 struct FitOverride {
     std::array<float, 3> offset_cm{};
     float yaw = 0.0f, pitch = 0.0f, roll = 0.0f;
