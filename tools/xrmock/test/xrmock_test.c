@@ -253,10 +253,31 @@ int main(void) {
     sug.suggestedBindings = sb;
     sug.countSuggestedBindings = 7;
     XR(xrSuggestInteractionProfileBindings(gInst, &sug));
+    // AzaharVR: the same actions for Touch and Index, so MOCK_XR_PROFILE can pick either.
+    const char* others[] = {"/interaction_profiles/oculus/touch_controller", "/interaction_profiles/valve/index_controller"};
+    for (int k = 0; k < 2; k++) {
+        sug.interactionProfile = path(xrStringToPath, others[k]);
+        XR(xrSuggestInteractionProfileBindings(gInst, &sug));
+    }
     XrSessionActionSetsAttachInfo att = {XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO};
     att.countActionSets = 1;
     att.actionSets = &set;
     XR(xrAttachSessionActionSets(session, &att));
+    {
+        // AzaharVR: the profile the runtime reports is the one MOCK_XR_PROFILE chose (the Frame's without it).
+        XRFN(xrGetCurrentInteractionProfile);
+        XRFN(xrPathToString);
+        XrInteractionProfileState ips = {XR_TYPE_INTERACTION_PROFILE_STATE};
+        XR(xrGetCurrentInteractionProfile(session, hands[1], &ips));
+        char got[XR_MAX_PATH_LENGTH] = "";
+        uint32_t n = 0;
+        if (ips.interactionProfile != XR_NULL_PATH) xrPathToString(gInst, ips.interactionProfile, sizeof(got), &n, got);
+        const char* want = getenv("MOCK_XR_PROFILE");
+        char full[XR_MAX_PATH_LENGTH];
+        snprintf(full, sizeof(full), "/interaction_profiles/%s", want && *want ? want : "valve/frame_controller");
+        printf("test: current interaction profile %s\n", got);
+        CHECK(!strcmp(got, full));
+    }
     XrActionSpaceCreateInfo aci = {XR_TYPE_ACTION_SPACE_CREATE_INFO};
     aci.action = aAim;
     aci.subactionPath = hands[1];

@@ -48,6 +48,10 @@
 //                             app's queue to go idle is an error (off unless
 //                             set: it stalls the app's queue)
 //   MOCK_XR_INPUT_SCRIPT=<f>  scripted controller input, see README.md
+//   MOCK_XR_PROFILE=<p>       AzaharVR: the controllers' interaction profile once the action
+//                             sets are attached (oculus/touch_controller, valve/index_controller,
+//                             htc/vive_focus3_controller, valve/frame_controller, ...); default:
+//                             the Frame's if the app suggested it, else the first suggested
 //   MOCK_XR_TRACE_POSE=1      quad layer positions in the trace (5: to 5 decimals, sizes too)
 //   MOCK_XR_DUMP_DIR=<dir>    write swapchain images as PNG into this dir
 //   MOCK_XR_DUMP_FRAME=<n|last>  the first image of each swapchain released at
@@ -239,6 +243,7 @@ static const char* pathStr(XrPath p) {
 static char gExtNames[64][XR_MAX_EXTENSION_NAME_SIZE];
 static int gExtCount = 0;
 static int gFrameControllerExt = 0;  // XR_VALVE_frame_controller_interaction enabled
+static int gFocus3Ext = 0;           // AzaharVR: XR_HTC_vive_focus3_controller_interaction enabled
 static int gCylinderExt = 0;        // XR_KHR_composition_layer_cylinder enabled
 
 static XrResult XRAPI_CALL mEnumExt(const char* layer, uint32_t cap, uint32_t* count, XrExtensionProperties* props) {
@@ -266,6 +271,7 @@ static XrResult XRAPI_CALL mCreateInstance(const XrInstanceCreateInfo* ci, XrIns
             res = XR_ERROR_EXTENSION_NOT_PRESENT;
         }
         if (!strcmp(name, "XR_VALVE_frame_controller_interaction")) gFrameControllerExt = 1;
+        if (!strcmp(name, "XR_HTC_vive_focus3_controller_interaction")) gFocus3Ext = 1;
         if (!strcmp(name, "XR_KHR_composition_layer_cylinder")) gCylinderExt = 1;
         if (strlen(line) + strlen(name) + 2 < sizeof(line)) {
             strcat(line, " ");
@@ -405,8 +411,11 @@ static int gBindCount = 0;
 
 static const char* kProfiles[] = {"/interaction_profiles/valve/frame_controller", "/interaction_profiles/khr/simple_controller",
                                   "/interaction_profiles/oculus/touch_controller", "/interaction_profiles/meta/touch_controller_plus",
-                                  "/interaction_profiles/valve/index_controller"};
-#define NPROFILES 5
+                                  "/interaction_profiles/valve/index_controller",
+                                  // AzaharVR: the Vive Focus 3 and XR Elite controllers (XR_HTC_vive_focus3_controller_interaction)
+                                  "/interaction_profiles/htc/vive_focus3_controller"};
+#define NPROFILES 6
+#define PROFILE_FOCUS3 5
 static int gProfileSuggested[NPROFILES];
 static int gProfile = -1;  // the active profile once the action sets are attached
 static int gAttached = 0, gSynced = 0;
@@ -646,6 +655,10 @@ static XrResult XRAPI_CALL mSuggest(XrInstance i, const XrInteractionProfileSugg
         mock_error("suggested bindings for %s without XR_VALVE_frame_controller_interaction", prof);
         return XR_ERROR_PATH_UNSUPPORTED;
     }
+    if (pi == PROFILE_FOCUS3 && !gFocus3Ext) {
+        mock_error("suggested bindings for %s without XR_HTC_vive_focus3_controller_interaction", prof);
+        return XR_ERROR_PATH_UNSUPPORTED;
+    }
     LOCK();
     if (gAttached) {
         UNLOCK();
@@ -686,9 +699,27 @@ static XrResult XRAPI_CALL mAttach(XrSession s, const XrSessionActionSetsAttachI
     (void)a;
     LOCK();
     gAttached = 1;
-    gProfile = gProfileSuggested[0] ? 0 : -1;
-    for (int k = 1; k < NPROFILES && gProfile < 0; k++)
-        if (gProfileSuggested[k]) gProfile = k;
+    // AzaharVR: MOCK_XR_PROFILE picks the controllers that are "connected" (vendor/name, as
+    // oculus/touch_controller, or the full path); without it the first profile with bindings,
+    // the Frame's first, as before.
+    const char* want = getenv("MOCK_XR_PROFILE");
+    if (want && *want) {
+        gProfile = -1;
+        for (int k = 0; k < NPROFILES; k++) {
+            const char* tail = kProfiles[k] + strlen("/interaction_profiles/");
+            if (!strcmp(want, kProfiles[k]) || !strcmp(want, tail)) gProfile = k;
+        }
+        if (gProfile < 0) {
+            mock_error("MOCK_XR_PROFILE=%s is not a profile the mock knows", want);
+        } else if (!gProfileSuggested[gProfile]) {
+            mock_error("MOCK_XR_PROFILE=%s: the app suggested no bindings for it", want);
+            gProfile = -1;
+        }
+    } else {
+        gProfile = gProfileSuggested[0] ? 0 : -1;
+        for (int k = 1; k < NPROFILES && gProfile < 0; k++)
+            if (gProfileSuggested[k]) gProfile = k;
+    }
     trace("attachActionSets profile=%s", gProfile >= 0 ? kProfiles[gProfile] : "none");
     if (gProfile >= 0) pushState(EV_PROFILE_CHANGED);
     UNLOCK();
@@ -2103,7 +2134,7 @@ static void init(void) {
     } else {
         const char* exts[] = {"XR_KHR_vulkan_enable2", "XR_FB_display_refresh_rate", "XR_EXT_performance_settings",
                               "XR_VALVE_frame_controller_interaction", "XR_KHR_composition_layer_depth", "XR_EXT_eye_gaze_interaction",
-                              "XR_KHR_composition_layer_cylinder"};
+                              "XR_KHR_composition_layer_cylinder", "XR_HTC_vive_focus3_controller_interaction"};
         for (unsigned i = 0; i < sizeof(exts) / sizeof(exts[0]); i++) strcpy(gExtNames[gExtCount++], exts[i]);
         if (getenv("MOCK_XR_SPACEWARP")) strcpy(gExtNames[gExtCount++], "XR_FB_space_warp");
     }
