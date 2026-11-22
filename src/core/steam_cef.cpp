@@ -19,6 +19,7 @@
 #include <fstream>
 #include <regex>
 #include <thread>
+#ifndef _WIN32 // AzaharVR: Steam's CEF port and vrcmd are the Frame's; Windows gets stubs below
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -26,10 +27,13 @@
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 #include <fmt/format.h>
 #include <json.hpp>
 
+#ifndef _WIN32 // AzaharVR
 extern char** environ;
+#endif
 
 namespace SteamCef {
 
@@ -74,6 +78,27 @@ bool IsFile(const std::string& path) {
     return std::filesystem::is_regular_file(path, ec);
 }
 
+#ifdef _WIN32
+// AzaharVR: nothing on Windows talks to Steam's debugging port (it is how the Frame's installer
+// sets up the library entry), so the connection always fails.
+class Socket {
+public:
+    bool Connect(int port, int /*timeout_s*/, std::string* error) {
+        *error = fmt::format("cannot connect to Steam's debugging port {} (not on Windows)", port);
+        return false;
+    }
+    bool SendAll(const std::string&) {
+        return false;
+    }
+    std::string Recv(std::size_t) {
+        return {};
+    }
+    bool RecvExact(std::size_t, std::string& out) {
+        out.clear();
+        return false;
+    }
+};
+#else
 class Socket {
 public:
     ~Socket() {
@@ -133,6 +158,7 @@ public:
 private:
     int fd = -1;
 };
+#endif // _WIN32
 
 std::string DechunkBody(const std::string& body) {
     std::string out;
@@ -543,6 +569,11 @@ std::string Vrcmd(const std::vector<std::string>& args) {
         std::fprintf(stderr, "no vrcmd\n");
         return {};
     }
+#ifdef _WIN32
+    // AzaharVR: only the Frame's scripts run vrcmd
+    std::fprintf(stderr, "vrcmd is not run on Windows\n");
+    return {};
+#else
     int fds[2];
     if (pipe(fds) != 0) {
         return {};
@@ -605,6 +636,7 @@ std::string Vrcmd(const std::vector<std::string>& args) {
     int status = 0;
     waitpid(pid, &status, 0);
     return out;
+#endif // _WIN32
 }
 
 } // namespace
