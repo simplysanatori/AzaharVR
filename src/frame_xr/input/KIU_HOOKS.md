@@ -1003,3 +1003,77 @@ toward the elbow, not overlapping. The left-hand poses come from the test's `aim
   another texture keeps its size. The address is the game's VRAM layout, which another chapter
   could change: the reticle then keeps its size, or (a risk) whatever other texture sits at
   that address is scaled instead. Off 100 % only.
+
+### Angel's Aim for 1.3.0, continued (AzaharFrame kiu133)
+
+#### Pit's model node, found: the doubling while firing
+
+- **The cause (V, desktop).** kiu131's hide read the model only at `[actor + 0x34C]`. That word
+  holds it only in some states. In the owner's firing air state it is 1, so nothing was hidden
+  and the log had no `hidden by its draw` line. The same was true in the Practice Range and
+  Chapter 1's land section. The actor holds an inline holder {class 0xD760B8, the actor,
+  0xffff0001, the model}, at a place that differs by battle: the model pointer is at + 0x344
+  (the owner's air state), + 0x34C (Chapter 1 air, Chapter 2 land), or + 0x3CC (the Practice
+  Range, Chapter 1 land).
+- **The fix (`kiu_model.h`, `KiuModel::FindModel`).** It tries the actor's link first:
+  `[actor + 0x1E4]`, whose + 0x1C is the actor and + 0x24 the model. This is the kiuusa lane's
+  reading. It holds in every state read, and in one USA state the link is on the heap. Next it
+  tries the offset found before, then + 0x34C, then the holder's shape from + 0x300 to + 0x480.
+  Any result must be of the model class. It is looked up again when the actor changes, each
+  VBlank while it is found, and every 30 VBlanks while it is not. The log says it once per
+  change: `the player's model node … (through [actor + 0x1E4])`, `(actor + 0x…)` or
+  `not found`.
+- **Measured (mock, deterministic pairs: held, the same steps, RT from 5 s).** These pairs
+  compare `HIDE_PLAYER=0` with the fix:
+  - The owner's air state while firing: a blue and white blade at the reticle, gone with the
+    fix.
+  - Chapter 1 land with the palm: the ghostly hands are gone, and the shots' glow stays.
+  - The score keeps rising while he is hidden (23710 → 25340).
+  - The Chapter 2 state 9 is saved on the pause screen, so it was not usable.
+
+#### Camera (`vr_kiu_over_shoulder`, `vr_kiu_game_camera`: First Person, Over the Shoulder, Game's Camera)
+
+One choice row stored in two keys, so old files keep their meaning. If `game_camera` is on, the
+view is the Game's Camera; otherwise `over_shoulder` decides
+(`Kiu::FirstPerson::ViewFor`, `ViewOverShoulder`, `ViewGameCamera`).
+`AZAHARFRAME_KIU_GAME_CAMERA=0|1` wins over the setting. `EYE_OFFSET` turns it off.
+
+- **The Game's Camera** drops only the eye group (the eye at Pit's head and the shoulder offset).
+  The rest of first person stays: the head turns the game's view, the shots leave along the
+  hand's ray, and the reticle, the 2D sprites and the wide view all work. Pit is drawn, since
+  the hide by draw needs the eye at his head. The weapon in hand is left out in both outside
+  views (`OutsideViewOn`), because Pit holds his own.
+- **Measured (mock, the owner's air state).** Firing, the head turned 30° and then 30°/-15°, the
+  hand moved. Pit and his weapon are drawn behind the reticle. The game's shots leave his weapon
+  and hit (the score rose). The sprites face the eye, and there is no second weapon.
+- **Not checked.** Comfort: the game's camera moves on its own (sways, turns at corners) with the
+  head on top. That is for the owner to judge in the headset.
+
+#### Pit Opacity (`vr_kiu_pit_opacity`, 20 to 100 %, the outside views only)
+
+- **How the game draws him (V, `AZAHARFRAME_KIU_DRAW_LOG=<any new value>`, one line per draw for
+  40 ms).** About 6 draws (vertex data in VRAM near 0x181E8000) for the body, the wings and the
+  weapon, plus glow draws (additive, no depth write). When the camera is near, the game's own
+  fade switches his draws from opaque (src 1, dst 0) to src alpha. No word in the model node
+  differs between faded and solid.
+- **Finding his draws (`kiu_pit_opacity.cpp`).** This runs once per model node, after the view
+  has settled:
+  - It collects the depth-tested draws' first vertex address for 4 VBlanks with him drawn.
+  - It skips 3 VBlanks, then collects for 4 more with his drawn byte cleared.
+  - His draws are the ones only in the first set (`KiuModel::PitDrawsFrom`). More than 48 means
+    the calibration failed, and none are used.
+  - The log line is `Pit Opacity: N of his draws found`.
+  - He blinks out for about 7 VBlanks (~0.1 s) the first time an outside view below 100 % is
+    in effect for a model node (a new battle or a save state load brings a new node).
+- **The blend (`vk_rasterizer.cpp`, `kiu_view_tap.h` `PitDraws`).** Those of his draws that the
+  game draws opaque get the constant alpha (src ConstantAlpha, dst OneMinusConstantAlpha). The
+  next draw's `SyncDrawState` restores the game's blending. Depth is unchanged, so he still hides
+  what is behind him in depth, and nothing else is touched. Draws the game already blends
+  (its own fade, the glows) keep their own blending.
+  `AZAHARFRAME_KIU_PIT_OPACITY=<percent>` (live) wins over the setting.
+- **Measured (mock, the Practice Range).** The Game's Camera at 100, 50 and 20 %, then Over the
+  Shoulder at 20 %: his body, wings and legs are see-through, and the floor and the target
+  show through him. 6 draws were found, with 64 draws while drawn and 18 while hidden.
+- **Risks.** The addresses are learnt once per model node. If the game moves his vertex data
+  later (another weapon, a power), he stays solid until the next model node. A depth-writing see-through draw hides his own parts behind it (a back arm), as in any
+  one-pass blend.
