@@ -7,7 +7,8 @@ thread's side), `tools/kiu_hooks/` (the stubs' ARM source and their checks), tes
 `tests/frame_xr/kiu_hooks.cpp`.
 
 Everything here is for the **European game, title 0004000000030200, original code (code.bin md5
-b107c9b1)**. Every address is of that build. **V** = seen working in the running game on the
+b107c9b1)**. Every address is of that build; **USA Rev 1** has its own tables ("Other builds"
+below). **V** = seen working in the running game on the
 desktop (native build, the real game) or read in the exact code; **I** = inferred.
 
 ## What it is
@@ -27,8 +28,9 @@ needed.
   what a stub assumes of the code after its site). So a save state loaded with or without patches
   is right one VBlank later (V: after a load the game's words are back for less than one game
   frame).
-- **Before anything**, the title must be the European one and nine words of the camera update
-  must match (`kiu_turn.h`, `CodeMatches`; the USA and Japanese builds differ there).
+- **Before anything**, the title must be a mapped one and nine words of the camera update must
+  match that build's (`kiu_turn.h`, `MatchBuild`: the European game and USA Rev 1; USA Rev 0 and
+  the Japanese game are left off).
 - **Every code word written is followed by a code cache drop** for it
   (`Core::System::InvalidateCacheRange`, all CPU cores). V on the desktop with each core (the
   x86-64 JIT, the fast interpreter, the old interpreter): a patch takes effect at once and so does
@@ -903,7 +905,8 @@ the game's picture, not this app's layer.
 ## Not done, not known
 
 - The headset: nothing here ran on it (the aarch64 build compiles).
-- Other regions and game versions: no table (the title and code checks leave everything off).
+- Other regions and game versions: USA Rev 1 is mapped ("Other builds"); USA Rev 0 (same title,
+  its code check differs) and the Japanese game have no table and stay off.
 - Multiplayer: not run. The shot stub compares the owner with the local player's actor (found
   through the local aim object), so other players' shots should pass untouched (I).
 - (Settled, "Shots from the hand" below: the game's own aim quaternion at a shot is read by the
@@ -1003,3 +1006,39 @@ toward the elbow, not overlapping. The left-hand poses come from the test's `aim
   another texture keeps its size. The address is the game's VRAM layout, which another chapter
   could change: the reticle then keeps its size, or (a risk) whatever other texture sits at
   that address is scaled instead. Off 100 % only.
+
+## Other builds (AzaharFrame kiuusa)
+
+**USA Rev 1** (title 0004000000030100, text 0x100000–0xC950F0, md5 c8e49bee…) is mapped; every
+other build is off.
+
+- **One table per build.** `kiu_turn.h` `Build` names its title, code check and the classes
+  (aim land/air, camera, owner, model, actor; the reticle texture). `kiu_hooks.h` `Code` names its
+  patch rows, context rows and stub image. `MatchBuild(title, memory)` picks the build whose
+  title and nine code words both match, so USA Rev 0, which shares the title, stays off. The
+  European game's tables are those above; its behaviour is unchanged.
+- **How USA Rev 1's addresses were found.** Both builds' text was dumped through the RPC server
+  (the dumps stay local). `tools/kiu_hooks/relocate/` maps one onto the other:
+  - `codemap.py`: unique 4-word anchors give a piecewise shift (303 segments). Every branch is
+    checked to reach the mapped target; the only misses are float literals.
+  - `datamap.py`: pairs the pointer literals. Data and bss are at +0. Rodata is +0 below
+    0xCAC13C, then −0x90 or −0xA0.
+  - `resolve.py`: every hook address and word, checked (93 of 93).
+  - `gen_usa.py`: writes the rows.
+  The code words at the patch sites are the same as the European game's, apart from branch
+  offsets.
+- **Stubs.** The stubs are position-independent. The USA image is the European one with its six
+  return and call literals relocated (`ImageFor`, `kStubTargetsUsaRev1`). It goes at the same
+  `0xC95380`, with the mailbox at `0xC95F00`: USA's text ends at 0xC950F0, and its tail up to
+  0xC96000 is all zero with no word referring to it.
+- **Seen on the mock (V, USA Rev 1, mode 4):**
+  - every group goes in;
+  - shots follow the hand's ray (0.00° on land; 0.00–0.21° in the air);
+  - Reticle Size, Over the Shoulder and the Bottom Screen (Persistent, Wrist, talk) work;
+  - a 345 s session ran without a crash.
+- **Not mapped for USA Rev 1:** the C-Stick & Gyro mod leave-out and the Recommended preset are
+  for the European game only. `kiu_range.h` (unused) is not mapped either.
+- **The player's model.** It is reached through the actor's model link (`FindModel`:
+  `[[actor + 0x1E4] + 0x24]`, whose `+0x1C` is the actor). `[actor + 0x34C]` holds the model only
+  in some states, in both builds; it is now the fallback.
+
