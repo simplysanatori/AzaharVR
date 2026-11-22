@@ -134,6 +134,8 @@ struct State {
     uint32_t run = 0; ///< Kiu::FirstPerson::RunCount() when this state began
     bool checked = false;
     bool code_ok = false;
+    /// AzaharFrame kiuusa: the build whose code matched (code_ok), else the European one's.
+    const Input::KiuTurn::Build* build = &Input::KiuTurn::kBuildEur;
     std::string note;
     uint32_t serial = 0;
     uint32_t idle_vblanks = 0;
@@ -467,11 +469,15 @@ void Hook(int64_t ticks) {
     GuestMemory mem(system, memory, *process);
     // AzaharFrame kiumode: the game's code first: Angel's Aim (Immersive Mode 4) is in effect only
     // where it is the mapped one (kiu_first_person.h).
-    const bool mapped = title == Input::KiuTurn::kTitleEur;
+    // AzaharFrame kiuusa: the European game or USA Rev 1 (KiuTurn::kBuilds), by title and code.
+    const bool mapped = Input::KiuTurn::IsMappedTitle(title);
     if (mapped && !s.checked) {
         s.checked = true;
-        s.code_ok = KH::GameCodeMatches(mem);
+        const Input::KiuTurn::Build* build = Input::KiuTurn::MatchBuild(title, mem);
+        s.code_ok = build != nullptr;
+        s.build = build ? build : &Input::KiuTurn::kBuildEur;
     }
+    const KH::Code& code = KH::CodeFor(s.build);
     Kiu::FirstPerson::SetGameCode(title, mapped && s.code_ok);
     Kiu::FirstPerson::NoteCStickMod(); // AzaharFrame kiu132: its toasts (a mod left out, or loaded)
     // AzaharFrame kiuvr: first person turns on the eye, the culls' and the follow's switches
@@ -548,7 +554,8 @@ void Hook(int64_t ticks) {
         const auto tex_text = Switch(kSwitchReticleTexture);
         const float scale = KH::ReticleScaleFor(
             size_text ? size_text->c_str() : nullptr, Settings::values.vr_kiu_reticle_size.GetValue());
-        const uint32_t tex = KH::ReticleTextureFor(tex_text ? tex_text->c_str() : nullptr);
+        const uint32_t tex = KH::ReticleTextureFor(tex_text ? tex_text->c_str() : nullptr,
+                                                   s.build->reticle_texture);
         VideoCore::Immersive::g_reticle_scale.store(scale, std::memory_order_relaxed);
         VideoCore::Immersive::g_reticle_texture.store(first_person ? tex : 0u,
                                                       std::memory_order_relaxed);
@@ -565,17 +572,18 @@ void Hook(int64_t ticks) {
 
     if (!mapped) {
         if (any) {
-            Note(s, fmt::format("off: only the European game (0004000000030200) is mapped, this "
-                                "is {:016X}{}",
-                                title, as_other));
+            Note(s, fmt::format("off: only {} are mapped, this is {:016X}{}",
+                                Input::KiuTurn::kMappedList, title, as_other));
         }
         return;
     }
     if (!s.code_ok) {
         if (any) {
-            Note(s, fmt::format("off: the game's code differs from the European game's "
-                                "(0x704178, 0x703894, 0x703D4C){}",
-                                as_other));
+            const Input::KiuTurn::Build& b = Input::KiuTurn::BuildOfTitle(title);
+            Note(s, fmt::format("off: the game's code differs from {} (0x{:06X}, 0x{:06X}, "
+                                "0x{:06X}){}",
+                                Input::KiuTurn::BuildsCode(b), b.code_check[0].addr,
+                                b.code_check[4].addr, b.code_check[8].addr, as_other));
         }
         return;
     }
@@ -583,16 +591,16 @@ void Hook(int64_t ticks) {
         // Nothing asked for. A save state made with a switch on brings our words (and a hidden
         // player) back: take them out; otherwise only look.
         const bool look = s.idle_vblanks++ % kIdleLookVBlanks == 0;
-        if (!KH::AnyOurs(mem) && !(s.hidden || s.model_hidden != 0 || look)) {
+        if (!KH::AnyOurs(mem, code) && !(s.hidden || s.model_hidden != 0 || look)) {
             return;
         }
     } else {
         s.idle_vblanks = 0;
-        Note(s, fmt::format("the game's code matches (European game){}",
+        Note(s, fmt::format("the game's code matches ({}){}", s.build->name,
                             angels_aim ? "; Angel's Aim: first person" : ""));
     }
 
-    const KH::Player p = KH::FindPlayer(mem);
+    const KH::Player p = KH::FindPlayer(mem, *s.build);
     KH::EyeRequest eye;
     eye.on = want_eye;
     if (first_person && !p.land) {
@@ -702,7 +710,7 @@ void Hook(int64_t ticks) {
                             (want_aim_box ? KH::Bit(KH::Group::AimBox) : 0u) |
                             (want_player_shadow ? KH::Bit(KH::Group::PlayerShadow) : 0u) |
                             (mailbox.wide_node != 0 ? KH::Bit(KH::Group::WideCamera) : 0u);
-    const KH::SyncResult r = KH::Sync(mem, wanted, mailbox);
+    const KH::SyncResult r = KH::Sync(mem, wanted, mailbox, code);
     LogChanges(s, r);
     if ((r.in_mask & KH::Bit(KH::Group::WideCamera)) != 0) {
         AutoShape::HoldWhileWide(); // AzaharFrame kiufix2: Screen Shape Automatic does not measure
@@ -742,10 +750,10 @@ void Hook(int64_t ticks) {
         }
         // AzaharFrame kiu131: his model's draw. AZAHARFRAME_KIU_HIDE_PLAYER set ("1": the scale
         // above; "0": keep him) leaves it drawn.
-        uint32_t model = 0, vt = 0, word = 0;
-        if (mem.Read32(p.actor + KH::kActorModel, model) && model != 0 && (model & 3u) == 0 &&
-            mem.Read32(model, vt) && vt == KH::kModelVtable &&
-            mem.Read32(model + KH::kModelDrawnWord, word)) {
+        // AzaharFrame kiuusa: found through the actor's model link first (KH::FindModel).
+        uint32_t word = 0;
+        const uint32_t model = KH::FindModel(mem, p.actor, *s.build);
+        if (model != 0 && mem.Read32(model + KH::kModelDrawnWord, word)) {
             const bool hide_draw = hide_by == KH::HideBy::Draw && !hide_text &&
                                    KH::HideByDrawInFirstPerson(first_person, eye_moved) && p.Ok();
             // Ours to put back: the node this app cleared, or (once a run, playing) a cleared

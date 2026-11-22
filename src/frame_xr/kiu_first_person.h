@@ -164,11 +164,13 @@ inline constexpr float kAngelsAimEnemyKeepS = 12.0f;
 constexpr bool WantedFor(bool dev_switch, uint32_t stored_mode, uint64_t title) {
     return dev_switch || (stored_mode == kModeAngelsAim && IsKidIcarus(title));
 }
-/// Angel's Aim is in effect: the stored mode is 4, the game is the European one, its code is the
-/// one the hooks are mapped for (checked by the hooks: SetGameCode) and the game is on view in
-/// VR (`in_vr`: in Flat no Immersive Mode does anything, nor does this one).
+/// Angel's Aim is in effect: the stored mode is 4, the game is one the hooks are mapped for (the
+/// European game, or USA Rev 1: AzaharFrame kiuusa) and its code is that build's (checked by the
+/// hooks: SetGameCode), and the game is on view in VR (`in_vr`: in Flat no Immersive Mode does
+/// anything, nor does this one).
 constexpr bool AngelsAimFor(uint32_t stored_mode, uint64_t title, bool code_ok, bool in_vr) {
-    return stored_mode == kModeAngelsAim && title == Input::KiuTurn::kTitleEur && code_ok && in_vr;
+    return stored_mode == kModeAngelsAim && Input::KiuTurn::IsMappedTitle(title) && code_ok &&
+           in_vr;
 }
 /// First person is on: Angel's Aim in effect, or the developer switch.
 constexpr bool OnFor(bool dev_switch, uint32_t stored_mode, uint64_t title, bool code_ok,
@@ -217,7 +219,7 @@ bool AngelsAim();
 bool ShoulderOn();
 /// AzaharFrame kiumode: Angel's Aim asked for (WantedFor; live). Any thread.
 bool Wanted();
-/// First person is on and `title` is the game it is for (the European game). Any thread.
+/// First person is on and `title` is a game it is for (the European game, USA Rev 1). Any thread.
 bool ForTitle(uint64_t title);
 /// Mode 3's registers for this game (the settings' View Matrix Register and Eye Indicator
 /// Register), found to be right for it on the desktop (KIU_HOOKS.md).
@@ -226,6 +228,9 @@ inline constexpr const char* kEyeIndicator = "87,2";
 /// AzaharFrame kiumode: the hooks, each VBlank: the running game and whether its code is the
 /// one they are mapped for (false: not checked, or not that code).
 void SetGameCode(uint64_t title, bool code_ok);
+/// AzaharFrame kiuusa: the running game's code is one the hooks are mapped for (SetGameCode):
+/// the in-game menu shows first person's rows for it. Any thread.
+bool CodeMapped();
 /// AzaharFrame kiumode: the hooks, each VBlank: the two registers supplied to the renderer for
 /// this run (in memory only; Settings::RunSuppliedSetting), or the settings' own again.
 void SupplyRegisters(bool on);

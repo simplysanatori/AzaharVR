@@ -1480,3 +1480,221 @@ TEST_CASE("Kid Icarus hooks: Reticle Size's scale and texture", "[frame_xr][kiuh
     CHECK(KH::ReticleTextureFor("1810AF00") == 0x1810AF00u);
     CHECK(KH::ReticleTextureFor("0") == 0u);
 }
+
+// AzaharFrame kiuusa: USA Rev 1. Its tables are the European ones relocated (KIU_HOOKS.md, "The
+// builds"): the same rows in the same order, the same words but for relative branches whose two
+// ends moved apart; the stubs' image differs only in its literals that name the game's code.
+namespace {
+
+namespace KT = FrameXr::Input::KiuTurn;
+
+constexpr bool IsBranch(uint32_t w) {
+    return (w & 0x0E000000u) == 0x0A000000u;
+}
+
+/// USA Rev 1's code where the hooks reach (as Game() for the European game).
+FakeMemory GameUsa() {
+    FakeMemory m;
+    for (const Patch& p : kPatchesUsaRev1) {
+        m.Set32(p.addr, p.original);
+    }
+    for (const Context& c : kContextUsaRev1) {
+        m.Set32(c.addr, c.word);
+    }
+    for (const auto& w : KT::kCodeCheckUsaRev1) {
+        m.Set32(w.addr, w.word);
+    }
+    for (uint32_t addr = kCaveStart; addr < kCaveEnd; addr += 4) {
+        m.Set32(addr, 0);
+    }
+    return m;
+}
+
+} // namespace
+
+TEST_CASE("Kid Icarus hooks: USA Rev 1's tables are the European ones relocated",
+          "[frame_xr][kiuhook][kiuusa]") {
+    REQUIRE(kPatchesUsaRev1.size() == kPatches.size());
+    for (std::size_t i = 0; i < kPatches.size(); ++i) {
+        const Patch& e = kPatches[i];
+        const Patch& u = kPatchesUsaRev1[i];
+        INFO("patch " << i);
+        CHECK(u.group == e.group);
+        CHECK(u.addr != e.addr);
+        CHECK(u.addr < kCaveStart);
+        CHECK((IsBranch(e.original) || u.original == e.original));
+        // Ours: the same word where it is no branch, or a branch from the same distance to the
+        // same place of the function, or into the same stub entry.
+        if (!IsBranch(e.patched)) {
+            CHECK(u.patched == e.patched);
+        } else {
+            const int32_t de = static_cast<int32_t>(e.patched << 8) >> 6;
+            const int32_t du = static_cast<int32_t>(u.patched << 8) >> 6;
+            const uint32_t te = e.addr + 8u + static_cast<uint32_t>(de);
+            const uint32_t tu = u.addr + 8u + static_cast<uint32_t>(du);
+            if (te >= kImageBase) {
+                CHECK(tu == te); // the same stub (the image stays where it is)
+            } else {
+                CHECK(tu - u.addr == te - e.addr); // inside the same function
+            }
+        }
+    }
+    REQUIRE(kContextUsaRev1.size() == kContext.size());
+    int branches_moved = 0;
+    for (std::size_t i = 0; i < kContext.size(); ++i) {
+        INFO("context " << i);
+        CHECK(kContextUsaRev1[i].group == kContext[i].group);
+        if (kContextUsaRev1[i].word != kContext[i].word) {
+            CHECK(IsBranch(kContext[i].word));
+            CHECK(IsBranch(kContextUsaRev1[i].word));
+            ++branches_moved;
+        }
+    }
+    CHECK(branches_moved == 3);
+    for (std::size_t i = 0; i < KT::kCodeCheck.size(); ++i) {
+        CHECK(KT::kCodeCheckUsaRev1[i].word == KT::kCodeCheck[i].word);
+    }
+    // The image: the same words but six literals.
+    int literals = 0;
+    for (std::size_t i = 0; i < Stubs::kImage.size(); ++i) {
+        literals += kImageUsaRev1[i] != Stubs::kImage[i] ? 1 : 0;
+    }
+    CHECK(literals == 6);
+    CHECK(kImageUsaRev1[Stubs::kLitMailbox / 4] == kMailbox);
+    CHECK(kImageUsaRev1[Stubs::kLitActorVtable / 4] == KT::kBuildUsaRev1.actor_vtable);
+    CHECK(kImageUsaRev1[Stubs::kLitSinkContinue / 4] == kPatchesUsaRev1[4].addr + 4);
+    CHECK(kImageUsaRev1[Stubs::kLitShadowContinue / 4] == kPatchesUsaRev1[12].addr + 4);
+    CHECK(kImageUsaRev1[Stubs::kLitFovContinue / 4] == kPatchesUsaRev1[13].addr + 4);
+    CHECK(&CodeFor(&KT::kBuildUsaRev1) == &kCodeUsaRev1);
+    CHECK(&CodeFor(&KT::kBuildEur) == &kCodeEur);
+    CHECK(&CodeFor(nullptr) == &kCodeEur);
+}
+
+TEST_CASE("Kid Icarus hooks: the build is the title's with its code",
+          "[frame_xr][kiuhook][kiuusa]") {
+    const FakeMemory eur = Game();
+    const FakeMemory usa = GameUsa();
+    CHECK(KT::MatchBuild(KT::kTitleEur, eur) == &KT::kBuildEur);
+    CHECK(KT::MatchBuild(KT::kTitleUsa, usa) == &KT::kBuildUsaRev1);
+    // The other title's code (or another revision: neither check matches) leaves everything off.
+    CHECK(KT::MatchBuild(KT::kTitleUsa, eur) == nullptr);
+    CHECK(KT::MatchBuild(KT::kTitleEur, usa) == nullptr);
+    CHECK(KT::MatchBuild(0x0004000000030000ull, usa) == nullptr);
+    CHECK(KT::IsMappedTitle(KT::kTitleUsa));
+    CHECK(!KT::IsMappedTitle(0x0004000000030000ull));
+    CHECK(!KT::IsMappedTitle(0x0004000000030300ull));
+    CHECK(GameCodeMatches(eur)); // the European check, as before
+    CHECK_FALSE(GameCodeMatches(usa));
+}
+
+TEST_CASE("Kid Icarus hooks: USA Rev 1's groups go in at its own places",
+          "[frame_xr][kiuhook][kiuusa]") {
+    FakeMemory m = GameUsa();
+    const SyncResult r = Sync(m, kAll, Mailbox{}, kCodeUsaRev1);
+    for (std::size_t g = 0; g < kGroupCount; ++g) {
+        const auto group = static_cast<Group>(g);
+        if ((kAll & Bit(group)) != 0) {
+            INFO("group " << g);
+            CHECK(r.Of(group) == GroupState::In);
+        }
+    }
+    CHECK(r.image_writes == kImageUsaRev1.size());
+    for (std::size_t i = 0; i < kImageUsaRev1.size(); ++i) {
+        CHECK(m.Get32(kImageBase + static_cast<uint32_t>(i) * 4u) == kImageUsaRev1[i]);
+    }
+    for (const Patch& p : kPatchesUsaRev1) {
+        if ((kAll & Bit(p.group)) != 0) {
+            CHECK(m.Get32(p.addr) == p.patched);
+        }
+    }
+    // Nothing is written outside the USA sites, the image and the mailbox.
+    for (const auto& w : m.writes) {
+        bool known = w.addr >= kImageBase && w.addr < kCaveEnd;
+        for (const Patch& p : kPatchesUsaRev1) {
+            known = known || w.addr == p.addr;
+        }
+        CHECK(known);
+    }
+    CHECK(AnyOurs(m, kCodeUsaRev1));
+    CHECK(LookAtCave(m, kCodeUsaRev1) == Cave::Ours);
+    // Taken out again: the game's words back.
+    const SyncResult out = Sync(m, 0, Mailbox{}, kCodeUsaRev1);
+    CHECK(out.in_mask == 0);
+    CHECK_FALSE(AnyOurs(m, kCodeUsaRev1));
+    for (const Patch& p : kPatchesUsaRev1) {
+        CHECK(m.Get32(p.addr) == p.original);
+    }
+    // The European tables on USA Rev 1's code: every group stays out, nothing is written.
+    FakeMemory other = GameUsa();
+    const SyncResult wrong = Sync(other, kAll, Mailbox{});
+    CHECK(wrong.in_mask == 0);
+    CHECK(other.writes.empty());
+}
+
+TEST_CASE("Kid Icarus hooks: USA Rev 1's player and camera by its classes",
+          "[frame_xr][kiuhook][kiuusa]") {
+    for (const bool land : {true, false}) {
+        FakeMemory m = GameUsa();
+        AddPlayer(m, land);
+        const uint32_t aim = kAimLink - KT::kAimBack;
+        m.Set32(aim, land ? KT::kBuildUsaRev1.aim_vtable_land : KT::kBuildUsaRev1.aim_vtable_air);
+        m.Set32(kOwner, KT::kBuildUsaRev1.owner_vtable);
+        const Player p = FindPlayer(m, KT::kBuildUsaRev1);
+        CHECK(p.guard == PlayerGuard::Ok);
+        CHECK(p.land == land);
+        CHECK(p.actor == kActor);
+        // The European classes are not USA Rev 1's.
+        CHECK(FindPlayer(m).guard == PlayerGuard::NoAim);
+    }
+    FakeMemory m = GameUsa();
+    AddPlayer(m, true);
+    const uint32_t aim = kAimLink - KT::kAimBack;
+    m.Set32(aim, KT::kBuildUsaRev1.aim_vtable_land);
+    const uint32_t cam = 0x14106000;
+    m.Set8(aim + KT::kAimGround, 1);
+    m.Set8(aim + KT::kAimGamePlaces, 0);
+    m.Set32(kOwner + KT::kOwnerCam, cam);
+    m.Set32(cam, KT::kBuildUsaRev1.cam_vtable);
+    m.Set32(KT::kCamGlobal, cam);
+    m.Set8(cam + KT::kCamMode, 1);
+    m.Set8(cam + KT::kCamModScale, 0);
+    for (const uint32_t off : {KT::kCamYaw, KT::kCamPitch, KT::kCamYawIn, KT::kCamPitchIn}) {
+        m.SetF(cam + off, 0.0f);
+    }
+    CHECK(KT::FindCamera(m, KT::kBuildUsaRev1).guard == KT::Guard::Ok);
+    CHECK(KT::FindCamera(m).guard == KT::Guard::NotLand);
+}
+
+TEST_CASE("Kid Icarus hooks: the player's model through the actor's model link",
+          "[frame_xr][kiuhook][kiuusa]") {
+    constexpr uint32_t actor = 0x141EBBE8;
+    // USA Rev 1, Chapter 1 land (read on the mock): the link inside the actor at +0x3B0, the
+    // model elsewhere; [actor + 0x34C] something else.
+    FakeMemory m;
+    const uint32_t link = actor + 0x3B0, model = 0x141EB348;
+    m.Set32(actor + kActorModelLink, link);
+    m.Set32(link + kModelLinkActor, actor);
+    m.Set32(link + kModelLinkModel, model);
+    m.Set32(model, KT::kBuildUsaRev1.model_vtable);
+    m.Set32(actor + kActorModel, 0x141EBF30);
+    m.Set32(0x141EBF30, 0x142154E0);
+    CHECK(FindModel(m, actor, KT::kBuildUsaRev1) == model);
+    CHECK(FindModel(m, actor, KT::kBuildEur) == 0u); // another build's model class
+    // A link whose +0x1C is not the actor is not used; [actor + 0x34C] is, if a model.
+    m.Set32(link + kModelLinkActor, actor + 8);
+    CHECK(FindModel(m, actor, KT::kBuildUsaRev1) == 0u);
+    m.Set32(actor + kActorModel, model);
+    CHECK(FindModel(m, actor, KT::kBuildUsaRev1) == model);
+    // The European game, an air state: the link at +0x328, the model also at [actor + 0x34C].
+    FakeMemory e;
+    const uint32_t eactor = 0x141E0228, elink = eactor + 0x328, emodel = 0x141DF988;
+    e.Set32(eactor + kActorModelLink, elink);
+    e.Set32(elink + kModelLinkActor, eactor);
+    e.Set32(elink + kModelLinkModel, emodel);
+    e.Set32(eactor + kActorModel, emodel);
+    e.Set32(emodel, kModelVtable);
+    CHECK(FindModel(e, eactor) == emodel);
+    e.Unmap32(eactor + kActorModelLink);
+    CHECK(FindModel(e, eactor) == emodel); // the old way
+    CHECK(FindModel(FakeMemory{}, eactor) == 0u);
+}

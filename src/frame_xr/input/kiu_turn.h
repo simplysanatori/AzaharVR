@@ -91,14 +91,96 @@ public:
     virtual bool Read8(uint32_t addr, uint8_t& value) const = 0;
 };
 
-inline bool CodeMatches(const Reader& m) {
-    for (const CodeWord& w : kCodeCheck) {
+// ---- The builds the hooks are mapped for (AzaharFrame kiuusa; KIU_HOOKS.md, "The builds") ----
+
+inline constexpr uint64_t kTitleUsa = 0x0004000000030100ull;
+
+/// USA Rev 1 (its text segment 0x100000-0xC950F0 as the running game holds it: md5 c8e49bee): the
+/// same nine words as kCodeCheck, each in its relocated place (the code moved down by 0x98
+/// to 0x280 in a few blocks; the data and bss segments did not move; rodata from 0xCAC25C moved
+/// down by 0x90 or 0xA0).
+inline constexpr std::array<CodeWord, 9> kCodeCheckUsaRev1{{
+    {0x703FE0, 0xE2840B03}, // add r0, r4, #0xC00
+    {0x703FE4, 0xE2800F4E}, // add r0, r0, #0x138
+    {0x703FE8, 0xEEB01A48},
+    {0x703FEC, 0xEC900A02}, // vldmia r0, {s0, s1}
+    {0x7036FC, 0xE2840B03},
+    {0x703700, 0xE5C49308},
+    {0x703704, 0xED808A4F},
+    {0x703708, 0xED808A4E},
+    {0x703BB4, 0xE5804000}, // str r4, [r0]
+}};
+
+/// One build of the game the hooks are mapped for: its title, its code check and the addresses
+/// in its read-only data that the hooks compare with (classes' vtables). Everything in the data
+/// and bss segments (kPlaying, kAimRoot, kCamGlobal, the scene camera, the round shadows) is at
+/// the same address in every mapped build; the code tables are kiu_hooks.h's (KiuHooks::Code).
+struct Build {
+    uint64_t title;
+    const char* name; ///< for the log: "European game", "USA Rev 1"
+    std::array<CodeWord, 9> code_check;
+    uint32_t aim_vtable_land;
+    uint32_t aim_vtable_air;
+    uint32_t cam_vtable;
+    uint32_t owner_vtable;   ///< kiu_hooks.h: the aim's owner
+    uint32_t model_vtable;   ///< kiu_hooks.h: the actor's model node
+    uint32_t actor_vtable;   ///< kiu_hooks.h: the game's generic actor (also a stub literal)
+    uint32_t reticle_texture; ///< kiu_hooks.h: the reticle's texture (VRAM, the game's layout)
+};
+inline constexpr Build kBuildEur{kTitleEur,      "European game", kCodeCheck,
+                                 kAimVtableLand, kAimVtableAir,   kCamVtable,
+                                 0xCEAC40,       0xD1E990,        0xCA046C,
+                                 0x1810AF00};
+/// USA Rev 1: the rodata classes 0xA0 lower; the generic actor's class did not move (rodata
+/// below 0xCAC25C kept its place); the reticle's texture (KIU_HOOKS.md, "The builds").
+inline constexpr Build kBuildUsaRev1{kTitleUsa,  "USA Rev 1", kCodeCheckUsaRev1,
+                                     0xCF1B94,   0xCF1B40,    0xCEE9D4,
+                                     0xCEABA0,   0xD1E8F0,    0xCA046C,
+                                     0x1810AF00};
+inline constexpr std::array<const Build*, 2> kBuilds{&kBuildEur, &kBuildUsaRev1};
+
+/// The mapped build of a title (its code not checked: MatchBuild), else the European one: for the
+/// log's "differs from" line.
+constexpr const Build& BuildOfTitle(uint64_t title) {
+    return title == kTitleUsa ? kBuildUsaRev1 : kBuildEur;
+}
+/// "the European game's" or "USA Rev 1's", the build the code was compared with (the log).
+constexpr const char* BuildsCode(const Build& b) {
+    return b.title == kTitleEur ? "the European game's" : "USA Rev 1's";
+}
+/// The log's "only ... are mapped" line's list.
+inline constexpr const char* kMappedList =
+    "the European game (0004000000030200) and USA Rev 1 (0004000000030100)";
+
+/// A title some mapped build has (the code still decides: MatchBuild).
+constexpr bool IsMappedTitle(uint64_t title) {
+    for (const Build* b : kBuilds) {
+        if (b->title == title) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline bool CodeMatches(const Reader& m, const Build& build = kBuildEur) {
+    for (const CodeWord& w : build.code_check) {
         uint32_t v = 0;
         if (!m.Read32(w.addr, v) || v != w.word) {
             return false;
         }
     }
     return true;
+}
+
+/// The mapped build that is running: its title is `title` and its code check matches; nullptr
+/// when none is (another region, another revision, a mod's code).
+inline const Build* MatchBuild(uint64_t title, const Reader& m) {
+    for (const Build* b : kBuilds) {
+        if (b->title == title && CodeMatches(m, *b)) {
+            return b;
+        }
+    }
+    return nullptr;
 }
 
 /// Why there is no turning now (Ok: turning is possible). In the order checked.
@@ -174,7 +256,7 @@ inline float AsFloat(uint32_t bits) {
 /// mapped; the aim's vtable the land one (the air one has no camera); aim +0x81 == 1 and +0xD5 ==
 /// 0; the owner mapped; the camera non-zero, aligned, the battle camera's vtable; the current
 /// camera ([0xD3A18C]); the camera mode 1 or 2.
-inline Camera FindCamera(const Reader& m) {
+inline Camera FindCamera(const Reader& m, const Build& build = kBuildEur) {
     Camera c;
     uint8_t b = 0;
     if (!m.Read8(kPlaying, b) || b != 1) {
@@ -193,11 +275,11 @@ inline Camera FindCamera(const Reader& m) {
         c.guard = Guard::NoAim;
         return c;
     }
-    if (vtable == kAimVtableAir) {
+    if (vtable == build.aim_vtable_air) {
         c.guard = Guard::Air;
         return c;
     }
-    if (vtable != kAimVtableLand) {
+    if (vtable != build.aim_vtable_land) {
         c.guard = Guard::NotLand;
         return c;
     }
@@ -215,7 +297,7 @@ inline Camera FindCamera(const Reader& m) {
     }
     uint32_t cam = 0, cam_vtable = 0;
     if (!m.Read32(owner + kOwnerCam, cam) || cam == 0 || (cam & 3u) != 0 ||
-        !m.Read32(cam, cam_vtable) || cam_vtable != kCamVtable) {
+        !m.Read32(cam, cam_vtable) || cam_vtable != build.cam_vtable) {
         c.guard = Guard::NoCamera;
         return c;
     }
