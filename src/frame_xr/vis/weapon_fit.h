@@ -101,6 +101,12 @@ HoldPick HoldPickFor(int cls, const std::optional<std::string>& value);
 /// or anything but "0": drawn, as before.
 inline constexpr const char* kWeaponDrawSwitch = "AZAHARFRAME_KIU_WEAPON_DRAW";
 bool WeaponModelDrawn(const std::optional<std::string>& value);
+/// AzaharFrame kiu130: the same with Over the Shoulder (Kiu::FirstPerson::ShoulderOn): the game
+/// draws Pit with his own weapon there, so the weapon in hand (and the controller in its place)
+/// is left out while the view is over the shoulder, at run time only: no setting is written, and
+/// it is back once the view is first person again. The switch, when set, wins ("0" out, anything
+/// else drawn).
+bool WeaponModelDrawnFor(const std::optional<std::string>& value, bool over_shoulder);
 
 struct FitOverride {
     std::array<float, 3> offset_cm{};

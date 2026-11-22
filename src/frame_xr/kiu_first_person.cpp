@@ -110,6 +110,16 @@ bool On() {
     return SwitchOn(kSwitch) || AngelsAim();
 }
 
+bool ShoulderOn() {
+    if (!On() || Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_EYE_OFFSET")) {
+        return false;
+    }
+    const auto text = Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_SHOULDER");
+    float back = 0.0f, up = 0.0f, side = 0.0f;
+    return ShoulderFor(text ? text->c_str() : nullptr,
+                       Settings::values.vr_kiu_over_shoulder.GetValue(), back, up, side);
+}
+
 bool Wanted() {
     return WantedFor(SwitchOn(kSwitch), StoredMode(), GameTitleId());
 }

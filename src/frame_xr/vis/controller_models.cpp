@@ -28,6 +28,7 @@
 #include "frame_xr/vis/model_shaders.h"
 #include "frame_xr/vis/proj_screen.h" // AzaharFrame projscreen
 #include "frame_xr/vis/weapon_fit.h" // AzaharFrame kiuguns
+#include "frame_xr/kiu_first_person.h" // AzaharFrame kiu130: Over the Shoulder
 #include "core/frame_weapon_models.h" // AzaharFrame kiuguns
 #include "frame_xr/xr_loader.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
@@ -2823,7 +2824,9 @@ void ControllerModels::FitWeapon(const ViewPose& views, const std::array<Hand, 2
                                      fits_text.empty() ? "" : ", ", side, lit, glows,
                                      glows > 0 && !glow ? " (glows not drawn)" : "");
         }
-        const bool model = WeaponModelDrawn(Common::FrameTestSwitches::Value(kWeaponDrawSwitch));
+        const auto draw_text = Common::FrameTestSwitches::Value(kWeaponDrawSwitch);
+        const bool shoulder = Kiu::FirstPerson::ShoulderOn(); // AzaharFrame kiu130
+        const bool model = WeaponModelDrawnFor(draw_text, shoulder);
         const std::string key = fmt::format("{} {} {} {}", g.weapon_live->id, hands_drawing,
                                             fits_text, model ? 1 : 0);
         if (hands_drawing > 0 && key != g.weapon_draw_logged) {
@@ -2832,7 +2835,9 @@ void ControllerModels::FitWeapon(const ViewPose& views, const std::array<Hand, 2
                      "xr: weapon drawn: {} in {} hand{}, {} fit{} ({}){}", g.weapon_live->id,
                      hands_drawing, hands_drawing == 1 ? "" : "s", weapon_fits.size(),
                      weapon_fits.size() == 1 ? "" : "s", fits_text.empty() ? "none" : fits_text,
-                     model ? "" : "; the model left out (AZAHARFRAME_KIU_WEAPON_DRAW=0)");
+                     model       ? ""
+                     : draw_text ? "; the model left out (AZAHARFRAME_KIU_WEAPON_DRAW=0)"
+                                 : "; the model left out (Over the Shoulder: Pit holds his own)");
         }
     }
 }
@@ -3063,8 +3068,10 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
                   weapon_drawn(hands[1]) && SeeThrough(hands[1].weapon_opacity));
     // AzaharFrame kiuweapon: AZAHARFRAME_KIU_WEAPON_DRAW=0 (live): the weapon's model left out
     // (weapon_fit.h kWeaponDrawSwitch); its flash and shots as before.
-    const bool weapon_model =
-        WeaponModelDrawn(Common::FrameTestSwitches::Value(kWeaponDrawSwitch));
+    // AzaharFrame kiu130: and while the view is over the shoulder, where the game draws Pit with
+    // his own weapon (WeaponModelDrawnFor; run time only, no setting changes).
+    const bool weapon_model = WeaponModelDrawnFor(
+        Common::FrameTestSwitches::Value(kWeaponDrawSwitch), Kiu::FirstPerson::ShoulderOn());
     for (int e = 0; e < 2; e++) {
         const vk::Viewport vp{static_cast<float>(g.eye_w * e), 0.0f, static_cast<float>(g.eye_w),
                               static_cast<float>(g.eye_h), 0.0f, 1.0f};

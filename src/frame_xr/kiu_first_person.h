@@ -187,6 +187,12 @@ constexpr bool ShotsFrom6DofFor(bool switch_on, bool first_person_on, bool angel
 bool On();
 /// AzaharFrame kiumode: Angel's Aim in effect (live): everything first person needs. Any thread.
 bool AngelsAim();
+/// AzaharFrame kiu130: the over-the-shoulder view is in effect (live): first person on, and Over
+/// the Shoulder's setting (vr_kiu_over_shoulder) or AZAHARFRAME_KIU_SHOULDER (ShoulderFor: the
+/// switch, when set, wins), with no AZAHARFRAME_KIU_EYE_OFFSET (which wins over both). The game
+/// draws Pit with his own weapon there, so the weapon in hand is left out of the image
+/// (Vis::WeaponModelDrawnFor). Any thread.
+bool ShoulderOn();
 /// AzaharFrame kiumode: Angel's Aim asked for (WantedFor; live). Any thread.
 bool Wanted();
 /// First person is on and `title` is the game it is for (the European game). Any thread.

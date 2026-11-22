@@ -193,6 +193,13 @@ bool WeaponModelDrawn(const std::optional<std::string>& value) { // AzaharFrame 
     return !(value && *value == "0");
 }
 
+bool WeaponModelDrawnFor(const std::optional<std::string>& value, bool over_shoulder) {
+    if (value) { // AzaharFrame kiu130: the switch, when set, wins
+        return WeaponModelDrawn(value);
+    }
+    return !over_shoulder;
+}
+
 namespace {
 
 /// Pit's hand's frame in aim space for a hold (row major: columns are where his hand's x, y, z

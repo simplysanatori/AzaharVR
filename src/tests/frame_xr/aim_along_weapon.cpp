@@ -20,6 +20,8 @@
 #include "frame_xr/input/gyro_aim.h"
 #include "frame_xr/test_switches.h"
 #include "frame_xr/vis/weapon_fit.h"
+#include "common/settings.h"
+#include "frame_xr/kiu_first_person.h"
 
 using Catch::Approx;
 using namespace FrameXr::Input;
@@ -731,4 +733,35 @@ TEST_CASE("AZAHARFRAME_KIU_WEAPON_DRAW: only 0 leaves the model out, live", "[fr
     CHECK_FALSE(Vis::WeaponModelDrawn(std::string{"0"}));
     CHECK(FrameXr::TestSwitches::ApplyFor(Vis::kWeaponDrawSwitch) ==
           FrameXr::TestSwitches::Apply::Live);
+}
+
+// AzaharFrame kiu130: over the shoulder the game draws Pit with his own weapon, so the weapon in
+// hand is left out at run time; nothing saved changes, and first person draws it again.
+TEST_CASE("Over the Shoulder leaves the weapon in hand out, at run time only", "[frame_xr][kiuweapon]") {
+    auto& shoulder = Settings::values.vr_kiu_over_shoulder;
+    auto& weapon = Settings::values.vr_light_gun_weapon;
+    const bool shoulder_before = shoulder.GetValue();
+    const bool weapon_before = weapon.GetValue();
+    weapon.SetValue(true);
+    float back = 0.0f, up = 0.0f, side = 0.0f;
+    for (const bool on : {true, false, true, false}) {
+        shoulder.SetValue(on);
+        const bool over = FrameXr::Kiu::FirstPerson::ShoulderFor(nullptr, shoulder.GetValue(),
+                                                                 back, up, side);
+        CHECK(over == on);
+        CHECK(Vis::WeaponModelDrawnFor(std::nullopt, over) == !on);
+        // Run time only: the settings stay what the player set.
+        CHECK(shoulder.GetValue() == on);
+        CHECK(weapon.GetValue());
+    }
+    // The shoulder switch alone, its "0" too (off), as the hooks read it.
+    CHECK(FrameXr::Kiu::FirstPerson::ShoulderFor("2.5,0.5", false, back, up, side));
+    CHECK_FALSE(FrameXr::Kiu::FirstPerson::ShoulderFor("0", true, back, up, side));
+    // AZAHARFRAME_KIU_WEAPON_DRAW, when set, wins: "0" out in first person too, "1" drawn over
+    // the shoulder (an A/B).
+    CHECK_FALSE(Vis::WeaponModelDrawnFor(std::string{"0"}, false));
+    CHECK(Vis::WeaponModelDrawnFor(std::string{"1"}, true));
+    CHECK(Vis::WeaponModelDrawnFor(std::nullopt, false));
+    shoulder.SetValue(shoulder_before);
+    weapon.SetValue(weapon_before);
 }
