@@ -38,7 +38,8 @@ inline constexpr const char* kHorizontalScaleTip =
 inline constexpr const char* kVerticalScale = "Vertical Scale";
 inline constexpr const char* kVerticalScaleTip = "Makes the immersive screen taller or shorter.";
 /// AzaharFrame hudmove: Settings::values.vr_immersive_hud_spacing_x and _y, HUD Spacing
-/// (experimental; video_core/vr_hud_spacing.h). Proposed wording, not yet approved.
+/// (experimental; video_core/vr_hud_spacing.h). The rows and their tips: approved by the owner
+/// (1.3.0).
 inline constexpr const char* kHudSpacingHorizontal = "HUD Spacing: Horizontal";
 inline constexpr const char* kHudSpacingHorizontalTip =
     "Experimental. In the Full modes, lower brings the game's HUD in from the sides, closer into "

@@ -78,14 +78,14 @@ inline constexpr const char* kAngelsAimSending = "Sending...";
 inline constexpr const char* kAngelsAimSent = "Report Sent";
 /// AzaharFrame kiuweap2: the prompt when Aiming is turned on (Off to Direct Aim or Gyro Aim) in
 /// the VR menu, once (vr_angels_aim_intro_shown): what Angel's Aim has on, and where to change it
-/// (tab_menu.h AngelsIntroDialog; PROPOSED strings, for the owner).
+/// (tab_menu.h AngelsIntroDialog). Approved by the owner (1.3.0).
 inline constexpr const char* kAngelsIntroTitle = "Angel's Aim Is On";
 inline constexpr const char* kAngelsIntroBody =
     "Here's what's on. Change any of it under Aiming.";
 inline constexpr const char* kAngelsIntroControls = "Show Aiming";
 inline constexpr const char* kAngelsIntroOk = "OK";
 /// AzaharFrame kiufire: Trigger Layout (the Controls tab's Aiming rows, Kid Icarus only, with
-/// Aiming on; vr_kiu_trigger_layout). DRAFT strings, for the owner: all of them are here.
+/// Aiming on; vr_kiu_trigger_layout). Approved by the owner (1.3.0), the tips too.
 inline constexpr const char* kTriggerLayoutRow = "Trigger Layout";
 inline constexpr const char* kTriggerLayoutFireAndPower = "Fire and Power";
 inline constexpr const char* kTriggerLayoutOriginal = "Original";
@@ -97,7 +97,7 @@ inline constexpr const char* kTriggerLayoutOriginalTip =
 /// AzaharFrame kiutoggles: Angel's Aim's first-person options, once test switches only (the
 /// Settings tab's Immersive section, under Immersive Mode, while Kid Icarus: Uprising is open and
 /// Immersive Mode is Angel's Aim; vr_kiu_wrist_screen, vr_kiu_talk_panel, vr_kiu_over_shoulder,
-/// vr_kiu_snap_turn). PROPOSED strings: they need the owner's approval. All of them are here.
+/// vr_kiu_snap_turn). Approved by the owner (1.3.0), the Turning choices too. All of them are here.
 inline constexpr const char* kWristScreenRow = "Secondary Screen on Wrist";
 inline constexpr const char* kWristScreenTip =
     "Shows the Secondary Screen on your free hand's wrist. Turn your wrist up to see it, and point "
