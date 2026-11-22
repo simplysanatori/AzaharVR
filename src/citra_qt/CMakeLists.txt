@@ -357,6 +357,13 @@ if (ENABLE_VULKAN)
     target_link_libraries(citra_qt PRIVATE vulkan-headers)
 endif()
 
+if (WIN32 AND ENABLE_FRAME_XR)
+    # AzaharVR: frame_offscreen.cpp uses Qt's private QPA header (qwindowsysteminterface.h)
+    set(QT_NO_PRIVATE_MODULE_WARNING ON)
+    find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
+    target_link_libraries(citra_qt PUBLIC Qt6::GuiPrivate)
+endif()
+
 if (NOT WIN32)
     find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
     if(Qt6_VERSION VERSION_GREATER_EQUAL "6.10.0")

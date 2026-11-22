@@ -48,6 +48,9 @@
 #include "citra_qt/frame_test_env.h"
 #include "common/linux/gamemode.h"
 #endif
+#ifdef _WIN32 // AzaharVR: the test hooks are read on Windows too (included above for __unix__)
+#include "citra_qt/frame_test_env.h"
+#endif
 #include "citra_meta/common_strings.h"
 #include "citra_qt/aboutdialog.h"
 #include "citra_qt/frame_open_folder.h" // AzaharFrame qtfiles
@@ -1946,7 +1949,9 @@ GMainWindow::GMainWindow(Core::System& system_)
 
             std::signal(SIGTERM, FrameXrOnSignal);
             std::signal(SIGINT, FrameXrOnSignal);
+#ifndef _WIN32 // AzaharVR: no SIGHUP on Windows
             std::signal(SIGHUP, FrameXrOnSignal); // AzaharFrame integ3: a hangup quits cleanly too
+#endif
             auto* signal_timer = new QTimer(this);
             connect(signal_timer, &QTimer::timeout, this, [this] {
                 if (g_frame_xr_terminate) {
@@ -8424,10 +8429,17 @@ int LaunchQtFrontend(int argc, char* argv[]) {
     // AzaharFrame fdm: Valve's FDM injection layer off before anything loads Vulkan or OpenXR
     // (frame_xr/session.cpp says why and logs it); AZAHARFRAME_FDM=1 leaves it on.
     if (const char* fdm = std::getenv("AZAHARFRAME_FDM"); fdm && std::strcmp(fdm, "1") == 0) {
+#ifdef _WIN32 // AzaharVR: the CRT's _putenv_s (an empty value removes the variable)
+        _putenv_s("DISABLE_VULKAN_FDM_INJECTION_LAYER", "");
+    } else if (!std::getenv("DISABLE_VULKAN_FDM_INJECTION_LAYER")) {
+        _putenv_s("DISABLE_VULKAN_FDM_INJECTION_LAYER", "1");
+    }
+#else
         unsetenv("DISABLE_VULKAN_FDM_INJECTION_LAYER");
     } else if (!std::getenv("DISABLE_VULKAN_FDM_INJECTION_LAYER")) {
         setenv("DISABLE_VULKAN_FDM_INJECTION_LAYER", "1", 1);
     }
+#endif
 #endif
 #ifdef __APPLE__
     // Ensure that the linker doesn't optimize qt_swizzle.mm out of existence.
