@@ -6,6 +6,12 @@
 #include <cmath>
 #include "audio_core/ff_skip.h"
 
+#ifdef _WIN32 // AzaharVR: MSVC's <cmath> has no M_PI without _USE_MATH_DEFINES
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+#endif
+
 namespace AudioCore {
 
 namespace {

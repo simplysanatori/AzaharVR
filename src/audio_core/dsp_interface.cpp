@@ -19,6 +19,15 @@
 #include "common/xr_pacer.h"
 #include "core/core.h"
 #include "core/dumping/backend.h"
+#ifdef _WIN32 // AzaharVR: GetThreadTimes, for the audio stats' CPU time
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace AudioCore {
 
@@ -234,9 +243,21 @@ void DspInterface::WriteAudioStats(const s16* buffer, std::size_t num_frames,
 
 namespace {
 u64 ThreadCpuNs() {
+#ifdef _WIN32
+    // AzaharVR: user plus kernel time, in 100 ns units
+    FILETIME created, exited, kernel, user;
+    if (!GetThreadTimes(GetCurrentThread(), &created, &exited, &kernel, &user)) {
+        return 0;
+    }
+    const auto ticks = [](const FILETIME& t) {
+        return static_cast<u64>(t.dwHighDateTime) << 32 | t.dwLowDateTime;
+    };
+    return (ticks(kernel) + ticks(user)) * 100ull;
+#else
     timespec ts{};
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
     return static_cast<u64>(ts.tv_sec) * 1000000000ull + static_cast<u64>(ts.tv_nsec);
+#endif
 }
 } // namespace
 
