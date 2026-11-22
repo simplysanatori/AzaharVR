@@ -11,6 +11,10 @@
 #include <map>
 #include <string>
 #include <thread>
+#ifdef _WIN32 // AzaharVR: SwitchFile's mtime
+#include <chrono>
+#include <filesystem>
+#endif
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <catch2/catch_approx.hpp>
@@ -49,9 +53,19 @@ struct SwitchFile {
             std::ofstream out(path, std::ios::trunc);
             out << text;
         }
+#ifdef _WIN32 // AzaharVR: no utimensat; the same time through the standard library
+        std::error_code ec;
+        std::filesystem::last_write_time(
+            path,
+            std::chrono::clock_cast<std::filesystem::file_time_type::clock>(
+                std::chrono::system_clock::from_time_t(static_cast<std::time_t>(tick))),
+            ec);
+        ++tick;
+#else
         const timespec times[2] = {{tick, 0}, {tick, 0}};
         ++tick;
         ::utimensat(AT_FDCWD, path.c_str(), times, 0);
+#endif
     }
     void Remove() {
         std::remove(path.c_str());

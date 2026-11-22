@@ -9,7 +9,11 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#ifdef _WIN32 // AzaharVR: getpid
+#include <process.h>
+#else
 #include <unistd.h>
+#endif
 #include <catch2/catch_test_macros.hpp>
 #include "core/custom_tex/download.h"
 #include "core/mods/catalog.h"

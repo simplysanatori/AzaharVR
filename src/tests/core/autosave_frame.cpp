@@ -12,7 +12,11 @@
 #include <string>
 #include <vector>
 #include <catch2/catch_test_macros.hpp>
+#ifdef _WIN32 // AzaharVR: getpid
+#include <process.h>
+#else
 #include <unistd.h>
+#endif
 #include "common/scm_rev.h"
 #include "common/settings.h"
 #include "common/zstd_compression.h"

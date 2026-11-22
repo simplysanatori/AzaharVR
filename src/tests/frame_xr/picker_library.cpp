@@ -8,7 +8,11 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#ifdef _WIN32 // AzaharVR: getpid
+#include <process.h>
+#else
 #include <unistd.h>
+#endif
 
 #include "frame_xr/picker/library.h"
 

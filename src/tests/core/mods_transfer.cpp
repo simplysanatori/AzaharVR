@@ -12,10 +12,14 @@
 #include <fstream>
 #include <functional>
 #include <thread>
+#ifdef _WIN32 // AzaharVR: getpid; the socket tests below are not built (see there)
+#include <process.h>
+#else
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#endif
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <httplib.h>
@@ -50,6 +54,10 @@ struct Temp {
     std::string load() const { return (root / "load").string(); }
 };
 
+// AzaharVR: on Windows the Stopper does not shut a socket down (mods/transfer.cpp), so a hung
+// connection is only ended by httplib's own timeouts; these stand-ins and the tests that use them
+// are POSIX sockets, built off Windows only.
+#ifndef _WIN32
 /// A listening socket on 127.0.0.1 that never accepts: the kernel lets the connection in, the
 /// request is never answered. With `backlog` 0 and one connection already queued, a further
 /// connect is not let in at all (its SYN is dropped while the queue is full).
@@ -131,6 +139,7 @@ std::chrono::milliseconds StopAfter(T::Stopper& stopper, std::chrono::millisecon
     t.join();
     return std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - stop);
 }
+#endif // _WIN32
 
 constexpr auto kPrompt = std::chrono::milliseconds(2000); // Cancel must end the transfer within this
 
@@ -138,6 +147,7 @@ constexpr auto kPrompt = std::chrono::milliseconds(2000); // Cancel must end the
 
 // ---- Cancel in every state ----
 
+#ifndef _WIN32 // AzaharVR: POSIX socket stand-ins (see Listener)
 TEST_CASE("fixes7: Cancel ends a texture download the server never answers", "[fixes7][cancel]") {
     Temp t;
     Listener server;
@@ -230,8 +240,10 @@ TEST_CASE("fixes7: Cancel ends a mod download that hangs, in each request kind",
         CHECK(reply.error == "Cancelled");
     }
 }
+#endif // _WIN32
 
 TEST_CASE("fixes7: the Stopper", "[fixes7][cancel]") {
+#ifndef _WIN32 // AzaharVR: socketpair, and a stop shuts nothing down on Windows
     SECTION("a stop before the socket is watched shuts it down when it is") {
         int sv[2];
         REQUIRE(::socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
@@ -264,6 +276,7 @@ TEST_CASE("fixes7: the Stopper", "[fixes7][cancel]") {
         ::close(sv[0]);
         ::close(sv[1]);
     }
+#endif // _WIN32
     SECTION("waits and lookups give up when stopped") {
         std::atomic_bool flag{true};
         const auto t0 = Clock::now();

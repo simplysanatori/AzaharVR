@@ -229,6 +229,7 @@ TEST_CASE("Emerald fallback: follower files seed the sandbox's cache", "[emfallb
     CHECK(F::SeedCache(from.string(), (to / "cache").string()) == 0); // nothing new
 }
 
+#ifndef _WIN32 // AzaharVR: bubblewrap and popen; on Windows the fallback is never available
 TEST_CASE("Emerald fallback: the sandbox cannot see the player's files", "[emfallback][sandbox]") {
     const F::Tools tools = F::Detect();
     if (!tools.Ok()) {
@@ -390,6 +391,8 @@ TEST_CASE("Emerald fallback: same pack as the built-in builder, and Cancel stops
     }
     CHECK(left.empty());
 }
+
+#endif // _WIN32
 
 TEST_CASE("Emerald fallback: new follower files go back to the app's cache only when they match their hash",
           "[emfallback]") {

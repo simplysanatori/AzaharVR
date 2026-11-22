@@ -6,7 +6,11 @@
 // backup of a real folder (all in a temp dir).
 
 #include <atomic>
+#ifdef _WIN32 // AzaharVR: getpid
+#include <process.h>
+#else
 #include <unistd.h>
+#endif
 #include <filesystem>
 #include <fstream>
 #include <catch2/catch_test_macros.hpp>

@@ -189,6 +189,10 @@ target_link_libraries(tests PRIVATE httplib) # AzaharFrame crashreport: Send Rep
 target_link_libraries(tests PRIVATE json-headers) # AzaharFrame jsoncrash: pack_config.h; emfallback: the recipe parser header
 target_link_libraries(tests PRIVATE tsl::robin_map) # AzaharFrame savemem: rasterizer_cache_clear.cpp
 target_link_libraries(tests PRIVATE ${PLATFORM_LIBRARIES} catch2 nihstro-headers Threads::Threads)
+if (WIN32 AND TARGET vulkan-headers)
+    # AzaharVR: frame_xr/vis.cpp includes vk_shader_util.h; Linux finds vulkan.hpp in the system
+    target_link_libraries(tests PRIVATE vulkan-headers)
+endif()
 
 if (ENABLE_LIBRETRO)
     target_link_libraries(tests PRIVATE $<TARGET_OBJECTS:citra_libretro_common>)

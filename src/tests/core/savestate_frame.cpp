@@ -15,7 +15,11 @@
 #include <vector>
 #include <boost/archive/archive_exception.hpp>
 #include <catch2/catch_test_macros.hpp>
+#ifdef _WIN32 // AzaharVR: getpid
+#include <process.h>
+#else
 #include <unistd.h>
+#endif
 #include "common/scm_rev.h"
 #include "common/zstd_compression.h"
 #include "core/save_backup.h"

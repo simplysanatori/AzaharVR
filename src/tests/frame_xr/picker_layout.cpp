@@ -13,7 +13,11 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#ifdef _WIN32 // AzaharVR: getpid
+#include <process.h>
+#else
 #include <unistd.h>
+#endif
 #include <utility>
 
 #include "frame_xr/picker/library.h"

@@ -17,7 +17,11 @@
 #include <boost/serialization/string.hpp>
 #include <boost/serialization/vector.hpp>
 #include <catch2/catch_test_macros.hpp>
+#ifdef _WIN32 // AzaharVR: getpid
+#include <process.h>
+#else
 #include <unistd.h>
+#endif
 #include "common/archives.h"
 #include "common/atomic_file.h"
 #include "common/scm_rev.h"

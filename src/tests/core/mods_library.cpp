@@ -18,6 +18,17 @@
 #include <catch2/catch_test_macros.hpp>
 #include "core/mods/library.h"
 
+#ifdef _WIN32 // AzaharVR: the CRT has _putenv_s (an empty value removes the variable)
+namespace {
+int setenv(const char* name, const char* value, int /*overwrite*/) {
+    return _putenv_s(name, value);
+}
+int unsetenv(const char* name) {
+    return _putenv_s(name, "");
+}
+} // namespace
+#endif
+
 using namespace Mods;
 namespace fs = std::filesystem;
 
