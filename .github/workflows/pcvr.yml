@@ -1,0 +1,129 @@
+# Azahar VR (the PC VR build): Linux x86-64 and Windows (MSVC) builds of this tree. Not a release:
+# the artifacts are for testing on a PC with SteamVR. Runs on a push to a ci/** branch or by hand
+# only; the Steam Frame's own build (portable.yml) is untouched. Modelled on upstream Azahar's
+# build.yml (its build container and its MSVC set-up).
+name: pcvr
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['ci/**']
+
+permissions:
+  contents: read
+
+jobs:
+  linux-x86_64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    container:
+      image: opensauce04/azahar-build-environment:latest
+      options: -u 1001
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_COMPILERCHECK: content
+      CCACHE_SLOPPINESS: time_macros
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0                # git describe needs the tags
+      - name: Cache the compiler cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: pcvr-linux-${{ github.sha }}
+          restore-keys: pcvr-linux-
+      - name: Build
+        run: |
+          pc/build-linux.sh build -- \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DAZAHARFRAME_TEST_HOOKS=OFF
+      - name: Unit tests (the VR frontend's)
+        run: QT_QPA_PLATFORM=offscreen build/bin/Release/tests "[frame_xr]"
+      - name: Pack
+        run: |
+          mkdir -p artifacts/azahar-vr
+          cp build/bin/Release/azahar artifacts/azahar-vr/
+          cp license.txt artifacts/azahar-vr/
+          tar -C artifacts -czf artifacts/azahar-vr-linux-x86_64.tar.gz azahar-vr
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: azahar-vr-linux-x86_64
+          path: artifacts/azahar-vr-linux-x86_64.tar.gz
+
+  windows-msvc:
+    runs-on: windows-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        # First: does the tree build on Windows at all (the OpenXR frontend off). Then with it on,
+        # shipping Khronos's OpenXR loader beside the program.
+        frame_xr: ['OFF', 'ON']
+    defaults:
+      run:
+        shell: bash
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_COMPILERCHECK: content
+      CCACHE_SLOPPINESS: time_macros
+      OPENXR_SDK_VERSION: '1.1.49'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Cache the compiler cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: pcvr-windows-${{ matrix.frame_xr }}-${{ github.sha }}
+          restore-keys: pcvr-windows-${{ matrix.frame_xr }}-
+      - name: Set up MSVC
+        uses: azahar-emu/msvc-dev-cmd@v1
+      - name: Install tools
+        run: choco install ccache ninja wget
+      - name: Install the Vulkan SDK
+        run: |
+          wget https://sdk.lunarg.com/sdk/download/1.4.304.1/windows/VulkanSDK-1.4.304.1-Installer.exe -O D:/a/_temp/vulkan.exe
+          D:/a/_temp/vulkan.exe --accept-licenses --default-answer --confirm-command install
+      - name: Disable line ending translation
+        run: git config --global core.autocrlf input
+      - name: Build
+        run: |
+          mkdir build && cd build
+          cmake .. -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DENABLE_FRAME_XR=${{ matrix.frame_xr }} \
+            -DAZAHARVR_PC=ON \
+            -DAZAHARFRAME_SENTRY=OFF \
+            -DAZAHARFRAME_TEST_HOOKS=OFF \
+            -DENABLE_FFMPEG=OFF \
+            -DENABLE_DISCORD_RPC=OFF \
+            -DENABLE_QT_UPDATE_CHECKER=OFF \
+            -DENABLE_WEB_SERVICE=OFF
+          ninja
+          ninja bundle
+      - name: Unit tests
+        run: |
+          cd build
+          ctest -VV -C Release || echo "::error ::Test error occurred on Windows build"
+      - name: Pack, with the OpenXR loader
+        if: ${{ matrix.frame_xr == 'ON' }}
+        run: |
+          wget "https://github.com/KhronosGroup/OpenXR-SDK-Source/releases/download/release-${OPENXR_SDK_VERSION}/openxr_loader_windows-${OPENXR_SDK_VERSION}.zip" -O D:/a/_temp/openxr.zip
+          mkdir -p D:/a/_temp/openxr && cd D:/a/_temp/openxr && 7z x ../openxr.zip > /dev/null
+          cd "$GITHUB_WORKSPACE"
+          cp "$(find D:/a/_temp/openxr -path '*x64*' -name openxr_loader.dll | head -1)" build/bundle/
+          mkdir -p artifacts
+          (cd build/bundle && 7z a -tzip "$GITHUB_WORKSPACE/artifacts/azahar-vr-windows-x86_64.zip" . > /dev/null)
+      - name: Upload
+        if: ${{ matrix.frame_xr == 'ON' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: azahar-vr-windows-x86_64
+          path: artifacts/azahar-vr-windows-x86_64.zip
