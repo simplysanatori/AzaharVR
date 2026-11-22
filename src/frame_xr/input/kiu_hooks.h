@@ -967,10 +967,38 @@ inline bool HideInFirstPerson(bool first_person, bool land, bool shots_from_hand
 /// full-size see-through weapon from his feet to the reticle on land; KIU_HOOKS.md, "The doubled
 /// weapon"). His size, hurt boxes and bones are untouched, so it is used in the air too.
 inline constexpr uint32_t kActorModel = 0x34C;
+/// AzaharFrame kiuusa: [actor + 0x34C] is the model only in some states (the owner's Chapter 2
+/// states, Chapter 1 from the air); in the Practice Range and Chapter 1's land section it is
+/// something else, and the model sits at another distance from the actor. Found in every state
+/// looked at, both builds: the actor's component at [actor + 0x1E4], whose +0x1C is the actor
+/// and whose +0x24 is the model. That way first, [actor + 0x34C] if it does not hold.
+inline constexpr uint32_t kActorModelLink = 0x1E4;
+inline constexpr uint32_t kModelLinkActor = 0x1C;
+inline constexpr uint32_t kModelLinkModel = 0x24;
 inline constexpr uint32_t kModelVtable = 0xD1E990;
 static_assert(KiuTurn::kBuildEur.model_vtable == kModelVtable);
 inline constexpr uint32_t kModelDrawnWord = 0xB4;
 inline constexpr uint32_t kModelDrawnShift = 8;
+/// The player's model node (0 if not found): [[actor + 0x1E4] + 0x24] when that link's +0x1C is
+/// the actor, else [actor + 0x34C]; either only if it is of the build's model class.
+template <class Reader>
+uint32_t FindModel(const Reader& m, uint32_t actor,
+                   const KiuTurn::Build& build = KiuTurn::kBuildEur) {
+    const auto is_model = [&](uint32_t node) {
+        uint32_t vt = 0;
+        return node != 0 && (node & 3u) == 0 && m.Read32(node, vt) && vt == build.model_vtable;
+    };
+    uint32_t link = 0, link_actor = 0, model = 0;
+    if (m.Read32(actor + kActorModelLink, link) && link != 0 && (link & 3u) == 0 &&
+        m.Read32(link + kModelLinkActor, link_actor) && link_actor == actor &&
+        m.Read32(link + kModelLinkModel, model) && is_model(model)) {
+        return model;
+    }
+    if (m.Read32(actor + kActorModel, model) && is_model(model)) {
+        return model;
+    }
+    return 0;
+}
 /// The word to write at the model's +0xB4, if anything: hide clears a drawn byte of 1; show
 /// sets a byte of 0 back to 1 (only what this app cleared: `ours`). Any other byte value is the
 /// game's and stays.

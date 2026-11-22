@@ -1663,3 +1663,37 @@ TEST_CASE("Kid Icarus hooks: USA Rev 1's player and camera by its classes",
     CHECK(KT::FindCamera(m, KT::kBuildUsaRev1).guard == KT::Guard::Ok);
     CHECK(KT::FindCamera(m).guard == KT::Guard::NotLand);
 }
+
+TEST_CASE("Kid Icarus hooks: the player's model through the actor's model link",
+          "[frame_xr][kiuhook][kiuusa]") {
+    constexpr uint32_t actor = 0x141EBBE8;
+    // USA Rev 1, Chapter 1 land (read on the mock): the link inside the actor at +0x3B0, the
+    // model elsewhere; [actor + 0x34C] something else.
+    FakeMemory m;
+    const uint32_t link = actor + 0x3B0, model = 0x141EB348;
+    m.Set32(actor + kActorModelLink, link);
+    m.Set32(link + kModelLinkActor, actor);
+    m.Set32(link + kModelLinkModel, model);
+    m.Set32(model, KT::kBuildUsaRev1.model_vtable);
+    m.Set32(actor + kActorModel, 0x141EBF30);
+    m.Set32(0x141EBF30, 0x142154E0);
+    CHECK(FindModel(m, actor, KT::kBuildUsaRev1) == model);
+    CHECK(FindModel(m, actor, KT::kBuildEur) == 0u); // another build's model class
+    // A link whose +0x1C is not the actor is not used; [actor + 0x34C] is, if a model.
+    m.Set32(link + kModelLinkActor, actor + 8);
+    CHECK(FindModel(m, actor, KT::kBuildUsaRev1) == 0u);
+    m.Set32(actor + kActorModel, model);
+    CHECK(FindModel(m, actor, KT::kBuildUsaRev1) == model);
+    // The European game, Chapter 1 air: the link at +0x328, the model also at [actor + 0x34C].
+    FakeMemory e;
+    const uint32_t eactor = 0x141E0228, elink = eactor + 0x328, emodel = 0x141DF988;
+    e.Set32(eactor + kActorModelLink, elink);
+    e.Set32(elink + kModelLinkActor, eactor);
+    e.Set32(elink + kModelLinkModel, emodel);
+    e.Set32(eactor + kActorModel, emodel);
+    e.Set32(emodel, kModelVtable);
+    CHECK(FindModel(e, eactor) == emodel);
+    e.Unmap32(eactor + kActorModelLink);
+    CHECK(FindModel(e, eactor) == emodel); // the old way
+    CHECK(FindModel(FakeMemory{}, eactor) == 0u);
+}

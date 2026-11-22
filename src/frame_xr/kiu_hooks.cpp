@@ -750,10 +750,10 @@ void Hook(int64_t ticks) {
         }
         // AzaharFrame kiu131: his model's draw. AZAHARFRAME_KIU_HIDE_PLAYER set ("1": the scale
         // above; "0": keep him) leaves it drawn.
-        uint32_t model = 0, vt = 0, word = 0;
-        if (mem.Read32(p.actor + KH::kActorModel, model) && model != 0 && (model & 3u) == 0 &&
-            mem.Read32(model, vt) && vt == s.build->model_vtable &&
-            mem.Read32(model + KH::kModelDrawnWord, word)) {
+        // AzaharFrame kiuusa: found through the actor's model link first (KH::FindModel).
+        uint32_t word = 0;
+        const uint32_t model = KH::FindModel(mem, p.actor, *s.build);
+        if (model != 0 && mem.Read32(model + KH::kModelDrawnWord, word)) {
             const bool hide_draw = hide_by == KH::HideBy::Draw && !hide_text &&
                                    KH::HideByDrawInFirstPerson(first_person, eye_moved) && p.Ok();
             // Ours to put back: the node this app cleared, or (once a run, playing) a cleared
