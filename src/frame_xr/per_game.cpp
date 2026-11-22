@@ -200,6 +200,18 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::TriggerLayout: // AzaharFrame kiufire
         f(v.vr_kiu_trigger_layout);
         return true;
+    case Id::KiuWristScreen: // AzaharFrame kiutoggles
+        f(v.vr_kiu_wrist_screen);
+        return true;
+    case Id::KiuTalkPanel:
+        f(v.vr_kiu_talk_panel);
+        return true;
+    case Id::KiuOverShoulder:
+        f(v.vr_kiu_over_shoulder);
+        return true;
+    case Id::KiuSnapTurn:
+        f(v.vr_kiu_snap_turn);
+        return true;
     default:
         return false;
     }

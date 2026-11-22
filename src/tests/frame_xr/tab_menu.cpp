@@ -3288,6 +3288,108 @@ TEST_CASE("Tab menu: Trigger Layout, Kid Icarus only", "[frame_xr][tabmenu][kiuf
     }
 }
 
+// AzaharFrame kiutoggles: Angel's Aim's first-person options, per game, in the Settings tab's
+// Immersive section right under Immersive Mode, shown only while Kid Icarus: Uprising is open and
+// Immersive Mode is Angel's Aim (stored 4). Three switches (off by default) and Turning's choices
+// (Smooth by default; stored in degrees). The strings are proposed (angels_aim_tab.h).
+TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim only",
+          "[frame_xr][tabmenu][kiutoggles]") {
+    const std::vector<Id> ids{Id::KiuWristScreen, Id::KiuTalkPanel, Id::KiuOverShoulder,
+                              Id::KiuSnapTurn};
+    for (const Id id : ids) {
+        INFO("id " << static_cast<int>(id));
+        CHECK(PerGameSetting(id));
+        CHECK(SectionOf(id) == SettingsSection::Immersive);
+        CHECK(!LabelFor(id).empty());
+        CHECK(!ExplainFor(id).empty());
+    }
+    CHECK(LabelFor(Id::KiuWristScreen) == "Secondary Screen on Wrist");
+    CHECK(LabelFor(Id::KiuTalkPanel) == "Talk Panel");
+    CHECK(LabelFor(Id::KiuOverShoulder) == "Over the Shoulder");
+    CHECK(LabelFor(Id::KiuSnapTurn) == "Turning");
+    CHECK(OptionsFor(Id::KiuSnapTurn) ==
+          std::vector<std::string>{"Smooth", "30\xC2\xB0", "45\xC2\xB0", "60\xC2\xB0", "90\xC2\xB0"});
+    CHECK(OptionsFor(Id::KiuSnapTurn).size() == kSnapTurnDegrees.size());
+    for (int i = 0; i < static_cast<int>(kSnapTurnDegrees.size()); i++) {
+        CHECK(SnapTurnIndexOf(SnapTurnDegreesAt(i)) == i);
+    }
+    CHECK(SnapTurnDegreesAt(0) == 0);
+    CHECK(SnapTurnDegreesAt(2) == 45);
+    CHECK(SnapTurnDegreesAt(9) == 0);
+    CHECK(SnapTurnIndexOf(50) == 0); // not a choice: Smooth, what it does
+    const MenuModel defaults;
+    CHECK_FALSE(defaults.kiu_wrist_screen);
+    CHECK_FALSE(defaults.kiu_talk_panel);
+    CHECK_FALSE(defaults.kiu_over_shoulder);
+    CHECK(defaults.kiu_snap_turn == 0);
+    CHECK(AngelsAimRowsShown(true, 4));
+    CHECK_FALSE(AngelsAimRowsShown(false, 4));
+    CHECK_FALSE(AngelsAimRowsShown(true, 3));
+
+    for (const bool kiu : {false, true}) {
+        for (const int mode : {0, 2, 3, 4}) {
+            INFO("kiu " << kiu << ", mode " << mode);
+            Drawn d;
+            MenuModel m = Sample();
+            m.mods.angels_aim.shown = kiu;
+            m.immersive_mode = mode;
+            m.kiu_wrist_screen = true; // a value of its own changes nothing here
+            m.kiu_snap_turn = 2;
+            MenuView v;
+            v.tab = Tab::Settings;
+            v.section = SettingsSection::Immersive;
+            bool seen[4] = {};
+            bool turns[5] = {};
+            bool under_mode = false;
+            for (float scroll = 0.0f; scroll <= 3000.0f; scroll += kRowH) {
+                v.scroll[static_cast<int>(Tab::Settings)] = scroll;
+                d.Draw(m, v);
+                for (std::size_t k = 0; k < 3; k++) {
+                    seen[k] |= FindHit(d, ids[k], -1) != nullptr; // the switch, never locked
+                }
+                for (int i = 0; i < 5; i++) {
+                    turns[i] |= FindHit(d, Id::KiuSnapTurn, i) != nullptr;
+                }
+                seen[3] |= turns[0] && turns[4];
+                const auto* mode_row = FindHit(d, Id::ImmersiveMode, kLabelIndex);
+                const auto* wrist = FindHit(d, Id::KiuWristScreen, -1);
+                if (mode_row && wrist) {
+                    const float dy = 0.5f * ((wrist->r.y0 + wrist->r.y1) -
+                                             (mode_row->r.y0 + mode_row->r.y1));
+                    under_mode |= std::abs(dy - kRowH) < 1.0f;
+                }
+                if (scroll >= d.menu.MaxScroll()) {
+                    break;
+                }
+            }
+            const bool shown = kiu && mode == 4;
+            for (int k = 0; k < 4; k++) {
+                CHECK(seen[k] == shown);
+            }
+            for (int i = 0; i < 5; i++) {
+                CHECK(turns[i] == shown);
+            }
+            if (shown) {
+                CHECK(under_mode); // the first of them right under Immersive Mode
+                Audit a;
+                v.scroll[static_cast<int>(Tab::Settings)] = 0.0f;
+                a.Draw(m, v);
+                a.Check("Settings, Immersive, Angel's Aim's rows");
+                CHECK(a.Drew("Secondary Screen on Wrist"));
+                CHECK(a.Drew("Turning"));
+            }
+            // The Per-Game count and Use Global Values for All: the rows on view only.
+            MenuModel own = m;
+            own.scope = 1;
+            for (const Id id : ids) {
+                own.game_value[static_cast<std::size_t>(id)] = true;
+            }
+            CHECK(GameValueRows(own, Tab::Settings, SettingsSection::Immersive) ==
+                  (shown ? ids : std::vector<Id>{}));
+        }
+    }
+}
+
 // AzaharFrame kiuflash: Muzzle Flash, a game's switch in Aiming's group on the Controls page,
 // under Weapon in Hand's own rows, shown only with it on.
 TEST_CASE("Tab menu: Muzzle Flash under Weapon in Hand", "[frame_xr][tabmenu][kiuflash]") {

@@ -349,6 +349,14 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::GripFreesAim;
     case Id::TriggerLayout: // AzaharFrame kiufire
         return MenuSetting::TriggerLayout;
+    case Id::KiuWristScreen: // AzaharFrame kiutoggles
+        return MenuSetting::KiuWristScreen;
+    case Id::KiuTalkPanel:
+        return MenuSetting::KiuTalkPanel;
+    case Id::KiuOverShoulder:
+        return MenuSetting::KiuOverShoulder;
+    case Id::KiuSnapTurn:
+        return MenuSetting::KiuSnapTurn;
     case Id::WeaponScale:
         return MenuSetting::WeaponScale;
     case Id::WeaponOpacity: // AzaharFrame kiuopacity
@@ -1077,6 +1085,12 @@ void MenuPanel::BuildModel(const Host& host) {
         static_cast<int>(std::clamp<u32>(v.vr_light_gun_muzzle_flash_size.GetValue(), 50, 300));
     m.trigger_layout = // AzaharFrame kiufire
         static_cast<int>(std::min<u32>(v.vr_kiu_trigger_layout.GetValue(), 1));
+    // AzaharFrame kiutoggles: the settings themselves (a test switch, when set, wins where they
+    // are read, not here: the rows show what the player chose).
+    m.kiu_wrist_screen = v.vr_kiu_wrist_screen.GetValue();
+    m.kiu_talk_panel = v.vr_kiu_talk_panel.GetValue();
+    m.kiu_over_shoulder = v.vr_kiu_over_shoulder.GetValue();
+    m.kiu_snap_turn = Menu::SnapTurnIndexOf(static_cast<int>(v.vr_kiu_snap_turn.GetValue()));
     m.angels_intro_shown = v.vr_angels_aim_intro_shown.GetValue();
     m.show_controllers = v.vr_show_controllers.GetValue();
     m.controllers_in_front = // AzaharFrame ctrlfront
@@ -1583,6 +1597,23 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = Menu::TriggerLayoutValueAt(std::clamp(value, 0, 1));
         Apply(v.vr_kiu_trigger_layout, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::TriggerLayout;
+        break;
+    case Id::KiuWristScreen: // AzaharFrame kiutoggles: live (read each display frame)
+        Apply(v.vr_kiu_wrist_screen, value != 0, per_game);
+        r.setting = MenuSetting::KiuWristScreen;
+        break;
+    case Id::KiuTalkPanel:
+        Apply(v.vr_kiu_talk_panel, value != 0, per_game);
+        r.setting = MenuSetting::KiuTalkPanel;
+        break;
+    case Id::KiuOverShoulder: // read at each VBlank
+        Apply(v.vr_kiu_over_shoulder, value != 0, per_game);
+        r.setting = MenuSetting::KiuOverShoulder;
+        break;
+    case Id::KiuSnapTurn: // the shown index; sent and stored in degrees
+        r.value = Menu::SnapTurnDegreesAt(value);
+        Apply(v.vr_kiu_snap_turn, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuSnapTurn;
         break;
     case Id::ShowControllers:
         Apply(v.vr_show_controllers, value != 0, false);
@@ -2489,6 +2520,15 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::ScreenAsPanel: // AzaharFrame projdef
         SetSetting(t.id, model.screen_as_panel ? 0 : 1, host);
         break;
+    case Id::KiuWristScreen: // AzaharFrame kiutoggles
+        SetSetting(t.id, model.kiu_wrist_screen ? 0 : 1, host);
+        break;
+    case Id::KiuTalkPanel:
+        SetSetting(t.id, model.kiu_talk_panel ? 0 : 1, host);
+        break;
+    case Id::KiuOverShoulder:
+        SetSetting(t.id, model.kiu_over_shoulder ? 0 : 1, host);
+        break;
     case Id::AsyncShaders:
         SetSetting(t.id, model.async_shaders ? 0 : 1, host);
         break;
@@ -2535,6 +2575,7 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::GripFreesAim: // AzaharFrame kiuaim3
     case Id::TurnZoneFrom:
     case Id::TriggerLayout: // AzaharFrame kiufire
+    case Id::KiuSnapTurn:   // AzaharFrame kiutoggles: Turning (Smooth, 30 to 90 degrees)
     case Id::WindowScale:
     case Id::MarginX: // AzaharFrame fovaxis
     case Id::MarginY:

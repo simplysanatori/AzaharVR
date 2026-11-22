@@ -5712,6 +5712,18 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::TriggerLayout: // AzaharFrame kiufire: 0 Original, 1 Fire and Power
         set(v.vr_kiu_trigger_layout, std::min<u32>(u, 1));
         break;
+    case S::KiuWristScreen: // AzaharFrame kiutoggles
+        set(v.vr_kiu_wrist_screen, r.value != 0);
+        break;
+    case S::KiuTalkPanel:
+        set(v.vr_kiu_talk_panel, r.value != 0);
+        break;
+    case S::KiuOverShoulder:
+        set(v.vr_kiu_over_shoulder, r.value != 0);
+        break;
+    case S::KiuSnapTurn: // degrees: 30, 45, 60 or 90; anything else Smooth (0)
+        set(v.vr_kiu_snap_turn, u == 30 || u == 45 || u == 60 || u == 90 ? u : 0u);
+        break;
     case S::AngelsAimIntroShown: // AzaharFrame kiuweap2: a plain global key
         v.vr_angels_aim_intro_shown.SetValue(r.value != 0);
         break;

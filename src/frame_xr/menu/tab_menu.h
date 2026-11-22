@@ -288,6 +288,13 @@ enum class Id : int {
     HudSpacingY,
     // AzaharFrame kiufire
     TriggerLayout, ///< index: 0 Original, 1 Fire and Power (vr_kiu_trigger_layout), Kid Icarus only
+    // AzaharFrame kiutoggles: Angel's Aim's first-person options, per game, in the Settings tab's
+    // Immersive section under Immersive Mode, shown only while Kid Icarus: Uprising is open and
+    // Immersive Mode is Angel's Aim (AngelsAimRowsShown)
+    KiuWristScreen,  ///< a switch: Secondary Screen on Wrist (vr_kiu_wrist_screen)
+    KiuTalkPanel,    ///< a switch: Talk Panel (vr_kiu_talk_panel)
+    KiuOverShoulder, ///< a switch: Over the Shoulder (vr_kiu_over_shoulder)
+    KiuSnapTurn,     ///< index: Turning's Smooth, 30, 45, 60, 90 degrees (vr_kiu_snap_turn)
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -362,6 +369,28 @@ constexpr int TriggerLayoutValueAt(int index) {
     return index == 0 ? 1 : 0;
 }
 
+/// AzaharFrame kiutoggles: Turning's choices in the shown order, in degrees (0 Smooth), as
+/// vr_kiu_snap_turn stores them; a stored value not among them shows as Smooth (what it does).
+inline constexpr std::array<int, 5> kSnapTurnDegrees{0, 30, 45, 60, 90};
+constexpr int SnapTurnIndexOf(int degrees) {
+    for (int i = 0; i < static_cast<int>(kSnapTurnDegrees.size()); i++) {
+        if (kSnapTurnDegrees[static_cast<std::size_t>(i)] == degrees) {
+            return i;
+        }
+    }
+    return 0;
+}
+constexpr int SnapTurnDegreesAt(int index) {
+    return index >= 0 && index < static_cast<int>(kSnapTurnDegrees.size())
+               ? kSnapTurnDegrees[static_cast<std::size_t>(index)]
+               : 0;
+}
+/// AzaharFrame kiutoggles: Angel's Aim's first-person rows show: Kid Icarus: Uprising is open
+/// (`kiu_open`, MenuModel::mods.angels_aim.shown) and Immersive Mode is Angel's Aim (stored 4).
+constexpr bool AngelsAimRowsShown(bool kiu_open, int immersive_mode) {
+    return kiu_open && immersive_mode == 4;
+}
+
 /// AzaharFrame kiuweap2: Aiming turned on: from Off (`stored_before`, vr_gyro_aim's 0) to Direct
 /// Aim or Gyro Aim (`index_after`, the shown index 1 or 2), while Kid Icarus: Uprising is open
 /// (`kiu_open`) and the prompt has not been shown (`shown`).
@@ -425,6 +454,10 @@ struct MenuModel {
     int projectile_opacity = 100; ///< percent (20 to 100)
     int flash_size = 100;         ///< AzaharFrame kiuweap2: Muzzle Flash Size, percent (50 to 300)
     int trigger_layout = 0;       ///< AzaharFrame kiufire: 0 Original, 1 Fire and Power
+    bool kiu_wrist_screen = false;  ///< AzaharFrame kiutoggles: vr_kiu_wrist_screen
+    bool kiu_talk_panel = false;    ///< vr_kiu_talk_panel
+    bool kiu_over_shoulder = false; ///< vr_kiu_over_shoulder
+    int kiu_snap_turn = 0;          ///< Turning's shown index (SnapTurnIndexOf), 0 Smooth
     bool angels_intro_shown = false; ///< AzaharFrame kiuweap2: vr_angels_aim_intro_shown
     bool aim_calibrated = false; ///< the running game has a Check Aim map of its own
     bool aim_calibration_ok = false; ///< Check Aim can start (Direct Aim, the reticle read)

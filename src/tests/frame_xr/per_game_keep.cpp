@@ -536,3 +536,22 @@ TEST_CASE("Per-Game: a save during Angel's Aim stores mode 4 and no registers",
         eye.SetGlobal(true);
     }
 }
+
+// AzaharFrame kiutoggles: Angel's Aim's first-person options are per-game keys, off (Smooth) by
+// default as their test switches were, kept like the others.
+TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_xr][kiutoggles]") {
+    const std::vector<std::string> labels = Labels();
+    const std::vector<std::pair<Id, const char*>> rows{{Id::KiuWristScreen, "vr_kiu_wrist_screen"},
+                                                       {Id::KiuTalkPanel, "vr_kiu_talk_panel"},
+                                                       {Id::KiuOverShoulder, "vr_kiu_over_shoulder"},
+                                                       {Id::KiuSnapTurn, "vr_kiu_snap_turn"}};
+    for (const auto& [id, key] : rows) {
+        INFO(key);
+        CHECK(std::find(labels.begin(), labels.end(), key) != labels.end());
+        CHECK(FrameXr::PerGame::KeysOf(id) == std::vector<std::string>{key});
+    }
+    CHECK_FALSE(Settings::values.vr_kiu_wrist_screen.GetDefault());
+    CHECK_FALSE(Settings::values.vr_kiu_talk_panel.GetDefault());
+    CHECK_FALSE(Settings::values.vr_kiu_over_shoulder.GetDefault());
+    CHECK(Settings::values.vr_kiu_snap_turn.GetDefault() == 0u);
+}

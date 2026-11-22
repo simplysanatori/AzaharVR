@@ -223,6 +223,17 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
         rows.push_back(
             row(Id::ImmersiveMode, RowKind::MenuButton, // AzaharFrame kiumode
                 Immersive::Names::ModeIndexOf(static_cast<std::uint32_t>(m.immersive_mode))));
+        // AzaharFrame kiutoggles: Angel's Aim's first-person options, under the row that shows
+        // them (so choosing Angel's Aim moves nothing above the beam), only while Kid Icarus:
+        // Uprising is open and Angel's Aim is chosen: they act in no other game or mode.
+        if (AngelsAimRowsShown(m.mods.angels_aim.shown, m.immersive_mode)) {
+            rows.push_back(row(Id::KiuWristScreen, RowKind::Switch, 0, m.kiu_wrist_screen));
+            rows.push_back(row(Id::KiuTalkPanel, RowKind::Switch, 0, m.kiu_talk_panel));
+            rows.push_back(row(Id::KiuOverShoulder, RowKind::Switch, 0, m.kiu_over_shoulder));
+            rows.push_back(row(Id::KiuSnapTurn, RowKind::Segmented,
+                               std::clamp(m.kiu_snap_turn, 0,
+                                          static_cast<int>(kSnapTurnDegrees.size()) - 1)));
+        }
         Row fov = full(row(Id::GameFov, RowKind::Slider));
         const SliderRange fr = SliderFor(Id::GameFov);
         fov.t = (static_cast<float>(m.game_fov) - fr.min) / (fr.max - fr.min);
@@ -341,6 +352,10 @@ SettingsSection SectionOf(Id id) {
     case Id::MotionClarity: // AzaharFrame flash
     case Id::MatchBottom:   // AzaharFrame fixa
     case Id::ScreenAsPanel:
+    case Id::KiuWristScreen: // AzaharFrame kiutoggles
+    case Id::KiuTalkPanel:
+    case Id::KiuOverShoulder:
+    case Id::KiuSnapTurn:
         return SettingsSection::Immersive;
     default:
         return SettingsSection::General;
@@ -410,6 +425,10 @@ bool PerGameSetting(Id id) {
     case Id::ProjectileOpacity:
     case Id::MuzzleFlashSize: // AzaharFrame kiuweap2
     case Id::TriggerLayout:   // AzaharFrame kiufire
+    case Id::KiuWristScreen:  // AzaharFrame kiutoggles
+    case Id::KiuTalkPanel:
+    case Id::KiuOverShoulder:
+    case Id::KiuSnapTurn:
         return true;
     default:
         return false;
@@ -636,6 +655,12 @@ const std::vector<std::string>& OptionsFor(Id id) {
                                                        kTriggerLayoutOriginal};
         return kTrigger;
     }
+    case Id::KiuSnapTurn: { // AzaharFrame kiutoggles: kSnapTurnDegrees' order
+        static const std::vector<std::string> kTurning{kTurningSmooth, kTurningSnaps[0],
+                                                       kTurningSnaps[1], kTurningSnaps[2],
+                                                       kTurningSnaps[3]};
+        return kTurning;
+    }
     case Id::WindowScale:
         return kScale;
     case Id::ImmersiveMode:
@@ -778,6 +803,14 @@ std::string LabelFor(Id id) {
         return "Muzzle Flash Size";
     case Id::TriggerLayout: // AzaharFrame kiufire
         return kTriggerLayoutRow;
+    case Id::KiuWristScreen: // AzaharFrame kiutoggles
+        return kWristScreenRow;
+    case Id::KiuTalkPanel:
+        return kTalkPanelRow;
+    case Id::KiuOverShoulder:
+        return kOverShoulderRow;
+    case Id::KiuSnapTurn:
+        return kTurningRow;
     case Id::CalibrateAimReset:
         return "Reset";
     case Id::AngelsAimSettings:
@@ -1143,6 +1176,14 @@ std::string ExplainFor(Id id) {
         return Immersive::Names::kMatchBottomTip;
     case Id::ScreenAsPanel: // AzaharFrame projdef
         return Immersive::Names::kScreenAsPanelTip;
+    case Id::KiuWristScreen: // AzaharFrame kiutoggles (angels_aim_tab.h)
+        return kWristScreenTip;
+    case Id::KiuTalkPanel:
+        return kTalkPanelTip;
+    case Id::KiuOverShoulder:
+        return kOverShoulderTip;
+    case Id::KiuSnapTurn:
+        return kTurningTip;
     case Id::Autosave: // AzaharFrame autosave
         return "Saves on its own as you play, when this menu opens and when the game closes.";
     case Id::AutosaveEvery:
