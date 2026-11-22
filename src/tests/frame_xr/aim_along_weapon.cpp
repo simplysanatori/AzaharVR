@@ -660,3 +660,75 @@ TEST_CASE("Angel's Aim: every class but the cannon as before", "[frame_xr][fixc]
     }
     CHECK(seen == want.size());
 }
+
+// AzaharFrame kiuweapon: Weapon Scale and Weapon Size make one weapon bigger or smaller about Pit's
+// fist, never a second one: at every scale the fit has as many parts as at 100 % (one for each
+// class, two for the orbitars' halves), on the same sides, Pit's fist stays on the controller's
+// handle, the weapon's own axis keeps its direction, and the muzzle moves out from the fist by
+// the factor (docs/handoff/kiu-weapon-doubling.md: the doubling reported with Weapon Scale).
+TEST_CASE("Weapon Scale: one weapon at every scale, scaled about Pit's fist",
+          "[frame_xr][kiuweapon]") {
+    // Made-up bounds, a long weapon (about 12 units: Hand Size brings it down).
+    const std::array<float, 3> lo{-5.0f, -1.0f, -10.0f}, hi{1.5f, 1.0f, 2.0f};
+    for (const ClassCase& c : Classes()) {
+        const auto& sides = SidesFor(c.w.cls);
+        for (const bool left : {false, true}) {
+            const auto base = Vis::FitWeaponToHand(c.w, left, sides);
+            REQUIRE(!base.empty());
+            CHECK(base.size() == (c.w.cls == 7 ? 2u : 1u));
+            const auto base_muzzle = Vis::FitMuzzle(c.w, left, sides);
+            const auto base_fist = Vis::FitFist(c.w, left, sides);
+            const auto base_axis = Vis::FitAxis(c.w, left, sides);
+            for (const Vis::WeaponSize size : {Vis::WeaponSize::Game, Vis::WeaponSize::Hand}) {
+                for (int pct = 50; pct <= 150; pct += 10) {
+                    INFO(c.name << (left ? ", left hand" : ", right hand")
+                                << (size == Vis::WeaponSize::Hand ? ", Hand Size " : ", Game Size ")
+                                << pct << " %");
+                    Vis::FitOverride tune;
+                    tune.scale = Vis::WeaponSizeFactor(c.w.cls, lo, hi,
+                                                       Vis::FitClassScale(c.w.cls), size, pct);
+                    REQUIRE(tune.scale > 0.0f);
+                    const auto parts = Vis::FitWeaponToHand(c.w, left, sides, tune);
+                    REQUIRE(parts.size() == base.size());
+                    for (std::size_t i = 0; i < parts.size(); i++) {
+                        CHECK(parts[i].side == base[i].side);
+                        CHECK(parts[i].mirrored == base[i].mirrored);
+                    }
+                    if (!c.w.hold) {
+                        continue; // the orbitars: no fist
+                    }
+                    const auto fist = Vis::FitFist(c.w, left, sides, tune);
+                    const auto muzzle = Vis::FitMuzzle(c.w, left, sides, tune);
+                    REQUIRE(fist);
+                    REQUIRE(base_fist);
+                    REQUIRE(muzzle);
+                    REQUIRE(base_muzzle);
+                    // The fist where it is at 100 % (on the handle).
+                    CHECK(Length(V(*fist) - V(*base_fist)) < 1e-4f);
+                    // The muzzle out from the fist by the factor, no further.
+                    const float reach = Length(V(*muzzle) - V(*fist));
+                    const float base_reach = Length(V(*base_muzzle) - V(*base_fist));
+                    CHECK(reach == Approx(base_reach * tune.scale).margin(1e-4f));
+                    // The weapon's own axis as held: the same way at any scale.
+                    const auto axis = Vis::FitAxis(c.w, left, sides, tune);
+                    CHECK(axis.has_value() == base_axis.has_value());
+                    if (axis && base_axis) {
+                        CHECK(Length(V(*axis) - V(*base_axis)) < 1e-4f);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// AzaharFrame kiuweapon: AZAHARFRAME_KIU_WEAPON_DRAW=0 leaves the weapon's model out; anything
+// else, or no line, draws it as before. A live switch (every AZAHARFRAME_KIU_ one is).
+TEST_CASE("AZAHARFRAME_KIU_WEAPON_DRAW: only 0 leaves the model out, live", "[frame_xr][kiuweapon]") {
+    CHECK(Vis::WeaponModelDrawn(std::nullopt));
+    CHECK(Vis::WeaponModelDrawn(std::string{"1"}));
+    CHECK(Vis::WeaponModelDrawn(std::string{""}));
+    CHECK(Vis::WeaponModelDrawn(std::string{"off"}));
+    CHECK_FALSE(Vis::WeaponModelDrawn(std::string{"0"}));
+    CHECK(FrameXr::TestSwitches::ApplyFor(Vis::kWeaponDrawSwitch) ==
+          FrameXr::TestSwitches::Apply::Live);
+}

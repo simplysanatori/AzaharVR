@@ -189,6 +189,10 @@ HoldPick HoldPickFor(int cls, const std::optional<std::string>& value) {
     return cls == 1 ? HoldPick::Shot : HoldPick::Idle;
 }
 
+bool WeaponModelDrawn(const std::optional<std::string>& value) { // AzaharFrame kiuweapon
+    return !(value && *value == "0");
+}
+
 namespace {
 
 /// Pit's hand's frame in aim space for a hold (row major: columns are where his hand's x, y, z

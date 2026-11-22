@@ -565,6 +565,7 @@ struct ControllerModels::Gpu {
     int weapon_failed_id = -1;
     uint32_t weapon_failed_generation = 0;
     std::string weapon_fit_logged;
+    std::string weapon_draw_logged; ///< AzaharFrame kiuweapon
 
     void FreeWeapon(Weapon& w) {
         if (!w.sets.empty()) {
@@ -2783,6 +2784,57 @@ void ControllerModels::FitWeapon(const ViewPose& views, const std::array<Hand, 2
             }
         }
     }
+    // AzaharFrame kiuweapon: what of the weapon goes into each eye's image, logged when it
+    // changes: the hands that draw it and, per fit, its side and the parts drawn with it
+    // (RecordWeapon's rule), and whether AZAHARFRAME_KIU_WEAPON_DRAW=0 leaves the model out. One
+    // hand and one fit (two for a pair's halves) is one weapon: a log that shows more is this
+    // app drawing it twice (the doubling reported with Weapon Scale:
+    // docs/handoff/kiu-weapon-doubling.md).
+    if (g.weapon_live) {
+        int hands_drawing = 0;
+        for (const Hand& hand : hands) {
+            if (hand.shown && hand.weapon >= 0 && g.weapon_live->id == hand.weapon) {
+                hands_drawing++;
+            }
+        }
+        const bool glow =
+            g.weapon_live->info.cls == FrameWeapons::kPalm ||
+            Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_WEAPON_GLOW").value_or("0") == "1";
+        std::string fits_text;
+        for (const FitPart& fit : weapon_fits) {
+            const char* side = fit.side == FitSide::Right  ? "R"
+                               : fit.side == FitSide::Left ? "L"
+                                                           : "C";
+            int lit = 0, glows = 0;
+            for (const auto& part : g.weapon_live->parts) {
+                if (part.flash || part.bullet || part.arm) {
+                    continue;
+                }
+                const bool has = std::any_of(
+                    part.components.begin(), part.components.end(),
+                    [&](const ModelComponent& comp) {
+                        return comp.name == side && comp.index_count > 0;
+                    });
+                if (has) {
+                    (part.glow ? glows : lit)++;
+                }
+            }
+            fits_text += fmt::format("{}{} with {} parts and {} glows{}",
+                                     fits_text.empty() ? "" : ", ", side, lit, glows,
+                                     glows > 0 && !glow ? " (glows not drawn)" : "");
+        }
+        const bool model = WeaponModelDrawn(Common::FrameTestSwitches::Value(kWeaponDrawSwitch));
+        const std::string key = fmt::format("{} {} {} {}", g.weapon_live->id, hands_drawing,
+                                            fits_text, model ? 1 : 0);
+        if (hands_drawing > 0 && key != g.weapon_draw_logged) {
+            g.weapon_draw_logged = key;
+            LOG_INFO(Frontend,
+                     "xr: weapon drawn: {} in {} hand{}, {} fit{} ({}){}", g.weapon_live->id,
+                     hands_drawing, hands_drawing == 1 ? "" : "s", weapon_fits.size(),
+                     weapon_fits.size() == 1 ? "" : "s", fits_text.empty() ? "none" : fits_text,
+                     model ? "" : "; the model left out (AZAHARFRAME_KIU_WEAPON_DRAW=0)");
+        }
+    }
 }
 
 // AzaharFrame kiuarm: Pit's arm on the hands this frame (weapon_fit.h): the off hand's while
@@ -3009,6 +3061,10 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
     const std::array<int, 2> order =
         HandOrder(weapon_drawn(hands[0]) && SeeThrough(hands[0].weapon_opacity),
                   weapon_drawn(hands[1]) && SeeThrough(hands[1].weapon_opacity));
+    // AzaharFrame kiuweapon: AZAHARFRAME_KIU_WEAPON_DRAW=0 (live): the weapon's model left out
+    // (weapon_fit.h kWeaponDrawSwitch); its flash and shots as before.
+    const bool weapon_model =
+        WeaponModelDrawn(Common::FrameTestSwitches::Value(kWeaponDrawSwitch));
     for (int e = 0; e < 2; e++) {
         const vk::Viewport vp{static_cast<float>(g.eye_w * e), 0.0f, static_cast<float>(g.eye_w),
                               static_cast<float>(g.eye_h), 0.0f, 1.0f};
@@ -3128,9 +3184,11 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
             // AzaharFrame kiuguns: the weapon in hand in place of the controller, once it is on
             // the GPU.
             if (weapon_drawn(hand)) {
-                RecordWeapon(c, g, *g.weapon_live, view_proj, views.eye[e].position, head, hand,
-                             h == Input::HandIndex(Input::Hand::Left), weapon_fits, weapon_clip,
-                             palm_elbow ? &palm_turn : nullptr);
+                if (weapon_model) { // AzaharFrame kiuweapon
+                    RecordWeapon(c, g, *g.weapon_live, view_proj, views.eye[e].position, head,
+                                 hand, h == Input::HandIndex(Input::Hand::Left), weapon_fits,
+                                 weapon_clip, palm_elbow ? &palm_turn : nullptr);
+                }
                 // AzaharFrame kiuflash: its muzzle flash after a real shot.
                 if (hand.flash.shown && muzzle && muzzle_hand == h) {
                     // AzaharFrame fixc: a cannon's from its mouth along its barrel
