@@ -426,7 +426,11 @@ void FrameMods::UpdateOptimizeRow() {
         row.original_removed = png.empty();
         if (!png.empty()) {
             row.original_size = size_of(png);
+#ifdef AZAHARVR_PC // AzaharVR: a PC's GPU reads no ASTC; the PNG pack is the one it shows
+            row.can_remove = false;
+#else
             row.can_remove = !waiting_switch && Canon(ActiveLink()) != png;
+#endif
         }
         return;
     } else if (const auto it = optimize_states.find(png); !png.empty() && it != optimize_states.end()) {
@@ -524,6 +528,9 @@ void FrameMods::NudgeOptimizeActive(u64 tid) {
 }
 
 void FrameMods::CheckNudge() {
+#ifdef AZAHARVR_PC // AzaharVR: Optimize for Frame is not offered on a PC (its GPU reads no ASTC)
+    return;
+#endif
     if (!textures.nudge_pack.empty()) {
         return;
     }
