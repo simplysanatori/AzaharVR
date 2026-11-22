@@ -10,6 +10,11 @@
 #endif
 #include "common/file_util.h"
 #include "common/logging/log.h"
+#ifdef AZAHARVR_PC
+#include <atomic>
+#include <memory>
+#include <astcenc.h> // AzaharVR: ASTC packs decoded for GPUs that cannot sample them
+#endif
 #include "common/texture.h"
 #include "core/frontend/image_interface.h"
 #include "video_core/custom_textures/material.h"
@@ -53,7 +58,72 @@ std::string_view MapTypeName(MapType type) {
     }
 }
 
+#ifdef AZAHARVR_PC
+std::atomic_bool g_decode_astc{false};
+
+/// AzaharVR: the ASTC block of a custom format (0 x 0: not ASTC)
+std::pair<unsigned, unsigned> AstcBlock(CustomPixelFormat format) {
+    switch (format) {
+    case CustomPixelFormat::ASTC4:
+        return {4, 4};
+    case CustomPixelFormat::ASTC6:
+        return {6, 6};
+    case CustomPixelFormat::ASTC8:
+        return {8, 6};
+    default:
+        return {0, 0};
+    }
+}
+
+/// AzaharVR: a decompress-only context for one block size, one for each loading thread
+astcenc_context* AstcContext(unsigned bx, unsigned by) {
+    struct Entry {
+        unsigned bx = 0, by = 0;
+        astcenc_context* context = nullptr;
+        Entry() = default;
+        Entry(const Entry&) = delete;
+        Entry& operator=(const Entry&) = delete;
+        ~Entry() {
+            if (context != nullptr) {
+                astcenc_context_free(context);
+            }
+        }
+    };
+    thread_local std::vector<std::unique_ptr<Entry>> cache;
+    for (const auto& e : cache) {
+        if (e->bx == bx && e->by == by) {
+            return e->context;
+        }
+    }
+    astcenc_config config{};
+    if (astcenc_config_init(ASTCENC_PRF_LDR, bx, by, 1, ASTCENC_PRE_FASTEST,
+                            ASTCENC_FLG_DECOMPRESS_ONLY, &config) != ASTCENC_SUCCESS) {
+        return nullptr;
+    }
+    astcenc_context* context = nullptr;
+    if (astcenc_context_alloc(&config, 1, &context, nullptr) != ASTCENC_SUCCESS) {
+        return nullptr;
+    }
+    auto entry = std::make_unique<Entry>(); // made in place: a copy's destructor would free it
+    entry->bx = bx;
+    entry->by = by;
+    entry->context = context;
+    cache.push_back(std::move(entry));
+    return context;
+}
+#endif
+
 } // Anonymous namespace
+
+#ifdef AZAHARVR_PC
+void SetDecodeAstc(bool decode) {
+    g_decode_astc = decode;
+}
+
+bool DecodeAstc() {
+    return g_decode_astc;
+}
+#endif
 
 CustomTexture::CustomTexture(Frontend::ImageInterface& image_interface_)
     : image_interface{image_interface_} {}
@@ -196,6 +266,57 @@ void CustomTexture::LoadDDS(std::vector<u8>&& input) {
     if (parsed_levels.empty()) {
         return;
     }
+
+#ifdef AZAHARVR_PC
+    // AzaharVR: this GPU samples no ASTC: every level decoded to RGBA8, in the file's row order
+    // (the order an RGBA8 replacement is uploaded in)
+    if (const auto [bx, by] = AstcBlock(parsed_format); bx != 0 && DecodeAstc()) {
+        astcenc_context* const context = AstcContext(bx, by);
+        if (context == nullptr) {
+            LOG_ERROR(Render, "{}: no ASTC decoder", path);
+            return;
+        }
+        std::size_t total = 0;
+        for (const CustomLevel& l : parsed_levels) {
+            total += std::size_t{l.width} * l.height * 4;
+        }
+        std::vector<u8> rgba(total);
+        std::vector<CustomLevel> rgba_levels;
+        rgba_levels.reserve(parsed_levels.size());
+        std::size_t at = 0;
+        const astcenc_swizzle swizzle{ASTCENC_SWZ_R, ASTCENC_SWZ_G, ASTCENC_SWZ_B, ASTCENC_SWZ_A};
+        for (const CustomLevel& l : parsed_levels) {
+            const std::size_t size = std::size_t{l.width} * l.height * 4;
+            void* slices[1] = {rgba.data() + at};
+            astcenc_image image{l.width, l.height, 1, ASTCENC_TYPE_U8, slices};
+            const astcenc_error e = astcenc_decompress_image(context, input.data() + l.offset,
+                                                             l.size, &image, &swizzle, 0);
+            astcenc_decompress_reset(context);
+            if (e != ASTCENC_SUCCESS) {
+                LOG_ERROR(Render, "{} level {}: {}", path, rgba_levels.size(),
+                          astcenc_get_error_string(e));
+                break;
+            }
+            rgba_levels.push_back(CustomLevel{
+                .offset = at,
+                .size = size,
+                .width = l.width,
+                .height = l.height,
+            });
+            at += size;
+        }
+        if (rgba_levels.empty()) {
+            return;
+        }
+        rgba.resize(at);
+        width = static_cast<u32>(info.width);
+        height = static_cast<u32>(info.height);
+        format = CustomPixelFormat::RGBA8;
+        levels = std::move(rgba_levels);
+        data = std::move(rgba);
+        return;
+    }
+#endif
 
     width = static_cast<u32>(info.width);
     height = static_cast<u32>(info.height);

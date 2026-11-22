@@ -232,6 +232,9 @@ create_target_directory_groups(video_core)
 
 target_link_libraries(video_core PUBLIC citra_common citra_core)
 target_link_libraries(video_core PRIVATE Boost::serialization dds-ktx json-headers nihstro-headers tsl::robin_map)
+if (AZAHARVR_PC) # AzaharVR: ASTC packs decoded for GPUs that cannot sample them (material.cpp)
+    target_link_libraries(video_core PRIVATE astcenc)
+endif()
 
 if ("x86_64" IN_LIST ARCHITECTURE)
     target_link_libraries(video_core PUBLIC xbyak)

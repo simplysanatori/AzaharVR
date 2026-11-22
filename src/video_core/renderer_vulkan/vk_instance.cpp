@@ -406,12 +406,25 @@ void Instance::CreateCustomFormatTable() {
                           vk::ImageUsageFlagBits::eTransferSrc;
         }
 
+#ifdef AZAHARVR_PC // AzaharVR: ASTC is decoded to RGBA8 as it is read (material.cpp)
+        if (!supports_transfer && is_astc) {
+            LOG_INFO(Render_Vulkan,
+                     "Custom texture format {} is not supported by this GPU; packs that use it "
+                     "are decoded to RGBA8 as they are read",
+                     VideoCore::CustomPixelFormatAsString(custom_format));
+        } else
+#endif
         if (!supports_transfer) {
             LOG_INFO(Render_Vulkan,
                      "Custom texture format {} is not supported by this GPU; packs that use it "
                      "keep the original textures",
                      VideoCore::CustomPixelFormatAsString(custom_format));
         }
+#ifdef AZAHARVR_PC
+        if (custom_format == VideoCore::CustomPixelFormat::ASTC4) {
+            VideoCore::SetDecodeAstc(!supports_transfer);
+        }
+#endif
 
         const u32 index = static_cast<u32>(custom_format);
         custom_format_table[index] = FormatTraits{

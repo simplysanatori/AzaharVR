@@ -38,4 +38,12 @@ bool IsCustomFormatCompressed(CustomPixelFormat format);
 /// block-compressed formats (ASTC blocks are not always 4x4). 0 for an invalid format.
 std::size_t CustomFormatLevelSize(CustomPixelFormat format, u32 width, u32 height);
 
+#ifdef AZAHARVR_PC
+/// AzaharVR: a GPU that cannot sample ASTC (desktop GPUs) gets ASTC packs, such as Optimize for
+/// Frame's copies, decoded to RGBA8 as they are read. Set by the renderer from its format table
+/// before any texture is read.
+void SetDecodeAstc(bool decode);
+bool DecodeAstc();
+#endif
+
 } // namespace VideoCore
