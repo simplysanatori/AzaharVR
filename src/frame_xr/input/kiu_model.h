@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <iterator> // std::back_inserter (MSVC: not through <algorithm>)
 #include <vector>
 #include "frame_xr/input/kiu_turn.h"
 
