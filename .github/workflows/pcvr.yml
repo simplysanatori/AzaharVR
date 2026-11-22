@@ -49,6 +49,8 @@ jobs:
           mkdir -p artifacts/azahar-vr
           cp build/bin/Release/azahar artifacts/azahar-vr/
           cp LICENSE.txt artifacts/azahar-vr/
+          mkdir -p artifacts/azahar-vr/art
+          cp steam-frame/art/*.png steam-frame/art/CREDITS.md dist/pcvr/art/NotoSans-* artifacts/azahar-vr/art/
           tar -C artifacts -czf artifacts/azahar-vr-linux-x86_64.tar.gz azahar-vr
       - name: Upload
         uses: actions/upload-artifact@v4
@@ -123,7 +125,8 @@ jobs:
           mkdir -p D:/a/_temp/openxr && cd D:/a/_temp/openxr && 7z x ../openxr.zip > /dev/null
           cd "$GITHUB_WORKSPACE"
           cp "$(find D:/a/_temp/openxr -path '*/x64/bin/*' -name openxr_loader.dll | head -1)" build/bundle/
-          mkdir -p artifacts
+          mkdir -p build/bundle/art artifacts
+          cp steam-frame/art/*.png steam-frame/art/CREDITS.md dist/pcvr/art/NotoSans-* build/bundle/art/
           (cd build/bundle && 7z a -tzip "$GITHUB_WORKSPACE/artifacts/azahar-vr-windows-x86_64.zip" . > /dev/null)
       - name: Upload
         if: ${{ matrix.frame_xr == 'ON' }}
