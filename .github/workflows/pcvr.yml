@@ -48,7 +48,7 @@ jobs:
         run: |
           mkdir -p artifacts/azahar-vr
           cp build/bin/Release/azahar artifacts/azahar-vr/
-          cp license.txt artifacts/azahar-vr/
+          cp LICENSE.txt artifacts/azahar-vr/
           tar -C artifacts -czf artifacts/azahar-vr-linux-x86_64.tar.gz azahar-vr
       - name: Upload
         uses: actions/upload-artifact@v4
@@ -122,7 +122,7 @@ jobs:
           wget "https://github.com/KhronosGroup/OpenXR-SDK-Source/releases/download/release-${OPENXR_SDK_VERSION}/openxr_loader_windows-${OPENXR_SDK_VERSION}.zip" -O D:/a/_temp/openxr.zip
           mkdir -p D:/a/_temp/openxr && cd D:/a/_temp/openxr && 7z x ../openxr.zip > /dev/null
           cd "$GITHUB_WORKSPACE"
-          cp "$(find D:/a/_temp/openxr -path '*x64*' -name openxr_loader.dll | head -1)" build/bundle/
+          cp "$(find D:/a/_temp/openxr -path '*/x64/bin/*' -name openxr_loader.dll | head -1)" build/bundle/
           mkdir -p artifacts
           (cd build/bundle && 7z a -tzip "$GITHUB_WORKSPACE/artifacts/azahar-vr-windows-x86_64.zip" . > /dev/null)
       - name: Upload
