@@ -1700,9 +1700,11 @@ void TabMenu::DrawStats(Kit& kit, const MenuModel& model, const MenuView& view, 
             }
         }
     };
-    const Rect pos_row{row.x0, row.y1, row.x1, row.y1 + kRowH - 8.0f};
+    // AzaharFrame kiu131: the two choice rows a little tighter, so Version keeps its own row at
+    // the bottom.
+    const Rect pos_row{row.x0, row.y1, row.x1, row.y1 + kRowH - 16.0f};
     choice_row(Id::StatsPosition, pos_row, model.stats_position);
-    const Rect at_row{row.x0, pos_row.y1, row.x1, pos_row.y1 + kRowH - 8.0f};
+    const Rect at_row{row.x0, pos_row.y1, row.x1, pos_row.y1 + kRowH - 16.0f};
     choice_row(Id::WristSide, at_row, std::clamp(model.wrist_side, 0, 1));
     kit.Line(c.x0, at_row.y1 + 8.0f, c.x1, at_row.y1 + 8.0f, 1.0f, Tok::kOutlineVariant);
 
@@ -1723,7 +1725,7 @@ void TabMenu::DrawStats(Kit& kit, const MenuModel& model, const MenuView& view, 
         }
         y += 12.0f;
     };
-    float yl = at_row.y1 + 24.0f, yr = yl;
+    float yl = at_row.y1 + 16.0f, yr = yl;
     if (model.stats_game.empty() && model.stats_vr.empty()) {
         kit.TextMid(c.x0, yl + 16.0f, Type::Body, Tok::kOnSurfaceVariant, "No Stats Yet");
     }

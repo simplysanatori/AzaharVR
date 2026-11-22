@@ -1526,6 +1526,9 @@ int main(int argc, char** argv) {
         for (int i = 0; i < 4; i++) {
             kv.hover = {tips[i], tips[i] == Id::KiuBottomReset ? -1 : kLabelIndex};
             kv.tooltip = tips[i];
+            if (tips[i] == Id::KiuReticleSize) { // the last row: scrolled into view
+                kv.scroll[static_cast<int>(Tab::Settings)] = 3.0f * kRowH;
+            }
             ok &= shot(names[i], ka, kv);
         }
     }
