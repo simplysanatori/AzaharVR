@@ -13,10 +13,12 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#ifndef _WIN32 // AzaharVR: the sandbox is bubblewrap's; on Windows the fallback is never available
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 #include <fmt/format.h>
 #include <json.hpp>
 #include "common/logging/log.h"
@@ -47,11 +49,18 @@ std::string OneLine(const std::string& text) {
 }
 
 bool Executable(const std::string& path) {
+#ifdef _WIN32
+    return false; // AzaharVR: no bubblewrap on Windows, so Detect() always reports it missing
+#else
     return ::access(path.c_str(), X_OK) == 0;
+#endif
 }
 
 /// Runs a fixed command and returns its first line of output ("" on any failure).
 std::string FirstLineOf(const std::vector<std::string>& argv) {
+#ifdef _WIN32
+    return {}; // AzaharVR
+#else
     int fds[2];
     if (::pipe(fds) != 0) {
         return {};
@@ -90,6 +99,7 @@ std::string FirstLineOf(const std::vector<std::string>& argv) {
         return {};
     }
     return out.substr(0, out.find('\n'));
+#endif // _WIN32
 }
 
 u32 Le32(const unsigned char* p) {
@@ -444,6 +454,10 @@ Build::Result Run(const Options& options) {
     LOG_INFO(Frontend, "emerald3ds: building with the release's own builder in a sandbox (network {}, {} cached follower files)",
              sb.network ? "on" : "off", seeded);
 
+#ifdef _WIN32
+    // AzaharVR: no sandbox on Windows (Detect() already says so; this is for tools passed in)
+    return fail("The builder could not be started.");
+#else
     int fds[2];
     if (::pipe(fds) != 0) {
         return fail("The builder could not be started.");
@@ -589,6 +603,7 @@ Build::Result Run(const Options& options) {
         b.progress(1000, "Done");
     }
     return res;
+#endif // _WIN32
 }
 
 // ---------------------------------------------------------------------------------------------
