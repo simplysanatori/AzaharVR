@@ -18,8 +18,10 @@
 #include <thread>
 #include <fmt/format.h>
 #include <json.hpp>
+#ifndef _WIN32 // AzaharVR
 #include <fcntl.h>
 #include <unistd.h>
+#endif
 #ifdef __linux__
 #include <sched.h>
 #include <sys/resource.h>

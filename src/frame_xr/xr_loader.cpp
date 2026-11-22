@@ -4,9 +4,10 @@
 
 #include <cstdio>
 #include <cstdlib>
-#include <dlfcn.h>
+#include <vector>
 
 #include "common/logging/log.h"
+#include "frame_xr/platform.h" // AzaharVR: dlopen or LoadLibrary
 #include "frame_xr/xr_loader.h"
 
 namespace FrameXr {
@@ -15,8 +16,6 @@ namespace {
 XrFunctions g_functions;
 void* g_loader = nullptr;
 XrInstance g_instance = XR_NULL_HANDLE;
-
-constexpr const char* kSteamVrLoader = "/opt/steamvr/bin/linuxarm64/libopenxr_loader.so";
 } // namespace
 
 XrFunctions& Xr() {
@@ -27,25 +26,28 @@ bool LoadLoader() {
     if (g_loader) {
         return true;
     }
-    const char* candidates[] = {std::getenv("AZAHARFRAME_OPENXR_LOADER"), kSteamVrLoader,
-                                "libopenxr_loader.so.1", "libopenxr_loader.so"};
+    // AzaharVR: the platform's loaders (platform.h; on Linux SteamVR's, then the system's).
+    std::vector<const char*> candidates{std::getenv("AZAHARFRAME_OPENXR_LOADER")};
+    for (const char* name : Platform::kOpenXrLoaders) {
+        candidates.push_back(name);
+    }
     for (const char* path : candidates) {
         if (!path || !*path) {
             continue;
         }
-        g_loader = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+        g_loader = Platform::OpenLibrary(path);
         if (g_loader) {
             LOG_INFO(Frontend, "xr: OpenXR loader {}", path);
             break;
         }
-        LOG_INFO(Frontend, "xr: no OpenXR loader at {} ({})", path, dlerror());
+        LOG_INFO(Frontend, "xr: no OpenXR loader at {} ({})", path, Platform::LibraryError());
     }
     if (!g_loader) {
         LOG_ERROR(Frontend, "xr: no OpenXR loader found");
         return false;
     }
     g_functions.xrGetInstanceProcAddr =
-        reinterpret_cast<PFN_xrGetInstanceProcAddr>(dlsym(g_loader, "xrGetInstanceProcAddr"));
+        reinterpret_cast<PFN_xrGetInstanceProcAddr>(Platform::LibrarySymbol(g_loader, "xrGetInstanceProcAddr"));
     if (!g_functions.xrGetInstanceProcAddr) {
         LOG_ERROR(Frontend, "xr: the OpenXR loader has no xrGetInstanceProcAddr");
         return false;

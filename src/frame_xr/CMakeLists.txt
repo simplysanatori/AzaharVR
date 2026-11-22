@@ -40,6 +40,7 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     watchdog.h
     xr_calls.h
     xr_includes.h
+    platform.h # AzaharVR
     xr_loader.cpp
     xr_loader.h
     # Controller input (input): actions, mapping, bridge to input_common.

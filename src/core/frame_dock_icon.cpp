@@ -12,9 +12,13 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#ifndef _WIN32 // AzaharVR: the dock icon is the Steam Frame's (vrcmd); nothing runs on Windows
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#else
+#include <process.h>
+#endif
 #include <fmt/format.h>
 #include <json.hpp>
 
@@ -61,7 +65,13 @@ bool Read(const std::string& path, std::string* out) {
 bool WriteAtomic(const std::string& path, const std::string& data) {
     std::error_code ec;
     fs::create_directories(fs::path(path).parent_path(), ec);
-    const std::string tmp = path + ".new" + std::to_string(getpid());
+    const std::string tmp = path + ".new" + std::to_string(
+#ifdef _WIN32 // AzaharVR
+                                                _getpid()
+#else
+                                                getpid()
+#endif
+                                            );
     {
         std::ofstream out(tmp, std::ios::binary);
         out.write(data.data(), static_cast<std::streamsize>(data.size()));
@@ -119,6 +129,11 @@ bool AppConfigEdit(const std::string& add, const std::string& drop) {
 
 /// Runs vrcmd --appmanifest MANIFEST (LD_LIBRARY_PATH out of its environment), exit status.
 int RunVrcmd(const std::string& vrcmd, const std::string& manifest) {
+#ifdef _WIN32 // AzaharVR
+    (void)vrcmd;
+    (void)manifest;
+    return -1;
+#else
     const pid_t pid = fork();
     if (pid < 0) {
         return -1;
@@ -136,6 +151,7 @@ int RunVrcmd(const std::string& vrcmd, const std::string& manifest) {
     int status = 0;
     waitpid(pid, &status, 0);
     return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+#endif
 }
 
 } // namespace

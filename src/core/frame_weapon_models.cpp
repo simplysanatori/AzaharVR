@@ -22,9 +22,11 @@
 #include <sstream>
 #include <thread>
 #include <fmt/format.h>
+#ifndef _WIN32 // AzaharVR: the worker's low priority is Linux's
 #include <sys/resource.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+#endif
 #include "common/file_util.h"
 #include "common/hash.h"
 #include "common/logging/log.h"
@@ -3333,7 +3335,9 @@ void StartLocked(Booted& b) {
     b.state = static_cast<int>(State::Working);
     b.worker = std::thread([&b, romfs = b.romfs, title = b.title, textures = b.custom_textures] {
         // The lowest priority: the game and the XR thread come first.
+#ifndef _WIN32 // AzaharVR
         setpriority(PRIO_PROCESS, static_cast<id_t>(syscall(SYS_gettid)), 19);
+#endif
         const TexturePack pack = textures ? ReadTexturePack(title) : TexturePack{};
         GameConverter game;
         RunResult res;

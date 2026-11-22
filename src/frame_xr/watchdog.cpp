@@ -4,6 +4,22 @@
 
 #include "frame_xr/watchdog.h"
 
+#ifdef _WIN32
+// AzaharVR: the watchdog reads Linux's /proc/self/task; on Windows it is off (platform.h).
+namespace FrameXr::Watchdog {
+void Start() {}
+void Stop() {}
+void Beat(const char*) {}
+void Idle() {}
+void FlatTick() {}
+void FlatPhase(const char*) {}
+void FlatEnd() {}
+double FlatStalledSeconds() {
+    return -1.0;
+}
+} // namespace FrameXr::Watchdog
+#else
+
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
@@ -262,3 +278,4 @@ double FlatStalledSeconds() {
 }
 
 } // namespace FrameXr::Watchdog
+#endif // _WIN32

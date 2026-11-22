@@ -4,11 +4,11 @@
 
 #include <algorithm>
 #include <exception>
-#include <dlfcn.h>
 
 #include "common/logging/log.h"
 #include "common/settings.h"
 #include "core/frontend/emu_window.h"
+#include "frame_xr/platform.h" // AzaharVR: dlopen or LoadLibrary
 #include "frame_xr/vulkan_bridge.h"
 #include "frame_xr/xr_loader.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
@@ -85,15 +85,19 @@ bool VulkanBridge::Init() {
              XR_VERSION_MINOR(req.maxApiVersionSupported));
     // Pinned for the whole process: the instance and device made through it
     // outlive every Vulkan::Instance (each loads and unloads its own reference).
-    libvulkan = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_LOCAL);
-    if (!libvulkan) {
-        libvulkan = dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL);
+    // AzaharVR: the platform's Vulkan loader (platform.h: libvulkan.so.1, or vulkan-1.dll).
+    for (const char* name : Platform::kVulkanLoaders) {
+        libvulkan = Platform::OpenLibrary(name);
+        if (libvulkan) {
+            break;
+        }
     }
     if (!libvulkan) {
-        LOG_ERROR(Frontend, "xr: no Vulkan loader (libvulkan.so.1)");
+        LOG_ERROR(Frontend, "xr: no Vulkan loader ({})", Platform::kVulkanLoaders[0]);
         return false;
     }
-    gipa = reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(libvulkan, "vkGetInstanceProcAddr"));
+    gipa = reinterpret_cast<PFN_vkGetInstanceProcAddr>(
+        Platform::LibrarySymbol(libvulkan, "vkGetInstanceProcAddr"));
     return gipa != nullptr;
 }
 
