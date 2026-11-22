@@ -1139,13 +1139,8 @@ void FrameMods::RefreshPacks() {
                 const CustomTex::Layers::PackData& d = game->data[p.id];
                 parts[p.id] = {d.layout.PartCount(), P::PartsOnText(d.layout, d.state),
                                // AzaharFrame ui3: Optimize for Frame is on the pack's page
-#ifdef AZAHARVR_PC // AzaharVR: not on a PC (its GPU reads no ASTC); an optimized copy keeps its
-                   // page, for Use Original
-                               CustomTex::Optimize::IsOptimized(p.path)};
-#else
                                p.format == CustomTex::Format::Png ||
                                    CustomTex::Optimize::IsOptimized(p.path)};
-#endif
             }
             return std::make_tuple(std::move(game), std::move(zipped), std::move(parts));
         },

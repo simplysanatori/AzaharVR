@@ -852,12 +852,7 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, const QStr
 
 #ifdef ENABLE_FRAME_XR
     // AzaharFrame: convert the title's texture pack to ASTC, or go back to the original one
-#ifdef AZAHARVR_PC // AzaharVR: on a PC only Use Original (its GPU reads no ASTC)
-    if (is_application && FrameTexturePack::HasPack(program_id) &&
-        FrameTexturePack::IsOptimized(program_id)) {
-#else
     if (is_application && FrameTexturePack::HasPack(program_id)) {
-#endif
         // AzaharFrame texlayers: with several packs on, these act on the top one: named
         const QString top = FrameTexturePack::TopPackName(program_id);
         auto* texture_pack = new QAction(FrameTexturePack::IsOptimized(program_id)
@@ -869,7 +864,6 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, const QStr
         context_menu.insertAction(shader_menu->menuAction(), texture_pack);
         connect(texture_pack, &QAction::triggered, this,
                 [this, program_id, name] { FrameTexturePack::Run(this, program_id, name); });
-#ifndef AZAHARVR_PC // AzaharVR: never on a PC: the PNG pack is the one it can show
         // AzaharFrame ui3: optimized, the original can go (its own guard decides when)
         if (!FrameTexturePack::RemovableOriginal(program_id).empty()) {
             auto* remove = new QAction(tr("Remove Original Texture Pack..."), &context_menu);
@@ -883,7 +877,6 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, const QStr
                 FrameTexturePack::RemoveOriginal(this, program_id, running == program_id);
             });
         }
-#endif
     }
     // AzaharFrame texparts: the pack's parts (the Emulation menu has it for the running game);
     // texlayers: the game's packs too, on or off
