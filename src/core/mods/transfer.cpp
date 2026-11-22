@@ -16,6 +16,9 @@
 #include <netdb.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#else // AzaharVR: Winsock (httplib.h has already brought it in)
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #endif
 #include "core/mods/transfer.h"
 
@@ -35,6 +38,10 @@ void Stopper::Stop() {
     if (fd_ >= 0) {
         ::shutdown(fd_, SHUT_RDWR); // wakes a connect, a handshake or a read in the worker
     }
+#else // AzaharVR
+    if (fd_ >= 0) {
+        ::shutdown(static_cast<SOCKET>(fd_), SD_BOTH);
+    }
 #endif
 }
 
@@ -53,8 +60,22 @@ void Stopper::Watch(int fd) {
     if (fd_ >= 0 && flag_) {
         ::shutdown(fd_, SHUT_RDWR);
     }
-#else
-    (void)fd;
+#else // AzaharVR: a second handle of the same socket, as dup gives on Linux
+    if (fd_ >= 0) {
+        ::closesocket(static_cast<SOCKET>(fd_));
+    }
+    fd_ = -1;
+    WSAPROTOCOL_INFOW info{};
+    if (fd >= 0 && WSADuplicateSocketW(static_cast<SOCKET>(fd), GetCurrentProcessId(), &info) == 0) {
+        const SOCKET dup = WSASocketW(FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO, &info,
+                                      0, WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT);
+        if (dup != INVALID_SOCKET) {
+            fd_ = static_cast<int>(dup);
+        }
+    }
+    if (fd_ >= 0 && flag_) {
+        ::shutdown(static_cast<SOCKET>(fd_), SD_BOTH);
+    }
 #endif
 }
 
@@ -63,6 +84,10 @@ void Stopper::Unwatch() {
 #ifndef _WIN32
     if (fd_ >= 0) {
         ::close(fd_);
+    }
+#else // AzaharVR
+    if (fd_ >= 0) {
+        ::closesocket(static_cast<SOCKET>(fd_));
     }
 #endif
     fd_ = -1;
@@ -91,12 +116,8 @@ std::string HostOnly(std::string_view host_with_scheme) {
 }
 
 bool IsAddress(const std::string& host) {
-#ifndef _WIN32
-    unsigned char buf[16];
+    unsigned char buf[16]; // AzaharVR: inet_pton is in Winsock too
     return inet_pton(AF_INET, host.c_str(), buf) == 1 || inet_pton(AF_INET6, host.c_str(), buf) == 1;
-#else
-    return false;
-#endif
 }
 
 } // namespace
@@ -112,7 +133,7 @@ std::optional<std::string> ResolveHost(const std::string& host, const std::atomi
     if (IsAddress(host)) {
         return host;
     }
-#ifndef _WIN32
+    // AzaharVR: the same on Windows (Winsock's getaddrinfo; httplib has started Winsock)
     struct Lookup {
         std::mutex mutex;
         std::condition_variable cv;
@@ -168,9 +189,6 @@ std::optional<std::string> ResolveHost(const std::string& host, const std::atomi
         lookup->cv.wait_for(lock, std::chrono::milliseconds(50));
     }
     return lookup->address;
-#else
-    return host;
-#endif
 }
 
 std::string Prepare(httplib::Client& client, const std::string& host_with_scheme, Stopper* stopper) {

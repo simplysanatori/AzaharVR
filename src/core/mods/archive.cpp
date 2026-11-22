@@ -22,10 +22,47 @@
 #include <sys/wait.h>
 #include <unistd.h>
 extern char** environ;
+#else // AzaharVR: Windows' own process and file calls for the POSIX code below
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <random>
+#include <thread>
+#include <windows.h>
 #endif
 #include "core/mods/archive.h"
 
 namespace Mods {
+
+#ifdef _WIN32 // AzaharVR: the two POSIX calls the tool paths use, as Windows can answer them
+namespace {
+constexpr int X_OK = 0;
+/// 0 when `path` is a file (Windows has no execute bit; the tools are .exe files).
+int access(const char* path, int) {
+    std::error_code ec;
+    return std::filesystem::is_regular_file(path, ec) ? 0 : -1;
+}
+/// Replaces the trailing XXXXXX with random letters and makes the folder; nullptr when it cannot.
+char* mkdtemp(char* templ) {
+    const std::size_t n = std::strlen(templ);
+    if (n < 6 || std::strcmp(templ + n - 6, "XXXXXX") != 0) {
+        return nullptr;
+    }
+    static constexpr char kChars[] = "abcdefghijklmnopqrstuvwxyz0123456789";
+    std::random_device rd;
+    for (int attempt = 0; attempt < 100; ++attempt) {
+        for (std::size_t i = n - 6; i < n; ++i) {
+            templ[i] = kChars[rd() % (sizeof(kChars) - 1)];
+        }
+        std::error_code ec;
+        if (std::filesystem::create_directory(templ, ec) && !ec) {
+            return templ;
+        }
+    }
+    return nullptr;
+}
+} // namespace
+#endif
 
 u32 Crc32(std::string_view data) {
     static const auto table = [] {
@@ -592,6 +629,151 @@ RunResult Run(const std::string& tool, const std::vector<std::string>& args, int
     }
     return r;
 }
+#else // AzaharVR: the same on Windows: CreateProcessW with no window, output through a pipe
+struct RunResult {
+    bool started = false;
+    bool timed_out = false;
+    bool too_much_output = false;
+    bool cancelled = false;
+    int status = -1; // exit code
+    std::string output; // stdout and stderr
+};
+
+/// One argument quoted as the C runtime's command line parser reads it back.
+std::wstring QuoteArg(const std::wstring& arg) {
+    if (!arg.empty() && arg.find_first_of(L" \t\n\v\"") == std::wstring::npos) {
+        return arg;
+    }
+    std::wstring out = L"\"";
+    for (auto it = arg.begin();; ++it) {
+        std::size_t slashes = 0;
+        while (it != arg.end() && *it == L'\\') {
+            ++it;
+            ++slashes;
+        }
+        if (it == arg.end()) {
+            out.append(slashes * 2, L'\\');
+            break;
+        }
+        if (*it == L'"') {
+            out.append(slashes * 2 + 1, L'\\');
+        } else {
+            out.append(slashes, L'\\');
+        }
+        out.push_back(*it);
+    }
+    out.push_back(L'"');
+    return out;
+}
+
+/// The program's strings are in the ANSI code page (UTF-8 under the manifest), as the paths are.
+std::wstring Wide(const std::string& s) {
+    if (s.empty()) {
+        return {};
+    }
+    const int n = MultiByteToWideChar(CP_ACP, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
+    std::wstring w(static_cast<std::size_t>(n), L'\0');
+    MultiByteToWideChar(CP_ACP, 0, s.data(), static_cast<int>(s.size()), w.data(), n);
+    return w;
+}
+
+RunResult Run(const std::string& tool, const std::vector<std::string>& args, int timeout_seconds,
+              std::size_t max_output, const std::atomic_bool* cancel = nullptr) {
+    RunResult r;
+    SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, TRUE};
+    HANDLE read_end = nullptr;
+    HANDLE write_end = nullptr;
+    if (!CreatePipe(&read_end, &write_end, &sa, 0)) {
+        return r;
+    }
+    SetHandleInformation(read_end, HANDLE_FLAG_INHERIT, 0);
+    HANDLE null_in = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
+                                 OPEN_EXISTING, 0, nullptr);
+    // Only these two handles go to the tool, whatever else this process holds open.
+    HANDLE inherit[2] = {write_end, null_in};
+    SIZE_T attr_size = 0;
+    InitializeProcThreadAttributeList(nullptr, 1, 0, &attr_size);
+    std::vector<char> attr_buf(attr_size);
+    auto* attrs = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attr_buf.data());
+    const bool attrs_ok =
+        InitializeProcThreadAttributeList(attrs, 1, 0, &attr_size) &&
+        UpdateProcThreadAttribute(attrs, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, inherit,
+                                  null_in != INVALID_HANDLE_VALUE ? sizeof(inherit) : sizeof(HANDLE),
+                                  nullptr, nullptr);
+    STARTUPINFOEXW si{};
+    si.StartupInfo.cb = sizeof(si);
+    si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    si.StartupInfo.hStdOutput = write_end;
+    si.StartupInfo.hStdError = write_end;
+    si.StartupInfo.hStdInput = null_in != INVALID_HANDLE_VALUE ? null_in : nullptr;
+    si.lpAttributeList = attrs_ok ? attrs : nullptr;
+    const std::wstring exe = Wide(tool);
+    std::wstring cmd = QuoteArg(exe);
+    for (const auto& a : args) {
+        cmd += L' ';
+        cmd += QuoteArg(Wide(a));
+    }
+    PROCESS_INFORMATION pi{};
+    const BOOL ok = attrs_ok && CreateProcessW(exe.c_str(), cmd.data(), nullptr, nullptr, TRUE,
+                                               CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT,
+                                               nullptr, nullptr, &si.StartupInfo, &pi);
+    if (attrs_ok) {
+        DeleteProcThreadAttributeList(attrs);
+    }
+    CloseHandle(write_end);
+    if (null_in != INVALID_HANDLE_VALUE) {
+        CloseHandle(null_in);
+    }
+    if (!ok) {
+        CloseHandle(read_end);
+        return r;
+    }
+    CloseHandle(pi.hThread);
+    r.started = true;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeout_seconds);
+    bool killed = false;
+    const auto stop = [&](bool& flag) {
+        flag = true;
+        TerminateProcess(pi.hProcess, 1);
+        killed = true;
+    };
+    for (;;) {
+        if (std::chrono::steady_clock::now() >= deadline) {
+            stop(r.timed_out);
+            break;
+        }
+        if (cancel != nullptr && cancel->load()) {
+            stop(r.cancelled);
+            break;
+        }
+        DWORD avail = 0;
+        if (!PeekNamedPipe(read_end, nullptr, 0, nullptr, &avail, nullptr)) {
+            break; // the tool has ended and closed its end
+        }
+        if (avail == 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
+        }
+        char buf[4096];
+        DWORD n = 0;
+        if (!ReadFile(read_end, buf, std::min<DWORD>(avail, sizeof(buf)), &n, nullptr) || n == 0) {
+            break;
+        }
+        if (r.output.size() + n > max_output) {
+            stop(r.too_much_output);
+            break;
+        }
+        r.output.append(buf, n);
+    }
+    CloseHandle(read_end);
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD code = 0;
+    if (!killed && GetExitCodeProcess(pi.hProcess, &code)) {
+        r.status = static_cast<int>(code);
+    }
+    CloseHandle(pi.hProcess);
+    return r;
+}
 #endif
 
 // AzaharFrame integ3: bsdtar keeps an archive's modes (less the umask), and a folder stored
@@ -630,7 +812,6 @@ struct TempDir {
 };
 
 
-#ifndef _WIN32
 // AzaharFrame texdl: the listing checks of ExtractWithBsdtar, shared with ExtractFileToDir. "" = fine.
 std::string CheckListing(const std::string& tool, const std::string& archive, ArchiveKind kind,
                          std::size_t max_total, int timeout_seconds,
@@ -701,7 +882,6 @@ std::string CheckListing(const std::string& tool, const std::string& archive, Ar
 
     return {};
 }
-#endif
 
 } // namespace
 
@@ -733,6 +913,16 @@ std::string FindBsdtar() {
                 return;
             }
         }
+#else // AzaharVR: Windows 10 and 11 ship bsdtar as System32\tar.exe (libarchive: zip, 7z, RAR)
+        wchar_t dir[MAX_PATH];
+        const UINT n = GetSystemDirectoryW(dir, MAX_PATH);
+        if (n > 0 && n < MAX_PATH) {
+            const fs::path candidate = fs::path(std::wstring(dir, n)) / L"tar.exe";
+            std::error_code ec;
+            if (fs::is_regular_file(candidate, ec)) {
+                found = candidate.string();
+            }
+        }
 #endif
     });
     return found;
@@ -742,7 +932,47 @@ std::string FindBsdtar() {
 // what bsdtar cannot read: Deflate64 zips, solid RAR4, RAR with odd streams, RAR5 with a 1 GB
 // dictionary. Looked up as $AZAHAR_7ZZ, tools/7zz beside the program, then PATH (7zz, 7zzs).
 std::string FindSevenZip() {
-#ifdef _WIN32
+#ifdef _WIN32 // AzaharVR: 7-Zip's 7z.exe (the same commands as 7zz): $AZAHAR_7ZZ, tools\7z.exe
+              // beside the program, the installed 7-Zip, then PATH
+    const auto usable = [](const fs::path& c) {
+        std::error_code e;
+        return !c.empty() && fs::is_regular_file(c, e);
+    };
+    if (const char* env = std::getenv("AZAHAR_7ZZ"); env != nullptr && usable(env)) {
+        return env;
+    }
+    std::vector<fs::path> candidates;
+    wchar_t self[MAX_PATH];
+    const DWORD len = GetModuleFileNameW(nullptr, self, MAX_PATH);
+    if (len > 0 && len < MAX_PATH) {
+        candidates.push_back(fs::path(std::wstring(self, len)).parent_path() / L"tools" / L"7z.exe");
+    }
+    for (const char* var : {"ProgramW6432", "ProgramFiles"}) {
+        if (const char* pf = std::getenv(var); pf != nullptr && *pf) {
+            candidates.push_back(fs::path(pf) / "7-Zip" / "7z.exe");
+        }
+    }
+    if (const char* path = std::getenv("PATH")) {
+        std::string p(path);
+        std::size_t start = 0;
+        while (start <= p.size()) {
+            const auto semi = p.find(';', start);
+            const std::string d = p.substr(start, semi == std::string::npos ? semi : semi - start);
+            if (!d.empty()) {
+                candidates.push_back(fs::path(d) / "7z.exe");
+                candidates.push_back(fs::path(d) / "7zz.exe");
+            }
+            if (semi == std::string::npos) {
+                break;
+            }
+            start = semi + 1;
+        }
+    }
+    for (const auto& c : candidates) {
+        if (usable(c)) {
+            return c.string();
+        }
+    }
     return {};
 #else
     const auto usable = [](const std::string& c) {
@@ -791,10 +1021,6 @@ ExtractResult ExtractWithBsdtar(std::string_view bytes, ArchiveKind kind, std::s
         result.error = std::move(message);
         return result;
     };
-#ifdef _WIN32
-    (void)bytes, (void)max_total, (void)timeout_seconds, (void)tool_override;
-    return fail(std::string(KindName(kind)) + " archives are not supported here");
-#else
     const std::string tool = tool_override.empty() ? FindBsdtar() : tool_override;
     if (tool.empty() || access(tool.c_str(), X_OK) != 0) {
         return fail(std::string(KindName(kind)) + " needs bsdtar, which wasn't found");
@@ -869,10 +1095,8 @@ ExtractResult ExtractWithBsdtar(std::string_view bytes, ArchiveKind kind, std::s
         return fail("The archive could not be unpacked");
     }
     return result;
-#endif
 }
 
-#ifndef _WIN32
 // AzaharFrame catalog3: the same guards as bsdtar's path, over 7zz's technical listing
 // (`l -slt`): safe paths, no links or special files, file count and total size capped. "" = fine.
 static std::string CheckListing7z(const std::string& tool, const std::string& archive, std::uint64_t max_total,
@@ -1002,7 +1226,6 @@ static std::string ExtractFileToDirSevenZip(const std::string& tool, const std::
     }
     return CheckExtracted(out_dir, max_total);
 }
-#endif
 
 // AzaharFrame texdl: extraction to disk for big archives (texture packs, 0.5 to 6 GB). Same listing
 // checks as ExtractWithBsdtar, then bsdtar writes straight into `out_dir`, which is checked again
@@ -1010,10 +1233,6 @@ static std::string ExtractFileToDirSevenZip(const std::string& tool, const std::
 std::string ExtractFileToDir(const std::string& archive_path, ArchiveKind kind, const std::string& out_dir,
                              std::uint64_t max_total, int timeout_seconds, const std::atomic_bool* cancel,
                              const std::string& tool_override) {
-#ifdef _WIN32
-    (void)archive_path, (void)out_dir, (void)max_total, (void)timeout_seconds, (void)cancel, (void)tool_override;
-    return std::string(KindName(kind)) + " archives are not supported here";
-#else
     // AzaharFrame catalog3: 7zz takes over where bsdtar is missing or cannot read the archive
     // (never for a refusal by the guards: links, unsafe paths, size).
     const std::string tool = tool_override.empty() ? FindBsdtar() : tool_override;
@@ -1072,12 +1291,10 @@ std::string ExtractFileToDir(const std::string& archive_path, ArchiveKind kind, 
         }
     }
     return ec ? "The archive could not be unpacked" : std::string{};
-#endif
 }
 
 ExtractResult ExtractArchive(std::string_view bytes, ArchiveKind kind) {
     ExtractResult r = kind == ArchiveKind::Zip ? ExtractZip(bytes) : ExtractWithBsdtar(bytes, kind);
-#ifndef _WIN32
     // AzaharFrame catalog3: what the built-in zip reader or bsdtar cannot read (Deflate64, solid
     // RAR4, odd RAR streams) goes to 7zz, through the on-disk path and its guards.
     constexpr std::size_t kMax = 256u * 1024 * 1024;
@@ -1126,9 +1343,6 @@ ExtractResult ExtractArchive(std::string_view bytes, ArchiveKind kind) {
         return r;
     }
     return alt;
-#else
-    return r;
-#endif
 }
 
 } // namespace Mods

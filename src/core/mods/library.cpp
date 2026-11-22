@@ -1256,6 +1256,9 @@ bool Library::DownloadParts(const CatalogEntry& entry, u64 title_id, std::string
         std::ifstream in(files.front(), std::ios::binary);
         in.read(first.data(), static_cast<std::streamsize>(first.size()));
         first.resize(static_cast<std::size_t>(in.gcount()));
+#ifdef _WIN32 // AzaharVR: Windows moves no file that is still open
+        in.close();
+#endif
         if (DetectArchive(first) == ArchiveKind::Unknown) {
             const std::string out_dir = work + "out";
             fs::create_directories(out_dir, ec);
