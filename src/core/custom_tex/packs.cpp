@@ -263,7 +263,11 @@ bool WriteExtraRoots(const std::string& load_dir, const std::vector<std::string>
     std::error_code ec;
     const fs::path dir = fs::path(load_dir) / "texture-packs";
     fs::create_directories(dir, ec);
+#ifdef _WIN32 // AzaharVR: LF as written (text mode writes CR LF, which the reader keeps)
+    std::ofstream f(dir / "roots.txt", std::ios::trunc | std::ios::binary);
+#else
     std::ofstream f(dir / "roots.txt", std::ios::trunc);
+#endif
     if (!f) {
         return false;
     }
@@ -595,11 +599,23 @@ Result Activate(const Paths& paths, u64 title_id, const Pack& pack) {
     const fs::path tmp = load.parent_path() / ("." + TitleFolder(title_id) + ".tmp");
     fs::remove(tmp, ec);
     ec.clear();
+#ifdef _WIN32 // AzaharVR: the target spelt with '\'; Windows renames nothing over a folder link
+    fs::create_directory_symlink(fs::path(link_target).make_preferred(), tmp, ec);
+    if (ec) {
+        r.error = "Could not create the link: " + ec.message();
+        return r;
+    }
+    if (fs::is_symlink(fs::symlink_status(load, ec))) {
+        fs::remove(load, ec);
+    }
+    ec.clear();
+#else
     fs::create_directory_symlink(link_target, tmp, ec);
     if (ec) {
         r.error = "Could not create the link: " + ec.message();
         return r;
     }
+#endif
     fs::rename(tmp, load, ec); // atomic: replaces an existing link
     if (ec) {
         std::error_code ignore;

@@ -104,7 +104,11 @@ void WriteMarkerLocked() {
     const std::string path = g_dir + kRunningFile;
     const std::string tmp = path + ".tmp";
     {
+#ifdef _WIN32 // AzaharVR: LF as written (text mode writes CR LF, which the reader keeps)
+        std::ofstream f(tmp, std::ios::trunc | std::ios::binary);
+#else
         std::ofstream f(tmp, std::ios::trunc);
+#endif
         if (!f) {
             return;
         }

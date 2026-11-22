@@ -256,7 +256,11 @@ std::string RestoreQuestion(const std::string& time) {
 void Arm(const std::string& root, const std::string& backup, const std::vector<Part>& parts) {
     std::error_code ec;
     fs::create_directories(root, ec);
+#ifdef _WIN32 // AzaharVR: LF as written (text mode writes CR LF, which the reader keeps)
+    std::ofstream out(fs::path(root) / kMarker, std::ios::trunc | std::ios::binary);
+#else
     std::ofstream out(fs::path(root) / kMarker, std::ios::trunc);
+#endif
     out << backup << '\n';
     for (const Part& p : parts) { // AzaharFrame advfix: "<name>\t<folder>" per part
         if (!p.dir.empty()) {

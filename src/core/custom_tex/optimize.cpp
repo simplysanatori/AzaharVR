@@ -263,7 +263,11 @@ void MarkAsked(const std::string& load_dir, const std::string& pack_id) {
     }
     std::error_code ec;
     fs::create_directories(AskedFile(load_dir).parent_path(), ec);
+#ifdef _WIN32 // AzaharVR: LF as written (text mode writes CR LF, which the reader keeps)
+    std::ofstream out(AskedFile(load_dir), std::ios::app | std::ios::binary);
+#else
     std::ofstream out(AskedFile(load_dir), std::ios::app);
+#endif
     out << pack_id << '\n';
 }
 

@@ -48,7 +48,11 @@ bool Lexists(const fs::path& p) {
 /// Python's os.path.abspath: absolute, normal, no trailing slash.
 std::string Abspath(const std::string& path) {
     fs::path p = fs::absolute(path).lexically_normal();
+#ifdef _WIN32 // AzaharVR: '/' in the path strings, as on Linux (folder links get backslashes)
+    std::string s = p.generic_string();
+#else
     std::string s = p.string();
+#endif
     while (s.size() > 1 && s.back() == '/') {
         s.pop_back();
     }
@@ -59,14 +63,28 @@ std::string Abspath(const std::string& path) {
 std::string Realpath(const std::string& path) {
     std::error_code ec;
     const fs::path c = fs::weakly_canonical(path, ec);
+#ifdef _WIN32 // AzaharVR: '/', as Abspath
+    return ec ? Abspath(path) : c.generic_string();
+#else
     return ec ? Abspath(path) : c.string();
+#endif
 }
 
 /// os.path.relpath of two absolute paths (lexical).
 std::string Relpath(const std::string& path, const std::string& start) {
     const fs::path r = fs::path(path).lexically_relative(start);
+#ifdef _WIN32 // AzaharVR: '/', as Abspath (the marker's "source" reads the same on every system)
+    return r.empty() ? std::string(".") : r.generic_string();
+#else
     return r.empty() ? std::string(".") : r.string();
+#endif
 }
+
+#ifdef _WIN32 // AzaharVR: a link to a folder on Windows is a folder link, its target spelt with '\'
+void CreateFolderLink(const std::string& target, const fs::path& link, std::error_code& ec) {
+    fs::create_directory_symlink(fs::path(target).make_preferred(), link, ec);
+}
+#endif
 
 bool ReadText(const std::string& path, std::string* text) {
     std::ifstream in(path, std::ios::binary);
@@ -178,10 +196,21 @@ bool SwapLink(const std::string& link, const std::string& target) {
     if (Lexists(tmp)) {
         fs::remove(tmp, ec);
     }
+#ifdef _WIN32 // AzaharVR: a folder link, and Windows renames nothing over a link to a folder
+    CreateFolderLink(Relpath(target, fs::path(link).parent_path().string()), tmp, ec);
+    if (ec) {
+        return false;
+    }
+    if (fs::is_symlink(fs::symlink_status(link, ec))) {
+        fs::remove(link, ec);
+    }
+    ec.clear();
+#else
     fs::create_symlink(Relpath(target, fs::path(link).parent_path().string()), tmp, ec);
     if (ec) {
         return false;
     }
+#endif
     fs::rename(tmp, link, ec);
     return !ec;
 }
@@ -727,7 +756,11 @@ bool Activate(const std::string& link_in, const std::string& out_dir_in, std::st
             *error = link + ": " + ec.message();
             return false;
         }
+#ifdef _WIN32 // AzaharVR: a folder link
+        CreateFolderLink(Relpath(out_dir, fs::path(link).parent_path().string()), link, ec);
+#else
         fs::create_symlink(Relpath(out_dir, fs::path(link).parent_path().string()), link, ec);
+#endif
         if (ec) {
             *error = link + ": " + ec.message();
             return false;
@@ -761,7 +794,11 @@ bool Restore(const std::string& link_in, std::string* message, std::string* erro
     if (marker.is_object() && marker.contains("source") && marker["source"].is_string()) {
         source_rel = marker["source"].get<std::string>();
     }
+#ifdef _WIN32 // AzaharVR: '/', as Abspath
+    const std::string source = (fs::path(real) / source_rel).lexically_normal().generic_string();
+#else
     const std::string source = (fs::path(real) / source_rel).lexically_normal().string();
+#endif
     std::string source_trim = source;
     while (source_trim.size() > 1 && source_trim.back() == '/') {
         source_trim.pop_back();
