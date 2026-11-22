@@ -285,6 +285,8 @@ them.
   Log: `xr: Angel's Aim: the C-Stick mod is left out of this run (...)`, the loader's `... left
   out of this run` per file, then the toast **Angel's Aim: C-Stick Mod Not Loaded** (V, desktop
   mock with a stand-in mod, reports/95/kiu132). Any other run: `the C-Stick mod loads (...)`.
+  A hand-installed `exheader.bin` (its own item in the library) goes out with a left-out
+  `code.bin`, and a widescreen build's shape is not given to `AutoShape` in that run.
 - **Chosen during a run with a mod loaded** (the VR menu or Azahar's window: the setting is read
   each VBlank): Angel's Aim stays out (`CStickModBlocksFor`; mode 4 plays as Other Games) and the
   toast **C-Stick Mod Loaded: Restart the Game for Angel's Aim** shows once each time it is
