@@ -18,7 +18,7 @@ Azahar VR is the PC VR version of Azahar for Frame: Linux x86-64 and Windows 10/
 4. **Data folder:** `azahar-vr` (Linux) and `AzaharVR` (Windows), and the test-switch folder `AzaharVR`. The first release copies nothing from other installs.
 5. **Controls:** the section 3.3 scheme, as a draft, built as data tables so it is cheap to change.
 6. **CI:** Linux x86-64 and Windows jobs beside the arm64 one. Each push needs the owner's OK (public repository).
-7. **Windows and Linux together.** Windows is built in CI from the start. The owner runs the Windows tests himself, with SteamVR, from a CI zip and a short checklist.
+7. **Windows and Linux together.** Windows is built in CI from the start. The owner runs the Windows tests, with SteamVR, from a CI zip and a short checklist.
 
 **2026-11-17 (still in force, except 1)**
 
@@ -31,19 +31,21 @@ Azahar VR is the PC VR version of Azahar for Frame: Linux x86-64 and Windows 10/
 
 | Step | State |
 |---|---|
-| 1. PC build | `pc/build-linux.sh` (native x86-64, `ENABLE_FRAME_XR=ON`, Sentry off). `ENABLE_FRAME_XR` now defaults on for Linux x86-64 too. A native build links and the native unit suites pass (three upstream-core failures are the same before and after: AES vectors, a save-state header and a touchpad hit test). |
+| 1. PC build | `pc/build-linux.sh` (native x86-64, `ENABLE_FRAME_XR=ON`, Sentry off). `ENABLE_FRAME_XR` now defaults on for Linux x86-64 too. A native build links. The native unit suites pass except three of this repository's own tests, which fail the same way on the unchanged tree and are open for x86-64: `tests/frame_xr/touchpad_touch.cpp` ("the dot sits on the screen"), `tests/core/mods_mega.cpp` (key, IV and CTR vectors) and `tests/core/savestate_memory.cpp` (a header check). |
 | 2. PC identity | `AZAHARVR_PC` (`CMakeLists.txt`): the define is added only when it is on, so the Frame's compile lines are unchanged. `common/frame_product.h` holds the name ("Azahar VR") and the switch folder; `common_paths.h` the data folder; Azahar's legacy-data migration prompt is skipped on PC. |
 | 3. Mock profiles | `MOCK_XR_PROFILE` in `tools/xrmock/xrmock.c` (`oculus/touch_controller`, `valve/index_controller`, `htc/vive_focus3_controller`, `valve/frame_controller`); the mock offers `XR_HTC_vive_focus3_controller_interaction`. `xrmock_test` checks the reported profile. |
 | 4. Controls | Built (section 3.3, "As Built"). Unit tests per scheme (`src/tests/frame_xr/pc_scheme.cpp`), including one that the Frame's scheme changes nothing the mapper does. Mock runs per profile, with the game's held buttons read through the RPC server. |
 | 5. Menu moves | **Not built yet.** On PC the grips are L and R in a game and grab nothing; grabbing with the menu open, a Fast Forward row and Left Stick rows are still to do (section 3.4). |
-| 6. Platform shim | `src/frame_xr/platform.h` (library loading for the OpenXR and Vulkan loaders); `%APPDATA%` test switches; Windows stubs for the watchdog and the dock icon; Linux-only includes guarded in `frame_weapon_models.cpp` and `custom_tex/convert.cpp`. The crash handler, evdev and the memory guard were already guarded or portable. **Not compiled on Windows yet.** |
+| 6. Platform shim | `src/frame_xr/platform.h` (library loading for the OpenXR and Vulkan loaders); `%APPDATA%` test switches; Windows stubs for the watchdog and the dock icon; Linux-only includes guarded in `frame_weapon_models.cpp` and `custom_tex/convert.cpp`. The crash handler, evdev and the memory guard were already guarded or portable. Guards are in the files, not in the CMake lists: the sources are referenced from tests and other targets, and a list change could not be checked without a Windows compiler. **Not compiled on Windows yet.** Still with unguarded POSIX includes (a sweep of this repository's sources): `core/steam_cef.cpp`, `core/homebrew/emerald3ds_fallback.cpp`, `frame_xr/app.cpp`; `core/mods/multipart.cpp` is partly guarded. |
 | 7. CI | `.github/workflows/pcvr.yml`: `linux-x86_64` (upstream's build container) and `windows-msvc` (frontend off, then on with `openxr_loader.dll` in a zip). Runs on `ci/**` pushes and by hand. Not pushed. |
+| 8. Black Frame Insertion on PC | **Not built.** The runtime and system names are already logged (`xr: runtime …`, `xr: system …`); the Motion Clarity row still shows on PC. |
 
 **Checked on the desktop (2026-11-22):**
 
-- the Frame's arm64 build: its unit suites pass (`tests`, `frame_qt_tests`, the test-switch suite; the picker suite and the menu dump: see the lane report); the arm64 binary has none of the PC names;
+- the Frame's arm64 build: every unit suite passes (`tests` 1236 cases, `frame_qt_tests`, `frame_xr_picker_tests`, the test-switch suite); its menu dump is identical to integ17's (378 files); the arm64 binary has none of the PC names;
 - native x86-64: the unit suites pass, apart from three upstream-core failures that fail the same way on the unchanged tree;
-- the mock (Kid Icarus: Uprising from a save state, `MOCK_XR_PROFILE`): every scripted button of the Frame, Touch, Index and Focus 3 profiles reached the game as expected (the game's held buttons read through the RPC server), and the PC build writes only `azahar-vr` and `AzaharVR`.
+- the mock (Kid Icarus: Uprising from a save state, `MOCK_XR_PROFILE`): every scripted button of the Frame, Touch, Index and Focus 3 profiles reached the game as expected (the game's held buttons read through the RPC server), and the PC build writes only `azahar-vr` and `AzaharVR`;
+- a Touch mock run of the chords through the whole app: Menu + right grip saved, Menu + right trigger switched Fast Forward on and off, Menu + left grip held loaded, and Menu held 1 s opened the VR menu.
 
 **Run-time detection.** `XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED` makes the controls look the profile up (`xrGetCurrentInteractionProfile`) and pick the scheme. The Frame's build always keeps the Frame's scheme.
 
@@ -314,6 +316,7 @@ Index needs no mode switch: the left trackpad is a D-pad next to the stick, just
   - the Face Buttons setting is ignored for Touch, Index and Focus 3 (always by label) but still applies to other gamepads; its row is not hidden yet;
   - Vive wands and `khr/simple_controller` get the Touch scheme (whatever they bind), not a menus-only mode;
   - Kid Icarus's Grip Frees Aim and the immersive screen grab use the grips on the Frame; on PC the grips are L and R, so those are off until section 3.4's menu grab exists.
+- **Also open:** the log lines for the chords still name the Frame's buttons ("View, then Right Bumper"); save, load and Fast Forward share one 1 s cooldown (the Frame keeps Fast Forward's apart); the Frame's build also looks the profile up and logs it (it keeps the Frame's scheme); the About dialog, the picker's header and `frame_mode.cpp`'s `~/.local/share/AzaharFrame` still say Azahar for Frame on PC.
 - **Checks:** unit tests in `src/tests/frame_xr/pc_scheme.cpp`; mock runs per profile with `MOCK_XR_PROFILE` (the game's held buttons through the RPC server).
 - **Still to measure on a headset (P2):** whether the left Menu button reaches the app over Steam Link; how Index `squeeze/force` reads; whether SteamVR offers the Focus 3 extension.
 
