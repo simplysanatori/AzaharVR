@@ -623,6 +623,8 @@ struct Values {
     SwitchableSetting<GraphicsAPI, true> graphics_api{
 #if defined(ANDROID) && defined(ENABLE_VULKAN) // Prefer Vulkan on Android, OpenGL on everything else
         GraphicsAPI::Vulkan,
+#elif defined(AZAHARVR_PC) && defined(ENABLE_VULKAN) // AzaharVR: VR needs Vulkan, as on the Frame
+        GraphicsAPI::Vulkan,
 #elif defined(ENABLE_OPENGL)
         GraphicsAPI::OpenGL,
 #elif defined(ENABLE_VULKAN)
