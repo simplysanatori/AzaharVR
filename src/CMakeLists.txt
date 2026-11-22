@@ -65,6 +65,14 @@ if (MSVC)
         # Warnings
         /W3
 
+        /wd4100 # 'identifier': unreferenced formal parameter
+        /wd4324 # 'struct_name': structure was padded due to __declspec(align())
+    )
+
+    # AzaharVR: these are errors only with CITRA_WARNINGS_AS_ERRORS; the fork's code was written
+    # against GCC and Clang, and the PC build's CI turns the option off.
+    if (CITRA_WARNINGS_AS_ERRORS)
+        add_compile_options(
         /we4062 # Enumerator 'identifier' in a switch of enum 'enumeration' is not handled
         /we4189 # 'identifier': local variable is initialized but not referenced
         /we4265 # 'class': class has virtual functions, but destructor is not virtual
@@ -82,12 +90,7 @@ if (MSVC)
         /we5038 # data member 'member1' will be initialized after data member 'member2'
         /we5233 # explicit lambda capture 'identifier' is not used
         /we5245 # 'function': unreferenced function with internal linkage has been removed
-
-        /wd4100 # 'identifier': unreferenced formal parameter
-        /wd4324 # 'struct_name': structure was padded due to __declspec(align())
-    )
-
-    if (CITRA_WARNINGS_AS_ERRORS)
+        )
         add_compile_options(/WX)
     endif()
 
