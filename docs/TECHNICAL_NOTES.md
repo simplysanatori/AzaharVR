@@ -63,6 +63,7 @@ Files with `AzaharFrame` marks (53 files differ from the tag in `src`, `CMakeLis
 | `src/video_core/renderer_vulkan/vk_pipeline_cache.{h,cpp}`, `vk_shader_disk_cache.{h,cpp}`, `vk_rasterizer.cpp` | the driver pipeline cache (`.bin`) written through a temporary file and a rename, and also once the cached pipelines are built and when the VR menu opens (`video_core/vr_cache_save.h`; on the pipeline workers, only when it grew); how the start got the cached pipelines; draws skipped for a pipeline still being built, counted (`StallTelemetry::draws_skipped`) |
 | `src/video_core/renderer_vulkan/renderer_vulkan.{h,cpp}` | `RenderToXr()` from `SwapBuffers()`, the XR target, the queue lock, no second window in VR |
 | `src/video_core/shader/generator/shader_uniforms.h` | `vr_immersive_mode_factor` defaults to 1 (it was 0, which divides by zero outside CitraVR's Android app) |
+| `src/core/file_sys/ncch_container.cpp`, `layered_fs.cpp` (and `mod_skip.h`, new) | AzaharFrame kiu132: files of the mods folder in `FileSys::ModSkip` are left out of the run (exheader, ExeFS overrides, code patches, `romfs/`, `romfs_ext/`): a Kid Icarus: Uprising C-Stick mod in a run that starts in Angel's Aim (`KIU_HOOKS.md`) |
 | `src/citra_qt/main.ui`, `aboutdialog.ui` | the name "Azahar for Frame" (no mark possible in the XML) |
 
 Not in the table, because the tag has no such file: `AI-POLICY.md`, `.github/workflows/` and the pull request template are removed, and the issue templates and `README.md` are rewritten.

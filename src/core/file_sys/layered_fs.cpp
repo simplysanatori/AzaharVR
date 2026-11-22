@@ -12,6 +12,7 @@
 #include "common/string_util.h"
 #include "common/swap.h"
 #include "core/file_sys/layered_fs.h"
+#include "core/file_sys/mod_skip.h" // AzaharFrame kiu132
 #include "core/file_sys/patch.h"
 
 SERIALIZE_EXPORT_IMPL(FileSys::LayeredFS)
@@ -165,6 +166,10 @@ void LayeredFS::LoadRelocations() {
                                                        callback);
             }
 
+            if (ModSkip::Skipped(directory + virtual_name)) { // AzaharFrame kiu132
+                LOG_INFO(Service_FS, "LayeredFS: {} left out of this run", directory + virtual_name);
+                return true;
+            }
             const auto path = (directory + virtual_name).substr(patch_path.size() - 1);
             if (!file_path_map.count(path)) { // Newly created file
                 auto file = std::make_unique<File>();
@@ -202,6 +207,10 @@ void LayeredFS::LoadExtRelocations() {
 
     for (const auto& entry : result.children) {
         if (FileUtil::IsDirectory(entry.physicalName)) {
+            continue;
+        }
+        if (ModSkip::Skipped(entry.physicalName)) { // AzaharFrame kiu132: left out of this run
+            LOG_INFO(Service_FS, "LayeredFS: {} left out of this run", entry.physicalName);
             continue;
         }
 

@@ -3006,6 +3006,10 @@ int main(int argc, char** argv) {
         kc.mods.mods.catalog = CatalogState::Ready;
         hv.scroll[static_cast<int>(Tab::Mods)] = 1.0e5f;
         ok &= shot("kiu132-hub-14-cstick-mods-end", kc, hv);
+        // The C-Stick mods' two toasts (a mod left out of the run; Angel's Aim chosen with one
+        // loaded).
+        ok &= toast_shot("kiu132-cstick-toasts.png",
+                         {kCStickModLeftOutToast, kCStickModRestartToast});
 
         // Kid Icarus-only rows: the same views in Kid Icarus (European), Kid Icarus (USA),
         // another game and no game.

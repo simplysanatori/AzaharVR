@@ -16,6 +16,10 @@
 #include <iterator>
 #include <vector>
 
+#include <string>
+#include <string_view>
+#include <vector>
+
 #include "core/mods/library.h"
 
 namespace FrameXr {
@@ -190,6 +194,15 @@ inline constexpr const char* kCStickModIds[] = {
 bool CStickModInstalled(const std::vector<Mods::ModInfo>& mods);
 /// The same for the mods folder of this title (Mods::Default()).
 bool CStickModInstalled(uint64_t title_id);
+/// AzaharFrame kiu132: a catalogue id of a C-Stick mod: one of kCStickModIds, or hosiniku's
+/// region builds ("kiu-cstick-aim-usa", "-eur", "-jpn": the catalogue's ids for kiu-cstick-aim).
+/// (CStickModInstalled, which the presets read, still takes the ids exactly.)
+bool IsCStickModId(std::string_view id);
+/// AzaharFrame kiu132: the files (relative to mods/<TID>/) of every turned-on C-Stick mod of a
+/// game's mod list: a catalogue one (IsCStickModId), or one put in by hand or from a zip as
+/// CStickModInstalled finds them. What a run in Angel's Aim leaves out
+/// (Kiu::FirstPerson::LeaveOutCStickModFor, FileSys::ModSkip).
+std::vector<std::string> CStickModFiles(const std::vector<Mods::ModInfo>& mods);
 
 /// AzaharFrame kiu: gives the running game the preset's values, with the game's file read into
 /// the settings: each one only where the game has no value of its own, the global value is still

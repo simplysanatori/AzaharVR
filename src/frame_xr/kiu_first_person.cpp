@@ -19,9 +19,13 @@
 #include "frame_xr/input/kiu_turn.h"
 #include "frame_xr/kiu_first_person.h"
 
+#include "frame_xr/menu/angels_aim_tab.h" // AzaharFrame kiu132: the C-Stick mods' toasts
+#include "frame_xr/toast_fit.h"            // AzaharFrame kiu132: ToastTime
+
 namespace FrameXr {
 uint64_t GameTitleId(); // frame_xr.h (AzaharFrame kiumode: the running game)
 bool IsStarted();       // frame_xr.h (AzaharFrame kiumode: an XR runtime)
+void ShowToastText(const std::string& text, ToastTime time); // frame_xr.h (AzaharFrame kiu132)
 } // namespace FrameXr
 
 // AzaharFrame kiuvr (kiu_first_person.h)
@@ -78,6 +82,11 @@ int64_t NowNs() {
 
 // AzaharFrame kiumode: the title whose code the hooks found to be the mapped one (0: none).
 std::atomic<uint64_t> g_code_title{0};
+// AzaharFrame kiu132: this run's C-Stick mod (SetCStickMod), and the toasts shown for it.
+std::atomic<bool> g_cstick_loaded{false};
+std::atomic<bool> g_cstick_left_out{false};
+std::atomic<bool> g_cstick_left_out_said{false};
+std::atomic<bool> g_cstick_block_said{false};
 std::atomic<bool> g_registers{false};
 // What the renderer is given for this run (constants: they outlive every reader).
 const int32_t kViewRegisterValue = kViewRegister;
@@ -101,9 +110,41 @@ bool DirectAim() {
 
 bool AngelsAim() {
     const uint64_t title = GameTitleId();
+    // AzaharFrame kiu132: never with a C-Stick mod's code loaded (CStickModBlocksFor).
     return AngelsAimFor(StoredMode(), title,
                         title != 0 && g_code_title.load(std::memory_order_relaxed) == title,
-                        InVr());
+                        InVr()) &&
+           !g_cstick_loaded.load(std::memory_order_relaxed);
+}
+
+void SetCStickMod(bool loaded, bool left_out) {
+    g_cstick_loaded.store(loaded, std::memory_order_relaxed);
+    g_cstick_left_out.store(left_out, std::memory_order_relaxed);
+    g_cstick_left_out_said.store(false, std::memory_order_relaxed);
+    g_cstick_block_said.store(false, std::memory_order_relaxed);
+}
+
+bool CStickModLoaded() {
+    return g_cstick_loaded.load(std::memory_order_relaxed);
+}
+
+void NoteCStickMod() {
+    if (g_cstick_left_out.load(std::memory_order_relaxed) &&
+        !g_cstick_left_out_said.exchange(true, std::memory_order_relaxed)) {
+        LOG_INFO(Frontend, "xr: Angel's Aim: the C-Stick mod is not loaded in this run (toast: "
+                           "\"{}\")",
+                 Menu::kCStickModLeftOutToast);
+        ShowToastText(Menu::kCStickModLeftOutToast, ToastTime::Long);
+    }
+    const bool blocks = CStickModBlocksFor(g_cstick_loaded.load(std::memory_order_relaxed),
+                                           StoredMode(), GameTitleId(), InVr());
+    if (blocks != g_cstick_block_said.exchange(blocks, std::memory_order_relaxed) && blocks) {
+        LOG_INFO(Frontend, "xr: Angel's Aim: off: a C-Stick mod's code is loaded in this run; "
+                           "Immersive Mode plays as Other Games until the game restarts (toast: "
+                           "\"{}\")",
+                 Menu::kCStickModRestartToast);
+        ShowToastText(Menu::kCStickModRestartToast, ToastTime::Long);
+    }
 }
 
 bool On() {

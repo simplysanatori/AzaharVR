@@ -208,6 +208,7 @@ Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin);
 #include "frame_xr/kiu_scan.h"          // AzaharFrame kiuguns: IsKidIcarus
 #include "frame_xr/kiu_hooks.h"         // AzaharFrame kiuhook
 #include "frame_xr/kiu_first_person.h"   // AzaharFrame kiu131: Bottom Screen's old keys
+#include "core/file_sys/mod_skip.h"     // AzaharFrame kiu132: a C-Stick mod left out of a run
 #include "core/mods/aspect.h"           // AzaharFrame fixes7
 #include "frame_xr/presets.h" // AzaharFrame vrqol
 #include "frame_xr/render_margin.h" // AzaharFrame fovaxis
@@ -3675,6 +3676,38 @@ void GMainWindow::BootGame(const QString& filename) {
         }
 #endif
     }
+
+#ifdef ENABLE_FRAME_XR // AzaharFrame kiu132: a C-Stick mod and Angel's Aim (kiu_first_person.h)
+    // With the game's own values and the presets read: a run that starts in Angel's Aim (the
+    // European game, Immersive Mode 4, in VR) leaves a turned-on C-Stick mod's files out of the
+    // loader (FileSys::ModSkip), with the mod library left as it is; any other run loads it.
+    FileSys::ModSkip::Clear();
+    FrameXr::Kiu::FirstPerson::SetCStickMod(false, false);
+    if (Loader::ResultStatus::Success == res && FrameXr::Kiu::IsKidIcarus(title_id)) {
+        const std::vector<std::string> cstick_files =
+            FrameXr::CStickModFiles(Mods::Default().ListLoaded(title_id));
+        const bool in_vr =
+            FrameXr::IsStarted() && !Settings::frame_flat_mono.load(std::memory_order_relaxed);
+        const u32 mode = Settings::values.vr_immersive_mode.GetValue();
+        const bool leave_out = FrameXr::Kiu::FirstPerson::LeaveOutCStickModFor(
+            !cstick_files.empty(), mode, title_id, in_vr);
+        if (leave_out) {
+            FileSys::ModSkip::Set(fmt::format("{}mods/{:016X}/",
+                                              FileUtil::GetUserPath(FileUtil::UserPath::LoadDir),
+                                              title_id),
+                                  cstick_files);
+            LOG_INFO(Frontend,
+                     "xr: Angel's Aim: the C-Stick mod is left out of this run ({} files, e.g. "
+                     "{}; Immersive Mode {}, in VR; the mod library is unchanged)",
+                     cstick_files.size(), cstick_files.front(), mode);
+        } else if (!cstick_files.empty()) {
+            LOG_INFO(Frontend, "xr: Angel's Aim: the C-Stick mod loads ({} files; Immersive Mode "
+                               "{}, {})",
+                     cstick_files.size(), mode, in_vr ? "in VR" : "not in VR");
+        }
+        FrameXr::Kiu::FirstPerson::SetCStickMod(!cstick_files.empty() && !leave_out, leave_out);
+    }
+#endif
 
 #ifdef ENABLE_FRAME_XR // AzaharFrame: the immersive screen's placement is saved per title id.
     FrameXr::SetGameTitleId(Loader::ResultStatus::Success == res ? title_id : 0);

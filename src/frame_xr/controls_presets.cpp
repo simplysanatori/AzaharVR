@@ -55,6 +55,32 @@ bool CStickModInstalled(uint64_t title_id) {
     return CStickModInstalled(Mods::Default().ListLoaded(title_id));
 }
 
+bool IsCStickModId(std::string_view id) {
+    for (const char* known : kCStickModIds) {
+        if (id == known) {
+            return true;
+        }
+    }
+    return id.rfind("kiu-cstick-aim-", 0) == 0;
+}
+
+std::vector<std::string> CStickModFiles(const std::vector<Mods::ModInfo>& mods) {
+    std::vector<std::string> files;
+    for (const Mods::ModInfo& m : mods) {
+        if (m.state != Mods::ModState::Active) {
+            continue; // in the library only: not in the mods folder
+        }
+        bool cstick = IsCStickModId(m.id);
+        if (!cstick && !(m.managed && m.id.rfind(Mods::kZipPrefix, 0) != 0)) {
+            cstick = CStickModInstalled(std::vector<Mods::ModInfo>{m}); // by hand or from a zip
+        }
+        if (cstick) {
+            files.insert(files.end(), m.files.begin(), m.files.end());
+        }
+    }
+    return files;
+}
+
 void MirrorGyroAim() {
     auto& v = Settings::values;
     auto& done = v.vr_controls_preset_done;

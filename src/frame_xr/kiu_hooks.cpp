@@ -473,6 +473,7 @@ void Hook(int64_t ticks) {
         s.code_ok = KH::GameCodeMatches(mem);
     }
     Kiu::FirstPerson::SetGameCode(title, mapped && s.code_ok);
+    Kiu::FirstPerson::NoteCStickMod(); // AzaharFrame kiu132: its toasts (a mod left out, or loaded)
     // AzaharFrame kiuvr: first person turns on the eye, the culls' and the follow's switches
     // with it (kiu_first_person.h). AzaharFrame kiumode: Angel's Aim, or the developer switch.
     const bool first_person = Kiu::FirstPerson::On();

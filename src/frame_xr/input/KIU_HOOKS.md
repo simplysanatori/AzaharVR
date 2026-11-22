@@ -261,6 +261,40 @@ it supplies View Matrix Register 90 and Eye Indicator `87,2` to the renderer in 
 mode chosen during play turns it off at the next VBlank. Other regions and other code play it as
 Other Games; the hooks' log line says why. The switches below still force their parts on.
 
+### C-Stick mods and Angel's Aim (AzaharFrame kiu132)
+
+The C-Stick mods (`kiu-cstick-gyro`, `-widescreen-16-9`, `-ultrawide-21-9`, hosiniku's
+`kiu-cstick-aim-*`) replace the game's code. They are what aims in Flat and in the other modes
+(the probe's mod route, `kiu_probe.cpp`); Angel's Aim's first person is made for the game without
+them.
+
+- **What the hooks check before writing (V, the code):** the title and the nine camera words
+  (`KiuTurn::CodeMatches`), each site's original word, each group's context words and the cave;
+  anything else leaves that group out. Darkshade's v172 EUR base and 21:9 builds pass these
+  checks (above), so with one loaded the hooks go in beside it. With the mod found, the probe
+  takes the mod's aim route instead of Angel's Aim's own (`AimNoModWanted` is not used), "aim
+  hold" stays out by its context (0x6D219C), and `NOCULL` jumps past the mod's hook at 0x7732D0.
+  First person thus runs on code it was not made for: the clash (the symptoms: I; never run
+  here). hosiniku's builds: not checked.
+- **Which modes:** only 4 (Angel's Aim), and only where it is in effect (the European game, in
+  VR: `AngelsAimFor`). Modes 1 to 3 and a stored 4 in the other regions take none of first
+  person's routes: the mod keeps aiming there, as in Flat.
+- **At start** (`citra_qt.cpp` BootGame, after the game's values and the presets): with
+  `LeaveOutCStickModFor`, every turned-on C-Stick mod's files (`CStickModFiles`) go into
+  `FileSys::ModSkip`, so the loader leaves them out of this run; the mod library is unchanged.
+  Log: `xr: Angel's Aim: the C-Stick mod is left out of this run (...)`, the loader's `... left
+  out of this run` per file, then the toast **Angel's Aim: C-Stick Mod Not Loaded** (V, desktop
+  mock with a stand-in mod, reports/95/kiu132). Any other run: `the C-Stick mod loads (...)`.
+- **Chosen during a run with a mod loaded** (the VR menu or Azahar's window: the setting is read
+  each VBlank): Angel's Aim stays out (`CStickModBlocksFor`; mode 4 plays as Other Games) and the
+  toast **C-Stick Mod Loaded: Restart the Game for Angel's Aim** shows once each time it is
+  asked for. The choice is kept, so the restart leaves the mod out. Refusing the switch was not
+  chosen: the setting is right for the next start, and Azahar's window would need the same
+  refusal.
+- **Risks:** a save state made with the mod's code loaded brings that code back into a run that
+  left the mod out (the hooks' checks still guard their own writes); switching to Flat after a
+  start in Angel's Aim leaves the run without the mod until a restart.
+
 ### The switches
 
 | Switch | Does |

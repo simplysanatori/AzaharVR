@@ -176,6 +176,27 @@ constexpr bool OnFor(bool dev_switch, uint32_t stored_mode, uint64_t title, bool
     return dev_switch || AngelsAimFor(stored_mode, title, code_ok, in_vr);
 }
 
+/// AzaharFrame kiu132: the Kid Icarus: Uprising C-Stick mods (controls_presets.h CStickModFiles)
+/// replace the game's code; Angel's Aim's first person is made for the game without them (its
+/// own aim route, the "aim hold" patches, the wide camera: KIU_HOOKS.md "C-Stick mods and
+/// Angel's Aim"). A turned-on one is left out of a run that starts with Angel's Aim about to be
+/// in effect: the stored mode 4, the European game, in VR. Everywhere else (Flat, the other
+/// modes, the other regions, where a stored 4 plays as Other Games) it loads as before: there it
+/// is what aims. The library's own state is never changed.
+constexpr bool LeaveOutCStickModFor(bool installed, uint32_t stored_mode, uint64_t title,
+                                    bool in_vr) {
+    return installed && in_vr && stored_mode == kModeAngelsAim &&
+           title == Input::KiuTurn::kTitleEur;
+}
+/// AzaharFrame kiu132: a C-Stick mod loaded in this run keeps Angel's Aim out (a stored 4 then
+/// plays as Other Games, as with any other code): Angel's Aim asked for now (the stored mode 4,
+/// the European game, in VR) while `mod_loaded`. The player is asked to restart the game, which
+/// leaves the mod out.
+constexpr bool CStickModBlocksFor(bool mod_loaded, uint32_t stored_mode, uint64_t title,
+                                  bool in_vr) {
+    return LeaveOutCStickModFor(mod_loaded, stored_mode, title, in_vr);
+}
+
 /// AzaharFrame kiufix2: the shots fly along the hand: the test switch (with first person on), or
 /// Angel's Aim in effect with Aiming = Direct Aim (with Off or Gyro the reticle is the game's own
 /// and the shots stay on it).
@@ -211,6 +232,15 @@ void SupplyRegisters(bool on);
 /// The frontend, when a game boots, before its presets are applied: forgets the last run's code
 /// check and registers. Writes no setting (AzaharFrame kiumode).
 void OnGameBoot();
+/// AzaharFrame kiu132: the frontend, when a game boots (after OnGameBoot): a C-Stick mod is loaded
+/// in this run (`loaded`), or one was left out of it (`left_out`, LeaveOutCStickModFor).
+void SetCStickMod(bool loaded, bool left_out);
+/// AzaharFrame kiu132: a C-Stick mod is loaded in this run (Angel's Aim stays out). Any thread.
+bool CStickModLoaded();
+/// AzaharFrame kiu132: each VBlank (the hooks): the toasts, "C-Stick Mod Not Loaded" once a run
+/// with a mod left out, and "Restart the Game for Angel's Aim" each time Angel's Aim is asked for
+/// while a mod is loaded (CStickModBlocksFor), with a log line each.
+void NoteCStickMod();
 /// AzaharFrame kiufix2: counts the runs (OnGameBoot bumps it). The hook, turning and probe state
 /// resets when it changes: a Process address can be reused by the next run of the same title.
 uint32_t RunCount();

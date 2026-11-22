@@ -14,6 +14,7 @@
 #include "common/tar_file.h"
 #include "core/core.h"
 #include "core/file_sys/layered_fs.h"
+#include "core/file_sys/mod_skip.h" // AzaharFrame kiu132
 #include "core/file_sys/ncch_container.h"
 #include "core/file_sys/patch.h"
 #include "core/file_sys/seed_db.h"
@@ -317,6 +318,10 @@ Loader::ResultStatus NCCHContainer::Load() {
 
             bool has_exheader_override = false;
             for (const auto& path : exheader_override_paths) {
+                if (ModSkip::Skipped(path)) { // AzaharFrame kiu132: left out of this run
+                    LOG_INFO(Service_FS, "File {} left out of this run", path);
+                    continue;
+                }
                 FileUtil::IOFile exheader_override_file{path, "rb"};
                 if (read_exheader(&exheader_override_file)) {
                     has_exheader_override = true;
@@ -560,6 +565,10 @@ Loader::ResultStatus NCCHContainer::ApplyCodePatch(std::vector<u8>& code) const 
     }};
 
     for (const PatchLocation& info : patch_paths) {
+        if (ModSkip::Skipped(info.path)) { // AzaharFrame kiu132: left out of this run
+            LOG_INFO(Service_FS, "File {} left out of this run", info.path);
+            continue;
+        }
         FileUtil::IOFile patch_file{info.path, "rb"};
         if (!patch_file)
             continue;
@@ -604,6 +613,10 @@ Loader::ResultStatus NCCHContainer::LoadOverrideExeFSSection(const char* name,
     }};
 
     for (const auto& path : override_paths) {
+        if (ModSkip::Skipped(path)) { // AzaharFrame kiu132: left out of this run
+            LOG_INFO(Service_FS, "File {} left out of this run", path);
+            continue;
+        }
         FileUtil::IOFile section_file(path, "rb");
 
         if (section_file.IsOpen()) {

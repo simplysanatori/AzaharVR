@@ -7,7 +7,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include "common/settings.h"
+#include "core/file_sys/mod_skip.h" // AzaharFrame kiu132
 #include "frame_xr/controls_presets.h" // AzaharFrame kiu
+#include "frame_xr/kiu_first_person.h" // AzaharFrame kiu132
 #include "frame_xr/input/gyro_aim.h"   // AzaharFrame kiugyro
 #include "frame_xr/kiu_scan.h" // AzaharFrame kiurec
 #include "frame_xr/presets.h"
@@ -816,6 +818,72 @@ TEST_CASE("FrameXr CStickModInstalled: catalogue ids and files", "[frame_xr][kiu
     CHECK(CStickModInstalled({MakeMod("unmanaged:kiu-cstick-aim", false, ModState::Active,
                                       {"kiu-cstick-aim/code.ips"})}));
     CHECK(CStickModInstalled({MakeMod("zip-C-Stick Aim", true)}));
+}
+
+// AzaharFrame kiu132: the C-Stick mods left out of a run in Angel's Aim: which mods, which
+// files, which runs, and the loader's list of files left out.
+TEST_CASE("FrameXr C-Stick mods: the files a run in Angel's Aim leaves out",
+          "[frame_xr][kiu][kiu132]") {
+    using Mods::ModState;
+    for (const char* id : {"kiu-cstick-gyro", "kiu-cstick-gyro-widescreen-16-9",
+                           "kiu-cstick-gyro-ultrawide-21-9", "kiu-cstick-aim",
+                           "kiu-cstick-aim-usa", "kiu-cstick-aim-eur", "kiu-cstick-aim-jpn"}) {
+        INFO(id);
+        CHECK(IsCStickModId(id));
+    }
+    CHECK_FALSE(IsCStickModId("kiu-cd-quality-soundtrack"));
+    CHECK_FALSE(IsCStickModId("kiu-cstick-aimx"));
+    // The presets still take the catalogue's ids exactly (an owner's decision to widen them).
+    CHECK_FALSE(CStickModInstalled({MakeMod("kiu-cstick-aim-eur", true)}));
+    const std::vector<std::string> gyro_files{"exefs/code.bin", "exheader.bin",
+                                              "romfs/menu/a.bclim"};
+    const std::vector<Mods::ModInfo> mods{
+        MakeMod("kiu-cstick-gyro-ultrawide-21-9", true, ModState::Active, gyro_files),
+        MakeMod("kiu-cstick-gyro", true, ModState::Inactive, {"exefs/code.bin"}), // library only
+        MakeMod("kiu-weapons-hd", true, ModState::Active, {"romfs/w.bin"}),
+        MakeMod("unmanaged:romfs", false, ModState::Active, {"romfs/x.bin"})};
+    CHECK(CStickModFiles(mods) == gyro_files);
+    CHECK(CStickModFiles({MakeMod("kiu-cstick-aim-eur", true, ModState::Active,
+                                  {"exefs/code.ips"})}) ==
+          std::vector<std::string>{"exefs/code.ips"});
+    CHECK(CStickModFiles({MakeMod("unmanaged:exefs", false, ModState::Active,
+                                  {"exefs/code.bin", "exheader.bin"})})
+              .size() == 2); // by hand: a full code replacement
+    CHECK(CStickModFiles({MakeMod("kiu-cd-quality-soundtrack", true, ModState::Active,
+                                  {"romfs/s.bcstm"})})
+              .empty());
+
+    // Which runs leave it out: Angel's Aim about to be in effect only.
+    namespace FP = FrameXr::Kiu::FirstPerson;
+    constexpr uint64_t kEur = 0x0004000000030200ull, kUsa = 0x0004000000030100ull;
+    CHECK(FP::LeaveOutCStickModFor(true, 4, kEur, true));
+    CHECK_FALSE(FP::LeaveOutCStickModFor(false, 4, kEur, true)); // no mod
+    CHECK_FALSE(FP::LeaveOutCStickModFor(true, 4, kEur, false)); // Flat: the mod aims
+    CHECK_FALSE(FP::LeaveOutCStickModFor(true, 4, kUsa, true));  // a stored 4 is Other Games
+    for (const uint32_t mode : {0u, 1u, 2u, 3u}) {
+        INFO("mode " << mode);
+        CHECK_FALSE(FP::LeaveOutCStickModFor(true, mode, kEur, true));
+        CHECK_FALSE(FP::CStickModBlocksFor(true, mode, kEur, true));
+    }
+    // Chosen during a run with the mod loaded: Angel's Aim stays out, the restart is asked for.
+    CHECK(FP::CStickModBlocksFor(true, 4, kEur, true));
+    CHECK_FALSE(FP::CStickModBlocksFor(false, 4, kEur, true));
+    CHECK_FALSE(FP::CStickModBlocksFor(true, 4, kEur, false));
+
+    // The loader's list: exactly these files of this folder, whatever the separators.
+    namespace Skip = FileSys::ModSkip;
+    const std::string dir = "/u/load/mods/0004000000030200/";
+    Skip::Set(dir, gyro_files);
+    CHECK(Skip::Count() == 3);
+    CHECK(Skip::Skipped(dir + "exefs/code.bin"));
+    CHECK(Skip::Skipped(dir + "exheader.bin"));
+    CHECK(Skip::Skipped("/u/load/mods/0004000000030200//romfs\\menu/a.bclim"));
+    CHECK_FALSE(Skip::Skipped(dir + "code.bin"));        // not the mod's file
+    CHECK_FALSE(Skip::Skipped(dir + "romfs/w.bin"));     // another mod's
+    CHECK_FALSE(Skip::Skipped("/u/load/mods/0004000000030100/exefs/code.bin")); // another game
+    Skip::Clear();
+    CHECK(Skip::Count() == 0);
+    CHECK_FALSE(Skip::Skipped(dir + "exefs/code.bin"));
 }
 
 // 1.2.0 fix lane B (triage item 16): World Scale and the Full modes' 3D Depth are starting values
