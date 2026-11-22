@@ -1,5 +1,13 @@
 # Handoff: Angel's Aim's first-person switches as settings (work/kiu-toggles)
 
+> **Outcome (lane/kiu130, 1.3.0).** Merged, built with GCC/Clang (desktop x86-64 and the Frame's
+> arm64) and tested (`[kiutoggles]`, `[kiuview]`, `[kiuturn]`, `[kiuwrist]`, the Qt and picker
+> suites). The strings below are approved by the owner, the Turning choices too. Over the
+> Shoulder checked on the desktop mock from its setting: the view behind and above Pit, Pit solid
+> (not hidden), and the weapon in hand left out while he holds his own (KIU_HOOKS.md, "The
+> doubled weapon"). The rest of this file is the Windows session's handoff, kept as written.
+
+
 Branch `work/kiu-toggles`, from `ci/pcvr` 5aefa5f5c. Four player-facing test switches of Kid
 Icarus: Uprising's Angel's Aim are now per-game settings with rows in the in-game menu. With the
 defaults nothing changes for players, and a test switch, when set, still wins over its setting.

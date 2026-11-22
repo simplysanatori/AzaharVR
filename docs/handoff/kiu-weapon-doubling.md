@@ -1,5 +1,13 @@
 # Kid Icarus: Uprising: the doubled weapon with Weapon Scale (kiuweapon)
 
+> **Outcome (lane/kiu130, 1.3.0).** The second weapon is the game's rapid-fire bullet, drawn on
+> the weapon in hand's tip because first person's shots started at its muzzle. Shots now start 6
+> units past the muzzle (`AZAHARFRAME_KIU_SHOT_AHEAD`, `0` for the old start). Over the Shoulder
+> leaves the weapon in hand out. The palm's ghostly hand (the game's weapon effect) still shows
+> while firing. See KIU_HOOKS.md, "The doubled weapon". The rest of this file is the Windows
+> session's handoff, kept as written.
+
+
 Branch `work/kiu-weapon` (from `ci/pcvr` 5aefa5f5c). The report, in the owner's words: "fix the
 weapon that's like in front of the other one when you do the weapon scale". Angel's Aim, weapon
 in hand, Weapon Scale (`vr_light_gun_weapon_scale`, 50 to 150 %).

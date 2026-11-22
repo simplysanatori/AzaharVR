@@ -1,5 +1,11 @@
 # Handoff: Pit's "shadow" in Angel's Aim's first person (branch work/kiu-shadow)
 
+> **Outcome (lane/kiu130, 1.3.0).** Merged, built and tested on the desktop (`[kiuhook]`), and
+> checked on the mock in Chapter 1's land section, standing and running: see KIU_HOOKS.md, "Pit's
+> own model in first person", "Checked on the desktop". The air is left as it is (the owner).
+> The rest of this file is the Windows session's handoff, kept as written.
+
+
 The owner's report: in Kid Icarus: Uprising, Angel's Aim, Pit's shadow shows in first person and
 looks "like the head".
 

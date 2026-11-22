@@ -589,7 +589,63 @@ looks like his head.
 - **To see the round shadows.** `HOOK_TRACE=1` ends its line with `round shadows N`, the count
   in the game's list ([0xD49490] + 0x14): 0 in the Practice Range with the group in, 1 with
   `NO_PLAYER_SHADOW=0` (as measured for "Pit's entry" above; this line itself not run).
+- **Checked on the desktop (AzaharFrame kiu130, V, the real game on the mock, Chapter 1's land
+  section, Direct Aim, the palm weapon 49 of the save states).**
+  - Standing and running (the left stick held, about 50 units a second), looking ahead and 50°
+    and 75° down: no see-through body, wings or round disc. With `HIDE_PLAYER=0` the same moves
+    show his see-through wings and arms in the lower half of the view while he runs: what was
+    still seen while running.
+  - `HOOK_TRACE=2` (a line a VBlank): `scale 0.0010` the whole time, standing and running; the
+    log has one `hidden ... (first person, on land)` after the state loads.
+  - `round shadows`: 3 standing and running (the level's other shadows), 4 with
+    `NO_PLAYER_SHADOW=0` standing and running; running far off, 1 with it and 0 without. So his
+    round shadow stays out while he runs too; with it in, the soft disc shows under the eye.
+  - Over the Shoulder (the setting): `scale 1.0000`, no hide line, Pit solid. `SHOULDER=0` live
+    gives first person and the hide; the switch taken out, the shoulder view and scale 1 again.
+  - Still seen with him hidden: the game's green guidance arrow, which lies on the floor beside
+    him (seen solid from over the shoulder; in first person its tip is at the left edge of the
+    view) and is not his; and, while firing or just after, the palm weapon's ghostly hand at
+    full size below the view's middle. The palm's hand is the game's weapon effect: the scale
+    write does not shrink it, and neither does shrinking the two kinds of effect actors
+    (`EFFECT_NORMAL_INFO`, `EFFECT_BLEND_INFO`) near him. Not fixed (its draw was not found).
+  - Not checked: damage taken (no enemy hit him in the runs), pickups, melee and dash hits.
+    Floor collision: he ran about 300 units over the floor at the same height (y 0.010).
+  - Aiming Off and Gyro Aim keep him drawn (`HideInFirstPerson` needs the shots from the hand).
+- **The air.** Left as it is (the owner: no shadow there).
 
+
+### The doubled weapon (AzaharFrame kiu130)
+
+The owner's report: a second weapon-like thing in front of the weapon in hand, with some weapons.
+In the owner's PC pictures (an air battle, the First Blade) a silver arrowhead sits on the
+blade's tip, and two seconds later one lies further along the line from the muzzle to the
+reticle; another picture shows it with no weapon in view. Its edges are drawn without MSAA:
+the game's picture, not this app's layer.
+
+- **It is the game's rapid-fire bullet (V, desktop).** With `AZAHARFRAME_KIU_WEAPON_DRAW=0`
+  nothing weapon-like is in the game's picture while idle in an air battle, only shots while
+  firing. Every pooled rapid bullet starts exactly on the ray's origin, the weapon in hand's
+  muzzle (0.00 units along and off the ray; Practice Range), so each new bullet is drawn on the
+  tip, at the world's life size.
+- **The fix.** First person's shots start past the muzzle along the ray,
+  `KH::kShotAheadDefault` = 6 units (about 0.8 m; `KH::ShotAheadFor`, `ShotFromHand`). The
+  switch is `AZAHARFRAME_KIU_SHOT_AHEAD=<units>` (live, 0 to 30; `0` is the muzzle, as before).
+  - Measured, Practice Range: charged and rapid shots start 6.00 units along the ray and 0.00
+    off it, at 0, 3, 6 and 10; the path stays on the ray (0.00).
+  - With the dummy 41 units ahead, a charged shot ends at its hit sphere with 0 and with 6.
+  - Not checked: a target nearer than 6 units to the hand, and the blade's own bullet (every
+    save state on the desktop has the palm).
+- **Pit's own weapon.** On land he is hidden with it. The palm's ghostly hand still shows while
+  firing ("Pit's own model in first person" above); not fixed. In the air his weapon was not
+  seen in the game's picture (the palm).
+- **Over the Shoulder** (`Kiu::FirstPerson::ShoulderOn`, `Vis::WeaponModelDrawnFor`): the game
+  draws Pit with his own weapon there, so the weapon in hand (and a controller in its place)
+  is left out of the image while the view is over the shoulder, at run time only. No setting
+  is written; first person draws it again. The fit, muzzle, Laser Sight and the shots from the
+  hand go on. `WEAPON_DRAW`, when set, wins (`1` draws it over the shoulder too). The log's
+  `xr: weapon drawn:` line ends `; the model left out (Over the Shoulder: Pit holds his own)`.
+  V on the mock: no weapon in the hand with Pit solid and his palm on; `SHOULDER=0` live, the
+  weapon in the hand again.
 
 ### The game's sprites (AzaharFrame kiu2d)
 
