@@ -20,6 +20,7 @@
 #include "frame_xr/auto_shape.h" // AzaharFrame kiufix2
 #include "frame_xr/frame_xr.h"
 #include "frame_xr/input/kiu_hooks.h"
+#include "frame_xr/input/kiu_model.h" // AzaharFrame kiu133
 #include "frame_xr/input/kiu_room.h" // AzaharFrame kiuvr
 #include "frame_xr/kiu_first_person.h"
 #include "frame_xr/kiu_hooks.h"
@@ -34,6 +35,7 @@ namespace FrameXr::Kiu::Hooks {
 namespace {
 
 namespace KH = Input::KiuHooks;
+namespace KM = Input::KiuModel; // AzaharFrame kiu133
 
 constexpr const char* kSwitchNoCull = "AZAHARFRAME_KIU_NOCULL";
 constexpr const char* kSwitchBulletKeep = "AZAHARFRAME_KIU_BULLET_KEEP";
@@ -147,6 +149,11 @@ struct State {
     uint32_t reticle_tex_logged = 0;
     uint32_t model_hidden = 0;
     bool model_looked = false;
+    /// AzaharFrame kiu133: the actor whose model node was looked for, where it was found
+    /// (KiuModel::FindModel; 0: not found), and the VBlanks until the next look when it was not.
+    uint32_t model_actor = 0;
+    uint32_t model_off = 0;
+    int model_retry = 0;
     int64_t poll_ns = 0;
     int64_t trace_ns = 0;
     int64_t fp_trace_ns = 0; ///< AzaharFrame kiuvr
@@ -742,10 +749,24 @@ void Hook(int64_t ticks) {
         }
         // AzaharFrame kiu131: his model's draw. AZAHARFRAME_KIU_HIDE_PLAYER set ("1": the scale
         // above; "0": keep him) leaves it drawn.
-        uint32_t model = 0, vt = 0, word = 0;
-        if (mem.Read32(p.actor + KH::kActorModel, model) && model != 0 && (model & 3u) == 0 &&
-            mem.Read32(model, vt) && vt == KH::kModelVtable &&
-            mem.Read32(model + KH::kModelDrawnWord, word)) {
+        // AzaharFrame kiu133: found by its holder's shape (its place differs between battles).
+        uint32_t model = 0, word = 0;
+        if (p.actor != s.model_actor || s.model_off != 0 || --s.model_retry <= 0) {
+            const KM::Found f = KM::FindModel(mem, p.actor, KH::kModelVtable,
+                                              p.actor == s.model_actor ? s.model_off : 0);
+            if (f.off != s.model_off || p.actor != s.model_actor) {
+                LOG_INFO(Frontend, "xr: Kid Icarus hooks: the player's model node {}",
+                         !f.model ? std::string{"not found"}
+                         : f.off == KM::kByLink
+                             ? fmt::format("{:08X} (through [actor + 0x1E4])", f.model)
+                             : fmt::format("{:08X} (actor + 0x{:X})", f.model, f.off));
+            }
+            s.model_actor = p.actor;
+            s.model_off = f.off;
+            s.model_retry = 30;
+            model = f.model;
+        }
+        if (model != 0 && mem.Read32(model + KH::kModelDrawnWord, word)) {
             const bool hide_draw = hide_by == KH::HideBy::Draw && !hide_text &&
                                    KH::HideByDrawInFirstPerson(first_person, eye_moved) && p.Ok();
             // Ours to put back: the node this app cleared, or (once a run, playing) a cleared

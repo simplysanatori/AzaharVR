@@ -47,6 +47,7 @@ add_executable(tests
     frame_xr/kiu_trigger_layout.cpp # AzaharFrame kiufire
     frame_xr/kiu_hooks.cpp # AzaharFrame kiuhook
     frame_xr/kiu_room.cpp # AzaharFrame kiuvr
+    frame_xr/kiu_model.cpp # AzaharFrame kiu133
     frame_xr/kiu_view.cpp # AzaharFrame kiuview
     frame_xr/angels_aim_mode.cpp # AzaharFrame kiumode
     frame_xr/aim_along_weapon.cpp # AzaharFrame kiuinteg
