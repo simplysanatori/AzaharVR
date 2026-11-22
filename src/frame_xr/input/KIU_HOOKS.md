@@ -622,19 +622,25 @@ blade's tip, and two seconds later one lies further along the line from the muzz
 reticle; another picture shows it with no weapon in view. Its edges are drawn without MSAA:
 the game's picture, not this app's layer.
 
-- **It is the game's rapid-fire bullet (V, desktop).** With `AZAHARFRAME_KIU_WEAPON_DRAW=0`
-  nothing weapon-like is in the game's picture while idle in an air battle, only shots while
-  firing. Every pooled rapid bullet starts exactly on the ray's origin, the weapon in hand's
-  muzzle (0.00 units along and off the ray; Practice Range), so each new bullet is drawn on the
-  tip, at the world's life size.
+- **The game's rapid-fire bullet (I, from the owner's pictures; the start V on the desktop).**
+  With `AZAHARFRAME_KIU_WEAPON_DRAW=0` nothing weapon-like is in the game's picture while idle
+  in an air battle, only shots while firing. Every pooled rapid bullet starts exactly on the
+  ray's origin, the weapon in hand's muzzle (0.00 units along and off the ray; Practice Range),
+  so each new bullet is drawn on the tip, at the world's life size. That the arrowhead is the
+  First Blade's bullet is inferred: every save state on the desktop carries the palm (weapon
+  49), so the blade, and its bullet's length, were never seen here.
 - **The fix.** First person's shots start past the muzzle along the ray,
-  `KH::kShotAheadDefault` = 6 units (about 0.8 m; `KH::ShotAheadFor`, `ShotFromHand`). The
-  switch is `AZAHARFRAME_KIU_SHOT_AHEAD=<units>` (live, 0 to 30; `0` is the muzzle, as before).
-  - Measured, Practice Range: charged and rapid shots start 6.00 units along the ray and 0.00
-    off it, at 0, 3, 6 and 10; the path stays on the ray (0.00).
-  - With the dummy 41 units ahead, a charged shot ends at its hit sphere with 0 and with 6.
-  - Not checked: a target nearer than 6 units to the hand, and the blade's own bullet (every
-    save state on the desktop has the palm).
+  `KH::kShotAheadDefault` = 6 units (about 0.8 m; `KH::ShotAheadFor`, `ShotFromHand`), a
+  judgement: clear of a blade's tip from the bullet's first frame. The switch is
+  `AZAHARFRAME_KIU_SHOT_AHEAD=<units>` (live, 0 to 30; `0` is the muzzle, as before; `3` to
+  compare).
+  - Measured, Practice Range: charged and rapid shots start 3.00, 6.00 or 10.00 units along
+    the ray as set and 0.00 off it; the charged path stays on the ray (0.00).
+  - Hits, Chapter 1's air battle (state 4), the score after the same 6 s of rapid fire: `0`
+    960 and 840 (840 before the change), `6` 600 and 960, `3` 840. No clear difference; runs
+    of the same setting differ by as much.
+  - Not checked: a target nearer than 6 units to the hand (in the Practice Range the dummy's
+    place against the ray could not be set up reliably), and the blade.
 - **Pit's own weapon.** On land he is hidden with it. The palm's ghostly hand still shows while
   firing ("Pit's own model in first person" above); not fixed. In the air his weapon was not
   seen in the game's picture (the palm).
