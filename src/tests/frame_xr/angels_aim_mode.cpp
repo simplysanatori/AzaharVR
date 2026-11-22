@@ -58,7 +58,7 @@ TEST_CASE("Angel's Aim: first person's truth table", "[frame_xr][kiumode]") {
     // In effect: mode 4, the European game, its code the mapped one.
     CHECK(FP::AngelsAimFor(4, kEur, true, true));
     CHECK(!FP::AngelsAimFor(4, kEur, false, true)); // code not checked yet, or another code
-    // AzaharFrame kiuusa: the USA title with its code the mapped one (USA Rev 1); with another
+    // AzaharFrame kiuusa: the USA title with its code the mapped one, USA Rev 1; with another
     // code (Rev 0, a mod) it plays as Other Games.
     CHECK(FP::AngelsAimFor(4, kUsa, true, true));
     CHECK(!FP::AngelsAimFor(4, kUsa, false, true));

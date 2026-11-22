@@ -1570,7 +1570,8 @@ TEST_CASE("Kid Icarus hooks: USA Rev 1's tables are the European ones relocated"
     CHECK(&CodeFor(nullptr) == &kCodeEur);
 }
 
-TEST_CASE("Kid Icarus hooks: the build is the title's with its code", "[frame_xr][kiuhook][kiuusa]") {
+TEST_CASE("Kid Icarus hooks: the build is the title's with its code",
+          "[frame_xr][kiuhook][kiuusa]") {
     const FakeMemory eur = Game();
     const FakeMemory usa = GameUsa();
     CHECK(KT::MatchBuild(KT::kTitleEur, eur) == &KT::kBuildEur);

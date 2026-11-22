@@ -53,7 +53,7 @@ for name, a in [("aim vtable land", 0xCF1C34), ("aim vtable air", 0xCF1BE0), ("c
     exact = lit.get(a)
     j = bisect.bisect_right(keys, a) - 1; lo = keys[j]; hi = keys[j+1] if j+1 < len(keys) else None
     print(f"{name:24s} {a:#08x}: exact {('%+#x' % exact) if exact is not None else '-'}; below {lo:#x} {lit[lo]:+#x}; above {hi:#x} {lit[hi]:+#x}")
-print("== cave (USA)")
+print("== cave, USA Rev 1")
 start = 0xC950F0
 nz = [hex(BASE+i*4) for i in range((start-BASE)//4, (0xC96000-BASE)//4) if U[i]]
 print("USA words nonzero in 0xC950F0-0xC96000:", len(nz), nz[:5])

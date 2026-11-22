@@ -410,7 +410,8 @@ constexpr std::array<uint32_t, Stubs::kImage.size()> ImageFor(const StubTargets&
 inline constexpr StubTargets kStubTargetsEur{Stubs::kSinkContinue, Stubs::kSpawn,
                                               Stubs::kPathRestart,   Stubs::kPathVanish,
                                               Stubs::kShadowContinue, Stubs::kFovContinue};
-static_assert(ImageFor(kStubTargetsEur) == Stubs::kImage, "the European image is the generated one");
+static_assert(ImageFor(kStubTargetsEur) == Stubs::kImage,
+              "the European image is the generated one");
 inline constexpr StubTargets kStubTargetsUsaRev1{0x633F54, 0x4855A0, 0x3E8C44,
                                                   0x3E8C68, 0x57AF88, 0x45DFB8};
 inline constexpr std::array<uint32_t, Stubs::kImage.size()> kImageUsaRev1 =
