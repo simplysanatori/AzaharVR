@@ -327,6 +327,31 @@ Talk TalkNow() {
 }
 
 
+// AzaharFrame kiu131
+BottomNow BottomScreenNow() {
+    BottomNow b;
+    if (!AngelsAim() && !On()) {
+        return b;
+    }
+    const auto& v = Settings::values;
+    const auto wrist = Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_WRIST_SCREEN");
+    const auto on = Common::FrameTestSwitches::Value(kSwitchTalk);
+    const auto at = Common::FrameTestSwitches::Value(kSwitchTalkAt);
+    b.mode = BottomScreenWithSwitches(
+        BottomScreenModeFor(v.vr_kiu_bottom_screen.GetValue(), v.vr_kiu_wrist_screen.GetValue(),
+                            v.vr_kiu_talk_panel.GetValue()),
+        wrist ? wrist->c_str() : nullptr, on ? on->c_str() : nullptr);
+    b.scale = BottomScaleFor(v.vr_kiu_bottom_size.GetValue());
+    b.alpha = BottomAlphaFor(v.vr_kiu_bottom_opacity.GetValue());
+    b.place = ParseTalk(nullptr, at ? at->c_str() : nullptr);
+    b.place.on = b.mode == BottomScreen::Persistent;
+    b.place.width_deg = std::min(b.place.width_deg * b.scale, 100.0f);
+    b.right_deg = std::clamp(v.vr_kiu_bottom_x.GetValue(), -kBottomMaxRightDeg, kBottomMaxRightDeg);
+    b.down_deg = std::clamp(v.vr_kiu_bottom_y.GetValue(), -kBottomMaxUpDeg, kBottomMaxDownDeg);
+    return b;
+}
+
+
 float FieldShare() {
     if (!On()) {
         return 1.0f;

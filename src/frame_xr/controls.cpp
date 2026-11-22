@@ -1750,38 +1750,42 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     // AzaharFrame kiutoggles: or its setting (vr_kiu_wrist_screen); the switch, when set, wins.
     {
         const ViewPose head_view = LatestViewPose();
-        const bool wanted =
-            Kiu::FirstPerson::AngelsAim() && head_view.valid &&
-            Vis::WristScreenOn(Common::FrameTestSwitches::Value(Vis::kKiuWristScreenSwitch),
-                               Settings::values.vr_kiu_wrist_screen.GetValue());
+        // AzaharFrame kiu131: Bottom Screen: Wrist (or its old setting, or the switch), on the
+        // Wrist Side chosen, at Bottom Screen Size.
+        const Kiu::FirstPerson::BottomNow bottom = Kiu::FirstPerson::BottomScreenNow();
+        const bool wanted = Kiu::FirstPerson::AngelsAim() && head_view.valid &&
+                            bottom.mode == Kiu::FirstPerson::BottomScreen::Wrist;
+        const Vis::WristSide side =
+            Vis::WristSideFrom(Settings::values.vr_wrist_side.GetValue());
+        const float wrist_w = Vis::kWristScreenWidth * bottom.scale;
+        const float wrist_h = Vis::kWristScreenHeight * bottom.scale;
         const Input::Hand hand =
             Vis::WristScreenHand(Settings::values.vr_motion_controls.GetValue());
         const Input::HandInput& off = in.hand[static_cast<std::size_t>(Input::HandIndex(hand))];
         const bool beside_stats = hand == Input::Hand::Left && visuals.StatsOnWrist();
         const Vis::WristScreen::Out w =
             wrist_screen.Update(wanted, off.active, off.aim, hand, beside_stats,
-                                ToInput(head_view.head).position);
+                                ToInput(head_view.head).position, side, wrist_w);
         wrist_on = w.shown;
         wrist_wanted = wanted; // AzaharFrame kiupanel
-        Immersive::SetWristScreen(w.shown, ToXr(w.pose),
-                                  {Vis::kWristScreenWidth, Vis::kWristScreenHeight},
-                                  info.display_time);
+        Immersive::SetWristScreen(w.shown, ToXr(w.pose), {wrist_w, wrist_h}, info.display_time);
         if (w.changed && wrist_logs < 200) {
             wrist_logs++;
             const Input::Vec3f to = Input::Normalized(ToInput(head_view.head).position - w.pose.position);
             LOG_INFO(Frontend,
                      "xr: Angel's Aim: the Secondary Screen on the {} wrist {} (facing {:.1f} "
                      "deg, {:.2f} m from the eyes, {:.1f} x {:.1f} deg; at {:.3f}, {:.3f}, {:.3f}, "
-                     "to the eyes {:.2f}, {:.2f}, {:.2f}{})",
+                     "to the eyes {:.2f}, {:.2f}, {:.2f}; {} of the wrist, {:.2f} m wide{})",
                      hand == Input::Hand::Left ? "left" : "right",
                      w.shown ? "shown" : "hidden", w.facing_deg, w.distance_m,
                      w.distance_m > 0.0f
-                         ? 2.0f * std::atan(0.5f * Vis::kWristScreenWidth / w.distance_m) * 57.2958f
+                         ? 2.0f * std::atan(0.5f * wrist_w / w.distance_m) * 57.2958f
                          : 0.0f,
                      w.distance_m > 0.0f
-                         ? 2.0f * std::atan(0.5f * Vis::kWristScreenHeight / w.distance_m) * 57.2958f
+                         ? 2.0f * std::atan(0.5f * wrist_h / w.distance_m) * 57.2958f
                          : 0.0f,
                      w.pose.position.x, w.pose.position.y, w.pose.position.z, to.x, to.y, to.z,
+                     side == Vis::WristSide::Back ? "back" : "inside", wrist_w,
                      beside_stats ? "; beside the wrist stats" : "");
         }
     }
@@ -1832,6 +1836,88 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     // screen in focus pauses immersive mode (SetBottomFocused below), so the grips move the
     // normal screens then.
     Input::InputFrame game_in = in;
+    // AzaharFrame kiu131: Bottom Screen: Persistent. A grip closed with that hand's beam on it
+    // holds it: it follows the beam about the eyes, in the view's frame (it goes with the head),
+    // and is saved for the game when let go. That grip is taken out of the game's input while it
+    // holds (neither Grip Frees Aim nor the fixed screen's toast sees it); a grip closed anywhere
+    // else keeps its meaning.
+    {
+        const ViewPose view = LatestViewPose();
+        const Input::PanelQuad panel{ToInput(shown.bottom_pose), shown.bottom_size.width,
+                                     shown.bottom_size.height,
+                                     shown.show_bottom && shown.bottom_persistent};
+        const Input::Posef head = ToInput(view.head);
+        const Input::Posef to_head = Input::Inverse(head);
+        const auto in_head = [&](const Input::Ray& r) {
+            return Input::Ray{Input::Transform(to_head, r.origin),
+                              Input::Rotate(to_head.orientation, r.direction)};
+        };
+        for (int h = 0; h < 2; h++) {
+            const Input::HandInput& hand = in.hand[static_cast<std::size_t>(h)];
+            const bool was = bottom_grip_down[h];
+            bottom_grip_down[h] = was ? hand.grip > Immersive::Layout::kGripRelease
+                                      : hand.grip > Immersive::Layout::kGripPress;
+            if (bottom_grab_hand < 0 && bottom_grip_down[h] && !was && panel.visible &&
+                hand.active && view.valid) {
+                const Input::Ray ray = Input::RayFromPose(hand.aim);
+                const Input::QuadHit hit = Input::IntersectQuad(ray, panel);
+                if (hit.in_bounds) {
+                    const Input::Posef local{Input::Normalized(Input::Multiply(
+                                                 to_head.orientation, panel.pose.orientation)),
+                                             Input::Transform(to_head, panel.pose.position)};
+                    bottom_grab.Begin({}, local, Input::Transform(to_head, hit.point_world));
+                    bottom_grab_hand = h;
+                    LOG_INFO(Frontend, "xr: Angel's Aim: the Bottom Screen held by the {} grip",
+                             h == 0 ? "left" : "right");
+                }
+            }
+        }
+        if (bottom_grab_hand >= 0) {
+            const std::size_t h = static_cast<std::size_t>(bottom_grab_hand);
+            const Kiu::FirstPerson::BottomNow b = Kiu::FirstPerson::BottomScreenNow();
+            if (!bottom_grip_down[h] || !panel.visible || !in.hand[h].active || !view.valid) {
+                // Let go (or gone): saved for this game.
+                MenuRequest r;
+                r.command = MenuCommand::SetSetting;
+                r.per_game = true;
+                r.setting = MenuSetting::KiuBottomX;
+                r.value = static_cast<int>(std::lround(bottom_grab_right * 10.0f));
+                {
+                    std::scoped_lock lock{hooks_mutex};
+                    if (hooks.menu_request) {
+                        hooks.menu_request(r);
+                        r.setting = MenuSetting::KiuBottomY;
+                        r.value = static_cast<int>(std::lround(bottom_grab_down * 10.0f));
+                        hooks.menu_request(r);
+                    }
+                }
+                LOG_INFO(Frontend,
+                         "xr: Angel's Aim: the Bottom Screen let go at {:.1f} deg right, {:.1f} "
+                         "deg down of its place",
+                         bottom_grab_right, bottom_grab_down);
+                bottom_grab_hand = -1;
+            } else {
+                const Input::Vec3f dir = bottom_grab.Direction(
+                    {}, in_head(Input::RayFromPose(in.hand[h].aim)), Kiu::FirstPerson::kTalkDistanceM);
+                constexpr float kToDeg = 57.29578f;
+                bottom_grab_right =
+                    std::clamp(-Vis::YawOf(dir) * kToDeg, -Kiu::FirstPerson::kBottomMaxRightDeg,
+                               Kiu::FirstPerson::kBottomMaxRightDeg);
+                bottom_grab_down = std::clamp(-Vis::PitchOf(dir) * kToDeg - b.place.down_deg,
+                                              -Kiu::FirstPerson::kBottomMaxUpDeg,
+                                              Kiu::FirstPerson::kBottomMaxDownDeg);
+                // Live (this thread draws it); per game, as the menu's rows are.
+                auto& v = Settings::values;
+                if (GameTitleId() != 0) {
+                    v.vr_kiu_bottom_x.SetGlobal(false);
+                    v.vr_kiu_bottom_y.SetGlobal(false);
+                }
+                v.vr_kiu_bottom_x.SetValue(bottom_grab_right);
+                v.vr_kiu_bottom_y.SetValue(bottom_grab_down);
+                game_in.hand[h].grip = 0.0f;
+            }
+        }
+    }
     // AzaharFrame mouse: Bottom Screen Reticle: the chosen controller aims the bottom screen and
     // its trigger touches there; its trigger and grip reach neither the mapper (no ZL or ZR, no
     // beam touch, no grab) nor the immersive screen. Its grip re-zeroes (reticle.h).

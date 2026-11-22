@@ -673,6 +673,11 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.vr_kiu_talk_panel);
     ReadGlobalSetting(Settings::values.vr_kiu_over_shoulder);
     ReadGlobalSetting(Settings::values.vr_kiu_snap_turn);
+    ReadGlobalSetting(Settings::values.vr_kiu_bottom_screen); // AzaharFrame kiu131
+    ReadGlobalSetting(Settings::values.vr_kiu_bottom_size);
+    ReadGlobalSetting(Settings::values.vr_kiu_bottom_opacity);
+    ReadGlobalSetting(Settings::values.vr_kiu_bottom_x);
+    ReadGlobalSetting(Settings::values.vr_kiu_bottom_y);
     if (!global) {
         // AzaharFrame kiu: what the Controls preset already decided (a game's file only).
         ReadGlobalSetting(Settings::values.vr_controls_preset_done);
@@ -689,6 +694,7 @@ void QtConfig::ReadVrValues() {
         ReadGlobalSetting(Settings::values.vr_background);
         ReadGlobalSetting(Settings::values.vr_show_stats);       // AzaharFrame vrvis
         ReadGlobalSetting(Settings::values.vr_stats_position);   // AzaharFrame statspos
+        ReadGlobalSetting(Settings::values.vr_wrist_side);       // AzaharFrame kiu131
         ReadGlobalSetting(Settings::values.vr_window_scale);
         ReadGlobalSetting(Settings::values.vr_immersive_offset_x); // AzaharFrame vrsize
         ReadGlobalSetting(Settings::values.vr_immersive_offset_y);
@@ -1415,6 +1421,11 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.vr_kiu_talk_panel);
     WriteGlobalSetting(Settings::values.vr_kiu_over_shoulder);
     WriteGlobalSetting(Settings::values.vr_kiu_snap_turn);
+    WriteGlobalSetting(Settings::values.vr_kiu_bottom_screen); // AzaharFrame kiu131
+    WriteGlobalSetting(Settings::values.vr_kiu_bottom_size);
+    WriteGlobalSetting(Settings::values.vr_kiu_bottom_opacity);
+    WriteGlobalSetting(Settings::values.vr_kiu_bottom_x);
+    WriteGlobalSetting(Settings::values.vr_kiu_bottom_y);
     if (!global) {
 #ifdef ENABLE_FRAME_XR
         FrameXr::MirrorGyroAim(); // AzaharFrame kiugyro: kept by builds that drop vr_gyro_aim
@@ -1429,6 +1440,7 @@ void QtConfig::SaveVrValues() {
         WriteGlobalSetting(Settings::values.vr_background);
         WriteGlobalSetting(Settings::values.vr_show_stats);       // AzaharFrame vrvis
         WriteGlobalSetting(Settings::values.vr_stats_position);   // AzaharFrame statspos
+        WriteGlobalSetting(Settings::values.vr_wrist_side);       // AzaharFrame kiu131
         WriteGlobalSetting(Settings::values.vr_window_scale);
         WriteGlobalSetting(Settings::values.vr_immersive_offset_x); // AzaharFrame vrsize
         WriteGlobalSetting(Settings::values.vr_immersive_offset_y);

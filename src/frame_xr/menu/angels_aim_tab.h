@@ -98,13 +98,29 @@ inline constexpr const char* kTriggerLayoutOriginalTip =
 /// Settings tab's Immersive section, under Immersive Mode, while Kid Icarus: Uprising is open and
 /// Immersive Mode is Angel's Aim; vr_kiu_wrist_screen, vr_kiu_talk_panel, vr_kiu_over_shoulder,
 /// vr_kiu_snap_turn). Approved by the owner (1.3.0), the Turning choices too. All of them are here.
-inline constexpr const char* kWristScreenRow = "Secondary Screen on Wrist";
-inline constexpr const char* kWristScreenTip =
-    "Shows the Secondary Screen on your free hand's wrist. Turn your wrist up to see it, and point "
-    "at it to touch.";
-inline constexpr const char* kTalkPanelRow = "Talk Panel";
-inline constexpr const char* kTalkPanelTip =
-    "Shows the Secondary Screen, where the characters talk, as a small panel below your view.";
+/// AzaharFrame kiu131: Bottom Screen (replaces Secondary Screen on Wrist and Talk Panel), its
+/// size, opacity and place, and Wrist Side (the Stats tab, every wrist display).
+/// "Bottom Screen" is the owner's own name (a hardware-bound exception, as Bottom Screen
+/// Reticle). PROPOSED strings: they need the owner's approval.
+inline constexpr const char* kBottomScreenRow = "Bottom Screen";
+inline constexpr const char* kBottomScreenOff = "Off";
+inline constexpr const char* kBottomScreenPersistent = "Persistent";
+inline constexpr const char* kBottomScreenWrist = "Wrist";
+inline constexpr const char* kBottomScreenTip =
+    "Persistent: always in view, below it; grab it with a grip to move it. Wrist: on your free "
+    "hand's wrist; look at it like a watch, and point at it to touch.";
+inline constexpr const char* kBottomScreenSizeRow = "Bottom Screen Size";
+inline constexpr const char* kBottomScreenSizeTip = "How big the Bottom Screen is, in view or on your wrist.";
+inline constexpr const char* kBottomScreenOpacityRow = "Bottom Screen Opacity";
+inline constexpr const char* kBottomScreenOpacityTip =
+    "How solid the Bottom Screen looks. Lower lets you see through it.";
+inline constexpr const char* kBottomScreenResetRow = "Reset Bottom Screen Position";
+inline constexpr const char* kBottomScreenResetTip = "Puts the Bottom Screen back below your view.";
+inline constexpr const char* kWristSideRow = "Wrist Side";
+inline constexpr const char* kWristSideBack = "Back";
+inline constexpr const char* kWristSideInside = "Inside";
+inline constexpr const char* kWristSideTip =
+    "Where wrist displays sit: on the back of your wrist like a watch, or on the inside.";
 inline constexpr const char* kOverShoulderRow = "Over the Shoulder";
 inline constexpr const char* kOverShoulderTip =
     "Moves your view behind and above Pit, so you can see him.";

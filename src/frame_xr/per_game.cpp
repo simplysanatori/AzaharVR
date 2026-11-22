@@ -200,11 +200,14 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::TriggerLayout: // AzaharFrame kiufire
         f(v.vr_kiu_trigger_layout);
         return true;
-    case Id::KiuWristScreen: // AzaharFrame kiutoggles
-        f(v.vr_kiu_wrist_screen);
+    case Id::KiuBottomScreen: // AzaharFrame kiu131
+        f(v.vr_kiu_bottom_screen);
         return true;
-    case Id::KiuTalkPanel:
-        f(v.vr_kiu_talk_panel);
+    case Id::KiuBottomSize:
+        f(v.vr_kiu_bottom_size);
+        return true;
+    case Id::KiuBottomOpacity:
+        f(v.vr_kiu_bottom_opacity);
         return true;
     case Id::KiuOverShoulder:
         f(v.vr_kiu_over_shoulder);

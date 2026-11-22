@@ -31,12 +31,12 @@ Input::Hand WristScreenHand(uint32_t motion_controls) {
     return Input::GyroAimSource(motion_controls) == 2 ? Input::Hand::Right : Input::Hand::Left;
 }
 
-Posef WristScreenLocalPose(Input::Hand hand, bool beside_stats) {
-    Posef p = WristLocalPose(); // the left wrist's (stats_place.cpp says how it was found)
+Posef WristScreenLocalPose(Input::Hand hand, bool beside_stats, WristSide side, float width) {
+    Posef p = WristLocalPose(side); // the left wrist's (stats_place.cpp says how it was found)
     if (beside_stats) {
         // Along the forearm toward the elbow: the way the picture reads is toward the hand.
         const Vec3f toward_hand = Input::Rotate(p.orientation, {1.0f, 0.0f, 0.0f});
-        p.position = p.position - toward_hand * kWristScreenBesideStats;
+        p.position = p.position - toward_hand * WristScreenBesideStats(width);
     }
     if (hand == Input::Hand::Right) {
         // Mirrored across the controller's middle (x to -x): the rotation M R M with M the
@@ -50,18 +50,20 @@ Posef WristScreenLocalPose(Input::Hand hand, bool beside_stats) {
     return p;
 }
 
-Posef WristScreenPose(const Posef& aim, Input::Hand hand, bool beside_stats) {
-    const Posef local = WristScreenLocalPose(hand, beside_stats);
+Posef WristScreenPose(const Posef& aim, Input::Hand hand, bool beside_stats, WristSide side,
+                      float width) {
+    const Posef local = WristScreenLocalPose(hand, beside_stats, side, width);
     return {Input::Normalized(Input::Multiply(aim.orientation, local.orientation)),
             Input::Transform(aim, local.position)};
 }
 
 WristScreen::Out WristScreen::Update(bool wanted, bool tracked, const Posef& aim,
-                                     Input::Hand hand, bool beside_stats, const Vec3f& eye) {
+                                     Input::Hand hand, bool beside_stats, const Vec3f& eye,
+                                     WristSide side, float width) {
     Out out;
     const bool was = shown_;
     if (wanted && tracked) {
-        out.pose = WristScreenPose(aim, hand, beside_stats);
+        out.pose = WristScreenPose(aim, hand, beside_stats, side, width);
         out.facing_deg = WristFacingDeg(out.pose, eye);
         out.distance_m = Input::Length(out.pose.position - eye);
         shown_ = WristShown(out.facing_deg, shown_);

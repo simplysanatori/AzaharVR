@@ -1176,6 +1176,8 @@ void Runtime::FrameLoop() {
             place = WithSecondSlot(place); // AzaharFrame layout: as GetScreenPlacement
             // Immersive mode (immersive.cpp) may move the top screen and hide the bottom one.
             const Immersive::ScreenLayers shown = Immersive::Screens(local_space, view_space, place);
+            // AzaharFrame kiu131: Bottom Screen Opacity, for the bottom screen's next pictures.
+            shader_alpha_bottom.store(shown.show_bottom ? shown.bottom_alpha : 1.0f);
             // AzaharFrame bfidr: what the head-driven top screen can show (Dynamic Resolution's
             // ceiling in the Full modes): its size over its distance from the left eye,
             // against the eye's field of view and recommended image, averaged over the second.
@@ -1467,6 +1469,10 @@ void Runtime::FrameLoop() {
                               size.height * MotionClarity::kCollapse};
                 }
                 q.eye = eye;
+                // AzaharFrame kiu131: Bottom Screen Opacity: blended by the picture's alpha.
+                if (!top && shown.bottom_alpha < 1.0f) {
+                    q.flags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+                }
                 if (to_proj) {
                     Vis::ProjScreenEye& pe =
                         proj.eye[eye == XR_EYE_VISIBILITY_RIGHT ? 1 : 0];

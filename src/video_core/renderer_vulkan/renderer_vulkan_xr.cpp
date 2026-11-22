@@ -136,8 +136,12 @@ bool RendererVulkan::RenderToXr() {
         // Bottom Screen Brightness's dim in thousandths, 1 to 999 (0: none).
         const float dim =
             sink->ScreenDim(static_cast<VideoCore::XrScreen>(std::min<u32>(screen_id, 2)));
+        // AzaharFrame kiu131: and the opacity in thousandths (1 to 999; 0: opaque) times 1000.
+        const float alpha =
+            sink->ScreenAlpha(static_cast<VideoCore::XrScreen>(std::min<u32>(screen_id, 2)));
         draw_info.layer =
-            dim < 1.0f ? std::clamp(static_cast<int>(dim * 1000.0f + 0.5f), 1, 999) : 0;
+            (dim < 1.0f ? std::clamp(static_cast<int>(dim * 1000.0f + 0.5f), 1, 999) : 0) +
+            1000 * (alpha < 1.0f ? std::clamp(static_cast<int>(alpha * 1000.0f + 0.5f), 1, 999) : 0);
         DrawSingleScreen(screen_id, 0.0f, 0.0f, static_cast<float>(target.width),
                          static_cast<float>(target.height),
                          Layout::DisplayOrientation::Landscape);

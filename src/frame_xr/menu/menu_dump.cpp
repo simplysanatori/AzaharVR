@@ -764,6 +764,16 @@ int main(int argc, char** argv) {
     v = {};
     v.tab = Tab::Stats;
     ok &= shot("3-stats", m, v);
+    // AzaharFrame kiu131: Wrist Side under Stats Position (Inside chosen), and its tooltip.
+    {
+        MenuModel ms = m;
+        ms.wrist_side = 1;
+        v.hover = {Id::WristSide, kLabelIndex};
+        v.tooltip = Id::WristSide;
+        ok &= shot("3b-stats-wrist-side-tooltip", ms, v);
+        v.tooltip = Id::None;
+        v.hover = {};
+    }
 
     v = {};
     v.tab = Tab::Controls;
@@ -1490,17 +1500,32 @@ int main(int argc, char** argv) {
         ka.immersive_mode = 4;
         MenuView kv = settings(SettingsSection::Immersive);
         ok &= shot("kiutoggles-1-angels-aim-rows-default", ka, kv);
-        ka.kiu_wrist_screen = true;
-        ka.kiu_talk_panel = true;
+        // AzaharFrame kiu131: Bottom Screen: Wrist (its size and opacity under it).
+        ka.kiu_bottom_screen = 2;
+        ka.kiu_bottom_size = 150;
+        ka.kiu_bottom_opacity = 80;
         ka.kiu_over_shoulder = true;
         ka.kiu_snap_turn = SnapTurnIndexOf(45);
         ok &= shot("kiutoggles-2-angels-aim-rows-on", ka, kv);
-        kv.hover = {Id::KiuWristScreen, kLabelIndex};
-        kv.tooltip = Id::KiuWristScreen;
-        ok &= shot("kiutoggles-3-wrist-screen-tooltip", ka, kv);
+        kv.hover = {Id::KiuBottomScreen, kLabelIndex};
+        kv.tooltip = Id::KiuBottomScreen;
+        ok &= shot("kiutoggles-3-bottom-screen-tooltip", ka, kv);
         kv.hover = {Id::KiuSnapTurn, kLabelIndex};
         kv.tooltip = Id::KiuSnapTurn;
         ok &= shot("kiutoggles-4-turning-tooltip", ka, kv);
+        // Persistent: the reset button too; each new row's tooltip.
+        ka.kiu_bottom_screen = 1;
+        kv.hover = {};
+        kv.tooltip = Id::None;
+        ok &= shot("kiu131-1-bottom-screen-persistent", ka, kv);
+        const Id tips[] = {Id::KiuBottomSize, Id::KiuBottomOpacity, Id::KiuBottomReset};
+        const char* const names[] = {"kiu131-2-size-tooltip", "kiu131-3-opacity-tooltip",
+                                     "kiu131-4-reset-tooltip"};
+        for (int i = 0; i < 3; i++) {
+            kv.hover = {tips[i], tips[i] == Id::KiuBottomReset ? -1 : kLabelIndex};
+            kv.tooltip = tips[i];
+            ok &= shot(names[i], ka, kv);
+        }
     }
     MenuModel gv = m; // Global chosen, the game has its own Immersive Mode
     gv.locked[static_cast<std::size_t>(Id::ImmersiveMode)] = Lock::GameValue;

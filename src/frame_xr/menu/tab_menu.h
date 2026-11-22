@@ -291,10 +291,14 @@ enum class Id : int {
     // AzaharFrame kiutoggles: Angel's Aim's first-person options, per game, in the Settings tab's
     // Immersive section under Immersive Mode, shown only while Kid Icarus: Uprising is open and
     // Immersive Mode is Angel's Aim (AngelsAimRowsShown)
-    KiuWristScreen,  ///< a switch: Secondary Screen on Wrist (vr_kiu_wrist_screen)
-    KiuTalkPanel,    ///< a switch: Talk Panel (vr_kiu_talk_panel)
+    // AzaharFrame kiu131: Bottom Screen replaces Secondary Screen on Wrist and Talk Panel
+    KiuBottomScreen, ///< index: Bottom Screen's Off, Persistent, Wrist (vr_kiu_bottom_screen)
+    KiuBottomSize,   ///< a slider, 50 to 200 (percent), with Bottom Screen not Off
     KiuOverShoulder, ///< a switch: Over the Shoulder (vr_kiu_over_shoulder)
     KiuSnapTurn,     ///< index: Turning's Smooth, 30, 45, 60, 90 degrees (vr_kiu_snap_turn)
+    KiuBottomOpacity, ///< AzaharFrame kiu131: a slider, 20 to 100 (percent), with it not Off
+    KiuBottomReset,   ///< a button: Persistent back to its place (vr_kiu_bottom_x, _y)
+    WristSide,        ///< index: 0 Back, 1 Inside (vr_wrist_side), global, the Stats tab
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -454,8 +458,11 @@ struct MenuModel {
     int projectile_opacity = 100; ///< percent (20 to 100)
     int flash_size = 100;         ///< AzaharFrame kiuweap2: Muzzle Flash Size, percent (50 to 300)
     int trigger_layout = 0;       ///< AzaharFrame kiufire: 0 Original, 1 Fire and Power
-    bool kiu_wrist_screen = false;  ///< AzaharFrame kiutoggles: vr_kiu_wrist_screen
-    bool kiu_talk_panel = false;    ///< vr_kiu_talk_panel
+    int kiu_bottom_screen = 0;      ///< AzaharFrame kiu131: 0 Off, 1 Persistent, 2 Wrist
+    int kiu_bottom_size = 100;      ///< percent (50 to 200)
+    int kiu_bottom_opacity = 100;   ///< percent (20 to 100)
+    bool kiu_bottom_moved = false;  ///< Persistent is off its default place
+    int wrist_side = 0;             ///< 0 Back, 1 Inside (global)
     bool kiu_over_shoulder = false; ///< vr_kiu_over_shoulder
     int kiu_snap_turn = 0;          ///< Turning's shown index (SnapTurnIndexOf), 0 Smooth
     bool angels_intro_shown = false; ///< AzaharFrame kiuweap2: vr_angels_aim_intro_shown

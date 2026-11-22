@@ -34,6 +34,7 @@
 
 #include "frame_xr/input/geometry.h"
 #include "frame_xr/input/types.h"
+#include "frame_xr/vis/stats_place.h"
 
 namespace FrameXr::Vis {
 
@@ -58,9 +59,18 @@ Input::Hand WristScreenHand(uint32_t motion_controls);
 
 /// The screen's pose in that controller's aim space (+X the way the picture reads, +Y its top,
 /// +Z its front).
-Input::Posef WristScreenLocalPose(Input::Hand hand, bool beside_stats);
+/// AzaharFrame kiu131: on the wrist side chosen (stats_place.h WristSide; Inside by default, as
+/// before) and `width` wide (Bottom Screen Size: beside the stats it moves that much further).
+Input::Posef WristScreenLocalPose(Input::Hand hand, bool beside_stats,
+                                  WristSide side = WristSide::Inside,
+                                  float width = kWristScreenWidth);
 /// In LOCAL space for that controller's aim pose.
-Input::Posef WristScreenPose(const Input::Posef& aim, Input::Hand hand, bool beside_stats);
+Input::Posef WristScreenPose(const Input::Posef& aim, Input::Hand hand, bool beside_stats,
+                             WristSide side = WristSide::Inside, float width = kWristScreenWidth);
+/// How far toward the elbow a screen `width` wide moves beside the wrist stats.
+constexpr float WristScreenBesideStats(float width) {
+    return 0.5f * 0.10f + 0.5f * width + 0.01f;
+}
 
 /// Each display frame: where it is and whether it shows.
 class WristScreen {
@@ -74,7 +84,8 @@ public:
     };
     /// `wanted`: Angel's Aim in effect with the switch on; `tracked`: the off hand's controller.
     Out Update(bool wanted, bool tracked, const Input::Posef& aim, Input::Hand hand,
-               bool beside_stats, const Input::Vec3f& eye);
+               bool beside_stats, const Input::Vec3f& eye, WristSide side = WristSide::Inside,
+               float width = kWristScreenWidth);
     void Reset() {
         shown_ = false;
     }

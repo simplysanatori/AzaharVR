@@ -5174,9 +5174,11 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     // AzaharFrame fovonce: Match Game Camera's Set Once value comes while the game plays.
     // AzaharFrame natural: and World Scale set by the grips or the migration, while it plays.
     // AzaharFrame natural: and the Full modes' 3D Depth stepped by the 3D Factor shortcuts.
+    // AzaharFrame kiu131: and Angel's Aim's Bottom Screen moved by a grip (Persistent).
     const bool measured_fov =
         r.command == C::SetSetting &&
         (r.setting == S::MeasuredGameFov || r.setting == S::WorldScaleSaved ||
+         r.setting == S::KiuBottomX || r.setting == S::KiuBottomY ||
          (r.setting == S::Depth3d && r.text == kFrameDepthShortcut));
     if (!emulation_running ||
         (!measured_fov && (!g_frame_mirror || !g_frame_mirror->MenuOpen()))) {
@@ -5712,11 +5714,25 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::TriggerLayout: // AzaharFrame kiufire: 0 Original, 1 Fire and Power
         set(v.vr_kiu_trigger_layout, std::min<u32>(u, 1));
         break;
-    case S::KiuWristScreen: // AzaharFrame kiutoggles
-        set(v.vr_kiu_wrist_screen, r.value != 0);
+    case S::KiuBottomScreen: // AzaharFrame kiu131: the two settings it replaced cleared
+        set(v.vr_kiu_bottom_screen, std::min<u32>(u, 2));
+        set(v.vr_kiu_wrist_screen, false);
+        set(v.vr_kiu_talk_panel, false);
         break;
-    case S::KiuTalkPanel:
-        set(v.vr_kiu_talk_panel, r.value != 0);
+    case S::KiuBottomSize:
+        set(v.vr_kiu_bottom_size, std::clamp<u32>(u, 50, 200));
+        break;
+    case S::KiuBottomOpacity:
+        set(v.vr_kiu_bottom_opacity, std::clamp<u32>(u, 20, 100));
+        break;
+    case S::KiuBottomX: // tenths of a degree
+        set(v.vr_kiu_bottom_x, std::clamp(static_cast<float>(r.value) / 10.0f, -60.0f, 60.0f));
+        break;
+    case S::KiuBottomY:
+        set(v.vr_kiu_bottom_y, std::clamp(static_cast<float>(r.value) / 10.0f, -60.0f, 60.0f));
+        break;
+    case S::WristSide: // global
+        set(v.vr_wrist_side, std::min<u32>(u, 1));
         break;
     case S::KiuOverShoulder:
         set(v.vr_kiu_over_shoulder, r.value != 0);

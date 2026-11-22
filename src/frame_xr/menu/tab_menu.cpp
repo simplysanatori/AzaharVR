@@ -98,8 +98,8 @@ std::string SliderText(Id id, float value) {
     if (id == Id::TurnZone || id == Id::RecoilCharged || id == Id::RecoilRapid ||
         id == Id::WeaponScale || id == Id::ProjectileSize || id == Id::ProjectileSpeed ||
         id == Id::WeaponOpacity || id == Id::ProjectileOpacity ||
-        id == Id::MuzzleFlashSize || id == Id::HudSpacingX ||
-        id == Id::HudSpacingY) { // AzaharFrame kiugyro: "10%" (kiufix: the strengths, the scale; kiuopacity: the opacities; kiuweap2: the flash's size)
+        id == Id::MuzzleFlashSize || id == Id::HudSpacingX || id == Id::HudSpacingY ||
+        id == Id::KiuBottomSize || id == Id::KiuBottomOpacity) { // AzaharFrame kiugyro: "10%" (kiufix: the strengths, the scale; kiuopacity: the opacities; kiuweap2: the flash's size)
         return Format("%.0f%%", value);
     }
     if (id == Id::AutosaveEvery) { // AzaharFrame autosave: the stop's minutes
@@ -227,8 +227,25 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
         // them (so choosing Angel's Aim moves nothing above the beam), only while Kid Icarus:
         // Uprising is open and Angel's Aim is chosen: they act in no other game or mode.
         if (AngelsAimRowsShown(m.mods.angels_aim.shown, m.immersive_mode)) {
-            rows.push_back(row(Id::KiuWristScreen, RowKind::Switch, 0, m.kiu_wrist_screen));
-            rows.push_back(row(Id::KiuTalkPanel, RowKind::Switch, 0, m.kiu_talk_panel));
+            // AzaharFrame kiu131: Bottom Screen and, while it is not Off, its size and opacity;
+            // Persistent's place reset under them.
+            const auto slider = [&](Id id, int value) {
+                Row r = row(id, RowKind::Slider);
+                const SliderRange sr = SliderFor(id);
+                const float v = std::clamp(static_cast<float>(value), sr.min, sr.max);
+                r.t = (v - sr.min) / (sr.max - sr.min);
+                r.value = SliderText(id, v);
+                rows.push_back(r);
+            };
+            rows.push_back(row(Id::KiuBottomScreen, RowKind::Segmented,
+                               std::clamp(m.kiu_bottom_screen, 0, 2)));
+            if (m.kiu_bottom_screen != 0) {
+                slider(Id::KiuBottomSize, m.kiu_bottom_size);
+                slider(Id::KiuBottomOpacity, m.kiu_bottom_opacity);
+            }
+            if (m.kiu_bottom_screen == 1) {
+                rows.push_back(row(Id::KiuBottomReset, RowKind::Button));
+            }
             rows.push_back(row(Id::KiuOverShoulder, RowKind::Switch, 0, m.kiu_over_shoulder));
             rows.push_back(row(Id::KiuSnapTurn, RowKind::Segmented,
                                std::clamp(m.kiu_snap_turn, 0,
@@ -352,8 +369,10 @@ SettingsSection SectionOf(Id id) {
     case Id::MotionClarity: // AzaharFrame flash
     case Id::MatchBottom:   // AzaharFrame fixa
     case Id::ScreenAsPanel:
-    case Id::KiuWristScreen: // AzaharFrame kiutoggles
-    case Id::KiuTalkPanel:
+    case Id::KiuBottomScreen: // AzaharFrame kiutoggles, kiu131
+    case Id::KiuBottomSize:
+    case Id::KiuBottomOpacity:
+    case Id::KiuBottomReset:
     case Id::KiuOverShoulder:
     case Id::KiuSnapTurn:
         return SettingsSection::Immersive;
@@ -425,8 +444,9 @@ bool PerGameSetting(Id id) {
     case Id::ProjectileOpacity:
     case Id::MuzzleFlashSize: // AzaharFrame kiuweap2
     case Id::TriggerLayout:   // AzaharFrame kiufire
-    case Id::KiuWristScreen:  // AzaharFrame kiutoggles
-    case Id::KiuTalkPanel:
+    case Id::KiuBottomScreen: // AzaharFrame kiutoggles, kiu131
+    case Id::KiuBottomSize:
+    case Id::KiuBottomOpacity:
     case Id::KiuOverShoulder:
     case Id::KiuSnapTurn:
         return true;
@@ -655,6 +675,15 @@ const std::vector<std::string>& OptionsFor(Id id) {
                                                        kTriggerLayoutOriginal};
         return kTrigger;
     }
+    case Id::KiuBottomScreen: { // AzaharFrame kiu131: the stored order
+        static const std::vector<std::string> kBottom{kBottomScreenOff, kBottomScreenPersistent,
+                                                      kBottomScreenWrist};
+        return kBottom;
+    }
+    case Id::WristSide: { // AzaharFrame kiu131: the stored order
+        static const std::vector<std::string> kSide{kWristSideBack, kWristSideInside};
+        return kSide;
+    }
     case Id::KiuSnapTurn: { // AzaharFrame kiutoggles: kSnapTurnDegrees' order
         static const std::vector<std::string> kTurning{kTurningSmooth, kTurningSnaps[0],
                                                        kTurningSnaps[1], kTurningSnaps[2],
@@ -803,10 +832,16 @@ std::string LabelFor(Id id) {
         return "Muzzle Flash Size";
     case Id::TriggerLayout: // AzaharFrame kiufire
         return kTriggerLayoutRow;
-    case Id::KiuWristScreen: // AzaharFrame kiutoggles
-        return kWristScreenRow;
-    case Id::KiuTalkPanel:
-        return kTalkPanelRow;
+    case Id::KiuBottomScreen: // AzaharFrame kiu131
+        return kBottomScreenRow;
+    case Id::KiuBottomSize:
+        return kBottomScreenSizeRow;
+    case Id::KiuBottomOpacity:
+        return kBottomScreenOpacityRow;
+    case Id::KiuBottomReset:
+        return kBottomScreenResetRow;
+    case Id::WristSide:
+        return kWristSideRow;
     case Id::KiuOverShoulder:
         return kOverShoulderRow;
     case Id::KiuSnapTurn:
@@ -1176,10 +1211,16 @@ std::string ExplainFor(Id id) {
         return Immersive::Names::kMatchBottomTip;
     case Id::ScreenAsPanel: // AzaharFrame projdef
         return Immersive::Names::kScreenAsPanelTip;
-    case Id::KiuWristScreen: // AzaharFrame kiutoggles (angels_aim_tab.h)
-        return kWristScreenTip;
-    case Id::KiuTalkPanel:
-        return kTalkPanelTip;
+    case Id::KiuBottomScreen: // AzaharFrame kiu131 (angels_aim_tab.h)
+        return kBottomScreenTip;
+    case Id::KiuBottomSize:
+        return kBottomScreenSizeTip;
+    case Id::KiuBottomOpacity:
+        return kBottomScreenOpacityTip;
+    case Id::KiuBottomReset:
+        return kBottomScreenResetTip;
+    case Id::WristSide:
+        return kWristSideTip;
     case Id::KiuOverShoulder:
         return kOverShoulderTip;
     case Id::KiuSnapTurn:
@@ -1289,6 +1330,12 @@ SliderRange SliderFor(Id id) {
     }
     if (id == Id::MuzzleFlashSize) { // AzaharFrame kiuweap2: 50 to 300 %
         return {50.0f, 300.0f, 10.0f};
+    }
+    if (id == Id::KiuBottomSize) { // AzaharFrame kiu131: 50 to 200 %
+        return {50.0f, 200.0f, 10.0f};
+    }
+    if (id == Id::KiuBottomOpacity) { // 20 to 100 %, as Weapon Opacity
+        return {20.0f, 100.0f, 10.0f};
     }
     return {};
 }
@@ -1619,30 +1666,34 @@ void TabMenu::DrawStats(Kit& kit, const MenuModel& model, const MenuView& view, 
     AddHit(row, {Id::ShowStats, enabled ? -1 : kLabelIndex}, pane);
     anchors.push_back({Id::ShowStats, c.x0, row.y0 + 6.0f, lock});
     // AzaharFrame statspos: Stats Position under it, a label and its two choices.
-    const Rect at_row{row.x0, row.y1, row.x1, row.y1 + kRowH - 8.0f};
-    {
-        const Lock at_lock = model.locked[static_cast<std::size_t>(Id::StatsPosition)];
+    // AzaharFrame kiu131: Wrist Side under that (every wrist display), the same way.
+    const auto choice_row = [&](Id id, const Rect& at_row, int selected) {
+        const Lock at_lock = model.locked[static_cast<std::size_t>(id)];
         const bool at_enabled = at_lock == Lock::None;
-        AddHit(at_row, {Id::StatsPosition, kLabelIndex}, pane);
-        anchors.push_back({Id::StatsPosition, c.x0, at_row.y0 + 6.0f, at_lock});
-        kit.TextMid(c.x0, at_row.Cy(), Type::Body, Tok::kOnSurface, LabelFor(Id::StatsPosition), 0,
+        AddHit(at_row, {id, kLabelIndex}, pane);
+        anchors.push_back({id, c.x0, at_row.y0 + 6.0f, at_lock});
+        kit.TextMid(c.x0, at_row.Cy(), Type::Body, Tok::kOnSurface, LabelFor(id), 0,
                     at_enabled ? 1.0f : kDisabledContent);
-        const auto& opts = OptionsFor(Id::StatsPosition);
+        const auto& opts = OptionsFor(id);
         const float w = kit.SegmentedWidth(opts, c.W() * 0.6f);
         const Rect seg{c.x1 - w, at_row.Cy() - kControlH * 0.5f, c.x1,
                        at_row.Cy() + kControlH * 0.5f};
-        const int hover = view.hover.id == Id::StatsPosition ? view.hover.index : -1;
-        const int pressed = view.pressed.id == Id::StatsPosition ? view.pressed.index : -1;
-        kit.Segmented(seg, opts, model.stats_position, hover, pressed, !at_enabled);
+        const int hover = view.hover.id == id ? view.hover.index : -1;
+        const int pressed = view.pressed.id == id ? view.pressed.index : -1;
+        kit.Segmented(seg, opts, selected, hover, pressed, !at_enabled);
         if (at_enabled) {
             const auto e = kit.SegmentEdges(seg, opts);
             for (int i = 0; i < static_cast<int>(opts.size()); i++) {
                 AddHit({e[static_cast<std::size_t>(i)], seg.y0, e[static_cast<std::size_t>(i + 1)],
                         seg.y1},
-                       {Id::StatsPosition, i}, pane);
+                       {id, i}, pane);
             }
         }
-    }
+    };
+    const Rect pos_row{row.x0, row.y1, row.x1, row.y1 + kRowH - 8.0f};
+    choice_row(Id::StatsPosition, pos_row, model.stats_position);
+    const Rect at_row{row.x0, pos_row.y1, row.x1, pos_row.y1 + kRowH - 8.0f};
+    choice_row(Id::WristSide, at_row, std::clamp(model.wrist_side, 0, 1));
     kit.Line(c.x0, at_row.y1 + 8.0f, c.x1, at_row.y1 + 8.0f, 1.0f, Tok::kOutlineVariant);
 
     const float col_gap = 40.0f;
@@ -2666,7 +2717,10 @@ void TabMenu::DrawRows(Kit& kit, const MenuModel& model, const MenuView& view, c
         if (r.kind == RowKind::Button) {
             // AzaharFrame menuux: a full-width tonal button (Switch to Flat), no label.
             const Rect b{c.x0, cy - 28.0f, c.x1, cy + 28.0f};
-            kit.Button(b, ButtonStyle::Tonal, r.id == Id::FillView ? Sym::kFitScreen : Sym::kTv,
+            kit.Button(b, ButtonStyle::Tonal,
+                       r.id == Id::FillView         ? Sym::kFitScreen
+                       : r.id == Id::KiuBottomReset ? Sym::kRecenter // AzaharFrame kiu131
+                                                    : Sym::kTv,
                        LabelFor(r.id),
                        StateOf(view, whole, enabled), Type::Title);
             if (enabled) {

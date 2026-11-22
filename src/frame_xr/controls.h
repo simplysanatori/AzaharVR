@@ -301,6 +301,12 @@ private:
     bool wrist_wanted = false;
     Vis::WristAimHold wrist_aim_hold;
     Kiu::FirstPerson::Hand wrist_held_hand;
+    /// AzaharFrame kiu131: Bottom Screen: Persistent held by a grip (the hand, or -1), the grab's
+    /// offsets, the grips' hysteresis and the place while held (saved when let go).
+    int bottom_grab_hand = -1;
+    Vis::StatsGrab bottom_grab;
+    bool bottom_grip_down[2]{};
+    float bottom_grab_right = 0.0f, bottom_grab_down = 0.0f;
     Input::Recoil recoil;          ///< AzaharFrame kiugyro: Light Gun's recoil
     Input::ShotRecoil shot_recoil; ///< AzaharFrame kiuguns: Recoil on the game's own shots
     Vis::MuzzleFlash muzzle_flash; ///< AzaharFrame kiuflash: Muzzle Flash on the same shots

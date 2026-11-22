@@ -2279,19 +2279,22 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
         // AzaharFrame kiuview: Kid Icarus first person's talk (portraits and words) is on the
         // Secondary Screen: a small panel with the head, below the view's middle and nearer
         // than the screen (AZAHARFRAME_KIU_FP_TALK; kiu_first_person.h).
-        if (KiuFirstPerson() && g.view.valid) {
-            const Kiu::FirstPerson::Talk talk = Kiu::FirstPerson::TalkNow();
-            if (talk.on) {
-                const Kiu::FirstPerson::TalkPlace p =
-                    Kiu::FirstPerson::TalkPanelInView(talk, 320.0f / 240.0f);
-                const XrPosef in_view{{std::sin(0.5f * p.pitch_rad), 0.0f, 0.0f,
-                                       std::cos(0.5f * p.pitch_rad)},
-                                      {0.0f, p.y, p.z}};
-                out.bottom_pose = Compose(g.view.head, in_view);
-                out.bottom_size = {p.width, p.height};
-                out.show_bottom = true;
-                out.bottom_pointable = false; // AzaharFrame kiupanel: for reading only
-            }
+        // AzaharFrame kiu131: Bottom Screen: Persistent (the talk panel's place by default,
+        // moved by the grip, sized and faded by its rows).
+        const Kiu::FirstPerson::BottomNow bottom =
+            KiuFirstPerson() ? Kiu::FirstPerson::BottomScreenNow() : Kiu::FirstPerson::BottomNow{};
+        if (KiuFirstPerson() && g.view.valid &&
+            bottom.mode == Kiu::FirstPerson::BottomScreen::Persistent) {
+            const Kiu::FirstPerson::PanelInView p = Kiu::FirstPerson::PersistentInView(
+                bottom.right_deg, bottom.place.down_deg + bottom.down_deg, bottom.place.width_deg,
+                320.0f / 240.0f);
+            const XrPosef in_view{{p.qx, p.qy, p.qz, p.qw}, {p.x, p.y, p.z}};
+            out.bottom_pose = Compose(g.view.head, in_view);
+            out.bottom_size = {p.width, p.height};
+            out.show_bottom = true;
+            out.bottom_pointable = false; // AzaharFrame kiupanel: for reading only
+            out.bottom_persistent = true;
+            out.bottom_alpha = bottom.alpha;
         }
         out.head_driven = true; // AzaharFrame flash
         // AzaharFrame kiuwrist: Angel's Aim's Secondary Screen on the off hand's wrist, set for
@@ -2302,6 +2305,8 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
             out.bottom_pointable = true; // AzaharFrame kiupanel: over the talk panel
             out.bottom_pose = g.wrist_pose;
             out.bottom_size = g.wrist_size;
+            out.bottom_persistent = false;
+            out.bottom_alpha = bottom.alpha; // AzaharFrame kiu131: Bottom Screen Opacity
         }
     }
     const float top_distance = out.top_space == view_space || (g.engaged && IsViewMode(g.mode))

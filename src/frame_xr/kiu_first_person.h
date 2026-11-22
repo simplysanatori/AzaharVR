@@ -278,6 +278,88 @@ inline TalkPlace TalkPanelInView(const Talk& t, float aspect, float distance = k
     return p;
 }
 
+/// AzaharFrame kiu131: Angel's Aim's Bottom Screen (vr_kiu_bottom_screen): the Secondary Screen
+/// Off, Persistent (with the view, below it by default; moved with a grip, for reading only)
+/// or on the off hand's Wrist (touched with the beam). It replaces Talk Panel (Persistent) and
+/// Secondary Screen on Wrist (Wrist).
+enum class BottomScreen : uint32_t { Off = 0, Persistent = 1, Wrist = 2 };
+/// The stored choice; while it is Off, the two settings it replaced (Wrist won while both were
+/// on). Choosing a value in the menu clears those two, so Off then stays Off.
+constexpr BottomScreen BottomScreenModeFor(uint32_t stored, bool old_wrist, bool old_talk) {
+    if (stored == 1u || stored == 2u) {
+        return static_cast<BottomScreen>(stored);
+    }
+    return old_wrist ? BottomScreen::Wrist : old_talk ? BottomScreen::Persistent : BottomScreen::Off;
+}
+/// The test switches over it (null: unset): AZAHARFRAME_KIU_WRIST_SCREEN on ("1", "on", "true")
+/// gives Wrist and off takes a Wrist away; AZAHARFRAME_KIU_FP_TALK "1" gives Persistent (unless
+/// the wrist switch is on) and anything else takes a Persistent away.
+inline BottomScreen BottomScreenWithSwitches(BottomScreen mode, const char* wrist,
+                                             const char* talk) {
+    bool wrist_on = false;
+    if (wrist) {
+        const std::string_view w{wrist};
+        wrist_on = w == "1" || w == "on" || w == "true" || w == "ON" || w == "On" ||
+                   w == "TRUE" || w == "True";
+        mode = wrist_on ? BottomScreen::Wrist
+                        : (mode == BottomScreen::Wrist ? BottomScreen::Off : mode);
+    }
+    if (talk && !wrist_on) {
+        mode = std::string_view{talk} == "1"
+                   ? BottomScreen::Persistent
+                   : (mode == BottomScreen::Persistent ? BottomScreen::Off : mode);
+    }
+    return mode;
+}
+/// Bottom Screen Size and Opacity (percent) as factors, within the settings' limits.
+constexpr float BottomScaleFor(uint32_t percent) {
+    return static_cast<float>(percent < 50u ? 50u : percent > 200u ? 200u : percent) / 100.0f;
+}
+constexpr float BottomAlphaFor(uint32_t percent) {
+    return static_cast<float>(percent < 20u ? 20u : percent > 100u ? 100u : percent) / 100.0f;
+}
+/// Persistent's offset limits from its default place (degrees right, and down).
+inline constexpr float kBottomMaxRightDeg = 60.0f;
+inline constexpr float kBottomMaxUpDeg = 45.0f;   ///< up: a negative down offset
+inline constexpr float kBottomMaxDownDeg = 36.0f; ///< its middle at most 60 deg below ahead
+struct BottomNow {
+    BottomScreen mode = BottomScreen::Off;
+    float scale = 1.0f; ///< Bottom Screen Size
+    float alpha = 1.0f; ///< Bottom Screen Opacity
+    Talk place{};       ///< Persistent: its default place (FP_TALK_AT) and width (scaled)
+    float right_deg = 0.0f, down_deg = 0.0f; ///< Persistent: the grip's offset (settings)
+};
+/// Live, with Angel's Aim's first person on (Off otherwise): the settings and switches. Any thread.
+BottomNow BottomScreenNow();
+/// Persistent in the head's frame (x right, y up, -z ahead): its middle `right` degrees to the
+/// right and `down` degrees below straight ahead, facing the eye.
+struct PanelInView {
+    float qx = 0.0f, qy = 0.0f, qz = 0.0f, qw = 1.0f;
+    float x = 0.0f, y = 0.0f, z = 0.0f;
+    float width = 0.0f, height = 0.0f;
+};
+inline PanelInView PersistentInView(float right_deg, float down_deg, float width_deg, float aspect,
+                                    float distance = kTalkDistanceM) {
+    constexpr float kDeg = 3.14159265358979f / 180.0f;
+    const float yaw = -right_deg * kDeg;  // about +y: positive turns left
+    const float pitch = -down_deg * kDeg; // about +x: negative looks down
+    const float cy = std::cos(0.5f * yaw), sy = std::sin(0.5f * yaw);
+    const float cp = std::cos(0.5f * pitch), sp = std::sin(0.5f * pitch);
+    PanelInView p;
+    // q = yaw * pitch
+    p.qw = cy * cp;
+    p.qx = cy * sp;
+    p.qy = sy * cp;
+    p.qz = -sy * sp;
+    const float c = std::cos(pitch);
+    p.x = -distance * std::sin(yaw) * c;
+    p.y = distance * std::sin(pitch);
+    p.z = -distance * std::cos(yaw) * c;
+    p.width = 2.0f * distance * std::tan(0.5f * width_deg * kDeg);
+    p.height = aspect > 0.1f ? p.width / aspect : p.width * 0.75f;
+    return p;
+}
+
 /// AzaharFrame kiuview: AZAHARFRAME_KIU_FP_FIELD, a share of the view's angle (0.5 to 1).
 inline constexpr int kMinFieldPercent = 50;
 /// AZAHARFRAME_KIU_FP_FIELD's text as a share: null or unreadable 1, else the percent within

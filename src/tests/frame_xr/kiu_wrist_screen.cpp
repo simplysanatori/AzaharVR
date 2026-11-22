@@ -236,3 +236,93 @@ TEST_CASE("FrameXr kiuwrist: the aiming hand's beam touches the wrist screen, fi
     mapper.Update(frame(where, 0.0f, 1.0f), panels);
     REQUIRE(mapper.DragActive());
 }
+
+// AzaharFrame kiu131: Wrist Side. Back (the default setting): on the back of the wrist like a
+// watch face; Inside: the palm side (as before). Each side shows only in its own reading pose:
+// the back of the hand toward the eyes (the forearm across the body) for Back, the palm toward
+// the face for Inside; the other pose turns it away. Both wrists, both sizes.
+TEST_CASE("FrameXr kiu131: Wrist Side, Back like a watch and Inside, each in its own pose",
+          "[frame_xr][kiuwrist][kiu131]") {
+    using Vis::WristSide;
+    REQUIRE(Vis::WristSideFrom(0) == WristSide::Back);
+    REQUIRE(Vis::WristSideFrom(1) == WristSide::Inside);
+    REQUIRE(Vis::WristSideFrom(7) == WristSide::Back);
+    // The two sides: mirror images across the handle's middle (x -0.0135), the same distance
+    // from the controller, the same place along the forearm.
+    const Posef back = Vis::WristLocalPose(WristSide::Back);
+    const Posef inside = Vis::WristLocalPose(WristSide::Inside);
+    REQUIRE(back.position.x + inside.position.x == Approx(2.0f * -0.0135f).margin(1e-5));
+    REQUIRE(back.position.y == Approx(inside.position.y));
+    REQUIRE(back.position.z == Approx(inside.position.z));
+    REQUIRE(back.position.x < -0.04f); // the outer side, clear of the controller's outer face
+    REQUIRE(Axis(back, {0, 0, 1}).x < -0.95f); // facing outward
+    REQUIRE(Axis(back, {1, 0, 0}).z == Approx(Axis(inside, {1, 0, 0}).z)); // reads toward the hand
+    const Vec3f c = Input::Cross(Axis(back, {1, 0, 0}), Axis(back, {0, 1, 0}));
+    REQUIRE(Input::Dot(c, Axis(back, {0, 0, 1})) == Approx(1.0f).margin(1e-4)); // not mirrored
+
+    // The pose that shows Back on the left wrist, facing the eyes, upright, reading left to right.
+    const auto aim_for = [](WristSide side, const Vec3f& centre) {
+        const Vec3f z = Input::Normalized(kEye - centre);
+        const Vec3f x = Input::Normalized(Input::Cross({0.0f, 1.0f, 0.0f}, z));
+        const Vec3f y = Input::Cross(z, x);
+        const Quatf panel = Input::Normalized(Input::FromBasis(x, y, z));
+        const Posef local = Vis::WristScreenLocalPose(Hand::Left, false, side);
+        const Quatf q =
+            Input::Normalized(Input::Multiply(panel, Input::Conjugate(local.orientation)));
+        return Posef{q, centre - Input::Rotate(q, local.position)};
+    };
+    const Vec3f centre{-0.05f, -0.30f, -0.30f};
+    const Posef watch = aim_for(WristSide::Back, centre);
+    const Posef palm = aim_for(WristSide::Inside, centre);
+    // The watch pose is the natural one: the controller points the way the forearm runs, across
+    // the body to the right; its top (the thumb's side) toward the body, its inner (palm) side
+    // down. The palm pose has the palm (+X) toward the face.
+    INFO("watch beam " << Axis(watch, {0, 0, -1}).x << ", " << Axis(watch, {0, 0, -1}).y << ", "
+                       << Axis(watch, {0, 0, -1}).z);
+    REQUIRE(Axis(watch, {0, 0, -1}).x > 0.5f);
+    REQUIRE(Axis(watch, {1, 0, 0}).y < -0.5f);
+    REQUIRE(Axis(watch, {0, 1, 0}).z > 0.3f);
+    REQUIRE(Input::Dot(Axis(palm, {1, 0, 0}), Input::Normalized(kEye - centre)) > 0.9f);
+    for (const float scale : {1.0f, 2.0f}) {
+        const float w = Vis::kWristScreenWidth * scale;
+        Vis::WristScreen b, i;
+        // Back: shown in the watch pose, turned away with the palm to the face.
+        Vis::WristScreen::Out o = b.Update(true, true, watch, Hand::Left, false, kEye,
+                                           WristSide::Back, w);
+        REQUIRE(o.shown);
+        REQUIRE(o.facing_deg < 1.0f);
+        REQUIRE(Axis(o.pose, {1, 0, 0}).x > 0.9f); // reads left to right
+        REQUIRE(Axis(o.pose, {0, 1, 0}).y > 0.0f);
+        REQUIRE(b.Update(true, true, palm, Hand::Left, false, kEye, WristSide::Back, w).facing_deg >
+                Vis::kWristHideDeg);
+        REQUIRE_FALSE(b.Update(true, true, palm, Hand::Left, false, kEye, WristSide::Back, w).shown);
+        // Inside: the other way round.
+        REQUIRE(i.Update(true, true, palm, Hand::Left, false, kEye, WristSide::Inside, w).shown);
+        REQUIRE_FALSE(
+            i.Update(true, true, watch, Hand::Left, false, kEye, WristSide::Inside, w).shown);
+        // Held to play: neither shows.
+        const Posef play{{}, {-0.25f, -0.4f, -0.35f}};
+        Vis::WristScreen p1, p2;
+        REQUIRE_FALSE(p1.Update(true, true, play, Hand::Left, false, kEye, WristSide::Back, w).shown);
+        REQUIRE_FALSE(
+            p2.Update(true, true, play, Hand::Left, false, kEye, WristSide::Inside, w).shown);
+        // The right wrist: the left one's pose mirrored, shown, upright, reading left to right.
+        Vis::WristScreen r;
+        const Vis::WristScreen::Out ro =
+            r.Update(true, true, Mirrored(watch), Hand::Right, false, kEye, WristSide::Back, w);
+        REQUIRE(ro.shown);
+        REQUIRE(Axis(ro.pose, {1, 0, 0}).x > 0.9f);
+        REQUIRE(Axis(ro.pose, {0, 1, 0}).y > 0.0f);
+        // Beside the wrist stats (both on the left wrist, the same side): moved along the
+        // forearm by half of each plus 1 cm, so they never overlap.
+        const Posef beside = Vis::WristScreenLocalPose(Hand::Left, true, WristSide::Back, w);
+        const Posef alone = Vis::WristScreenLocalPose(Hand::Left, false, WristSide::Back, w);
+        REQUIRE(Input::Length(beside.position - alone.position) ==
+                Approx(0.5f * Vis::kWristWidth + 0.5f * w + 0.01f).margin(1e-5));
+    }
+    // The wrist stats take the same place and rule.
+    const Posef stats = Vis::WristStatsPose(watch, WristSide::Back);
+    REQUIRE(Vis::WristShown(Vis::WristFacingDeg(stats, kEye), false));
+    REQUIRE_FALSE(Vis::WristShown(
+        Vis::WristFacingDeg(Vis::WristStatsPose(palm, WristSide::Back), kEye), false));
+}

@@ -33,7 +33,8 @@ namespace {
 // compositor's sRGB decode expects. Alpha is opaque (quads are not blended).
 // AzaharFrame fixa: `layer` (unused here otherwise), 1 to 999, is Match Bottom Screen
 // Brightness's dim in thousandths (RenderToXr, XrScreenSink::ScreenDim): the colour is
-// multiplied by it in linear light. 0: as it is.
+// multiplied by it in linear light. 0: as it is. AzaharFrame kiu131: `layer` / 1000, 1 to 999,
+// is an opacity in thousandths (Bottom Screen Opacity): written as alpha, the colour premultiplied.
 constexpr std::string_view XR_PRESENT_FRAG = R"(
 #version 450 core
 #extension GL_ARB_separate_shader_objects : enable
@@ -74,18 +75,22 @@ vec3 ToSrgb(vec3 c) {
 
 void main() {
     vec3 c = GetScreen(screen_id_l).rgb;
-    const bool dimmed = layer > 0 && layer < 1000;
+    const int dim = layer % 1000;
+    const int opacity = layer / 1000; // AzaharFrame kiu131: 1 to 999 thousandths; 0 opaque
+    const bool dimmed = dim > 0;
+    const float a = opacity > 0 ? float(opacity) * 0.001 : 1.0;
 #ifdef XR_SRGB_TARGET
     c = ToLinear(c);
     if (dimmed) {
-        c *= float(layer) * 0.001;
+        c *= float(dim) * 0.001;
     }
+    c *= a; // premultiplied
 #else
-    if (dimmed) {
-        c = ToSrgb(ToLinear(c) * (float(layer) * 0.001));
+    if (dimmed || opacity > 0) {
+        c = ToSrgb(ToLinear(c) * ((dimmed ? float(dim) * 0.001 : 1.0) * a));
     }
 #endif
-    color = vec4(c, 1.0);
+    color = vec4(c, a);
 }
 )";
 

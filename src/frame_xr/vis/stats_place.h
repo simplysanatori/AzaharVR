@@ -84,9 +84,16 @@ constexpr float kWristFadeSeconds = 0.15f;
 
 /// The panel's pose in the left controller's aim space (the comment over it in stats_place.cpp
 /// says how it was found from the model).
-Input::Posef WristLocalPose();
+/// AzaharFrame kiu131: Wrist Side (vr_wrist_side), for every wrist display: Back, on the back of
+/// the wrist like a watch face (read with the forearm across the body and the back of the hand
+/// toward the eyes), or Inside, on the palm side (read with the palm turned to the face).
+enum class WristSide : uint8_t { Back = 0, Inside = 1 };
+constexpr WristSide WristSideFrom(uint32_t setting) {
+    return setting == 1u ? WristSide::Inside : WristSide::Back;
+}
+Input::Posef WristLocalPose(WristSide side = WristSide::Inside);
 /// In LOCAL space for the left controller's aim pose.
-Input::Posef WristStatsPose(const Input::Posef& left_aim);
+Input::Posef WristStatsPose(const Input::Posef& left_aim, WristSide side = WristSide::Inside);
 /// The angle (degrees) between the panel's front and the direction to `eye`.
 float WristFacingDeg(const Input::Posef& panel, const Input::Vec3f& eye);
 /// Whether it should show, with the hysteresis (`shown`: it shows now).

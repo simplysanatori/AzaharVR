@@ -39,6 +39,7 @@
 #include "frame_xr/vis/help_content.h"
 #include "frame_xr/vis/menu_diagram.h"
 #include "frame_xr/vis/visuals.h"
+#include "frame_xr/kiu_first_person.h" // AzaharFrame kiu131: Bottom Screen
 #include "input_common/frame_xr.h" // AzaharFrame pads: the mouse for the Pointer Test
 
 namespace FrameXr {
@@ -349,10 +350,14 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::GripFreesAim;
     case Id::TriggerLayout: // AzaharFrame kiufire
         return MenuSetting::TriggerLayout;
-    case Id::KiuWristScreen: // AzaharFrame kiutoggles
-        return MenuSetting::KiuWristScreen;
-    case Id::KiuTalkPanel:
-        return MenuSetting::KiuTalkPanel;
+    case Id::KiuBottomScreen: // AzaharFrame kiu131
+        return MenuSetting::KiuBottomScreen;
+    case Id::KiuBottomSize:
+        return MenuSetting::KiuBottomSize;
+    case Id::KiuBottomOpacity:
+        return MenuSetting::KiuBottomOpacity;
+    case Id::WristSide:
+        return MenuSetting::WristSide;
     case Id::KiuOverShoulder:
         return MenuSetting::KiuOverShoulder;
     case Id::KiuSnapTurn:
@@ -1087,8 +1092,15 @@ void MenuPanel::BuildModel(const Host& host) {
         static_cast<int>(std::min<u32>(v.vr_kiu_trigger_layout.GetValue(), 1));
     // AzaharFrame kiutoggles: the settings themselves (a test switch, when set, wins where they
     // are read, not here: the rows show what the player chose).
-    m.kiu_wrist_screen = v.vr_kiu_wrist_screen.GetValue();
-    m.kiu_talk_panel = v.vr_kiu_talk_panel.GetValue();
+    // AzaharFrame kiu131: Bottom Screen as it acts (its old two settings while it is Off).
+    m.kiu_bottom_screen = static_cast<int>(Kiu::FirstPerson::BottomScreenModeFor(
+        v.vr_kiu_bottom_screen.GetValue(), v.vr_kiu_wrist_screen.GetValue(),
+        v.vr_kiu_talk_panel.GetValue()));
+    m.kiu_bottom_size = static_cast<int>(std::clamp<u32>(v.vr_kiu_bottom_size.GetValue(), 50, 200));
+    m.kiu_bottom_opacity =
+        static_cast<int>(std::clamp<u32>(v.vr_kiu_bottom_opacity.GetValue(), 20, 100));
+    m.kiu_bottom_moved = v.vr_kiu_bottom_x.GetValue() != 0.0f || v.vr_kiu_bottom_y.GetValue() != 0.0f;
+    m.wrist_side = static_cast<int>(std::min<u32>(v.vr_wrist_side.GetValue(), 1));
     m.kiu_over_shoulder = v.vr_kiu_over_shoulder.GetValue();
     m.kiu_snap_turn = Menu::SnapTurnIndexOf(static_cast<int>(v.vr_kiu_snap_turn.GetValue()));
     m.angels_intro_shown = v.vr_angels_aim_intro_shown.GetValue();
@@ -1598,13 +1610,36 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         Apply(v.vr_kiu_trigger_layout, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::TriggerLayout;
         break;
-    case Id::KiuWristScreen: // AzaharFrame kiutoggles: live (read each display frame)
-        Apply(v.vr_kiu_wrist_screen, value != 0, per_game);
-        r.setting = MenuSetting::KiuWristScreen;
+    case Id::KiuBottomScreen: // AzaharFrame kiu131: live; the two settings it replaced cleared
+        r.value = std::clamp(value, 0, 2);
+        Apply(v.vr_kiu_bottom_screen, static_cast<u32>(r.value), per_game);
+        Apply(v.vr_kiu_wrist_screen, false, per_game);
+        Apply(v.vr_kiu_talk_panel, false, per_game);
+        r.setting = MenuSetting::KiuBottomScreen; // the Qt side clears them too
         break;
-    case Id::KiuTalkPanel:
-        Apply(v.vr_kiu_talk_panel, value != 0, per_game);
-        r.setting = MenuSetting::KiuTalkPanel;
+    case Id::KiuBottomSize:
+        r.value = std::clamp(value, 50, 200);
+        Apply(v.vr_kiu_bottom_size, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuBottomSize;
+        break;
+    case Id::KiuBottomOpacity:
+        r.value = std::clamp(value, 20, 100);
+        Apply(v.vr_kiu_bottom_opacity, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuBottomOpacity;
+        break;
+    case Id::KiuBottomReset: { // both offsets back to 0, at the scope Bottom Screen has
+        const bool game = scope == 1 && PerGameSetting(Id::KiuBottomScreen);
+        Apply(v.vr_kiu_bottom_x, 0.0f, game);
+        Apply(v.vr_kiu_bottom_y, 0.0f, game);
+        send(MenuSetting::KiuBottomX, 0, game);
+        r.per_game = game;
+        r.value = 0;
+        r.setting = MenuSetting::KiuBottomY;
+        break;
+    }
+    case Id::WristSide: // global, every wrist display
+        Apply(v.vr_wrist_side, std::min<u32>(u, 1), false);
+        r.setting = MenuSetting::WristSide;
         break;
     case Id::KiuOverShoulder: // read at each VBlank
         Apply(v.vr_kiu_over_shoulder, value != 0, per_game);
@@ -2520,11 +2555,8 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::ScreenAsPanel: // AzaharFrame projdef
         SetSetting(t.id, model.screen_as_panel ? 0 : 1, host);
         break;
-    case Id::KiuWristScreen: // AzaharFrame kiutoggles
-        SetSetting(t.id, model.kiu_wrist_screen ? 0 : 1, host);
-        break;
-    case Id::KiuTalkPanel:
-        SetSetting(t.id, model.kiu_talk_panel ? 0 : 1, host);
+    case Id::KiuBottomReset: // AzaharFrame kiu131
+        SetSetting(t.id, 0, host);
         break;
     case Id::KiuOverShoulder:
         SetSetting(t.id, model.kiu_over_shoulder ? 0 : 1, host);
@@ -2576,6 +2608,8 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::TurnZoneFrom:
     case Id::TriggerLayout: // AzaharFrame kiufire
     case Id::KiuSnapTurn:   // AzaharFrame kiutoggles: Turning (Smooth, 30 to 90 degrees)
+    case Id::KiuBottomScreen: // AzaharFrame kiu131: Off, Persistent, Wrist
+    case Id::WristSide:       // Back, Inside
     case Id::WindowScale:
     case Id::MarginX: // AzaharFrame fovaxis
     case Id::MarginY:

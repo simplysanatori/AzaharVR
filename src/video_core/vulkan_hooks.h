@@ -106,6 +106,12 @@ public:
     virtual float ScreenDim(XrScreen /*screen*/) const {
         return 1.0f;
     }
+    /// AzaharFrame kiu131: an opacity for the screen's next pictures (Angel's Aim's Bottom Screen
+    /// Opacity): the XR present shader writes it as alpha, premultiplied, and the layer is
+    /// blended by it. 1: opaque.
+    virtual float ScreenAlpha(XrScreen /*screen*/) const {
+        return 1.0f;
+    }
 
     /// The mutex that guards the renderer's VkQueue (Scheduler::submit_mutex), or
     /// nullptr when no renderer exists. The XR thread holds it around the OpenXR

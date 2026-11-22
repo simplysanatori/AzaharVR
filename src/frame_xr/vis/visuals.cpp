@@ -833,7 +833,9 @@ void Visuals::Frame(Runtime& rt, const FrameInfo& info, Where where, const Windo
         m.wrist_last_ns = info.display_time;
         bool facing = false;
         if (wrist_tracked) {
-            wrist_pose = WristStatsPose(m.activity[0].Pose());
+            // AzaharFrame kiu131: on the Wrist Side chosen (Back by default).
+            wrist_pose = WristStatsPose(m.activity[0].Pose(),
+                                        WristSideFrom(Settings::values.vr_wrist_side.GetValue()));
             facing = WristShown(WristFacingDeg(wrist_pose, head.position), m.wrist_facing);
         }
         if (facing != m.wrist_facing && m.wrist_logs < 40) {

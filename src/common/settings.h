@@ -987,6 +987,9 @@ struct Values {
     // of you, then fixed in the room; a grip moves it), 1 = On Wrist (the left controller). Read
     // every frame (frame_xr/vis/stats_place.h).
     SwitchableSetting<u32, true> vr_stats_position{0, 0, 1, "vr_stats_position"};
+    // AzaharFrame kiu131: Wrist Side, for every wrist display (Stats On Wrist, Angel's Aim's
+    // Bottom Screen on Wrist): 0 Back (like a watch), 1 Inside (the palm side). Global.
+    SwitchableSetting<u32, true> vr_wrist_side{0, 0, 1, "vr_wrist_side"};
     // AzaharFrame (global only): how large Azahar's window looks on the VR panel, in percent
     // (100, 150 or 200 in the settings; any value in between works). Read by the home panel
     // (citra_qt/frame_mirror.cpp); flat mode ignores it.
@@ -1138,6 +1141,16 @@ struct Values {
     // Right Stick turning's snap angle in degrees: 30, 45, 60 or 90; 0 (or anything else) smooth
     // (AZAHARFRAME_KIU_SNAP_TURN).
     SwitchableSetting<u32, true> vr_kiu_snap_turn{0, 0, 90, "vr_kiu_snap_turn"};
+    // AzaharFrame kiu131: Angel's Aim's Bottom Screen: 0 Off, 1 Persistent (with the view, below
+    // it), 2 Wrist. It replaces vr_kiu_wrist_screen and vr_kiu_talk_panel, which are still read
+    // while this is 0 and cleared whenever it is chosen (kiu_first_person.h BottomScreenModeFor).
+    SwitchableSetting<u32, true> vr_kiu_bottom_screen{0, 0, 2, "vr_kiu_bottom_screen"};
+    // Its size and opacity in percent (Persistent and Wrist alike).
+    SwitchableSetting<u32, true> vr_kiu_bottom_size{100, 50, 200, "vr_kiu_bottom_size"};
+    SwitchableSetting<u32, true> vr_kiu_bottom_opacity{100, 20, 100, "vr_kiu_bottom_opacity"};
+    // Persistent's place moved by the grip: degrees right of and below its default place.
+    SwitchableSetting<float, true> vr_kiu_bottom_x{0.f, -60.f, 60.f, "vr_kiu_bottom_x"};
+    SwitchableSetting<float, true> vr_kiu_bottom_y{0.f, -60.f, 60.f, "vr_kiu_bottom_y"};
     // AzaharFrame kiu: in a game's own file only: the Controls preset's values already decided
     // for this game (FrameXr::ControlsPresetField bits). A value the preset gave, or the game
     // already had, is never given again, so a later choice (Use Global Value too) stays.

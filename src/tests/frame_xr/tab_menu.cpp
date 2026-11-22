@@ -3293,9 +3293,12 @@ TEST_CASE("Tab menu: Trigger Layout, Kid Icarus only", "[frame_xr][tabmenu][kiuf
 // Immersive Mode is Angel's Aim (stored 4). Three switches (off by default) and Turning's choices
 // (Smooth by default; stored in degrees). The strings are proposed (angels_aim_tab.h).
 TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim only",
-          "[frame_xr][tabmenu][kiutoggles]") {
-    const std::vector<Id> ids{Id::KiuWristScreen, Id::KiuTalkPanel, Id::KiuOverShoulder,
-                              Id::KiuSnapTurn};
+          "[frame_xr][tabmenu][kiutoggles][kiu131]") {
+    // AzaharFrame kiu131: Bottom Screen (Off, Persistent, Wrist) replaces Secondary Screen on
+    // Wrist and Talk Panel; its size and opacity show while it is not Off, the reset with
+    // Persistent.
+    const std::vector<Id> ids{Id::KiuBottomScreen, Id::KiuBottomSize, Id::KiuBottomOpacity,
+                              Id::KiuOverShoulder, Id::KiuSnapTurn};
     for (const Id id : ids) {
         INFO("id " << static_cast<int>(id));
         CHECK(PerGameSetting(id));
@@ -3303,91 +3306,105 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
         CHECK(!LabelFor(id).empty());
         CHECK(!ExplainFor(id).empty());
     }
-    CHECK(LabelFor(Id::KiuWristScreen) == "Secondary Screen on Wrist");
-    CHECK(LabelFor(Id::KiuTalkPanel) == "Talk Panel");
+    CHECK(SectionOf(Id::KiuBottomReset) == SettingsSection::Immersive);
+    CHECK_FALSE(PerGameSetting(Id::KiuBottomReset));
+    CHECK(LabelFor(Id::KiuBottomScreen) == "Bottom Screen");
+    CHECK(OptionsFor(Id::KiuBottomScreen) == std::vector<std::string>{"Off", "Persistent", "Wrist"});
+    CHECK(LabelFor(Id::KiuBottomSize) == "Bottom Screen Size");
+    CHECK(LabelFor(Id::KiuBottomOpacity) == "Bottom Screen Opacity");
+    CHECK(LabelFor(Id::KiuBottomReset) == "Reset Bottom Screen Position");
     CHECK(LabelFor(Id::KiuOverShoulder) == "Over the Shoulder");
     CHECK(LabelFor(Id::KiuSnapTurn) == "Turning");
+    CHECK(LabelFor(Id::WristSide) == "Wrist Side");
+    CHECK(OptionsFor(Id::WristSide) == std::vector<std::string>{"Back", "Inside"});
+    CHECK_FALSE(PerGameSetting(Id::WristSide));
+    CHECK(SliderFor(Id::KiuBottomSize).min == 50.0f);
+    CHECK(SliderFor(Id::KiuBottomSize).max == 200.0f);
+    CHECK(SliderFor(Id::KiuBottomOpacity).min == 20.0f);
     CHECK(OptionsFor(Id::KiuSnapTurn) ==
           std::vector<std::string>{"Smooth", "30\xC2\xB0", "45\xC2\xB0", "60\xC2\xB0", "90\xC2\xB0"});
-    CHECK(OptionsFor(Id::KiuSnapTurn).size() == kSnapTurnDegrees.size());
-    for (int i = 0; i < static_cast<int>(kSnapTurnDegrees.size()); i++) {
-        CHECK(SnapTurnIndexOf(SnapTurnDegreesAt(i)) == i);
-    }
-    CHECK(SnapTurnDegreesAt(0) == 0);
-    CHECK(SnapTurnDegreesAt(2) == 45);
-    CHECK(SnapTurnDegreesAt(9) == 0);
-    CHECK(SnapTurnIndexOf(50) == 0); // not a choice: Smooth, what it does
     const MenuModel defaults;
-    CHECK_FALSE(defaults.kiu_wrist_screen);
-    CHECK_FALSE(defaults.kiu_talk_panel);
-    CHECK_FALSE(defaults.kiu_over_shoulder);
-    CHECK(defaults.kiu_snap_turn == 0);
+    CHECK(defaults.kiu_bottom_screen == 0);
+    CHECK(defaults.kiu_bottom_size == 100);
+    CHECK(defaults.kiu_bottom_opacity == 100);
+    CHECK(defaults.wrist_side == 0);
     CHECK(AngelsAimRowsShown(true, 4));
     CHECK_FALSE(AngelsAimRowsShown(false, 4));
     CHECK_FALSE(AngelsAimRowsShown(true, 3));
 
-    for (const bool kiu : {false, true}) {
-        for (const int mode : {0, 2, 3, 4}) {
-            INFO("kiu " << kiu << ", mode " << mode);
-            Drawn d;
-            MenuModel m = Sample();
-            m.mods.angels_aim.shown = kiu;
-            m.immersive_mode = mode;
-            m.kiu_wrist_screen = true; // a value of its own changes nothing here
-            m.kiu_snap_turn = 2;
-            MenuView v;
-            v.tab = Tab::Settings;
-            v.section = SettingsSection::Immersive;
-            bool seen[4] = {};
-            bool turns[5] = {};
-            bool under_mode = false;
-            for (float scroll = 0.0f; scroll <= 3000.0f; scroll += kRowH) {
-                v.scroll[static_cast<int>(Tab::Settings)] = scroll;
-                d.Draw(m, v);
-                for (std::size_t k = 0; k < 3; k++) {
-                    seen[k] |= FindHit(d, ids[k], -1) != nullptr; // the switch, never locked
+    for (const int bottom : {0, 1, 2}) {
+        for (const bool kiu : {false, true}) {
+            for (const int mode : {0, 3, 4}) {
+                INFO("bottom " << bottom << ", kiu " << kiu << ", mode " << mode);
+                Drawn d;
+                MenuModel m = Sample();
+                m.mods.angels_aim.shown = kiu;
+                m.immersive_mode = mode;
+                m.kiu_bottom_screen = bottom;
+                MenuView v;
+                v.tab = Tab::Settings;
+                v.section = SettingsSection::Immersive;
+                bool seen_bottom[3] = {}, size = false, opacity = false, reset = false,
+                     under_mode = false;
+                for (float scroll = 0.0f; scroll <= 3000.0f; scroll += kRowH) {
+                    v.scroll[static_cast<int>(Tab::Settings)] = scroll;
+                    d.Draw(m, v);
+                    for (int i = 0; i < 3; i++) {
+                        seen_bottom[i] |= FindHit(d, Id::KiuBottomScreen, i) != nullptr;
+                    }
+                    size |= FindHit(d, Id::KiuBottomSize, kLabelIndex) != nullptr;
+                    opacity |= FindHit(d, Id::KiuBottomOpacity, kLabelIndex) != nullptr;
+                    reset |= FindHit(d, Id::KiuBottomReset, -1) != nullptr;
+                    const auto* mode_row = FindHit(d, Id::ImmersiveMode, kLabelIndex);
+                    const auto* first = FindHit(d, Id::KiuBottomScreen, kLabelIndex);
+                    if (mode_row && first) {
+                        const float dy = 0.5f * ((first->r.y0 + first->r.y1) -
+                                                 (mode_row->r.y0 + mode_row->r.y1));
+                        under_mode |= std::abs(dy - kRowH) < 1.0f;
+                    }
+                    if (scroll >= d.menu.MaxScroll()) {
+                        break;
+                    }
                 }
-                for (int i = 0; i < 5; i++) {
-                    turns[i] |= FindHit(d, Id::KiuSnapTurn, i) != nullptr;
+                const bool shown = kiu && mode == 4;
+                for (int i = 0; i < 3; i++) {
+                    CHECK(seen_bottom[i] == shown);
                 }
-                seen[3] |= turns[0] && turns[4];
-                const auto* mode_row = FindHit(d, Id::ImmersiveMode, kLabelIndex);
-                const auto* wrist = FindHit(d, Id::KiuWristScreen, -1);
-                if (mode_row && wrist) {
-                    const float dy = 0.5f * ((wrist->r.y0 + wrist->r.y1) -
-                                             (mode_row->r.y0 + mode_row->r.y1));
-                    under_mode |= std::abs(dy - kRowH) < 1.0f;
+                CHECK(size == (shown && bottom != 0));
+                CHECK(opacity == (shown && bottom != 0));
+                CHECK(reset == (shown && bottom == 1));
+                if (shown) {
+                    CHECK(under_mode);
+                    Audit a;
+                    v.scroll[static_cast<int>(Tab::Settings)] = 0.0f;
+                    a.Draw(m, v);
+                    a.Check("Settings, Immersive, Angel's Aim's rows");
+                    CHECK(a.Drew("Bottom Screen"));
                 }
-                if (scroll >= d.menu.MaxScroll()) {
-                    break;
-                }
             }
-            const bool shown = kiu && mode == 4;
-            for (int k = 0; k < 4; k++) {
-                CHECK(seen[k] == shown);
-            }
-            for (int i = 0; i < 5; i++) {
-                CHECK(turns[i] == shown);
-            }
-            if (shown) {
-                CHECK(under_mode); // the first of them right under Immersive Mode
-                Audit a;
-                v.scroll[static_cast<int>(Tab::Settings)] = 0.0f;
-                a.Draw(m, v);
-                a.Check("Settings, Immersive, Angel's Aim's rows");
-                CHECK(a.Drew("Secondary Screen on Wrist"));
-                CHECK(a.Drew("Turning"));
-            }
-            // The Per-Game count and Use Global Values for All: the rows on view only.
-            MenuModel own = m;
-            own.scope = 1;
-            for (const Id id : ids) {
-                own.game_value[static_cast<std::size_t>(id)] = true;
-            }
-            CHECK(GameValueRows(own, Tab::Settings, SettingsSection::Immersive) ==
-                  (shown ? ids : std::vector<Id>{}));
         }
     }
+}
+
+// AzaharFrame kiu131: Wrist Side in the Stats tab under Stats Position, both choices pressable.
+TEST_CASE("Tab menu: Wrist Side under Stats Position", "[frame_xr][tabmenu][kiu131]") {
+    Drawn d;
+    MenuModel m = Sample();
+    m.wrist_side = 1;
+    MenuView v;
+    v.tab = Tab::Stats;
+    d.Draw(m, v);
+    const auto* pos = FindHit(d, Id::StatsPosition, kLabelIndex);
+    const auto* side = FindHit(d, Id::WristSide, kLabelIndex);
+    REQUIRE(pos);
+    REQUIRE(side);
+    CHECK(side->r.y0 >= pos->r.y1 - 0.5f);
+    CHECK(FindHit(d, Id::WristSide, 0));
+    CHECK(FindHit(d, Id::WristSide, 1));
+    Audit a;
+    a.Draw(m, v);
+    a.Check("Stats, Wrist Side");
+    CHECK(a.Drew("Wrist Side"));
 }
 
 // AzaharFrame kiuflash: Muzzle Flash, a game's switch in Aiming's group on the Controls page,

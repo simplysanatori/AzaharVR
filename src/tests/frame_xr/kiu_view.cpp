@@ -12,6 +12,7 @@
 #include "frame_xr/immersive_layout.h"
 #include "frame_xr/input/kiu_hooks.h"
 #include "frame_xr/kiu_first_person.h"
+#include "frame_xr/input/geometry.h"
 
 namespace FP = FrameXr::Kiu::FirstPerson;
 namespace L = FrameXr::Immersive::Layout;
@@ -152,4 +153,51 @@ TEST_CASE("kiufp3: the field's share is the screen's angle", "[kiuview]") {
     }
     // Unset (share 1): the whole view; 50 % is the least the switch takes.
     CHECK(FP::ParseFieldShare("40") == 0.5f);
+}
+
+// AzaharFrame kiu131: Bottom Screen. The stored choice; while Off, the two settings it replaced
+// (Wrist won while both were on); the test switches over it; Persistent's place.
+TEST_CASE("kiu131: Bottom Screen's choice, migration, switches and place", "[kiuview][kiu131]") {
+    using BS = FP::BottomScreen;
+    CHECK(FP::BottomScreenModeFor(0, false, false) == BS::Off);
+    CHECK(FP::BottomScreenModeFor(1, false, false) == BS::Persistent);
+    CHECK(FP::BottomScreenModeFor(2, false, false) == BS::Wrist);
+    CHECK(FP::BottomScreenModeFor(0, false, true) == BS::Persistent); // Talk Panel was on
+    CHECK(FP::BottomScreenModeFor(0, true, false) == BS::Wrist);      // the wrist screen was on
+    CHECK(FP::BottomScreenModeFor(0, true, true) == BS::Wrist);       // both: the wrist won
+    CHECK(FP::BottomScreenModeFor(1, true, false) == BS::Persistent); // chosen: the old go
+    CHECK(FP::BottomScreenModeFor(9, false, true) == BS::Persistent);
+    CHECK(FP::BottomScreenWithSwitches(BS::Off, nullptr, nullptr) == BS::Off);
+    CHECK(FP::BottomScreenWithSwitches(BS::Off, "1", nullptr) == BS::Wrist);
+    CHECK(FP::BottomScreenWithSwitches(BS::Persistent, "on", "1") == BS::Wrist);
+    CHECK(FP::BottomScreenWithSwitches(BS::Wrist, "0", nullptr) == BS::Off);
+    CHECK(FP::BottomScreenWithSwitches(BS::Persistent, "0", nullptr) == BS::Persistent);
+    CHECK(FP::BottomScreenWithSwitches(BS::Off, nullptr, "1") == BS::Persistent);
+    CHECK(FP::BottomScreenWithSwitches(BS::Wrist, "0", "1") == BS::Persistent);
+    CHECK(FP::BottomScreenWithSwitches(BS::Persistent, nullptr, "0") == BS::Off);
+    CHECK(FP::BottomScreenWithSwitches(BS::Wrist, nullptr, "0") == BS::Wrist);
+    CHECK(FP::BottomScaleFor(100) == 1.0f);
+    CHECK(FP::BottomScaleFor(10) == 0.5f);
+    CHECK(FP::BottomScaleFor(500) == 2.0f);
+    CHECK(FP::BottomAlphaFor(0) == 0.2f);
+    CHECK(FP::BottomAlphaFor(100) == 1.0f);
+    // The default place: the talk panel's (24 degrees down, 34 wide, 0.8 m).
+    const FP::PanelInView p = FP::PersistentInView(0.0f, FP::kTalkDownDeg, FP::kTalkWidthDeg, 4.0f / 3.0f);
+    const FP::TalkPlace t = FP::TalkPanelInView(FP::Talk{true}, 4.0f / 3.0f);
+    CHECK_THAT(p.y, WithinAbs(t.y, 1e-5));
+    CHECK_THAT(p.z, WithinAbs(t.z, 1e-5));
+    CHECK_THAT(p.x, WithinAbs(0.0, 1e-6));
+    CHECK_THAT(p.width, WithinAbs(t.width, 1e-5));
+    CHECK_THAT(p.qx, WithinAbs(std::sin(0.5f * t.pitch_rad), 1e-5));
+    // Moved 20 degrees right and 10 more down: still 0.8 m away, facing the eye.
+    const FP::PanelInView m = FP::PersistentInView(20.0f, 34.0f, 34.0f, 4.0f / 3.0f);
+    CHECK_THAT(std::sqrt(m.x * m.x + m.y * m.y + m.z * m.z), WithinAbs(0.8, 1e-5));
+    CHECK(m.x > 0.0f);
+    CHECK_THAT(std::atan2(m.x, -m.z) * 57.29578f, WithinAbs(20.0, 1e-3));
+    CHECK_THAT(-std::asin(m.y / 0.8f) * 57.29578f, WithinAbs(34.0, 1e-3));
+    const FrameXr::Input::Quatf q{m.qx, m.qy, m.qz, m.qw};
+    const auto front = FrameXr::Input::Rotate(q, {0.0f, 0.0f, 1.0f}); // toward the eye
+    CHECK_THAT(front.x, WithinAbs(-m.x / 0.8f, 1e-4));
+    CHECK_THAT(front.y, WithinAbs(-m.y / 0.8f, 1e-4));
+    CHECK_THAT(front.z, WithinAbs(-m.z / 0.8f, 1e-4));
 }

@@ -139,18 +139,32 @@ Vec3f StatsGrab::Direction(const Vec3f& eye, const Input::Ray& ray, float distan
 // (pointing ahead, below the head), it faces away from the eyes (about 50 degrees off); turn the
 // palm toward your face, as to read the inside of a watch, and it reads level.
 
-Posef WristLocalPose() {
+//
+// AzaharFrame kiu131: Back (the default): the same place mirrored across the handle's middle (x
+// -0.0135) to the outer side, the back of the wrist, 2.3 cm clear of the controller's outer face,
+// its front facing outward, turned 10 degrees up as the inside one. Its +X still reads toward the
+// hand and its +Y is then off the handle's bottom: held like a watch (the left forearm across the
+// body, the back of the hand toward the eyes; the controller's top is toward the body then) the
+// picture is upright and reads left to right. Turn the palm to the face, or hold the controller
+// to play, and it faces away.
+
+Posef WristLocalPose(WristSide side) {
     const Vec3f along = Input::Normalized(Vec3f{0.0f, -0.6f, 0.8f}); // toward the wrist
     const Vec3f top = Input::Normalized(Vec3f{0.0f, 0.8f, 0.6f});    // off the handle's top
     const float tilt = 10.0f * kDeg;
-    const Vec3f z = Input::Normalized(Vec3f{1.0f, 0.0f, 0.0f} * std::cos(tilt) + top * std::sin(tilt));
+    const float out = side == WristSide::Back ? -1.0f : 1.0f; // the outer or the inner side
+    const Vec3f z =
+        Input::Normalized(Vec3f{out, 0.0f, 0.0f} * std::cos(tilt) + top * std::sin(tilt));
     const Vec3f x = along * -1.0f;
     const Vec3f y = Input::Cross(z, x);
-    return {Input::Normalized(Input::FromBasis(x, y, z)), {0.022f, -0.085f, 0.148f}};
+    constexpr float kHandleMiddleX = -0.0135f;
+    constexpr float kInsideX = 0.022f;
+    const float px = side == WristSide::Back ? 2.0f * kHandleMiddleX - kInsideX : kInsideX;
+    return {Input::Normalized(Input::FromBasis(x, y, z)), {px, -0.085f, 0.148f}};
 }
 
-Posef WristStatsPose(const Posef& left_aim) {
-    static const Posef local = WristLocalPose();
+Posef WristStatsPose(const Posef& left_aim, WristSide side) {
+    const Posef local = WristLocalPose(side);
     return {Input::Normalized(Input::Multiply(left_aim.orientation, local.orientation)),
             Input::Transform(left_aim, local.position)};
 }

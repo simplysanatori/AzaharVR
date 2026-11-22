@@ -186,6 +186,11 @@ public:
         return screen == VideoCore::XrScreen::Bottom ? shader_dim_bottom.load() : 1.0f;
     }
     std::atomic<float> shader_dim_bottom{1.0f};
+    /// AzaharFrame kiu131: Bottom Screen Opacity for the bottom screen's next pictures.
+    float ScreenAlpha(VideoCore::XrScreen screen) const override {
+        return screen == VideoCore::XrScreen::Bottom ? shader_alpha_bottom.load() : 1.0f;
+    }
+    std::atomic<float> shader_alpha_bottom{1.0f};
     void SetQueueMutex(std::mutex* mutex) override;
     void SetScreensLive(bool live) override;
     void NoteLateRelease(VideoCore::XrScreen screen) override;

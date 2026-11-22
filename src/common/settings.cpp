@@ -366,6 +366,11 @@ void RestoreGlobalState(bool is_powered_on) {
     values.vr_kiu_talk_panel.SetGlobal(true);
     values.vr_kiu_over_shoulder.SetGlobal(true);
     values.vr_kiu_snap_turn.SetGlobal(true);
+    values.vr_kiu_bottom_screen.SetGlobal(true); // AzaharFrame kiu131
+    values.vr_kiu_bottom_size.SetGlobal(true);
+    values.vr_kiu_bottom_opacity.SetGlobal(true);
+    values.vr_kiu_bottom_x.SetGlobal(true);
+    values.vr_kiu_bottom_y.SetGlobal(true);
     values.vr_dynamic_resolution.SetGlobal(true); // AzaharFrame menuux
     values.autosave_enabled.SetGlobal(true);      // AzaharFrame autosave
     values.autosave_every.SetGlobal(true);

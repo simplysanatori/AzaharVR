@@ -388,8 +388,13 @@ enum class MenuSetting {
                      ///< (vr_light_gun_muzzle_flash_size)
     TriggerLayout,   ///< AzaharFrame kiufire: `value` 0 Original, 1 Fire and Power
                      ///< (vr_kiu_trigger_layout)
-    KiuWristScreen,  ///< AzaharFrame kiutoggles: `value` 0 or 1 (vr_kiu_wrist_screen)
-    KiuTalkPanel,    ///< `value` 0 or 1 (vr_kiu_talk_panel)
+    KiuBottomScreen, ///< AzaharFrame kiu131: `value` 0 Off, 1 Persistent, 2 Wrist
+                     ///< (vr_kiu_bottom_screen; vr_kiu_wrist_screen and vr_kiu_talk_panel cleared)
+    KiuBottomSize,   ///< `value` percent, 50 to 200 (vr_kiu_bottom_size)
+    KiuBottomOpacity, ///< `value` percent, 20 to 100 (vr_kiu_bottom_opacity)
+    KiuBottomX,      ///< `value` tenths of a degree (vr_kiu_bottom_x)
+    KiuBottomY,      ///< `value` tenths of a degree (vr_kiu_bottom_y)
+    WristSide,       ///< `value` 0 Back, 1 Inside (vr_wrist_side, global)
     KiuOverShoulder, ///< `value` 0 or 1 (vr_kiu_over_shoulder)
     KiuSnapTurn,     ///< `value` degrees: 0 Smooth, 30, 45, 60 or 90 (vr_kiu_snap_turn)
     AngelsAimIntroShown, ///< AzaharFrame kiuweap2: `value` 1 (vr_angels_aim_intro_shown, global)
