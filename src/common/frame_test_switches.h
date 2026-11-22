@@ -41,9 +41,16 @@
 #include <utility>
 #include <vector>
 #include <sys/stat.h>
+#include "common/frame_product.h" // AzaharVR
 
+#ifdef _WIN32 // AzaharVR: the CRT's environment
+#include <stdlib.h>
+#define AZAHARFRAME_ENVIRON _environ
+#else
 // C linkage, as unistd.h declares it (a C++-linkage redeclaration conflicts with it).
 extern "C" char** environ;
+#define AZAHARFRAME_ENVIRON environ
+#endif
 
 namespace Common::FrameTestSwitches {
 
@@ -53,12 +60,21 @@ inline std::vector<std::string>& FromFile() {
 }
 
 inline std::string Path() {
+#ifdef _WIN32 // AzaharVR: %APPDATA%\AzaharVR\test-switches.txt
+    const char* appdata = std::getenv("APPDATA");
+    return appdata && *appdata
+               ? std::string(appdata) + "\\" + FrameProduct::kSwitchFolder + "\\test-switches.txt"
+               : std::string();
+#else
     const char* xdg = std::getenv("XDG_CONFIG_HOME");
     const char* home = std::getenv("HOME");
     const std::string base = xdg && *xdg ? std::string(xdg)
                              : home && *home ? std::string(home) + "/.config"
                                              : std::string();
-    return base.empty() ? std::string() : base + "/AzaharFrame/test-switches.txt";
+    // AzaharVR: AzaharVR/ on the PC build (common/frame_product.h).
+    return base.empty() ? std::string()
+                        : base + "/" + FrameProduct::kSwitchFolder + "/test-switches.txt";
+#endif
 }
 
 /// A name whose value is never logged or shown (a DSN, a token, a key), whatever file it is in.
@@ -336,7 +352,7 @@ inline void Load() {
 /// The test switches in effect (AZAHARFRAME_IMMERSIVE_, _XR_, _TEST_ and any from the file), "NAME=value (from the file|from the environment)".
 inline std::vector<std::string> InEffect() {
     std::vector<std::string> out;
-    for (char** e = environ; e && *e; ++e) {
+    for (char** e = AZAHARFRAME_ENVIRON; e && *e; ++e) {
         const std::string kv = *e;
         if (kv.rfind("AZAHARFRAME_", 0) != 0) {
             continue;

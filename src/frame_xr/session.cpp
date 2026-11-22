@@ -12,6 +12,7 @@
 #include <vector>
 #include <utility> // AzaharFrame flash: std::exchange
 #include <fmt/format.h>
+#include "common/frame_product.h" // AzaharVR
 
 #include "common/logging/log.h"
 #include "common/frame_flat.h"
@@ -221,7 +222,7 @@ bool Runtime::CreateXrInstance(bool renew) {
     }
 
     XrInstanceCreateInfo ci{XR_TYPE_INSTANCE_CREATE_INFO};
-    std::strncpy(ci.applicationInfo.applicationName, "Azahar for Frame",
+    std::strncpy(ci.applicationInfo.applicationName, Common::FrameProduct::kName, // AzaharVR
                  XR_MAX_APPLICATION_NAME_SIZE - 1);
     ci.applicationInfo.applicationVersion = 1;
     std::strncpy(ci.applicationInfo.engineName, "Azahar", XR_MAX_ENGINE_NAME_SIZE - 1);

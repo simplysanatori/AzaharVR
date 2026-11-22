@@ -19,6 +19,9 @@ UserDataMigrator::UserDataMigrator(QMainWindow* main_window) {
     // NOTE: Logging is not initialized yet, do not produce logs here.
 
     // Check migration if user directory does not exist
+#ifdef AZAHARVR_PC // AzaharVR: a new folder of its own; nothing is copied from other installs
+    return;
+#endif
     if (!fs::is_directory(PathFromUTF8(FileUtil::GetUserPath(FileUtil::UserPath::UserDir)))) {
         ShowMigrationPrompt(main_window);
     }

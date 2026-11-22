@@ -23,7 +23,11 @@
 #define EMU_DATA_DIR USER_DIR
 #else
 #ifdef _WIN32
+#ifdef AZAHARVR_PC // AzaharVR: its own folder, apart from Azahar's
+#define EMU_DATA_DIR "AzaharVR"
+#else
 #define EMU_DATA_DIR "Azahar"
+#endif
 #define LEGACY_CITRA_DATA_DIR "Citra"
 #define LEGACY_LIME3DS_DATA_DIR "Lime3DS"
 #elif defined(__APPLE__)
@@ -38,11 +42,19 @@
 #define LEGACY_LIME3DS_APPLE_DATA_DIR "Library" DIR_SEP "Application Support" DIR_SEP "Lime3DS"
 #endif
 // For compatibility with XDG paths.
+#ifdef AZAHARVR_PC // AzaharVR
+#define EMU_DATA_DIR "azahar-vr"
+#else
 #define EMU_DATA_DIR "azahar-emu"
+#endif
 #define LEGACY_CITRA_DATA_DIR "citra-emu"
 #define LEGACY_LIME3DS_DATA_DIR "lime3ds-emu"
 #else
+#ifdef AZAHARVR_PC // AzaharVR
+#define EMU_DATA_DIR "azahar-vr"
+#else
 #define EMU_DATA_DIR "azahar-emu"
+#endif
 #define LEGACY_CITRA_DATA_DIR "citra-emu"
 #define LEGACY_LIME3DS_DATA_DIR "lime3ds-emu"
 #endif

@@ -98,6 +98,7 @@
 #include "citra_qt/qt_swizzle.h"
 #include "citra_qt/uisettings.h"
 #include "common/play_time_manager.h"
+#include "common/frame_product.h" // AzaharVR
 #ifdef ENABLE_QT_UPDATE_CHECKER
 #include "citra_qt/update_checker.h"
 #endif
@@ -994,7 +995,7 @@ GMainWindow::GMainWindow(Core::System& system_)
         }
 
         if (args[i] == QStringLiteral("--version") || args[i] == QStringLiteral("-v")) {
-            const std::string version_string = std::string("Azahar for Frame ") + Common::g_build_fullname;
+            const std::string version_string = std::string(Common::FrameProduct::kName) + " " + Common::g_build_fullname; // AzaharVR
             ShowCommandOutput("Version", version_string);
             exit(0);
         }
@@ -8219,12 +8220,12 @@ void GMainWindow::UpdateWindowTitle() {
     const QString full_name = QString::fromUtf8(Common::g_build_fullname);
 
     if (game_title.isEmpty()) {
-        setWindowTitle(QStringLiteral("Azahar for Frame %1").arg(full_name));
+        setWindowTitle(QString::fromLatin1(Common::FrameProduct::kName) + QStringLiteral(" %1").arg(full_name));
     } else {
-        setWindowTitle(QStringLiteral("Azahar for Frame %1 | %2").arg(full_name, game_title));
+        setWindowTitle(QString::fromLatin1(Common::FrameProduct::kName) + QStringLiteral(" %1 | %2").arg(full_name, game_title));
         render_window->setWindowTitle(
-            QStringLiteral("Azahar for Frame %1 | %2 | %3").arg(full_name, game_title, tr("Primary Window")));
-        secondary_window->setWindowTitle(QStringLiteral("Azahar for Frame %1 | %2 | %3")
+            QString::fromLatin1(Common::FrameProduct::kName) + QStringLiteral(" %1 | %2 | %3").arg(full_name, game_title, tr("Primary Window")));
+        secondary_window->setWindowTitle(QString::fromLatin1(Common::FrameProduct::kName) + QStringLiteral(" %1 | %2 | %3")
                                              .arg(full_name, game_title, tr("Secondary Window")));
     }
 }

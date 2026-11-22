@@ -38,6 +38,7 @@ add_library(citra_common STATIC EXCLUDE_FROM_ALL
     frame_crash.cpp # AzaharFrame crashreport
     frame_crash.h # AzaharFrame crashreport
     frame_flat.h # AzaharFrame
+    frame_product.h # AzaharVR
     hash.h
     hacks/hack_list.h
     hacks/hack_list.cpp

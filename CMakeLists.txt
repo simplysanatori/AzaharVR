@@ -171,12 +171,28 @@ set(DEFAULT_ENABLE_FRAME_XR OFF)
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
     set(DEFAULT_ENABLE_FRAME_XR ON)
 endif()
+# AzaharVR: Linux x86-64 (Azahar VR, the PC VR build) too.
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
+    set(DEFAULT_ENABLE_FRAME_XR ON)
+endif()
 CMAKE_DEPENDENT_OPTION(ENABLE_FRAME_XR "Enables the OpenXR frontend (Azahar for Frame)" ${DEFAULT_ENABLE_FRAME_XR} "ENABLE_VULKAN;ENABLE_QT;NOT ANDROID;NOT ENABLE_LIBRETRO" OFF)
 # AzaharFrame crashreport: Send Report sends a crash report to Sentry (externals/sentry-native) when
 # the player taps it. The DSN comes from -DAZAHARFRAME_SENTRY_DSN=..., else the environment variable
 # of that name; with none, Send Report is hidden and Save Report stays. Never commit a DSN.
 CMAKE_DEPENDENT_OPTION(AZAHARFRAME_SENTRY "Crash reports can be sent to Sentry (sentry-native)" ON "ENABLE_FRAME_XR" OFF)
 set(AZAHARFRAME_SENTRY_DSN "" CACHE STRING "The Sentry DSN Send Report sends to (empty: no Send Report)")
+# AzaharVR: the PC VR build ("Azahar VR": Linux x86-64 and Windows). On for anything but the
+# Steam Frame's aarch64 Linux: the product name, the data folder (azahar-vr) and the test-switch
+# folder (AzaharVR). The define is only added when it is on, so the Frame's compile lines stay as
+# they were.
+set(DEFAULT_AZAHARVR_PC ON)
+if (NOT WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+    set(DEFAULT_AZAHARVR_PC OFF)
+endif()
+option(AZAHARVR_PC "Build Azahar VR (the PC VR product) rather than Azahar for Frame" ${DEFAULT_AZAHARVR_PC})
+if (AZAHARVR_PC)
+    add_compile_definitions(AZAHARVR_PC)
+endif()
 
 option(ENABLE_DISCORD_RPC "Enables Discord Rich Presence" OFF)
 
