@@ -35,7 +35,11 @@ std::string TempDir(const char* name) {
 }
 
 void Write(const std::string& path, const std::string& text) {
+#ifdef _WIN32 // AzaharVR: the log as Azahar writes it, LF only
+    std::ofstream(path, std::ios::trunc | std::ios::binary) << text;
+#else
     std::ofstream(path, std::ios::trunc) << text;
+#endif
 }
 
 bool Exists(const std::string& path) {

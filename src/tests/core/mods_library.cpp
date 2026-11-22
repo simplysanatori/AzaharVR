@@ -344,6 +344,9 @@ TEST_CASE("Mods: non-ASCII archive names unpack under any locale", "[mods]") {
     if (FindBsdtar().empty()) {
         SKIP("bsdtar is not installed");
     }
+#ifdef _WIN32 // AzaharVR: no POSIX locales, and the test's UTF-8 names are not the code page's
+    SKIP("POSIX locales only");
+#endif
     const std::string dir = TempDir("unicode");
     const std::string name = "Xbox 1\xE2\x81\x84" "2 UI"; // U+2044 FRACTION SLASH
     fs::create_directories(dir + "src/" + name);
@@ -396,9 +399,20 @@ TEST_CASE("Mods: 7z through bsdtar", "[mods]") {
         SKIP("bsdtar is not installed");
     }
     const std::string dir = TempDir("sevenz");
+#ifdef _WIN32 // AzaharVR: cmd.exe, and bsdtar is Windows' own tar.exe
+    const auto make = [&](std::string cmd) {
+        if (cmd.rfind("bsdtar ", 0) == 0) {
+            cmd = "\"" + FindBsdtar() + "\"" + cmd.substr(6);
+        }
+        std::replace(cmd.begin(), cmd.end(), '\'', '"');
+        const std::string where = fs::absolute(dir).make_preferred().string(); // cd reads no "/tmp"
+        return std::system(("cd /d \"" + where + "\" && " + cmd + " >NUL 2>&1").c_str()) == 0;
+    };
+#else
     const auto make = [&](const std::string& cmd) {
         return std::system(("cd '" + dir + "' && " + cmd + " >/dev/null 2>&1").c_str()) == 0;
     };
+#endif
     SECTION("a 7z and a tar.gz unpack to the right paths, then the layout mapping applies") {
         fs::create_directories(dir + "src/v100/citra");
         fs::create_directories(dir + "src/docs");
@@ -464,6 +478,9 @@ TEST_CASE("Mods: 7z through bsdtar", "[mods]") {
         CHECK_FALSE(fs::exists(out));
     }
     SECTION("zip-slip and absolute paths are refused before anything is written") {
+#ifdef _WIN32 // AzaharVR: Windows' tar.exe has no -s to make the test archive
+        SKIP("POSIX tools only");
+#endif
         std::ofstream(dir + "a") << "evil";
         REQUIRE(make("bsdtar -cf slip.7z --format 7zip -s '|^a|../evil|' a"));
         const auto r = ExtractWithBsdtar(Read(dir + "slip.7z"), ArchiveKind::SevenZip);
@@ -476,6 +493,9 @@ TEST_CASE("Mods: 7z through bsdtar", "[mods]") {
         REQUIRE(r2.error == "The archive holds an unsafe file path");
     }
     SECTION("links are refused") {
+#ifdef _WIN32 // AzaharVR: no /etc/passwd or ln -s to make the test archive
+        SKIP("POSIX tools only");
+#endif
         REQUIRE(make("ln -s /etc/passwd link && bsdtar -cf l.tar --format ustar link"));
         const auto r = ExtractWithBsdtar(Read(dir + "l.tar"), ArchiveKind::Unknown);
         REQUIRE(r.files.empty());

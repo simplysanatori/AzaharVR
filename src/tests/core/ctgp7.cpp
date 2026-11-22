@@ -306,7 +306,12 @@ TEST_CASE("CTGP-7: the download follows GameBanana's redirects and checks the fi
         return r;
     };
     const std::string page_key = "https://gamebanana.com/apiv11/Mod/50221/ProfilePage";
+#ifdef _WIN32 // AzaharVR: an empty file (Windows has no /dev/null)
+    WriteAll(dir + "empty", "");
+    REQUIRE(FileMd5(dir + "empty") == "d41d8cd98f00b204e9800998ecf8427e");
+#else
     REQUIRE(FileMd5("/dev/null") == "d41d8cd98f00b204e9800998ecf8427e");
+#endif
     SECTION("a good download") {
         WriteAll(dir + "probe", zip);
         REQUIRE(FileMd5(dir + "probe") == md5);

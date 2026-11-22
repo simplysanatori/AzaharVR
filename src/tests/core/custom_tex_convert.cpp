@@ -215,7 +215,11 @@ TEST_CASE("convert: a pack, its copy, a second run, a bad PNG", "[texparts][conv
     const C::Result r = converter.Run();
     REQUIRE(r.code == C::kOk);
     const fs::path out = root / "0004000000033500-astc4x4";
+#ifdef _WIN32 // AzaharVR: the converter's paths are spelt with '/' on Windows too
+    CHECK(r.output == out.generic_string());
+#else
     CHECK(r.output == out.string());
+#endif
     CHECK(last_done == 3);
     CHECK(last_total == 3);
     CHECK(last_permille == 1000);

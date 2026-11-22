@@ -5,6 +5,7 @@
 // AzaharFrame ui3: Optimize for Frame's file side (core/custom_tex/optimize.h): the pair, what the
 // converter prints, the Customize choices carried both ways, the packs asked about once.
 
+#include <algorithm> // AzaharVR: std::replace (Windows)
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -137,14 +138,23 @@ TEST_CASE("optimize: Remove Original's guard", "[texparts][optimize][remove]") {
     Write(png / "tex1_64x64_0123456789ABCDEF_14.png", "x");
     Write(png / ".azaharframe-download.json", R"({"id":"oot3d-4k","source":"github"})");
     fs::create_symlink(outside / "keep.txt", png / "a-link-out.txt"); // removed, never followed
+#ifdef _WIN32 // AzaharVR: a link to a folder is a folder link on Windows; JSON wants '/'
+    const auto link = [](const fs::path& target, const fs::path& at) {
+        fs::create_directory_symlink(target, at);
+    };
+    const auto marker = [&](std::string source) {
+        std::replace(source.begin(), source.end(), '\\', '/');
+#else
+    const auto link = [](const fs::path& target, const fs::path& at) { fs::create_symlink(target, at); };
     const auto marker = [&](const std::string& source) {
+#endif
         Write(copy / kMarker, source.empty() ? std::string(R"({"format":"ASTC 4x4"})")
                                              : R"({"format":"ASTC 4x4","source":")" + source + "\"}");
     };
     marker("../4K");
     Write(copy / "tex1_64x64_0123456789ABCDEF_14.ktx", "k");
     const fs::path active = load / "textures" / "0004000000033500";
-    fs::create_symlink(copy, active);
+    link(copy, active);
     const auto roots = ManagedRoots(load.string());
 
     // The right one, the copy in use: allowed, and it is a catalog pack ("download it again").
@@ -157,10 +167,10 @@ TEST_CASE("optimize: Remove Original's guard", "[texparts][optimize][remove]") {
 
     // What the game reads now: never.
     fs::remove(active);
-    fs::create_symlink(png, active);
+    link(png, active);
     CHECK(CheckRemoveOriginal(copy.string(), roots, active.string()).error == "Original Is in Use");
     fs::remove(active);
-    fs::create_symlink(copy, active);
+    link(copy, active);
 
     // A wrong source: the copy itself, the folder holding both (a root's child) and a root, another
     // optimized copy, outside the texture folders.

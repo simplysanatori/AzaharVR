@@ -8,6 +8,7 @@
 // made-up ones with only the headers that are read.
 
 #include <algorithm>
+#include <cctype> // AzaharVR: std::tolower (Windows)
 #include <filesystem>
 #include <fstream>
 #include <set>
@@ -332,8 +333,18 @@ TEST_CASE("Emerald detect: a copy from another computer, with no state.json", "[
         CHECK(e.playable);
         CHECK(e.version.empty());
         CHECK(e.language.empty()); // English or Português (Brasil)
+#ifdef _WIN32 // AzaharVR: names are not case sensitive: Emerald3DS is the app's emerald3ds folder
+        const auto lower = [](std::string s) {
+            std::transform(s.begin(), s.end(), s.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return s;
+        };
+        CHECK(lower(N(e.game_path)) == lower(N(dir + "Emerald3DS.3dsx")));
+        CHECK(lower(N(e.three_dsx)) == lower(N(dir + "Emerald3DS.3dsx")));
+#else
         CHECK(N(e.game_path) == N(dir + "Emerald3DS.3dsx"));
         CHECK(N(e.three_dsx) == N(dir + "Emerald3DS.3dsx"));
+#endif
         CHECK(e.game_copy.empty());
     }
     SECTION("a deep game folder") {
@@ -504,6 +515,10 @@ TEST_CASE("Emerald uninstall: Also Delete Save Data, only when ticked", "[emhb]"
 }
 
 TEST_CASE("Emerald uninstall: an imported copy and an installed title", "[emhb]") {
+#ifdef _WIN32 // AzaharVR: names are not case sensitive: the import's Emerald3DS folder is the app's
+              // own emerald3ds folder, which the uninstall keeps
+    SKIP("case-sensitive file names only");
+#endif
     Scratch s("uninstall-imported");
     const E::Paths p = s.Paths();
     const std::string dir = s.root.string() + "/sdmc/3ds/Emerald3DS/";
