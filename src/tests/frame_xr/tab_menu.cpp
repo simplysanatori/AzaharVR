@@ -4902,6 +4902,7 @@ MenuModel KiuModel(bool mapped, int mode) {
     m.game_title = "Kid Icarus: Uprising";
     m.mods.angels_aim.shown = true;
     m.mods.angels_aim.mapped = mapped;
+    m.mods.angels_aim.report_url = kAngelsAimIssuesUrl;
     m.immersive_mode = mode;
     m.scope = 1;
     m.gyro_aim = 2; // Direct Aim: every Aiming row on
