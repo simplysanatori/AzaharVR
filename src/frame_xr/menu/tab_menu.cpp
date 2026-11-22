@@ -105,7 +105,8 @@ std::string SliderText(Id id, float value) {
         id == Id::WeaponScale || id == Id::ProjectileSize || id == Id::ProjectileSpeed ||
         id == Id::WeaponOpacity || id == Id::ProjectileOpacity ||
         id == Id::MuzzleFlashSize || id == Id::HudSpacingX || id == Id::HudSpacingY ||
-        id == Id::KiuBottomSize || id == Id::KiuBottomOpacity || id == Id::KiuReticleSize) { // AzaharFrame kiugyro: "10%" (kiufix: the strengths, the scale; kiuopacity: the opacities; kiuweap2: the flash's size)
+        id == Id::KiuBottomSize || id == Id::KiuBottomOpacity || id == Id::KiuReticleSize ||
+        id == Id::KiuPitOpacity) { // AzaharFrame kiugyro: "10%" (kiufix: the strengths, the scale; kiuopacity: the opacities; kiuweap2: the flash's size)
         return Format("%.0f%%", value);
     }
     if (id == Id::AutosaveEvery) { // AzaharFrame autosave: the stop's minutes
@@ -226,8 +227,11 @@ Row RowFor(Id id, const MenuModel& m) {
     case Id::KiuBottomOpacity:
         slider(m.kiu_bottom_opacity);
         break;
-    case Id::KiuOverShoulder:
-        on_off(m.kiu_over_shoulder);
+    case Id::KiuOverShoulder: // AzaharFrame kiu133: Camera
+        segmented(std::clamp(m.kiu_view, 0, 2));
+        break;
+    case Id::KiuPitOpacity:
+        slider(m.kiu_pit_opacity);
         break;
     case Id::KiuSnapTurn:
         segmented(std::clamp(m.kiu_snap_turn, 0, static_cast<int>(kSnapTurnDegrees.size()) - 1));
@@ -492,6 +496,7 @@ SettingsSection SectionOf(Id id) {
     case Id::KiuBottomReset:
     case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
+    case Id::KiuPitOpacity: // AzaharFrame kiu133
     case Id::KiuSnapTurn:
         return SettingsSection::Immersive;
     default:
@@ -567,6 +572,7 @@ bool PerGameSetting(Id id) {
     case Id::KiuBottomOpacity:
     case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
+    case Id::KiuPitOpacity: // AzaharFrame kiu133
     case Id::KiuSnapTurn:
         return true;
     default:
@@ -708,6 +714,9 @@ std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& m) {
         rows.push_back(Id::KiuBottomReset);
     }
     rows.push_back(Id::KiuOverShoulder);
+    if (m.kiu_view != 0) { // AzaharFrame kiu133: the views from outside Pit
+        rows.push_back(Id::KiuPitOpacity);
+    }
     rows.push_back(Id::KiuSnapTurn);
     rows.push_back(Id::KiuReticleSize);
     return rows;
@@ -741,7 +750,7 @@ std::vector<AngelsAimRowGroup> AngelsAimGroups(const MenuModel& model) {
     }
     aiming.rows.push_back(Id::AngelsAimSettings); // the Controls tab at Aiming, as before
     AngelsAimRowGroup view{AngelsAimGroupKind::View, {Id::ImmersiveMode}};
-    for (const Id id : {Id::KiuOverShoulder, Id::KiuSnapTurn}) {
+    for (const Id id : {Id::KiuOverShoulder, Id::KiuPitOpacity, Id::KiuSnapTurn}) {
         if (has(fp, id)) {
             view.rows.push_back(id);
         }
@@ -934,6 +943,11 @@ const std::vector<std::string>& OptionsFor(Id id) {
                                                        kTriggerLayoutOriginal};
         return kTrigger;
     }
+    case Id::KiuOverShoulder: { // AzaharFrame kiu133: Camera, Kiu::FirstPerson::ViewFor's order
+        static const std::vector<std::string> kView{kCameraFirstPerson, kOverShoulderRow,
+                                                    kCameraGame};
+        return kView;
+    }
     case Id::KiuBottomScreen: { // AzaharFrame kiu131: the stored order
         static const std::vector<std::string> kBottom{kBottomScreenOff, kBottomScreenPersistent,
                                                       kBottomScreenWrist};
@@ -1103,8 +1117,10 @@ std::string LabelFor(Id id) {
         return kWristSideRow;
     case Id::KiuReticleSize:
         return kReticleSizeRow;
-    case Id::KiuOverShoulder:
-        return kOverShoulderRow;
+    case Id::KiuOverShoulder: // AzaharFrame kiu133
+        return kCameraRow;
+    case Id::KiuPitOpacity:
+        return kPitOpacityRow;
     case Id::KiuSnapTurn:
         return kTurningRow;
     case Id::CalibrateAimReset:
@@ -1484,8 +1500,10 @@ std::string ExplainFor(Id id) {
         return kWristSideTip;
     case Id::KiuReticleSize:
         return kReticleSizeTip;
-    case Id::KiuOverShoulder:
-        return kOverShoulderTip;
+    case Id::KiuOverShoulder: // AzaharFrame kiu133
+        return kCameraTip;
+    case Id::KiuPitOpacity:
+        return kPitOpacityTip;
     case Id::KiuSnapTurn:
         return kTurningTip;
     case Id::Autosave: // AzaharFrame autosave
@@ -1598,6 +1616,9 @@ SliderRange SliderFor(Id id) {
         return {50.0f, 200.0f, 10.0f};
     }
     if (id == Id::KiuBottomOpacity) { // 20 to 100 %, as Weapon Opacity
+        return {20.0f, 100.0f, 10.0f};
+    }
+    if (id == Id::KiuPitOpacity) { // AzaharFrame kiu133: 20 to 100 %, as the other opacities
         return {20.0f, 100.0f, 10.0f};
     }
     if (id == Id::KiuReticleSize) { // 30 to 150 %

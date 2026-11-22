@@ -152,13 +152,27 @@ bool On() {
 }
 
 bool ShoulderOn() {
-    if (!On() || Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_EYE_OFFSET")) {
+    if (!On() || Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_EYE_OFFSET") ||
+        GameCameraOn()) { // AzaharFrame kiu133: the Game's Camera wins
         return false;
     }
     const auto text = Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_SHOULDER");
     float back = 0.0f, up = 0.0f, side = 0.0f;
     return ShoulderFor(text ? text->c_str() : nullptr,
                        Settings::values.vr_kiu_over_shoulder.GetValue(), back, up, side);
+}
+
+bool GameCameraOn() {
+    if (!On() || Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_EYE_OFFSET")) {
+        return false;
+    }
+    const auto text = Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_GAME_CAMERA");
+    return GameCameraFor(text ? text->c_str() : nullptr,
+                         Settings::values.vr_kiu_game_camera.GetValue());
+}
+
+bool OutsideViewOn() {
+    return GameCameraOn() || ShoulderOn();
 }
 
 bool Wanted() {

@@ -1505,7 +1505,7 @@ int main(int argc, char** argv) {
         ka.kiu_bottom_screen = 2;
         ka.kiu_bottom_size = 150;
         ka.kiu_bottom_opacity = 80;
-        ka.kiu_over_shoulder = true;
+        ka.kiu_view = 1; // AzaharFrame kiu133: Over the Shoulder (Camera)
         ka.kiu_snap_turn = SnapTurnIndexOf(45);
         ok &= shot("kiutoggles-2-angels-aim-rows-on", ka, kv);
         kv.hover = {Id::KiuBottomScreen, kLabelIndex};
@@ -1532,6 +1532,25 @@ int main(int argc, char** argv) {
             }
             ok &= shot(names[i], ka, kv);
         }
+        // AzaharFrame kiu133: Camera's Game's Camera with Pit Opacity under it at 50 %, their
+        // tooltips, and Over the Shoulder with it.
+        ka.kiu_bottom_screen = 0;
+        ka.kiu_view = 2;
+        ka.kiu_pit_opacity = 50;
+        kv.scroll[static_cast<int>(Tab::Settings)] = 0.0f;
+        kv.hover = {};
+        kv.tooltip = Id::None;
+        ok &= shot("kiu133-1-camera-game", ka, kv);
+        kv.hover = {Id::KiuOverShoulder, kLabelIndex};
+        kv.tooltip = Id::KiuOverShoulder;
+        ok &= shot("kiu133-2-camera-tooltip", ka, kv);
+        kv.hover = {Id::KiuPitOpacity, kLabelIndex};
+        kv.tooltip = Id::KiuPitOpacity;
+        ok &= shot("kiu133-3-pit-opacity-tooltip", ka, kv);
+        ka.kiu_view = 1;
+        kv.hover = {};
+        kv.tooltip = Id::None;
+        ok &= shot("kiu133-4-camera-shoulder", ka, kv);
     }
     MenuModel gv = m; // Global chosen, the game has its own Immersive Mode
     gv.locked[static_cast<std::size_t>(Id::ImmersiveMode)] = Lock::GameValue;
@@ -3006,6 +3025,12 @@ int main(int argc, char** argv) {
         kc.mods.mods.catalog = CatalogState::Ready;
         hv.scroll[static_cast<int>(Tab::Mods)] = 1.0e5f;
         ok &= shot("kiu132-hub-14-cstick-mods-end", kc, hv);
+        // AzaharFrame kiu133: the View group with Camera's Game's Camera and Pit Opacity.
+        MenuModel kv133 = kh;
+        kv133.kiu_view = 2;
+        kv133.kiu_pit_opacity = 60;
+        hv.scroll[static_cast<int>(Tab::Mods)] = 1320.0f;
+        ok &= shot("kiu133-hub-view", kv133, hv);
         // The C-Stick mods' two toasts (a mod left out of the run; Angel's Aim chosen with one
         // loaded).
         ok &= toast_shot("kiu132-cstick-toasts.png",

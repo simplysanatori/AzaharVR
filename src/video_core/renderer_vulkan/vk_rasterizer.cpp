@@ -571,6 +571,25 @@ void RasterizerVulkan::DrawTriangles() {
 bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     MICROPROFILE_SCOPE(Vulkan_Drawing);
     SyncDrawState();
+    if (VideoCore::Immersive::g_draw_log.load(std::memory_order_relaxed)) { // AzaharFrame kiu133
+        const auto& om = regs.framebuffer.output_merger;
+        const auto& va = regs.pipeline.vertex_attributes;
+        LOG_INFO(Render,
+                 "kiu draw: tex0 {} {:08X} {}x{} fmt {} | verts {} {} attr0 {:08X} idx {:08X} | "
+                 "blend {} src {} dst {} | depth test {} write {} | colour {:08X}",
+                 regs.texturing.main_config.texture0_enable.Value(),
+                 regs.texturing.texture0.GetPhysicalAddress(),
+                 regs.texturing.texture0.width.Value(), regs.texturing.texture0.height.Value(),
+                 static_cast<u32>(regs.texturing.texture0_format.Value()),
+                 accelerate ? regs.pipeline.num_vertices : static_cast<u32>(vertex_batch.size()),
+                 accelerate ? "gpu" : "cpu",
+                 va.GetPhysicalBaseAddress() + va.attribute_loaders[0].data_offset,
+                 va.GetPhysicalBaseAddress() + regs.pipeline.index_array.offset,
+                 om.alphablend_enable.Value(), static_cast<u32>(om.alpha_blending.factor_source_rgb.Value()),
+                 static_cast<u32>(om.alpha_blending.factor_dest_rgb.Value()),
+                 om.depth_test_enable.Value(), om.depth_write_enable.Value(),
+                 regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress());
+    }
 
     const bool shadow_rendering = regs.framebuffer.IsShadowRendering();
     const bool has_stencil = regs.framebuffer.HasStencil();
@@ -630,6 +649,32 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         // AzaharFrame kiuvr: the same rows for Kid Icarus: Uprising's first person trace.
         if (VideoCore::Immersive::g_world_view_tap.wanted.load(std::memory_order_relaxed)) {
             VideoCore::Immersive::g_world_view_tap.Store(vr_world_eye);
+        }
+    }
+
+    // AzaharFrame kiu133: Pit Opacity: his draws found (phase 1 and 2), and those the game
+    // draws opaque blended with a constant alpha (the next draw's SyncDrawState puts it back).
+    if (accelerate && regs.framebuffer.output_merger.depth_test_enable) {
+        const auto& va = regs.pipeline.vertex_attributes;
+        const u32 attr0 = va.GetPhysicalBaseAddress() + va.attribute_loaders[0].data_offset;
+        auto& pit = VideoCore::Immersive::g_pit_draws;
+        pit.Seen(attr0);
+        const float alpha = pit.AlphaFor(attr0);
+        auto& b = pipeline_info.state.blending;
+        using F = Pica::FramebufferRegs::BlendFactor;
+        const bool opaque = !b.blend_enable ||
+                            (b.src_color_blend_factor == F::One && b.dst_color_blend_factor == F::Zero);
+        if (alpha < 1.0f && opaque && !b.rgb_blend_emulation && !b.alpha_blend_emulation) {
+            b.blend_enable = 1;
+            b.color_blend_eq.Assign(Pica::FramebufferRegs::BlendEquation::Add);
+            b.alpha_blend_eq.Assign(Pica::FramebufferRegs::BlendEquation::Add);
+            b.src_color_blend_factor.Assign(F::ConstantAlpha);
+            b.dst_color_blend_factor.Assign(F::OneMinusConstantAlpha);
+            b.src_alpha_blend_factor.Assign(F::ConstantAlpha);
+            b.dst_alpha_blend_factor.Assign(F::OneMinusConstantAlpha);
+            const u32 a8 = static_cast<u32>(std::clamp(alpha, 0.0f, 1.0f) * 255.0f + 0.5f);
+            pipeline_info.dynamic_info.blend_color =
+                (pipeline_info.dynamic_info.blend_color & 0x00FFFFFFu) | (a8 << 24);
         }
     }
 

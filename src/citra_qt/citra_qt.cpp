@@ -5778,8 +5778,12 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::WristSide: // global
         set(v.vr_wrist_side, std::min<u32>(u, 1));
         break;
-    case S::KiuOverShoulder:
-        set(v.vr_kiu_over_shoulder, r.value != 0);
+    case S::KiuOverShoulder: // AzaharFrame kiu133: Camera, both keys
+        set(v.vr_kiu_over_shoulder, FrameXr::Kiu::FirstPerson::ViewOverShoulder(r.value));
+        set(v.vr_kiu_game_camera, FrameXr::Kiu::FirstPerson::ViewGameCamera(r.value));
+        break;
+    case S::KiuPitOpacity: // AzaharFrame kiu133
+        set(v.vr_kiu_pit_opacity, std::clamp<u32>(u, 20, 100));
         break;
     case S::KiuSnapTurn: // degrees: 30, 45, 60 or 90; anything else Smooth (0)
         set(v.vr_kiu_snap_turn, u == 30 || u == 45 || u == 60 || u == 90 ? u : 0u);

@@ -372,6 +372,8 @@ void RestoreGlobalState(bool is_powered_on) {
     values.vr_kiu_bottom_x.SetGlobal(true);
     values.vr_kiu_bottom_y.SetGlobal(true);
     values.vr_kiu_reticle_size.SetGlobal(true);
+    values.vr_kiu_game_camera.SetGlobal(true); // AzaharFrame kiu133
+    values.vr_kiu_pit_opacity.SetGlobal(true);
     values.vr_dynamic_resolution.SetGlobal(true); // AzaharFrame menuux
     values.autosave_enabled.SetGlobal(true);      // AzaharFrame autosave
     values.autosave_every.SetGlobal(true);

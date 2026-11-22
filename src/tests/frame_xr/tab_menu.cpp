@@ -3313,7 +3313,10 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
     CHECK(LabelFor(Id::KiuBottomSize) == "Bottom Screen Size");
     CHECK(LabelFor(Id::KiuBottomOpacity) == "Bottom Screen Opacity");
     CHECK(LabelFor(Id::KiuBottomReset) == "Reset Bottom Screen Position");
-    CHECK(LabelFor(Id::KiuOverShoulder) == "Over the Shoulder");
+    // AzaharFrame kiu133: Over the Shoulder is one of Camera's choices.
+    CHECK(LabelFor(Id::KiuOverShoulder) == "Camera");
+    CHECK(OptionsFor(Id::KiuOverShoulder) ==
+          std::vector<std::string>{"First Person", "Over the Shoulder", "Game's Camera"});
     CHECK(LabelFor(Id::KiuSnapTurn) == "Turning");
     CHECK(LabelFor(Id::WristSide) == "Wrist Side");
     CHECK(LabelFor(Id::KiuReticleSize) == "Reticle Size");
@@ -5047,7 +5050,7 @@ TEST_CASE("Angel's Aim settings: drawn in the segment, each control a target",
     CHECK(hit(Id::KiuSnapTurn, 4));
     CHECK(hit(Id::WristSide, 1));
     CHECK(hit(Id::Recoil, -1));
-    CHECK(hit(Id::KiuOverShoulder, -1));
+    CHECK(hit(Id::KiuOverShoulder, 2)); // AzaharFrame kiu133: Camera's Game's Camera
     CHECK(hit(Id::ImmersiveMode, -1));
     CHECK(hit(Id::KiuBottomReset, -1));
     CHECK(hit(Id::AngelsAimSettings, -1));
@@ -5066,4 +5069,40 @@ TEST_CASE("Angel's Aim settings: drawn in the segment, each control a target",
         opened = FindHit(d, Id::ImmersiveMode, 3) != nullptr;
     }
     CHECK(opened);
+}
+
+// AzaharFrame kiu133: Camera (First Person, Over the Shoulder, Game's Camera) and, in the two
+// views from outside Pit, Pit Opacity: in the Settings tab's first-person rows and the hub's
+// View group, the same rows.
+TEST_CASE("Tab menu: Angel's Aim's Camera and Pit Opacity", "[frame_xr][tabmenu][kiu133]") {
+    CHECK(LabelFor(Id::KiuPitOpacity) == "Pit Opacity");
+    CHECK(!ExplainFor(Id::KiuPitOpacity).empty());
+    CHECK(PerGameSetting(Id::KiuPitOpacity));
+    CHECK(SectionOf(Id::KiuPitOpacity) == SettingsSection::Immersive);
+    CHECK(SliderFor(Id::KiuPitOpacity).min == 20.0f);
+    CHECK(SliderFor(Id::KiuPitOpacity).max == 100.0f);
+    const MenuModel defaults;
+    CHECK(defaults.kiu_view == 0);
+    CHECK(defaults.kiu_pit_opacity == 100);
+    for (const int view : {0, 1, 2}) {
+        INFO("view " << view);
+        MenuModel m = KiuModel(true, 4);
+        m.kiu_view = view;
+        const auto fp = AngelsAimFirstPersonRows(m);
+        CHECK(Has(fp, Id::KiuOverShoulder));
+        CHECK(Has(fp, Id::KiuPitOpacity) == (view != 0));
+        const auto groups = AngelsAimGroups(m);
+        REQUIRE(groups.size() == 4);
+        CHECK(Has(groups[1].rows, Id::KiuPitOpacity) == (view != 0));
+        // The row right under Camera.
+        const auto at = std::find(fp.begin(), fp.end(), Id::KiuOverShoulder);
+        if (view != 0) {
+            REQUIRE(at + 1 != fp.end());
+            CHECK(*(at + 1) == Id::KiuPitOpacity);
+        }
+    }
+    MenuModel usa = KiuModel(true, 4);
+    usa.mods.angels_aim.mapped = false; // not the European game: none of first person's rows
+    usa.kiu_view = 2;
+    CHECK_FALSE(Has(AngelsAimFirstPersonRows(usa), Id::KiuPitOpacity));
 }

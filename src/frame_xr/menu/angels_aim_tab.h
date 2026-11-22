@@ -146,6 +146,18 @@ inline constexpr const char* kWristSideTip =
 inline constexpr const char* kOverShoulderRow = "Over the Shoulder";
 inline constexpr const char* kOverShoulderTip =
     "Moves your view behind and above Pit, so you can see him.";
+/// AzaharFrame kiu133: Over the Shoulder became one of Camera's choices (the row's old name and
+/// tip, approved, are its choice name), with First Person and the Game's Camera; Pit Opacity for
+/// the two views from outside Pit. PROPOSED strings: they need the owner's approval.
+inline constexpr const char* kCameraRow = "Camera";
+inline constexpr const char* kCameraFirstPerson = "First Person";
+inline constexpr const char* kCameraGame = "Game's Camera";
+inline constexpr const char* kCameraTip =
+    "Where you see from: Pit's eyes, behind and above Pit, or where the game itself puts its "
+    "camera.";
+inline constexpr const char* kPitOpacityRow = "Pit Opacity";
+inline constexpr const char* kPitOpacityTip =
+    "How solid Pit looks when you see him from behind. Lower lets you see through him.";
 inline constexpr const char* kTurningRow = "Turning";
 inline constexpr const char* kTurningSmooth = "Smooth";
 /// Turning's snap choices after Smooth (Menu::kSnapTurnDegrees' 30, 45, 60, 90).
