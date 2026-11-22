@@ -172,14 +172,14 @@ r12; its own early exit changes r2 and the flags too).
 | `AZAHARFRAME_KIU_BULLET_KEEP=1` | bullets out of the game camera's view live on |
 | `AZAHARFRAME_KIU_EYE=1` | the scene camera's eye at the player; the view direction the game's |
 | `AZAHARFRAME_KIU_EYE_OFFSET=x,y,z` | the eye's offset in the player's own axes (default 0,12.3,0) |
-| `AZAHARFRAME_KIU_HIDE_PLAYER=1` | the actor's local scale 1 → 0.001 (a data write; exactly 0.001 goes back to 1 when off, or when not playing) |
+| `AZAHARFRAME_KIU_HIDE_PLAYER=1` | the actor's local scale 1 → 0.001 (a data write; exactly 0.001 goes back to 1 when off, or when not playing). AzaharFrame kiupit: first person does it by itself on land ("Pit's own model in first person" below); `=0` keeps him drawn there |
 | `AZAHARFRAME_KIU_SHOT_TEST=yaw,pitch[,dx,dy,dz]` | the player's shots turned by that many degrees from the game's aim (yaw about the world's up axis: positive is to the left; pitch up about the game camera's level side axis) and, with the last three, started at the player's position + dx to the side (positive: to the right), dy up, dz ahead of the game camera's level view |
 | `AZAHARFRAME_KIU_SHOT_NO_LOCK=1` | with SHOT_TEST: no lock target (no homing) |
 | `AZAHARFRAME_KIU_ENEMY_KEEP=1` | passed fliers fly their path again, for good |
 | `AZAHARFRAME_KIU_ENEMY_KEEP_S=<seconds>` | the same until an enemy is that old; replaces ENEMY_KEEP |
 | `AZAHARFRAME_KIU_GROUP_KEEP=1` | land spawner groups are not despawned |
 | `AZAHARFRAME_KIU_NO_FOLLOW=1` | the land camera no longer takes back part of a turn while the player runs |
-| `AZAHARFRAME_KIU_HOOK_TRACE=1` (or 2) | a status line a second (2: one a VBlank): `xr: Kid Icarus hooks: t … [groups] player … scene eye …` |
+| `AZAHARFRAME_KIU_HOOK_TRACE=1` (or 2) | a status line a second (2: one a VBlank): `xr: Kid Icarus hooks: t … [groups] player … scene eye … round shadows N` (AzaharFrame kiupit: the count in the game's round-shadow list, `-` when it cannot be read) |
 
 The hook is set when Kid Icarus: Uprising boots (`citra_qt.cpp`, `OnGameBoot`) and runs at each
 VBlank after Direct Aim's and Right Stick turning's (`common/frame_emu_poll.h`, `RunPatch`), in VR
@@ -278,7 +278,7 @@ Other Games; the hooks' log line says why. The switches below still force their 
 | `AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]` | over the shoulder: the eye this many metres behind, above and to the right of the first-person eye along the camera's level view (game units = metres × the leaning scale, 7.7 per metre at life size); `AZAHARFRAME_KIU_EYE_OFFSET` wins |
 | `AZAHARFRAME_KIU_WRIST_SCREEN=0\|1` | Angel's Aim's Secondary Screen on the off hand's wrist (default 0, off): shown while the wrist is turned up, touched by the aiming hand's beam without a shot ("The Secondary Screen on the wrist" below) |
 | `AZAHARFRAME_KIU_FP_FACTOR=<f>` | the most the game draws past its own frame on either axis in first person (1 to 8, default 6); past it the screen is smaller on that axis ("The screen in first person" below) |
-| `AZAHARFRAME_KIU_FP_TRACE=1\|2`, `AZAHARFRAME_KIU_FP_PROBE=<hex>` | a line of `key=value` words a second (2: a VBlank): the scene camera, the view register, the rest pose, the head, the hand's ray in the world, the reticle, the mailbox; and an actor's place in the world and in the head's view |
+| `AZAHARFRAME_KIU_FP_TRACE=1\|2`, `AZAHARFRAME_KIU_FP_PROBE=<hex>` | a line of `key=value` words a second (2: a VBlank): the scene camera, the view register, the rest pose, the head, the hand's ray in the world, the reticle, the mailbox; and an actor's place in the world and in the head's view. AzaharFrame kiupit: `cam_node_44=` the scene camera node's ten words from +0x44, as floats (to find its near plane) |
 
 ### The transform (`kiu_room.h`)
 
@@ -553,6 +553,43 @@ off): one word, `b shadow_stub` at 0x57B054.
   0x551238–0x551838 and the empty cave are byte for byte the same in the original, the mod's
   base, 16:9 and 21:9 builds (V, files).
 
+### Pit's own model in first person (AzaharFrame kiupit)
+
+The owner's report (Frame, 2026-11-22): in Angel's Aim "Pit's shadow" shows in first person and
+looks like his head.
+
+- **Not the round shadow.** The "player shadow" group is in whenever first person is on
+  (`kiu_hooks.cpp`, `want_player_shadow`: `GroupWanted(first_person, …)`; no test switch needed,
+  only `NO_PLAYER_SHADOW=0` keeps it out), and in the air there is no round shadow at all (above).
+  The owner's air pictures (an air battle, the weapon in the hand) show a pale see-through
+  shape in the middle of the view, a head with shoulders below it, in front of the eye and
+  between it and the reticle: the shape of Pit seen from just behind his head, drawn faded. His
+  dark picture (likely a land section) shows no round disc; a faint pale upright shape is in its
+  middle (I: too dark to be sure).
+- **What it is (I, from the notes above and the pictures).** The game draws its player faded
+  when its camera is near him ("Why Pit is faded"), and first person puts the eye inside him: on
+  land 12.3 units up, in his head; in the air 3 up (`kEyeOffsetAir`), with his head ahead of it.
+  So his head (in the air) and his body looking down (on land, "Pit's own body") stay on view,
+  see-through.
+- **On land: hidden.** First person writes `HIDE_PLAYER`'s scale by itself
+  (`KH::HideInFirstPerson`): on land, with the shots from the hand (Aiming = Direct Aim: their
+  start is the mailbox's) and the eye at his middle (no `SHOULDER`, no `EYE_OFFSET` with a side
+  or ahead part: those are there to see him). `HIDE_PLAYER=0` keeps him drawn (an A/B);
+  `HIDE_PLAYER=1` hides him anywhere, as before. Cutscenes and pauses (the playing flag down) and
+  the air put the scale back (`HideWrite`). The log says `the player's model hidden (local scale
+  0.001) (first person, on land)`. Not seen on the headset or the desktop yet: whether he takes
+  less damage on land (his hurt boxes, as in the air), whether his close attacks still hit, and
+  whether anything else of him shrinks with the scale.
+- **In the air: not done.** The scale write is not usable there (above). Ways not tried: the eye
+  ahead of his head (live, `EYE_OFFSET=0,3,<ahead>` during an air battle only, as it applies on
+  land too: in first person a side or ahead part lays it along the camera's level view, +z
+  ahead); a near plane far enough out to cut him (the scene camera node's, not found:
+  `FP_TRACE`'s `cam_node_44=` lists the words after its shape); skipping his model's draw (its
+  code was never looked for).
+- **To see the round shadows.** `HOOK_TRACE=1` ends its line with `round shadows N`, the count
+  in the game's list ([0xD49490] + 0x14): 0 in the Practice Range with the group in, 1 with
+  `NO_PLAYER_SHADOW=0` (as measured for "Pit's entry" above; this line itself not run).
+
 
 ### The game's sprites (AzaharFrame kiu2d)
 
@@ -597,9 +634,9 @@ off): one word, `b shadow_stub` at 0x57B054.
 - **Pit's own body (V, Chapter 1's land section).** Looking down in first person shows a
   see-through white shape of his legs and body on the floor: the game draws the player faded
   when the camera is close, and first person does not hide him. `AZAHARFRAME_KIU_HIDE_PLAYER=1`
-  takes it away on land (V); it is not in Angel's Aim's set (in the air it washes the picture
-  out and he takes less damage; his hurt boxes on land are unchecked). The player's round
-  shadow is not it (`NO_PLAYER_SHADOW=0`: the same picture).
+  takes it away on land (V). The player's round shadow is not it (`NO_PLAYER_SHADOW=0`: the
+  same picture). AzaharFrame kiupit: first person now hides him on land by itself ("Pit's own
+  model in first person" above).
 
 ### The talk and the HUD in first person (AzaharFrame kiuview)
 

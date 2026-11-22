@@ -783,6 +783,36 @@ inline std::optional<uint32_t> HideWrite(uint32_t scale_bits, bool want) {
     return std::nullopt;
 }
 
+/// AzaharFrame kiupit: whether first person hides the player's model by itself (HideWrite, as
+/// AZAHARFRAME_KIU_HIDE_PLAYER; that switch at "1" or "0" wins: GroupWanted). The game draws him
+/// see-through when its camera is near him, and in first person the eye is inside him: his head
+/// and body show as a pale shape about the eye (KIU_HOOKS.md, "Pit's own model in first
+/// person"). Only where nothing against the write was seen: on land (in the air it washes the
+/// picture out and he takes less damage; on land his hurt boxes were never checked), with the
+/// shots from the hand (their start is the mailbox's; where the game's own start, his weapon's
+/// muzzle, goes with him shrunk was never looked at) and with the eye at his middle (an eye moved
+/// behind him, over the shoulder or by EYE_OFFSET, is there to see him).
+inline bool HideInFirstPerson(bool first_person, bool land, bool shots_from_hand,
+                              bool eye_moved) {
+    return first_person && land && shots_from_hand && !eye_moved;
+}
+
+/// AzaharFrame kiupit: the circle-shadow renderer's singleton (KIU_HOOKS.md, "The player's round
+/// shadow") and, in it, the number of round shadows in this frame's list; room for 64.
+inline constexpr uint32_t kRoundShadows = 0xD49490;
+inline constexpr uint32_t kRoundShadowCount = 0x14;
+inline constexpr uint32_t kRoundShadowMax = 64;
+/// The round shadows in this frame's list (for the trace), or -1: no renderer, or a count the
+/// list cannot hold.
+inline int RoundShadowCount(const Reader& m) {
+    uint32_t renderer = 0, count = 0;
+    if (!m.Read32(kRoundShadows, renderer) || renderer == 0 || (renderer & 3u) != 0 ||
+        !m.Read32(renderer + kRoundShadowCount, count) || count > kRoundShadowMax) {
+        return -1;
+    }
+    return static_cast<int>(count);
+}
+
 // ---- The scene camera's angle and shape (AzaharFrame kiuwide) ----
 
 /// What the app asks of the scene camera: its angle up and down (radians) and its shape (width

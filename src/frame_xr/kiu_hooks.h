@@ -16,7 +16,9 @@
 //                                     view direction stays the game's.
 //   AZAHARFRAME_KIU_EYE_OFFSET=x,y,z  that offset in the player's own axes (default 0,12.3,0).
 //   AZAHARFRAME_KIU_HIDE_PLAYER=1     the player's model shrunk away (a scale write; back when
-//                                     off).
+//                                     off). AzaharFrame kiupit: first person does it by itself
+//                                     on land (with the shots from the hand and the eye at his
+//                                     middle); =0 keeps him drawn there, for an A/B.
 //   AZAHARFRAME_KIU_SHOT_TEST=yaw,pitch[,dx,dy,dz]
 //                                     the player's shots turned by that many degrees from the
 //                                     game's aim (yaw about the world's up axis, pitch up about
@@ -37,7 +39,8 @@
 //   AZAHARFRAME_KIU_NO_FOLLOW=1       the land camera no longer takes back part of a turn while the
 //                                     player runs (its eased follow gets no movement input).
 //   AZAHARFRAME_KIU_HOOK_TRACE=1|2    a status line a second (2: one a VBlank): the groups, the
-//                                     player, the scene eye.
+//                                     player, the scene eye, the round shadows in the game's
+//                                     list (AzaharFrame kiupit).
 //   AZAHARFRAME_KIU_NO_PLAYER_SHADOW=1
 //                                     the player's own round shadow is not drawn (first person
 //                                     puts it in by itself).
