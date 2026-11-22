@@ -362,6 +362,10 @@ void RestoreGlobalState(bool is_powered_on) {
     values.vr_light_gun_projectile_opacity.SetGlobal(true);
     values.vr_light_gun_muzzle_flash_size.SetGlobal(true); // AzaharFrame kiuweap2
     values.vr_kiu_trigger_layout.SetGlobal(true);          // AzaharFrame kiufire
+    values.vr_kiu_wrist_screen.SetGlobal(true);            // AzaharFrame kiutoggles
+    values.vr_kiu_talk_panel.SetGlobal(true);
+    values.vr_kiu_over_shoulder.SetGlobal(true);
+    values.vr_kiu_snap_turn.SetGlobal(true);
     values.vr_dynamic_resolution.SetGlobal(true); // AzaharFrame menuux
     values.autosave_enabled.SetGlobal(true);      // AzaharFrame autosave
     values.autosave_every.SetGlobal(true);
