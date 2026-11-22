@@ -5,7 +5,9 @@
 #include <cstdint>
 #include <map>
 #include <catch2/catch_test_macros.hpp>
+#include <vector>
 #include "frame_xr/input/kiu_model.h"
+#include "frame_xr/kiu_first_person.h"
 
 // AzaharFrame kiu133: the player's model node found by its holder's shape, wherever the holder
 // sits in the actor (frame_xr/input/kiu_model.h).
@@ -84,4 +86,30 @@ TEST_CASE("Kid Icarus: the player's model node by its holder", "[frame_xr][kiu13
         const Mem m = ActorWithModelAt(0x3CC);
         CHECK(FindModel(m, kActor, kVt, 0x344).off == 0x3CCu);
     }
+}
+
+TEST_CASE("Kid Icarus: Pit Opacity's draws", "[frame_xr][kiu133]") {
+    // Seen with him drawn (twice each eye) and hidden: his are the ones only seen drawn.
+    const std::vector<uint32_t> drawn{0x181E824C, 0x181EAAA8, 0x18442B9C, 0x181E824C, 0x18442B9C,
+                                      0x181F08FC};
+    const std::vector<uint32_t> hidden{0x18442B9C, 0x18442B9C};
+    CHECK(PitDrawsFrom(drawn, hidden) ==
+          std::vector<uint32_t>{0x181E824C, 0x181EAAA8, 0x181F08FC});
+    CHECK(PitDrawsFrom(drawn, {}).empty()); // no frame looked at hidden: nothing known
+}
+
+TEST_CASE("Kid Icarus: Camera's two keys", "[frame_xr][kiu133]") {
+    using namespace FrameXr::Kiu::FirstPerson;
+    // A file from before keeps its meaning: Over the Shoulder alone is 1, nothing is 0.
+    CHECK(ViewFor(false, false) == 0);
+    CHECK(ViewFor(true, false) == 1);
+    CHECK(ViewFor(false, true) == 2);
+    CHECK(ViewFor(true, true) == 2); // the Game's Camera wins
+    for (const int v : {0, 1, 2}) {
+        CHECK(ViewFor(ViewOverShoulder(v), ViewGameCamera(v)) == v);
+    }
+    CHECK(GameCameraFor(nullptr, true));
+    CHECK_FALSE(GameCameraFor(nullptr, false));
+    CHECK(GameCameraFor("1", false));
+    CHECK_FALSE(GameCameraFor("0", true)); // the switch wins
 }

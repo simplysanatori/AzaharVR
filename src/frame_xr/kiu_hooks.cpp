@@ -24,6 +24,7 @@
 #include "frame_xr/input/kiu_room.h" // AzaharFrame kiuvr
 #include "frame_xr/kiu_first_person.h"
 #include "frame_xr/kiu_hooks.h"
+#include "frame_xr/kiu_pit_opacity.h" // AzaharFrame kiu133
 #include "frame_xr/kiu_turn.h" // AzaharFrame kiufov
 #include "frame_xr/kiu_scan.h"
 #include "frame_xr/test_switches.h"
@@ -152,6 +153,8 @@ struct State {
     /// AzaharFrame kiu133: the actor whose model node was looked for, where it was found
     /// (KiuModel::FindModel; 0: not found), and the VBlanks until the next look when it was not.
     uint32_t model_actor = 0;
+    std::string draw_log_seen; ///< AzaharFrame kiu133: AZAHARFRAME_KIU_DRAW_LOG's last value
+    int64_t draw_log_until = 0;
     uint32_t model_off = 0;
     int model_retry = 0;
     int64_t poll_ns = 0;
@@ -501,7 +504,9 @@ void Hook(int64_t ticks) {
     const bool want_nocull =
         KH::GroupWanted(first_person, nocull_text ? nocull_text->c_str() : nullptr);
     const bool want_keep = shots_6dof || SwitchIs(kSwitchBulletKeep, "1");
-    const bool want_eye = first_person || SwitchIs(kSwitchEye, "1");
+    // AzaharFrame kiu133: the Game's Camera keeps the game's own eye (the eye group out).
+    const bool game_camera = Kiu::FirstPerson::GameCameraOn();
+    const bool want_eye = (first_person && !game_camera) || SwitchIs(kSwitchEye, "1");
     // AzaharFrame kiupit: first person also hides the player on land (below, once he is known);
     // first person alone keeps `any` true.
     const auto hide_text = Switch(kSwitchHide);
@@ -566,6 +571,18 @@ void Hook(int64_t ticks) {
                      scale * 100.0f, tex);
         }
     }
+    // AzaharFrame kiu133: AZAHARFRAME_KIU_DRAW_LOG: each new value logs the draws of the next 40 ms.
+    {
+        const auto text = Switch("AZAHARFRAME_KIU_DRAW_LOG");
+        const std::string now = text ? *text : std::string{};
+        if (!now.empty() && now != s.draw_log_seen) {
+            s.draw_log_until = host_now + 40'000'000; // about two game frames
+            LOG_INFO(Frontend, "xr: Kid Icarus hooks: the draws of the next frames ({})", now);
+        }
+        s.draw_log_seen = now;
+        VideoCore::Immersive::g_draw_log.store(host_now < s.draw_log_until,
+                                               std::memory_order_relaxed);
+    }
     // AzaharFrame kiumode: why Angel's Aim plays as Full (6DoF): Other Games here.
     const char* const as_other =
         fp_wanted && !first_person ? "; Angel's Aim plays as Full (6DoF): Other Games" : "";
@@ -625,7 +642,7 @@ void Hook(int64_t ticks) {
     // and right of the first-person eye along the camera's level view); EYE_OFFSET wins.
     // AzaharFrame kiutoggles: or Over the Shoulder's setting (vr_kiu_over_shoulder, a fixed
     // place) when the switch is not set; the switch, when set, wins.
-    if (first_person && !Switch(kSwitchEyeOffset)) {
+    if (first_person && !game_camera && !Switch(kSwitchEyeOffset)) {
         float back = 0.0f, up = 0.0f, side = 0.0f;
         const auto text = Switch(kSwitchShoulder);
         KH::Vec3 eye_at, look_at;
@@ -731,8 +748,9 @@ void Hook(int64_t ticks) {
     const auto hide_by_text = Switch(kSwitchHideBy);
     const KH::HideBy hide_by = KH::HideByFrom(hide_by_text ? hide_by_text->c_str() : nullptr);
     if (p.actor != 0) {
-        const bool eye_moved =
-            eye.own_axes || eye.extra.x != 0.0f || eye.extra.y != 0.0f || eye.extra.z != 0.0f;
+        const bool eye_moved = game_camera || // AzaharFrame kiu133: there to see him
+                               eye.own_axes || eye.extra.x != 0.0f || eye.extra.y != 0.0f ||
+                               eye.extra.z != 0.0f;
         const bool by_mode = hide_by == KH::HideBy::Scale &&
                              KH::HideInFirstPerson(first_person, p.land, shots_6dof, eye_moved);
         const bool hide =
@@ -793,6 +811,14 @@ void Hook(int64_t ticks) {
                 s.model_hidden = 0; // drawn again by the game itself
             }
         }
+        // AzaharFrame kiu133: Pit Opacity in the views from outside him (kiu_pit_opacity.h).
+        const auto opacity_text = Switch("AZAHARFRAME_KIU_PIT_OPACITY");
+        Kiu::PitOpacity::OnVBlank(
+            mem, model, Kiu::FirstPerson::OutsideViewOn() && p.Ok(),
+            Kiu::PitOpacity::PercentFor(opacity_text ? opacity_text->c_str() : nullptr,
+                                        Settings::values.vr_kiu_pit_opacity.GetValue()));
+    } else {
+        Kiu::PitOpacity::OnVBlank(mem, 0, false, 100); // AzaharFrame kiu133: no player: off
     }
 
     if (trace <= 0) {

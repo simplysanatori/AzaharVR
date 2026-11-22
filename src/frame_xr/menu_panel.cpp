@@ -362,6 +362,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::KiuReticleSize;
     case Id::KiuOverShoulder:
         return MenuSetting::KiuOverShoulder;
+    case Id::KiuPitOpacity: // AzaharFrame kiu133
+        return MenuSetting::KiuPitOpacity;
     case Id::KiuSnapTurn:
         return MenuSetting::KiuSnapTurn;
     case Id::WeaponScale:
@@ -1105,7 +1107,10 @@ void MenuPanel::BuildModel(const Host& host) {
     m.wrist_side = static_cast<int>(std::min<u32>(v.vr_wrist_side.GetValue(), 1));
     m.kiu_reticle_size =
         static_cast<int>(std::clamp<u32>(v.vr_kiu_reticle_size.GetValue(), 30, 150));
-    m.kiu_over_shoulder = v.vr_kiu_over_shoulder.GetValue();
+    m.kiu_view = Kiu::FirstPerson::ViewFor(v.vr_kiu_over_shoulder.GetValue(),
+                                           v.vr_kiu_game_camera.GetValue()); // AzaharFrame kiu133
+    m.kiu_pit_opacity =
+        static_cast<int>(std::clamp<u32>(v.vr_kiu_pit_opacity.GetValue(), 20, 100));
     m.kiu_snap_turn = Menu::SnapTurnIndexOf(static_cast<int>(v.vr_kiu_snap_turn.GetValue()));
     m.angels_intro_shown = v.vr_angels_aim_intro_shown.GetValue();
     m.show_controllers = v.vr_show_controllers.GetValue();
@@ -1650,9 +1655,16 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         Apply(v.vr_wrist_side, std::min<u32>(u, 1), false);
         r.setting = MenuSetting::WristSide;
         break;
-    case Id::KiuOverShoulder: // read at each VBlank
-        Apply(v.vr_kiu_over_shoulder, value != 0, per_game);
+    case Id::KiuOverShoulder: // read at each VBlank; AzaharFrame kiu133: Camera, both keys
+        r.value = std::clamp(value, 0, 2);
+        Apply(v.vr_kiu_over_shoulder, Kiu::FirstPerson::ViewOverShoulder(r.value), per_game);
+        Apply(v.vr_kiu_game_camera, Kiu::FirstPerson::ViewGameCamera(r.value), per_game);
         r.setting = MenuSetting::KiuOverShoulder;
+        break;
+    case Id::KiuPitOpacity: // AzaharFrame kiu133
+        r.value = std::clamp(value, 20, 100);
+        Apply(v.vr_kiu_pit_opacity, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuPitOpacity;
         break;
     case Id::KiuSnapTurn: // the shown index; sent and stored in degrees
         r.value = Menu::SnapTurnDegreesAt(value);
@@ -2567,9 +2579,6 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::KiuBottomReset: // AzaharFrame kiu131
         SetSetting(t.id, 0, host);
         break;
-    case Id::KiuOverShoulder:
-        SetSetting(t.id, model.kiu_over_shoulder ? 0 : 1, host);
-        break;
     case Id::AsyncShaders:
         SetSetting(t.id, model.async_shaders ? 0 : 1, host);
         break;
@@ -2618,6 +2627,7 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::TriggerLayout: // AzaharFrame kiufire
     case Id::KiuSnapTurn:   // AzaharFrame kiutoggles: Turning (Smooth, 30 to 90 degrees)
     case Id::KiuBottomScreen: // AzaharFrame kiu131: Off, Persistent, Wrist
+    case Id::KiuOverShoulder: // AzaharFrame kiu133: Camera
     case Id::WristSide:       // Back, Inside
     case Id::WindowScale:
     case Id::MarginX: // AzaharFrame fovaxis

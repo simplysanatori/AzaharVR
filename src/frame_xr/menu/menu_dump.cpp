@@ -1505,7 +1505,7 @@ int main(int argc, char** argv) {
         ka.kiu_bottom_screen = 2;
         ka.kiu_bottom_size = 150;
         ka.kiu_bottom_opacity = 80;
-        ka.kiu_over_shoulder = true;
+        ka.kiu_view = 1; // AzaharFrame kiu133: Over the Shoulder (Camera)
         ka.kiu_snap_turn = SnapTurnIndexOf(45);
         ok &= shot("kiutoggles-2-angels-aim-rows-on", ka, kv);
         kv.hover = {Id::KiuBottomScreen, kLabelIndex};

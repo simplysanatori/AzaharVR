@@ -215,6 +215,16 @@ bool AngelsAim();
 /// draws Pit with his own weapon there, so the weapon in hand is left out of the image
 /// (Vis::WeaponModelDrawnFor). Any thread.
 bool ShoulderOn();
+/// AzaharFrame kiu133: the Game's Camera view is in effect (live): first person on, and the
+/// setting (vr_kiu_game_camera) or AZAHARFRAME_KIU_GAME_CAMERA (GameCameraFor: the switch, when
+/// set, wins), with no AZAHARFRAME_KIU_EYE_OFFSET. The game's own camera places the eye (the eye
+/// hook stays out); everything else of first person stays. It wins over Over the Shoulder. Any
+/// thread.
+bool GameCameraOn();
+/// AzaharFrame kiu133: a view from outside Pit (Over the Shoulder or the Game's Camera): he is
+/// drawn with his own weapon, so the weapon in hand is left out, and Pit Opacity applies. Any
+/// thread.
+bool OutsideViewOn();
 /// AzaharFrame kiumode: Angel's Aim asked for (WantedFor; live). Any thread.
 bool Wanted();
 /// First person is on and `title` is the game it is for (the European game). Any thread.
@@ -474,6 +484,26 @@ inline bool ShoulderFor(const char* switch_text, bool setting, float& back_m, fl
     up_m = kShoulderSettingUpM;
     side_m = 0.0f;
     return true;
+}
+/// AzaharFrame kiu133: the Game's Camera from AZAHARFRAME_KIU_GAME_CAMERA's text when it is set
+/// ("1" on, anything else off), else the setting.
+inline bool GameCameraFor(const char* switch_text, bool setting) {
+    if (switch_text) {
+        return switch_text[0] == '1' && switch_text[1] == '\0';
+    }
+    return setting;
+}
+/// AzaharFrame kiu133: the View row (Angel's Aim) from its two keys: 0 First Person, 1 Over the
+/// Shoulder (vr_kiu_over_shoulder, as before), 2 the Game's Camera (vr_kiu_game_camera, which
+/// wins). Choosing writes both: Over the Shoulder only for 1, the Game's Camera only for 2.
+constexpr int ViewFor(bool over_shoulder, bool game_camera) {
+    return game_camera ? 2 : over_shoulder ? 1 : 0;
+}
+constexpr bool ViewOverShoulder(int view) {
+    return view == 1;
+}
+constexpr bool ViewGameCamera(int view) {
+    return view == 2;
 }
 /// The eye's extra offset in game units along the camera's level view (x right, y up, z ahead:
 /// the axes of Input::KiuHooks::LevelYawAxes), from metres back, up and right at

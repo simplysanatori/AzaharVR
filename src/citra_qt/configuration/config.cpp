@@ -679,6 +679,8 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.vr_kiu_bottom_x);
     ReadGlobalSetting(Settings::values.vr_kiu_bottom_y);
     ReadGlobalSetting(Settings::values.vr_kiu_reticle_size);
+    ReadGlobalSetting(Settings::values.vr_kiu_game_camera); // AzaharFrame kiu133
+    ReadGlobalSetting(Settings::values.vr_kiu_pit_opacity);
     if (!global) {
         // AzaharFrame kiu: what the Controls preset already decided (a game's file only).
         ReadGlobalSetting(Settings::values.vr_controls_preset_done);
@@ -1428,6 +1430,8 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.vr_kiu_bottom_x);
     WriteGlobalSetting(Settings::values.vr_kiu_bottom_y);
     WriteGlobalSetting(Settings::values.vr_kiu_reticle_size);
+    WriteGlobalSetting(Settings::values.vr_kiu_game_camera); // AzaharFrame kiu133
+    WriteGlobalSetting(Settings::values.vr_kiu_pit_opacity);
     if (!global) {
 #ifdef ENABLE_FRAME_XR
         FrameXr::MirrorGyroAim(); // AzaharFrame kiugyro: kept by builds that drop vr_gyro_aim

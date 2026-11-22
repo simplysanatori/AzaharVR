@@ -1154,6 +1154,11 @@ struct Values {
     // AzaharFrame kiu131: Reticle Size: the game's own reticle in Angel's Aim's first person, in
     // percent about its middle.
     SwitchableSetting<u32, true> vr_kiu_reticle_size{100, 30, 150, "vr_kiu_reticle_size"};
+    /// AzaharFrame kiu133: the View row's third choice, the Game's Camera (Angel's Aim; wins
+    /// over vr_kiu_over_shoulder; Kiu::FirstPerson::ViewFor), and Pit Opacity (percent, 20 to
+    /// 100) in the views from outside Pit.
+    SwitchableSetting<bool> vr_kiu_game_camera{false, "vr_kiu_game_camera"};
+    SwitchableSetting<u32, true> vr_kiu_pit_opacity{100, 20, 100, "vr_kiu_pit_opacity"};
     // AzaharFrame kiu: in a game's own file only: the Controls preset's values already decided
     // for this game (FrameXr::ControlsPresetField bits). A value the preset gave, or the game
     // already had, is never given again, so a later choice (Use Global Value too) stays.

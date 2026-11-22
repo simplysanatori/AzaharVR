@@ -11,7 +11,10 @@
 #pragma once
 
 #include <array>
+#include <algorithm>
 #include <atomic>
+#include <mutex>
+#include <vector>
 #include "common/common_types.h"
 
 namespace VideoCore::Immersive {
@@ -63,5 +66,41 @@ inline bool ReticleScaled(u32 texture0) {
     const u32 t = g_reticle_texture.load(std::memory_order_relaxed);
     return t != 0 && texture0 == t && g_reticle_scale.load(std::memory_order_relaxed) != 1.0f;
 }
+
+/// AzaharFrame kiu133: a test aid (AZAHARFRAME_KIU_DRAW_LOG, frame_xr/kiu_hooks.cpp): while set,
+/// every draw is logged (texture 0, its size and format, the vertex count, the blend and depth
+/// state, the colour buffer); the hooks set it for one VBlank to the next each time the switch's
+/// value changes (for 40 ms).
+inline std::atomic<bool> g_draw_log{false};
+
+/// AzaharFrame kiu133: Pit Opacity (frame_xr/kiu_pit_opacity.cpp). Pit's draws are known by their
+/// first vertex array's address: the hooks have the world's draws collected while he is drawn
+/// (phase 1) and while his model is hidden (phase 2); his are the ones only in phase 1. Then
+/// those of them the game draws opaque are blended with the constant alpha g_pit_alpha.
+struct PitDraws {
+    std::mutex mutex;
+    std::vector<u32> seen[2]; ///< the depth-tested draws' addresses in phase 1 and 2
+    std::vector<u32> pit;     ///< sorted: Pit's
+    std::atomic<int> collect{0};
+    std::atomic<float> alpha{1.0f};
+
+    void Seen(u32 attr0) {
+        const int c = collect.load(std::memory_order_relaxed);
+        if (c == 1 || c == 2) {
+            std::scoped_lock lock{mutex};
+            seen[c - 1].push_back(attr0);
+        }
+    }
+    /// The alpha for this draw: below 1 only for one of Pit's while Pit Opacity is in effect.
+    float AlphaFor(u32 attr0) {
+        const float a = alpha.load(std::memory_order_relaxed);
+        if (a >= 1.0f) {
+            return 1.0f;
+        }
+        std::scoped_lock lock{mutex};
+        return std::binary_search(pit.begin(), pit.end(), attr0) ? a : 1.0f;
+    }
+};
+inline PitDraws g_pit_draws;
 
 } // namespace VideoCore::Immersive

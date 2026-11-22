@@ -214,6 +214,10 @@ bool WithSetting(Menu::Id id, F&& f) {
         return true;
     case Id::KiuOverShoulder:
         f(v.vr_kiu_over_shoulder);
+        f(v.vr_kiu_game_camera); // AzaharFrame kiu133: Camera's two keys
+        return true;
+    case Id::KiuPitOpacity:
+        f(v.vr_kiu_pit_opacity);
         return true;
     case Id::KiuSnapTurn:
         f(v.vr_kiu_snap_turn);

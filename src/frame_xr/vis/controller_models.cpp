@@ -2825,7 +2825,8 @@ void ControllerModels::FitWeapon(const ViewPose& views, const std::array<Hand, 2
                                      glows > 0 && !glow ? " (glows not drawn)" : "");
         }
         const auto draw_text = Common::FrameTestSwitches::Value(kWeaponDrawSwitch);
-        const bool shoulder = Kiu::FirstPerson::ShoulderOn(); // AzaharFrame kiu130
+        // AzaharFrame kiu130; kiu133: the Game's Camera shows Pit too.
+        const bool shoulder = Kiu::FirstPerson::OutsideViewOn();
         const bool model = WeaponModelDrawnFor(draw_text, shoulder);
         const std::string key = fmt::format("{} {} {} {}", g.weapon_live->id, hands_drawing,
                                             fits_text, model ? 1 : 0);
@@ -2837,7 +2838,7 @@ void ControllerModels::FitWeapon(const ViewPose& views, const std::array<Hand, 2
                      weapon_fits.size() == 1 ? "" : "s", fits_text.empty() ? "none" : fits_text,
                      model       ? ""
                      : draw_text ? "; the model left out (AZAHARFRAME_KIU_WEAPON_DRAW=0)"
-                                 : "; the model left out (Over the Shoulder: Pit holds his own)");
+                                 : "; the model left out (a view from outside Pit: he holds his own)");
         }
     }
 }

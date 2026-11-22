@@ -7,7 +7,9 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
+#include <vector>
 #include "frame_xr/input/kiu_turn.h"
 
 namespace FrameXr::Input::KiuModel {
@@ -87,5 +89,23 @@ inline Found FindModel(const Reader& m, uint32_t actor, uint32_t model_vtable, u
     }
     return {};
 }
+
+/// AzaharFrame kiu133: Pit Opacity's draws: the addresses seen while his model was drawn and
+/// not while it was hidden (sorted, each once). Empty when nothing was seen hidden (no frame was
+/// drawn then: the result would be every draw).
+inline std::vector<uint32_t> PitDrawsFrom(std::vector<uint32_t> drawn, std::vector<uint32_t> hidden) {
+    std::sort(drawn.begin(), drawn.end());
+    drawn.erase(std::unique(drawn.begin(), drawn.end()), drawn.end());
+    std::sort(hidden.begin(), hidden.end());
+    std::vector<uint32_t> out;
+    if (hidden.empty()) {
+        return out;
+    }
+    std::set_difference(drawn.begin(), drawn.end(), hidden.begin(), hidden.end(),
+                        std::back_inserter(out));
+    return out;
+}
+/// More than this many of them is not one character's: a calibration that went wrong.
+inline constexpr std::size_t kPitDrawsMax = 48;
 
 } // namespace FrameXr::Input::KiuModel
