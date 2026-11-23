@@ -24,7 +24,9 @@
 #include "core/frontend/framebuffer_layout.h"
 #include "core/loader/loader.h"
 #include "core/perf_stats.h"
+#ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
 #include "frame_xr/frame_xr.h" // AzaharFrame touchpad
+#endif
 #include "input_common/frame_xr.h" // AzaharFrame touchpad
 #include "input_common/keyboard.h"
 #include "input_common/main.h"
@@ -595,6 +597,7 @@ void GRenderWindow::keyReleaseEvent(QKeyEvent* event) {
 // the touchpad as a mouse (Steam Input): it goes to the XR side as a position over the window and
 // the left button, to touch the bottom screen there, and not as a touch in the window's layout.
 bool GRenderWindow::FeedVrMouse(const QMouseEvent* event, bool leaving) {
+#ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
     // AzaharFrame padsui: a real mouse in VR is read directly (frame_xr/input/devices.h): its
     // clicks on this window touch nothing here.
     if (FrameXr::VrShowing() && InputCommon::FrameXr::VrMouseOwned()) {
@@ -616,6 +619,13 @@ bool GRenderWindow::FeedVrMouse(const QMouseEvent* event, bool leaving) {
     }
     InputCommon::FrameXr::SetMouseState(state);
     return true;
+#else
+    // no VR: as FrameXr::VrShowing() false above
+    static_cast<void>(event);
+    static_cast<void>(leaving);
+    InputCommon::FrameXr::ClearMouseState();
+    return false;
+#endif
 }
 
 void GRenderWindow::leaveEvent(QEvent* event) {

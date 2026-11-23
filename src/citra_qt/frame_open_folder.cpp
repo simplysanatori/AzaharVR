@@ -22,10 +22,12 @@
 #include <QUrl>
 
 // (declared here, not through frame_xr/frame_xr.h, so frame_qt_tests can build this file)
+#ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
 namespace FrameXr {
 bool IsStarted();
 bool VrShowing();
 } // namespace FrameXr
+#endif
 
 namespace FrameOpenFolder {
 
@@ -68,8 +70,11 @@ bool UseDialog() {
     if (pick == QStringLiteral("app") || pick == QStringLiteral("system")) {
         return pick == QStringLiteral("app");
     }
-    return qEnvironmentVariable("XDG_CURRENT_DESKTOP") == QStringLiteral("gamescope") ||
-           (FrameXr::IsStarted() && FrameXr::VrShowing());
+    return qEnvironmentVariable("XDG_CURRENT_DESKTOP") == QStringLiteral("gamescope")
+#ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
+           || (FrameXr::IsStarted() && FrameXr::VrShowing())
+#endif
+        ;
 }
 
 void Open(QWidget* parent, const QString& path, const QString& label) {

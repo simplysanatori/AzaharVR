@@ -102,6 +102,9 @@
 #include "citra_qt/uisettings.h"
 #include "common/play_time_manager.h"
 #include "common/frame_product.h" // AzaharVR
+// AzaharVR: builds with ENABLE_FRAME_XR off (common/, built either way: WindowLayoutOption, FrameAutosaveGates)
+#include "common/frame_flat.h" // AzaharFrame flat3: flat mode's own screen layout
+#include "common/stall_telemetry.h" // AzaharFrame stall
 #ifdef ENABLE_QT_UPDATE_CHECKER
 #include "citra_qt/update_checker.h"
 #endif
@@ -189,7 +192,6 @@ Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin);
 #include "core/mods/catalog.h" // AzaharFrame texui
 #include "core/mods/library.h" // AzaharFrame catalog3
 #include "citra_qt/frame_mode.h"
-#include "common/frame_flat.h" // AzaharFrame flat3: flat mode's own screen layout
 #include "core/frontend/emu_window.h"
 #include "frame_xr/frame_xr.h"
 #ifdef AZAHARVR_PC // AzaharVR: EnsureControllerModels; the Frame's font
@@ -214,7 +216,6 @@ Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin);
 #include "frame_xr/render_margin.h" // AzaharFrame fovaxis
 #include "frame_xr/per_game_keys.h" // AzaharFrame fixa
 #include "frame_xr/shader_notice.h" // AzaharFrame stall
-#include "common/stall_telemetry.h" // AzaharFrame stall
 #include "frame_xr/swkbd.h" // AzaharFrame kbd
 #include "input_common/frame_xr.h"
 
@@ -2377,7 +2378,9 @@ GMainWindow::GMainWindow(Core::System& system_)
 }
 
 GMainWindow::~GMainWindow() {
+#ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
     frame_memwarn.reset(); // AzaharFrame memwarn: its thread posts to this window
+#endif
     // Will get automatically deleted otherwise
     if (!render_window->parent()) {
         delete render_window;
@@ -2503,6 +2506,7 @@ void GMainWindow::InitializeWidgets() {
     });
     statusBar()->insertPermanentWidget(1, volume_button);
 
+#ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
     // AzaharFrame flat: back to VR from flat, next to the renderer and volume buttons (hidden in
     // VR and without OpenXR). Made like the renderer button (its object name, so the theme's
     // style, and bold coloured text): one press switches, as the chord does (g_frame_xr_switch
@@ -2535,6 +2539,7 @@ void GMainWindow::InitializeWidgets() {
         }
     });
     statusBar()->insertPermanentWidget(3, g_frame_flat_button);
+#endif
 
     statusBar()->addPermanentWidget(multiplayer_state->GetStatusText());
     statusBar()->addPermanentWidget(multiplayer_state->GetStatusIcon());
@@ -3478,6 +3483,7 @@ bool GMainWindow::LoadROM(const QString& filename) {
         return false;
     }
 
+#ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
     // AzaharFrame catalog3: mods downloaded or removed while a game ran go in or out now, before the
     // loader reads the game's folders
     Mods::Default().SetRunningTitle(0);
@@ -3485,6 +3491,7 @@ bool GMainWindow::LoadROM(const QString& filename) {
     if (g_frame_mods) { // AzaharFrame ui3: a texture pack switch Optimize for Frame asked for
         g_frame_mods->ApplyPendingPack();
     }
+#endif
 
     const auto scope = render_window->Acquire();
 
@@ -3582,7 +3589,9 @@ bool GMainWindow::LoadROM(const QString& filename) {
 
     game_path = filename;
     game_title_id = title_id;
+#ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
     Mods::Default().SetRunningTitle(title_id); // AzaharFrame catalog3: its folders are not touched now
+#endif
 
     return true;
 }
@@ -4072,12 +4081,14 @@ void GMainWindow::ShutdownGame() {
     game_list->RefreshIfPending(!game_path.isEmpty() && !QFileInfo::exists(game_path));
     game_path.clear();
     game_title_id = 0;
+#ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
     // AzaharFrame catalog3: the game is not running: what waited goes in or out
     Mods::Default().SetRunningTitle(0);
     Mods::Default().ApplyPending();
     if (g_frame_mods) { // AzaharFrame ui3
         g_frame_mods->ApplyPendingPack();
     }
+#endif
 
     // Update the GUI
     UpdateMenuState();
@@ -6474,6 +6485,7 @@ void GMainWindow::FrameMemoryEvent(int action, u64 used, u64 max) {
         return;
     }
 #endif
+#ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
     if (emu_thread->IsRunning() && !system.frame_limiter.IsFrameAdvancing()) {
         OnPauseGame();
         frame_memwarn_resume = true;
@@ -6497,6 +6509,7 @@ void GMainWindow::FrameMemoryEvent(int action, u64 used, u64 max) {
             }
         });
     }
+#endif
     test_answer();
 }
 
@@ -6535,6 +6548,7 @@ void GMainWindow::FrameMemoryTexturesOff() {
     }
     Settings::values.custom_textures_off_for_memory = ct.UsingGlobal() ? 1 : 2;
     ct.SetValue(false);
+#ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
     const u64 before = frame_memwarn ? frame_memwarn->ReadNow().Used() : 0;
     LOG_INFO(Frontend, "memwarn: Turn Off Custom Textures ({} MiB in use)", before >> 20);
     // What it freed, for the log: the renderer's surfaces go after a few frames
@@ -6552,6 +6566,7 @@ void GMainWindow::FrameMemoryTexturesOff() {
             });
         }
     }
+#endif
 }
 
 void GMainWindow::FrameMemoryRestoreTextures() {
@@ -8568,6 +8583,7 @@ int LaunchQtFrontend(int argc, char* argv[]) {
                    // the Fusion style and "Sans Serif" 9 pt, which there is Noto Sans (the files
                    // in the art folder are the Frame's own)
     QApplication::setStyle(QStringLiteral("Fusion"));
+#ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
     for (const char* name : {"NotoSans-Regular.ttf", "NotoSans-Bold.ttf"}) {
         if (const std::string path = frame_xr::picker::FindArtFile(name); !path.empty()) {
             QFontDatabase::addApplicationFont(QString::fromStdString(path));
@@ -8576,6 +8592,7 @@ int LaunchQtFrontend(int argc, char* argv[]) {
     if (QFontDatabase::families().contains(QStringLiteral("Noto Sans"))) {
         QApplication::setFont(QFont(QStringLiteral("Noto Sans"), 9));
     }
+#endif
 #endif
 
     // Required when using .qrc resources from within a static library.
@@ -8764,7 +8781,9 @@ Core::Autosave::Gates GMainWindow::FrameAutosaveGates() const {
     g.shaders_busy =
         loading_shaders_label->isVisible() || (backlog && (last <= 0 || now_us - last > 500'000));
     // AzaharFrame memwarn: at the pause level a save state's extra ~300 MB could cross the limit
+#ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
     g.memory_low = FrameMemWarn::Critical();
+#endif
     return g;
 }
 

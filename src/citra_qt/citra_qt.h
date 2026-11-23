@@ -378,11 +378,13 @@ private slots:
     void ShowFullscreen();
     void HideFullscreen();
     bool WindowFullscreen() const; ///< AzaharFrame flat3: the game's window is Fullscreen
+#ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
     /// AzaharFrame tabmenu: a button or setting of the in-game menu in VR (frame_xr/menu_panel.h).
     void FrameMenuRequest(const FrameXr::MenuRequest& r);
     /// AzaharFrame natural: the 3D Factor shortcuts in VR in the Full modes step their own 3D
     /// Depth; false when they do not apply (Normal and Wide: the 3DS 3D Depth).
     bool FrameStepImmersiveDepth(int step);
+#endif
     void ToggleWindowMode();
     void OnCreateGraphicsSurfaceViewer();
     void OnRecordMovie();
@@ -547,7 +549,9 @@ private:
     std::function<void(int)> frame_notice_answer;  ///< the in-game menu's notice, unanswered
     bool frame_notice_opened_menu = false;         ///< the notice opened the menu (Cancel closes it)
     // AzaharFrame memwarn
+#ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
     std::unique_ptr<FrameMemWarn> frame_memwarn;
+#endif
     bool frame_memwarn_asking = false;       ///< its dialog shows (VR menu or Qt)
     bool frame_memwarn_textures = false; ///< AzaharFrame savemem: it offers Turn Off Custom Textures
     QDialog* frame_memwarn_dialog = nullptr; ///< the Qt one, while it shows

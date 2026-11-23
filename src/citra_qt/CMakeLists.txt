@@ -340,6 +340,12 @@ if (ENABLE_FRAME_XR) # AzaharFrame
                                     frame_emerald.h)
     # AzaharFrame ctgp7: the Mods tab's CTGP-7 segment, the Qt side.
     target_sources(citra_qt PRIVATE frame_ctgp7.cpp frame_ctgp7.h)
+else() # AzaharVR: builds with ENABLE_FRAME_XR off: the Qt-only and standalone helpers that shared
+       # code calls (Open Folder; the VR settings tab's Render Margin and scales)
+    target_sources(citra_qt PRIVATE frame_open_folder.cpp frame_open_folder.h
+                                    ../frame_xr/render_margin.cpp ../frame_xr/render_margin.h
+                                    ../frame_xr/immersive_layout.cpp ../frame_xr/immersive_layout.h
+                                    ../frame_xr/input/geometry.cpp ../frame_xr/input/geometry.h)
 endif()
 target_link_libraries(citra_qt PUBLIC Boost::boost Qt6::Widgets)
 target_link_libraries(citra_qt PRIVATE nihstro-headers Qt6::Multimedia Qt6::Concurrent)
