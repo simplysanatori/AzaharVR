@@ -176,6 +176,9 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86
     set(DEFAULT_ENABLE_FRAME_XR ON)
 endif()
 CMAKE_DEPENDENT_OPTION(ENABLE_FRAME_XR "Enables the OpenXR frontend (Azahar for Frame)" ${DEFAULT_ENABLE_FRAME_XR} "ENABLE_VULKAN;ENABLE_QT;NOT ANDROID;NOT ENABLE_LIBRETRO" OFF)
+# The DS (melonDS) and GBA/GB/GBC (gba-ds, mGBA) cores. They draw through the OpenXR frontend, and
+# only Linux has been built: anything else has them off.
+CMAKE_DEPENDENT_OPTION(ENABLE_ALT_CORES "Build the DS (melonDS) and GBA/GB (gba-ds, mGBA) cores" ON "ENABLE_FRAME_XR;LINUX" OFF)
 # AzaharFrame crashreport: Send Report sends a crash report to Sentry (externals/sentry-native) when
 # the player taps it. The DSN comes from -DAZAHARFRAME_SENTRY_DSN=..., else the environment variable
 # of that name; with none, Send Report is hidden and Save Report stays. Never commit a DSN.
