@@ -5636,6 +5636,9 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         });
         return;
     case C::Cheats: // AzaharFrame menu: Emulation > Configure Current Game..., Cheats tab
+        if (AltGameRunning()) {
+            return; // that window is for 3DS games
+        }
         g_frame_mirror->SetMenuWindow(true);
         QTimer::singleShot(0, this, [this] {
             if (emulation_running && g_frame_mirror && g_frame_mirror->MenuOpen()) {
@@ -8543,6 +8546,9 @@ void GMainWindow::OnLanguageChanged(const QString& locale) {
 }
 
 void GMainWindow::OnConfigurePerGame() {
+    if (AltGameRunning()) {
+        return; // that window is for 3DS games
+    }
     u64 title_id{};
     system.GetAppLoader().ReadProgramId(title_id);
     OpenPerGameConfiguration(title_id, game_path);

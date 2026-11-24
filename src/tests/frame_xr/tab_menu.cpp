@@ -1569,6 +1569,30 @@ TEST_CASE("Toasts: the mouse and the reticle's one-time toasts fit", "[frame_xr]
     CHECK(ui::TextWidth(ui::kFontLarge, FrameXr::Input::kMouseHint) <= kOneLine);
 }
 
+// A DS or GBA game's Cheats tab has no buttons for 3DS cheats: their handlers need a 3DS game.
+TEST_CASE("Tab menu: no 3DS cheat buttons for a DS or GBA game", "[frame_xr][tabmenu]") {
+    Drawn d;
+    MenuModel m = Sample();
+    m.core.is_3ds = false;
+    m.core.has_3ds_cheats = false;
+    m.core.has_alt_cheats = true;
+    MenuView v;
+    v.tab = kModsTab;
+    for (const bool list : {false, true}) {
+        m.mods.cheats = {};
+        if (list) {
+            m.mods.cheats.cheats = {{"Infinite Hearts", CheatSource::User, true, ""}};
+        }
+        d.Draw(m, v);
+        CHECK(HasHit(d, Id::AddCheat, -1));
+        CHECK(HasHit(d, Id::Cheat, 0) == list);
+        CHECK(!HasHit(d, Id::CheatsWindow, -1));
+        CHECK(!HasHit(d, Id::DownloadCheats, -1));
+        CHECK(!HasHit(d, Id::InstallCheatFile, -1));
+        CheckTargets(d);
+    }
+}
+
 // AzaharFrame ui2: Add Cheat and Install from File in the Cheats segment, with a list and without,
 // and Install from Zip's browser over the segment for a cheat file.
 TEST_CASE("Tab menu: Cheats add and install from a file", "[frame_xr][tabmenu]") {

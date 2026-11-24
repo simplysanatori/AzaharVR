@@ -194,6 +194,8 @@ void TabMenu::DrawCheats(Kit& kit, const MenuModel& model, const MenuView& view,
     const Rect c{area.x0 + kPad, area.y0, area.x1 - kPad, area.y1 - kPad};
     const bool downloading = m.download == DownloadState::Downloading;
     const bool failed = m.download == DownloadState::Failed;
+    // Downloads, cheat files and Azahar's cheat window are for 3DS cheats only.
+    const bool cheats_3ds = model.core.has_3ds_cheats;
 
     // AzaharFrame ui2: Install from Zip's page, for a cheat file, over the segment.
     if (model.mods.zip.open && model.mods.zip.target == ZipTarget::Cheats) {
@@ -203,7 +205,7 @@ void TabMenu::DrawCheats(Kit& kit, const MenuModel& model, const MenuView& view,
     // ---- Top bar: Download and Add Cheat on the left (with a list), Azahar's Window and
     // Install from File on the right (AzaharFrame ui2: at the bar's end, as Install from Zip on
     // the Mods and Textures pages) ----
-    {
+    if (cheats_3ds) {
         const std::string file = LabelFor(Id::InstallCheatFile);
         const float fw = ButtonWidth(kit, file, true, kBarSide);
         const Rect fb{c.x1 - fw, c.y0, c.x1, c.y0 + kBarH};
@@ -254,14 +256,17 @@ void TabMenu::DrawCheats(Kit& kit, const MenuModel& model, const MenuView& view,
             y += 24.0f;
             const std::string label = failed ? "Try Again" : LabelFor(Id::DownloadCheats);
             const std::string add = LabelFor(Id::AddCheat);
-            const float w = ButtonWidth(kit, label, true);
+            const float w = cheats_3ds ? ButtonWidth(kit, label, true) : 0.0f;
+            const float gap = cheats_3ds ? 8.0f : 0.0f;
             const float aw = ButtonWidth(kit, add, true);
-            const float x0 = mid.Cx() - (w + 8.0f + aw) * 0.5f;
-            const Rect b{x0, y, x0 + w, y + button_h};
-            kit.Button(b, ButtonStyle::Filled, failed ? Sym::kRefresh : Sym::kCloudDownload, label,
-                       StateOf(view, {Id::DownloadCheats}));
-            AddHit(b, {Id::DownloadCheats}, area);
-            const Rect ab{b.x1 + 8.0f, y, b.x1 + 8.0f + aw, y + button_h};
+            const float x0 = mid.Cx() - (w + gap + aw) * 0.5f;
+            if (cheats_3ds) {
+                const Rect b{x0, y, x0 + w, y + button_h};
+                kit.Button(b, ButtonStyle::Filled, failed ? Sym::kRefresh : Sym::kCloudDownload,
+                           label, StateOf(view, {Id::DownloadCheats}));
+                AddHit(b, {Id::DownloadCheats}, area);
+            }
+            const Rect ab{x0 + w + gap, y, x0 + w + gap + aw, y + button_h};
             kit.Button(ab, ButtonStyle::Tonal, Sym::kAdd, add, StateOf(view, {Id::AddCheat}));
             AddHit(ab, {Id::AddCheat}, area);
         }
@@ -269,17 +274,20 @@ void TabMenu::DrawCheats(Kit& kit, const MenuModel& model, const MenuView& view,
         return;
     }
     {
-        const std::string label = LabelFor(Id::DownloadCheats);
-        const Rect dl{c.x0, c.y0, c.x0 + ButtonWidth(kit, label, true, kBarSide), c.y0 + kBarH};
-        kit.Button(dl, ButtonStyle::Tonal, Sym::kCloudDownload, label,
-                   StateOf(view, {Id::DownloadCheats}, !downloading));
-        if (!downloading) {
-            AddHit(dl, {Id::DownloadCheats}, area);
+        float x = c.x0;
+        if (cheats_3ds) {
+            const std::string label = LabelFor(Id::DownloadCheats);
+            const Rect dl{x, c.y0, x + ButtonWidth(kit, label, true, kBarSide), c.y0 + kBarH};
+            kit.Button(dl, ButtonStyle::Tonal, Sym::kCloudDownload, label,
+                       StateOf(view, {Id::DownloadCheats}, !downloading));
+            if (!downloading) {
+                AddHit(dl, {Id::DownloadCheats}, area);
+            }
+            x = dl.x1 + 8.0f;
         }
         // AzaharFrame ui2: Add Cheat after Download
         const std::string add = LabelFor(Id::AddCheat);
-        const Rect ab{dl.x1 + 8.0f, c.y0, dl.x1 + 8.0f + ButtonWidth(kit, add, true, kBarSide),
-                      c.y0 + kBarH};
+        const Rect ab{x, c.y0, x + ButtonWidth(kit, add, true, kBarSide), c.y0 + kBarH};
         kit.Button(ab, ButtonStyle::Tonal, Sym::kAdd, add, StateOf(view, {Id::AddCheat}));
         AddHit(ab, {Id::AddCheat}, area);
     }
