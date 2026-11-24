@@ -3045,7 +3045,7 @@ void GMainWindow::OnAppFocusStateChanged(Qt::ApplicationState state) {
         const bool running = [this] {
 #ifdef ENABLE_ALT_CORES
             if (AltGameRunning()) {
-                return !AltGamePaused();
+                return !alt_core_host->IsPaused();
             }
 #endif
             return emu_thread->IsRunning();

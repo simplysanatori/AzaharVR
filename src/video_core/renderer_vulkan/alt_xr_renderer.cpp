@@ -549,13 +549,8 @@ bool AltXrRenderer::Init(Frontend::EmuWindow* window, Frontend::EmuWindow* secon
             return false;
         }
         impl->scheduler->Finish();
-
-        if (impl->XrShowsScreens()) {
-            impl->xr_target_generation = sink->SwapchainGeneration();
-            impl->xr_target = std::make_unique<XrPresentTarget>(
-                *impl->instance, *impl->scheduler, *sink, impl->present_vertex_shader,
-                *impl->present_pipeline_layout);
-        }
+        // Present makes the XrPresentTarget: the session may not run yet (a game started with the
+        // app), and its swapchains come and go.
         if (window) {
             impl->window_target = std::make_unique<AltWindowTarget>(
                 *window, *impl->instance, *impl->scheduler, impl->present_vertex_shader,
@@ -563,7 +558,7 @@ bool AltXrRenderer::Init(Frontend::EmuWindow* window, Frontend::EmuWindow* secon
         }
         impl->ready = true;
         LOG_INFO(Render_Vulkan, "alt_xr: presenter initialized ({})",
-                 impl->xr_target ? "VR" : "window");
+                 impl->XrShowsScreens() ? "VR" : "window");
         return true;
     } catch (const std::exception& e) {
         LOG_ERROR(Render_Vulkan, "alt_xr: initialization failed: {}", e.what());
