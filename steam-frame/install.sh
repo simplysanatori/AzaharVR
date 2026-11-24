@@ -171,6 +171,10 @@ LICENSES_SRC=$SRC_DIR/licenses
 if [ "$(readlink -f "$LICENSES_SRC")" != "$(readlink -f "$DEST/licenses")" ]; then
   act mkdir -p "$DEST/licenses"
   for f in $LICENSEFILES; do if [ -f "$LICENSES_SRC/$f" ]; then put "$LICENSES_SRC/$f" "$DEST/licenses/$f"; fi; done
+  # the DS, GBA and Game Boy cores' licences
+  for f in "$LICENSES_SRC"/melonDS-*.txt "$LICENSES_SRC"/gba-ds-*.txt "$LICENSES_SRC"/mGBA-*.txt; do
+    if [ -f "$f" ]; then put "$f" "$DEST/licenses/$(basename "$f")"; fi
+  done
 fi
 # The program's own Qt and libraries (a portable release): lib/, plugins/ and qt.conf beside the program.
 # They replace the old ones as a whole (an old library must not stay), and a program installed without them

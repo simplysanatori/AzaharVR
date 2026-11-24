@@ -59,6 +59,8 @@ mkdir -p "$STAGE/tools"
 ASTCLIC=$SF/../externals/astcenc/LICENSE.txt
 [ -f "$ASTCLIC" ] || { echo "make-release: $ASTCLIC is missing (git submodule update --init externals/astcenc)" >&2; exit 1; }
 mkdir -p "$STAGE/licenses"; cp "$ASTCLIC" "$STAGE/licenses/astcenc-LICENSE.txt"
+# the DS, GBA and Game Boy cores (linked into the program) and the parts they carry
+cp "$SF"/portable/licenses/{melonDS,gba-ds,mGBA}-*.txt "$STAGE/licenses/"
 "$SF/tools/fetch-7zip.sh" "$STAGE/tools" "$STAGE/licenses" # 7zz: the fallback extractor (pinned, sha256 checked)
 chmod +x "$STAGE/azahar" "$STAGE/azaharframe.sh" "$STAGE/install.sh" "$STAGE/uninstall.sh"
 echo "$VERSION" > "$STAGE/VERSION"

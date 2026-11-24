@@ -110,6 +110,11 @@ done
 # AzaharFrame cppconv: the converter is in the program; astcenc's licence ships and installs
 check "release: astcenc licence is shipped" test -s "$U/licenses/astcenc-LICENSE.txt"
 check "installed licenses/astcenc-LICENSE.txt" test -s "$APP/licenses/astcenc-LICENSE.txt"
+# the DS, GBA and Game Boy cores are in the program; their licences ship and install
+for f in melonDS-LICENSE.txt melonDS-Teakra-LICENSE.txt melonDS-FatFs-LICENSE.txt melonDS-tiny-AES-c-LICENSE.txt melonDS-blip_buf-LICENSE.txt melonDS-Dolphin-LICENSE.txt melonDS-FreeBIOS-LICENSE.txt gba-ds-LICENSE.txt gba-ds-rzstd-LICENSE.txt mGBA-LICENSE.txt mGBA-inih-LICENSE.txt; do
+    check "release: $f is shipped" test -s "$U/licenses/$f"
+    check "installed licenses/$f" test -s "$APP/licenses/$f"
+done
 check "release: no converter script or encoder helper" test ! -e "$U/tools/convert-texture-pack.sh" -a ! -e "$U/tools/af-ktxenc"
 check "installed programs are executable" test -x "$APP/azahar" -a -x "$APP/azaharframe.sh" -a -x "$APP/uninstall.sh"
 check "installed VERSION matches" test "$(head -n 1 "$APP/VERSION")" = "$VER"
