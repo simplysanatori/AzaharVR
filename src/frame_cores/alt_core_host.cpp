@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <mutex>
 #include <thread>
+#include <utility>
 
 #include "common/logging/log.h"
 #include "common/settings.h"
@@ -111,6 +112,8 @@ std::unique_ptr<CoreBackend> CreateBackend(Common::AltCore::CoreKind kind) {
 
 struct AltCoreHost::Impl {
     HostCallbacks callbacks{};
+    HostFrontend frontend{};
+    Layout::AltScreens screens{};
     bool custom_callbacks = false;
 
     std::unique_ptr<CoreBackend> core;
@@ -135,6 +138,7 @@ struct AltCoreHost::Impl {
     std::atomic<bool> running{false};
     std::atomic<bool> stop_requested{false};
     std::atomic<bool> paused{false};
+    std::atomic<bool> redraw{false};
     std::atomic<bool> fast_forward{false};
     std::atomic<uint32_t> ff_speed_pct{200};
     bool headless = false;
@@ -159,12 +163,52 @@ struct AltCoreHost::Impl {
         }
     }
 
-    void ExecuteSingleFrameLocked(double& frame_time_ms_out) {
+    Common::AltCore::InputState ReadInput() {
         Common::AltCore::InputState in{};
         {
             std::lock_guard in_lock(input_mutex);
             in = latest_input;
         }
+        if (frontend.input) {
+            const Common::AltCore::InputState own = frontend.input();
+            in.buttons |= own.buttons;
+            if (!in.touching) {
+                in.touching = own.touching;
+                in.touch_x = own.touch_x;
+                in.touch_y = own.touch_y;
+            }
+        }
+        return in;
+    }
+
+    /// Tells the window about a screen's new size. A Secondary Screen that goes (the GBA map in a
+    /// game's menu) keeps its place and its last picture.
+    void NoteScreens() {
+        Layout::AltScreens now = screens;
+        if (last_frame.primary.pixels) {
+            now.top_width = last_frame.primary.width;
+            now.top_height = last_frame.primary.height;
+        }
+        if (last_frame.secondary.pixels) {
+            now.bottom_width = last_frame.secondary.width;
+            now.bottom_height = last_frame.secondary.height;
+        }
+        if (now != screens) {
+            screens = now;
+            if (frontend.on_screens) {
+                frontend.on_screens(screens);
+            }
+        }
+    }
+
+    void Present(bool skippable) {
+        if (renderer && renderer->IsReady() && last_frame.primary.pixels) {
+            renderer->Present(last_frame.primary, last_frame.secondary, skippable);
+        }
+    }
+
+    void ExecuteSingleFrameLocked(double& frame_time_ms_out) {
+        const Common::AltCore::InputState in = ReadInput();
 
         const auto t0 = std::chrono::steady_clock::now();
 
@@ -194,9 +238,8 @@ struct AltCoreHost::Impl {
             audio.Push(last_frame.audio_pcm.data(), last_frame.audio_pcm.size() / 2u);
         }
 
-        if (renderer && renderer->IsReady() && last_frame.primary.pixels) {
-            renderer->Present(last_frame.primary, last_frame.secondary);
-        }
+        NoteScreens();
+        Present(fast_forward.load(std::memory_order_relaxed));
 
         const float rumble = last_frame.rumble;
         if (callbacks.on_rumble && (rumble > 0.0f || last_rumble > 0.0f)) {
@@ -220,13 +263,24 @@ struct AltCoreHost::Impl {
         double window_frame_ms_sum = 0.0;
         double window_peak_ms = 0.0;
         uint32_t window_slow = 0;
+        bool was_paused = false;
 
         while (!stop_requested.load(std::memory_order_acquire)) {
             if (paused.load(std::memory_order_acquire)) {
+                if (redraw.exchange(false, std::memory_order_acq_rel) ||
+                    (renderer && renderer->NeedsPresent())) {
+                    std::lock_guard lock(core_mutex);
+                    Present(false);
+                }
+                if (!std::exchange(was_paused, true)) {
+                    std::lock_guard lock(core_mutex);
+                    core->CloseMicrophone();
+                }
                 std::this_thread::sleep_for(std::chrono::milliseconds(8));
                 next_frame_time = std::chrono::steady_clock::now();
                 continue;
             }
+            was_paused = false;
 
             double frame_ms = 0.0;
             {
@@ -245,16 +299,18 @@ struct AltCoreHost::Impl {
             }
 
             const bool is_ff = fast_forward.load(std::memory_order_relaxed);
-            const uint32_t pct = is_ff ? ff_speed_pct.load(std::memory_order_relaxed) : 100u;
+            // Percent; 0 is no limit. Emulation Speed applies as to a 3DS game.
+            const double limit =
+                is_ff ? static_cast<double>(ff_speed_pct.load(std::memory_order_relaxed))
+                      : Settings::values.frame_limit.GetValue();
 
             // Pacing & XR LimiterLock
             const int64_t now_ns = SteadyNowNs();
             auto& pacer_shared = Common::XrPacer::Get();
-            const auto step = pacer_lock.Frame(pacer_shared, false, static_cast<double>(pct), now_ns);
+            const auto step = pacer_lock.Frame(pacer_shared, false, limit, now_ns);
 
-            if (!is_ff || pct > 0) {
-                const double speed_scale =
-                    is_ff ? (static_cast<double>(pct) / 100.0) : step.speed;
+            if (limit > 0) {
+                const double speed_scale = limit / 100.0 * step.speed;
                 const double target_us =
                     (nominal_frame_us / std::max(0.1, speed_scale)) +
                     static_cast<double>(is_ff ? 0 : step.correction_us);
@@ -272,7 +328,7 @@ struct AltCoreHost::Impl {
                 pacer_lock.NoteSleep(pacer_shared, slept);
                 pacer_lock.NoteWake(pacer_shared, SteadyNowNs());
             } else {
-                // Uncapped fast-forward (speed_pct == 0)
+                // No limit
                 next_frame_time = std::chrono::steady_clock::now();
                 pacer_lock.NoteSleep(pacer_shared, false);
             }
@@ -323,6 +379,10 @@ void AltCoreHost::SetCallbacks(HostCallbacks callbacks) {
     impl->custom_callbacks = true;
 }
 
+void AltCoreHost::SetFrontend(HostFrontend frontend) {
+    impl->frontend = std::move(frontend);
+}
+
 bool AltCoreHost::Boot(const std::string& rom_path, const std::string& data_dir,
                        bool headless_for_test, const CoreBootOptions& opts) {
     Stop();
@@ -349,6 +409,7 @@ bool AltCoreHost::Boot(const std::string& rom_path, const std::string& data_dir,
         return false;
     }
 
+    impl->core->SetMicrophone(impl->frontend.microphone);
     if (!impl->core->Load(rom_path, impl->paths, opts)) {
         impl->core.reset();
         return false;
@@ -357,7 +418,9 @@ bool AltCoreHost::Boot(const std::string& rom_path, const std::string& data_dir,
     impl->caps = impl->core->GetCapabilities();
     impl->last_frame = FrameOutput{};
     impl->last_rumble = 0.0f;
+    impl->screens = {};
     impl->paused.store(false, std::memory_order_relaxed);
+    impl->redraw.store(false, std::memory_order_relaxed);
     impl->fast_forward.store(false, std::memory_order_relaxed);
     impl->stop_requested.store(false, std::memory_order_relaxed);
     {
@@ -371,9 +434,10 @@ bool AltCoreHost::Boot(const std::string& rom_path, const std::string& data_dir,
 
     if (!headless_for_test) {
         impl->renderer = std::make_unique<Vulkan::AltXrRenderer>();
-        if (!impl->renderer->Init()) {
-            LOG_WARNING(Render_Vulkan,
-                        "AltCoreHost: AltXrRenderer::Init returned false (XR inactive)");
+        if (!impl->renderer->Init(impl->frontend.window, impl->frontend.secondary_window)) {
+            LOG_ERROR(Render_Vulkan, "AltCoreHost: no way to show the game");
+            Stop();
+            return false;
         }
     }
 
@@ -481,9 +545,19 @@ bool AltCoreHost::IsPaused() const {
     return impl->paused.load(std::memory_order_acquire);
 }
 
+void AltCoreHost::Redraw() {
+    impl->redraw.store(true, std::memory_order_release);
+}
+
+void AltCoreHost::WithScreens(const std::function<void(const FrameOutput&)>& use) const {
+    std::lock_guard lock(impl->core_mutex);
+    use(impl->last_frame);
+}
+
 void AltCoreHost::Reset() {
     std::lock_guard lock(impl->core_mutex);
     if (impl->core) {
+        impl->last_frame = FrameOutput{}; // its pixels are the core's
         impl->core->Reset();
         impl->audio.Flush();
     }
@@ -615,6 +689,7 @@ bool AltCoreHost::ImportSave(const std::string& sav_path) {
     if (!impl->core) {
         return false;
     }
+    impl->last_frame = FrameOutput{}; // the core may start again
     const bool ok = impl->core->ImportBatterySave(sav_path);
     if (ok) {
         impl->audio.Flush();
@@ -661,6 +736,13 @@ bool AltCoreHost::AddCheat(const std::string& name, const std::string& code) {
         return false;
     }
     return impl->core->AddCheat(name, code);
+}
+
+void AltCoreHost::ReloadMicrophone() {
+    std::lock_guard lock(impl->core_mutex);
+    if (impl->core) {
+        impl->core->ReloadMicrophone();
+    }
 }
 
 void AltCoreHost::SetSolarLevel(int level) {
@@ -717,6 +799,7 @@ void AltCoreHost::SetConsoleMode(bool dsi) {
     if (!impl->core) {
         return;
     }
+    impl->last_frame = FrameOutput{}; // the core starts again
     impl->core->SetConsoleMode(dsi);
     impl->caps = impl->core->GetCapabilities();
     impl->audio.Flush();

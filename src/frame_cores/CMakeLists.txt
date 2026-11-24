@@ -13,6 +13,8 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     nds_core.h
     microphone.cpp
     microphone.h
+    profile_input.cpp
+    profile_input.h
     rom_info.cpp
     rom_info.h
 )

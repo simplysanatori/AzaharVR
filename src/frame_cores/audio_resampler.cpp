@@ -187,7 +187,9 @@ void AudioResampler::ResampleLocked(int16_t* out, std::size_t out_frames) {
         Common::XrPacer::Get().audio_ratio.load(std::memory_order_relaxed), 0.95, 1.05);
     const double step =
         (static_cast<double>(in_rate) * pacer_ratio) / static_cast<double>(std::max(1u, out_rate));
-    const float vol = std::clamp(Settings::values.volume.GetValue(), 0.0f, 1.0f);
+    const float vol = Settings::values.audio_muted
+                          ? 0.0f
+                          : std::clamp(Settings::values.volume.GetValue(), 0.0f, 1.0f);
 
     std::size_t written = 0;
     while (written < out_frames && queued_frames >= 2) {

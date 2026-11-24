@@ -38,7 +38,9 @@ struct MenuRequest; // AzaharFrame tabmenu
 #ifdef ENABLE_ALT_CORES
 namespace FrameCores {
 class AltCoreHost;
-}
+class ProfileInput;
+struct RomInfo;
+} // namespace FrameCores
 #endif
 
 // Needs to be included at the end due to https://bugreports.qt.io/browse/QTBUG-73263
@@ -214,9 +216,24 @@ private:
     bool LoadROM(const QString& filename);
     void BootGame(const QString& filename);
     void ShutdownGame();
+    /// A DS, GBA or GB game runs: emulation_running is true, but there is no emu_thread and no 3DS
+    /// application in `system`.
+    bool AltGameRunning() const;
 #ifdef ENABLE_ALT_CORES
     bool BootAltGame(const QString& filename);
     void ShutdownAltGame();
+    // frame_alt_window.cpp
+    bool AltGamePaused() const;
+    bool AltWindowOpen(const FrameCores::RomInfo& info); ///< before the host boots
+    void AltWindowShow();                                ///< once it runs
+    void AltWindowClose();
+    void OnAltSettingsChanged();
+    void PauseAltGame(bool pause);
+    void UpdateAltStatusBar();
+    void UpdateAltSaveStates();
+    void AltSaveState(u32 slot);
+    void AltLoadState(u32 slot);
+    void AltCaptureScreenshot();
     void FramePushAltCheats();
     void FrameSyncAltMenuState();
 #endif
@@ -564,6 +581,7 @@ private:
     std::unique_ptr<FrameMemWarn> frame_memwarn;
 #endif
 #ifdef ENABLE_ALT_CORES
+    std::unique_ptr<FrameCores::ProfileInput> alt_input; ///< outlives the host, which reads it
     std::unique_ptr<FrameCores::AltCoreHost> alt_core_host;
 #endif
     bool frame_memwarn_asking = false;       ///< its dialog shows (VR menu or Qt)
