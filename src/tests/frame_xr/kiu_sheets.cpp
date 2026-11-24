@@ -265,3 +265,116 @@ TEST_CASE("Kid Icarus sheets: degenerate draws", "[frame_xr][kiu140c]") {
     REQUIRE(Rim({a, b, bad}, 2.5f).empty());
     REQUIRE(Rim(std::vector<Vertex>(kMaxVertices + 3, a), 2.5f).empty());
 }
+
+namespace {
+/// A sheet as the game's: a wall side (z = -2) faded out, raised in the middle round (0, 0), two
+/// front corners at (+-half, depth) with alpha 1. Faces as Square does.
+std::vector<Vertex> Tent(float half, float depth, float up, float middle_alpha, float y = 0.0f) {
+    const Vertex w0 = At(-half, -2, 0, y), w1 = At(half, -2, 0, y);
+    const Vertex n0 = At(half, depth, 1, y), n1 = At(-half, depth, 1, y);
+    const Vertex m = At(0, 0, middle_alpha, y + up);
+    return {w0, w1, m, w1, n0, m, n0, n1, m, n1, w0, m};
+}
+} // namespace
+
+TEST_CASE("Kid Icarus sheets: the sky's switch", "[frame_xr][kiu140c]") {
+    REQUIRE_FALSE(ParseSky(nullptr).on);
+    REQUIRE_FALSE(ParseSky("").on);
+    REQUIRE_FALSE(ParseSky("0").on);
+    REQUIRE(ParseSky("1").on);
+    REQUIRE(ParseSky("1").hold == Sky{}.hold);
+    const Sky s = ParseSky("0.2,5,9,0.5,1");
+    REQUIRE(s.on);
+    REQUIRE(s.first == 0.2f);
+    REQUIRE(s.hold == 5.0f);
+    REQUIRE(s.far == 9.0f);
+    REQUIRE(s.level == 0.5f);
+    REQUIRE(s.slope == 1.0f);
+    REQUIRE(ParseSky("0.2,5").far == Sky{}.far);
+    for (const char* bad : {"x", "0.2,x", "0.2,5,4", "0.2,0.1,4", "-1,5,9", "0.2,5,9,2",
+                            "0.2,5,9,-1.1", "0.2,5,9,0,-1", "nan,5,9", "0.2,5,1000"}) {
+        REQUIRE_FALSE(ParseSky(bad).on);
+    }
+}
+
+TEST_CASE("Kid Icarus sheets: the sky's strips", "[frame_xr][kiu140c]") {
+    Sky sky = ParseSky("0.2,4,8,0,0");
+    const auto v = Tent(10.0f, 6.0f, 3.0f, 0.5f);
+    const auto out = SkyStrips(v, sky);
+    // Seven quads a ring, three rings; four of the first ring's are triangles.
+    REQUIRE(out.size() == (7 * 2 * 3 - 4) * 3);
+    // The front, level with the corners: held at the middle's alpha, then faded out. Half the
+    // width to the sides, the depth (8, from the wall's side) to the front.
+    Vertex held = At(10, 6 + 4 * 8, 0.5f);
+    REQUIRE(Has(out, held));
+    REQUIRE(Has(out, At(10, 6 + 8 * 8, 0.0f)));
+    REQUIRE(Has(out, At(-10, 6 + 0.2f * 8, 0.5f)));
+    REQUIRE(Has(out, At(10 + 4 * 10, 6 + 4 * 8, 0.5f))); // a corner
+    REQUIRE(Has(out, At(-10 - 8 * 10, 6, 0.0f)));
+    // The wall's side: straight out along it, faded out, never past it.
+    REQUIRE(Has(out, At(10 + 4 * 10, -2, 0.0f)));
+    REQUIRE(Has(out, At(-10 - 8 * 10, -2, 0.0f)));
+    for (const Added& a : out) {
+        REQUIRE(a.v.more[3] >= -2.001f); // z is kept there
+        REQUIRE(a.v.more[2] <= 90.001f);
+        REQUIRE(a.from < v.size());
+    }
+    // Held at the hard edges' own alpha, or at a part of the middle's.
+    sky.level = 1.0f;
+    REQUIRE(Has(SkyStrips(v, sky), At(10, 6 + 4 * 8, 1.0f)));
+    sky.level = -0.5f;
+    REQUIRE(Has(SkyStrips(v, sky), At(10, 6 + 4 * 8, 0.25f)));
+    // Down as the sheet's own side: from the middle (0, 3, 0) to the front edge's (0, 0, 6).
+    sky.level = 0.0f;
+    sky.slope = 1.0f;
+    REQUIRE(Has(SkyStrips(v, sky), At(10, 6 + 4 * 6, 0.5f, -4 * 3.0f)));
+}
+
+TEST_CASE("Kid Icarus sheets: the sky's strips leave no gap and do not flip",
+          "[frame_xr][kiu140c]") {
+    // Seen from below with a plain view, w = 1: the areas are the sheet's way round and add up.
+    auto v = Tent(10.0f, 6.0f, 0.0f, 0.5f);
+    for (Vertex& p : v) {
+        p.pos = {p.more[2], p.more[3], 0.0f, 1.0f};
+    }
+    const auto area = [](const Vertex& a, const Vertex& b, const Vertex& c) {
+        return 0.5f * ((b.pos[0] - a.pos[0]) * (c.pos[1] - a.pos[1]) -
+                       (c.pos[0] - a.pos[0]) * (b.pos[1] - a.pos[1]));
+    };
+    float sheet = 0.0f, sum = 0.0f;
+    for (std::size_t i = 0; i < v.size(); i += 3) {
+        REQUIRE(area(v[i], v[i + 1], v[i + 2]) > 0.0f);
+        sheet += area(v[i], v[i + 1], v[i + 2]);
+    }
+    REQUIRE(sheet == Approx(20 * 8));
+    const auto out = SkyStrips(v, ParseSky("0.2,4,8"));
+    for (std::size_t i = 0; i < out.size(); i += 3) {
+        const float a = area(out[i].v, out[i + 1].v, out[i + 2].v);
+        REQUIRE(a > 0.0f);
+        sum += a;
+    }
+    // From the wall's side on: 8 times the half width to each side and the depth to the front.
+    REQUIRE(sum == Approx((20 + 2 * 80) * (8 + 64) - 20 * 8));
+    // A point of the strips that comes behind the eye is the same plane's, undivided.
+    const auto through = Tent(10.0f, 6.0f, 3.0f, 0.5f, -20.0f);
+    for (const Added& a : SkyStrips(through, ParseSky("0.2,4,8"))) {
+        const auto want = Clip(a.v.more[2], -20.0f, a.v.more[3]);
+        for (int i = 0; i < 4; ++i) {
+            REQUIRE(a.v.pos[i] == Approx(want[i]).margin(1e-2));
+        }
+    }
+}
+
+TEST_CASE("Kid Icarus sheets: no sky for another shape", "[frame_xr][kiu140c]") {
+    const Sky sky = ParseSky("1");
+    REQUIRE(SkyStrips(Square(0, 30, 5, {1, 1, 1, 1}), sky).empty()); // closed
+    REQUIRE(SkyStrips(Square(0, 30, 5, {1, 1, 0, 0}), sky).empty()); // no middle
+    REQUIRE(SkyStrips(Square(0, 30, 5, {0, 0, 0, 0}), sky).empty()); // nothing hard
+    REQUIRE(SkyStrips({}, sky).empty());
+    REQUIRE(SkyStrips(Tent(10, 6, 3, 0.5f), Sky{}).empty()); // off
+    REQUIRE(SkyStrips(Tent(10, 6, 3, 0.0f), sky).empty());   // a middle that is faded
+    auto two = Tent(10, 6, 3, 0.5f);
+    const auto second = Tent(4, 5, 2, 0.7f, 50.0f);
+    two.insert(two.end(), second.begin(), second.end());
+    REQUIRE(SkyStrips(two, sky).size() == 2 * SkyStrips(second, sky).size());
+}

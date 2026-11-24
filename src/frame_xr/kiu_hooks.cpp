@@ -61,6 +61,7 @@ constexpr const char* kSwitchReticleSize = "AZAHARFRAME_KIU_RETICLE_SIZE"; // Az
 constexpr const char* kSwitchReticleTexture = "AZAHARFRAME_KIU_RETICLE_TEX";
 constexpr const char* kSwitchSheets = "AZAHARFRAME_KIU_SHEETS"; // AzaharFrame kiu140
 constexpr const char* kSwitchSheetsOut = "AZAHARFRAME_KIU_SHEETS_OUT"; // AzaharFrame kiu140
+constexpr const char* kSwitchSheetsSky = "AZAHARFRAME_KIU_SHEETS_SKY"; // AzaharFrame kiu140
 constexpr const char* kSwitchTrace = "AZAHARFRAME_KIU_HOOK_TRACE";
 // AzaharFrame kiuvr (kiu_first_person.h)
 constexpr const char* kSwitchFpTrace = "AZAHARFRAME_KIU_FP_TRACE";
@@ -596,6 +597,9 @@ void Hook(int64_t ticks) {
         VideoCore::KiuSheets::g_out.store(
             out >= 1.0f && out <= 4.0f ? out : VideoCore::KiuSheets::kOut,
             std::memory_order_relaxed);
+        const auto sky_text = Switch(kSwitchSheetsSky);
+        VideoCore::KiuSheets::g_sky.Set(
+            VideoCore::KiuSheets::ParseSky(sky_text ? sky_text->c_str() : nullptr));
     }
     // AzaharFrame kiu131: Reticle Size: the game's reticle's draws (its texture) scaled about
     // their middle, in first person (video_core/kiu_view_tap.h).

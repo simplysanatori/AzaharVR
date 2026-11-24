@@ -460,8 +460,11 @@ void RasterizerAccelerated::AddSheetRim() {
                       v.tex_coord2.x, v.tex_coord2.y, v.tex_coord0_w, v.view.x,
                       v.view.y,       v.view.z};
     }
-    const auto rim = VideoCore::KiuSheets::Rim(
-        in, VideoCore::KiuSheets::g_out.load(std::memory_order_relaxed));
+    const VideoCore::KiuSheets::Sky sky = VideoCore::KiuSheets::g_sky.Get();
+    const auto rim =
+        sky.on ? VideoCore::KiuSheets::SkyStrips(in, sky)
+               : VideoCore::KiuSheets::Rim(
+                     in, VideoCore::KiuSheets::g_out.load(std::memory_order_relaxed));
     vertex_batch.reserve(vertex_batch.size() + rim.size());
     for (const VideoCore::KiuSheets::Added& a : rim) {
         HardwareVertex v = vertex_batch[a.from];
