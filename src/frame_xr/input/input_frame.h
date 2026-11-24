@@ -29,6 +29,11 @@ struct HandInput {
     bool bumper = false;
     Vec2f stick;
     bool stick_click = false;
+    /// AzaharFrame kiu140: a finger or the thumb resting on the trigger, the grip, and any of the
+    /// thumb's controls (false on a profile without touch). Only Pit's hand reads them.
+    bool trigger_touch = false;
+    bool grip_touch = false;
+    bool thumb_touch = false;
     /// AzaharVR: the Index trackpad (-1..1 each way; zero without one) and how hard it is pressed
     /// (0..1). Read on PC builds only; a scheme's adapter turns them into the D-pad or the Menu
     /// role (pc_scheme.h).

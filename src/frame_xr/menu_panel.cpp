@@ -356,6 +356,28 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::KiuBottomSize;
     case Id::KiuBottomOpacity:
         return MenuSetting::KiuBottomOpacity;
+    case Id::KiuWristAngle: // AzaharFrame kiu140
+        return MenuSetting::KiuWristAngle;
+    case Id::KiuWristAlong: // AzaharFrame kiu140
+        return MenuSetting::KiuWristAlong;
+    case Id::KiuCutscenes: // AzaharFrame kiu140
+        return MenuSetting::KiuCutscenes;
+    case Id::KiuHud: // AzaharFrame kiu140
+        return MenuSetting::KiuHud;
+    case Id::KiuHudSize: // AzaharFrame kiu140
+        return MenuSetting::KiuHudSize;
+    case Id::KiuHudHeight: // AzaharFrame kiu140
+        return MenuSetting::KiuHudHeight;
+    case Id::KiuHudSpread: // AzaharFrame kiu140
+        return MenuSetting::KiuHudSpread;
+    case Id::KiuHudBar: // AzaharFrame kiu140
+        return MenuSetting::KiuHudBar;
+    case Id::KiuHudScore: // AzaharFrame kiu140
+        return MenuSetting::KiuHudScore;
+    case Id::KiuArm: // AzaharFrame kiu140
+        return MenuSetting::KiuArm;
+    case Id::KiuLaurel: // AzaharFrame kiu140
+        return MenuSetting::KiuLaurel;
     case Id::WristSide:
         return MenuSetting::WristSide;
     case Id::KiuReticleSize:
@@ -1110,6 +1132,17 @@ void MenuPanel::BuildModel(const Host& host) {
     m.kiu_bottom_opacity =
         static_cast<int>(std::clamp<u32>(v.vr_kiu_bottom_opacity.GetValue(), 20, 100));
     m.kiu_bottom_moved = v.vr_kiu_bottom_x.GetValue() != 0.0f || v.vr_kiu_bottom_y.GetValue() != 0.0f;
+    m.kiu_wrist_angle = static_cast<int>(v.vr_kiu_wrist_angle.GetValue()); // AzaharFrame kiu140
+    m.kiu_wrist_along = static_cast<int>(v.vr_kiu_wrist_along.GetValue()); // AzaharFrame kiu140
+    m.kiu_cutscenes = static_cast<int>(v.vr_kiu_cutscenes.GetValue()); // AzaharFrame kiu140
+    m.kiu_hud = static_cast<int>(v.vr_kiu_hud.GetValue()); // AzaharFrame kiu140
+    m.kiu_hud_size = static_cast<int>(v.vr_kiu_hud_size.GetValue()); // AzaharFrame kiu140
+    m.kiu_hud_height = static_cast<int>(v.vr_kiu_hud_height.GetValue()); // AzaharFrame kiu140
+    m.kiu_hud_spread = static_cast<int>(v.vr_kiu_hud_spread.GetValue()); // AzaharFrame kiu140
+    m.kiu_hud_bar = static_cast<int>(v.vr_kiu_hud_bar.GetValue()); // AzaharFrame kiu140
+    m.kiu_hud_score = static_cast<int>(v.vr_kiu_hud_score.GetValue()); // AzaharFrame kiu140
+    m.kiu_arm = static_cast<int>(v.vr_kiu_arm.GetValue()); // AzaharFrame kiu140
+    m.kiu_laurel = static_cast<int>(v.vr_kiu_laurel.GetValue()); // AzaharFrame kiu140
     m.wrist_side = static_cast<int>(std::min<u32>(v.vr_wrist_side.GetValue(), 1));
     m.kiu_reticle_size =
         static_cast<int>(std::clamp<u32>(v.vr_kiu_reticle_size.GetValue(), 30, 150));
@@ -1652,6 +1685,61 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.setting = MenuSetting::KiuBottomY;
         break;
     }
+    case Id::KiuWristAngle: // AzaharFrame kiu140
+        r.value = std::clamp(value, 0, 360);
+        Apply(v.vr_kiu_wrist_angle, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuWristAngle;
+        break;
+    case Id::KiuWristAlong: // AzaharFrame kiu140
+        r.value = std::clamp(value, -12, 25);
+        Apply(v.vr_kiu_wrist_along, r.value, per_game);
+        r.setting = MenuSetting::KiuWristAlong;
+        break;
+    case Id::KiuCutscenes: // AzaharFrame kiu140
+        r.value = std::clamp(value, 0, 1);
+        Apply(v.vr_kiu_cutscenes, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuCutscenes;
+        break;
+    case Id::KiuHud: // AzaharFrame kiu140
+        r.value = std::clamp(value, 0, 1);
+        Apply(v.vr_kiu_hud, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuHud;
+        break;
+    case Id::KiuHudSize: // AzaharFrame kiu140
+        r.value = std::clamp(value, 40, 200);
+        Apply(v.vr_kiu_hud_size, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuHudSize;
+        break;
+    case Id::KiuHudHeight: // AzaharFrame kiu140
+        r.value = std::clamp(value, -30, 30);
+        Apply(v.vr_kiu_hud_height, r.value, per_game);
+        r.setting = MenuSetting::KiuHudHeight;
+        break;
+    case Id::KiuHudSpread: // AzaharFrame kiu140
+        r.value = std::clamp(value, 0, 200);
+        Apply(v.vr_kiu_hud_spread, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuHudSpread;
+        break;
+    case Id::KiuHudBar: // AzaharFrame kiu140
+        r.value = std::clamp(value, 0, 2);
+        Apply(v.vr_kiu_hud_bar, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuHudBar;
+        break;
+    case Id::KiuHudScore: // AzaharFrame kiu140
+        r.value = std::clamp(value, 0, 2);
+        Apply(v.vr_kiu_hud_score, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuHudScore;
+        break;
+    case Id::KiuArm: // AzaharFrame kiu140
+        r.value = std::clamp(value, 0, 1);
+        Apply(v.vr_kiu_arm, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuArm;
+        break;
+    case Id::KiuLaurel: // AzaharFrame kiu140
+        r.value = std::clamp(value, 0, 1);
+        Apply(v.vr_kiu_laurel, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuLaurel;
+        break;
     case Id::KiuReticleSize:
         r.value = std::clamp(value, 30, 150);
         Apply(v.vr_kiu_reticle_size, static_cast<u32>(r.value), per_game);
@@ -2634,6 +2722,12 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::KiuSnapTurn:   // AzaharFrame kiutoggles: Turning (Smooth, 30 to 90 degrees)
     case Id::KiuBottomScreen: // AzaharFrame kiu131: Off, Persistent, Wrist
     case Id::KiuOverShoulder: // AzaharFrame kiu133: Camera
+    case Id::KiuCutscenes: // AzaharFrame kiu140
+    case Id::KiuHud: // AzaharFrame kiu140
+    case Id::KiuHudBar: // AzaharFrame kiu140
+    case Id::KiuHudScore: // AzaharFrame kiu140
+    case Id::KiuArm: // AzaharFrame kiu140
+    case Id::KiuLaurel: // AzaharFrame kiu140
     case Id::WristSide:       // Back, Inside
     case Id::WindowScale:
     case Id::MarginX: // AzaharFrame fovaxis

@@ -397,6 +397,14 @@ struct BottomNow {
     Talk place{};       ///< Persistent: its default place (FP_TALK_AT) and width (scaled)
     float right_deg = 0.0f, down_deg = 0.0f; ///< Persistent: the grip's offset (settings)
 };
+/// AzaharFrame kiu140: the game plays a cutscene of its own drawing, shown on the Primary Screen
+/// (kiu_cutscene.h; Cutscenes, vr_kiu_cutscenes, or AZAHARFRAME_KIU_CUTSCENES=0|1). Set each VBlank
+/// by the hooks; any thread.
+void SetCutscene(bool on);
+bool Cutscene();
+bool CutscenesOnScreen();
+/// AzaharFrame kiu140: the HUD moved into the view (HUD, vr_kiu_hud, or AZAHARFRAME_KIU_HUD=0|1).
+bool HudInView();
 /// Live, with Angel's Aim's first person on (Off otherwise): the settings and switches. Any thread.
 BottomNow BottomScreenNow();
 /// Persistent in the head's frame (x right, y up, -z ahead): its middle `right` degrees to the

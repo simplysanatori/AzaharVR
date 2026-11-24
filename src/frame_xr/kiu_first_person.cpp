@@ -388,6 +388,26 @@ Talk TalkNow() {
 
 
 // AzaharFrame kiu131
+namespace {
+std::atomic<bool> g_cutscene{false};
+} // namespace
+
+void SetCutscene(bool on) {
+    g_cutscene.store(on, std::memory_order_relaxed);
+}
+bool Cutscene() {
+    return g_cutscene.load(std::memory_order_relaxed);
+}
+bool CutscenesOnScreen() {
+    const auto text = Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_CUTSCENES");
+    return text ? *text != "0" : Settings::values.vr_kiu_cutscenes.GetValue() != 0;
+}
+
+bool HudInView() {
+    const auto text = Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_HUD");
+    return text ? *text != "0" : Settings::values.vr_kiu_hud.GetValue() != 0;
+}
+
 BottomNow BottomScreenNow() {
     BottomNow b;
     if (!AngelsAim() && !On()) {

@@ -111,6 +111,17 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_kiu_bottom_opacity);
     f(v.vr_kiu_bottom_x);
     f(v.vr_kiu_bottom_y);
+    f(v.vr_kiu_wrist_angle); // AzaharFrame kiu140
+    f(v.vr_kiu_wrist_along); // AzaharFrame kiu140
+    f(v.vr_kiu_cutscenes); // AzaharFrame kiu140
+    f(v.vr_kiu_hud); // AzaharFrame kiu140
+    f(v.vr_kiu_hud_size); // AzaharFrame kiu140
+    f(v.vr_kiu_hud_height); // AzaharFrame kiu140
+    f(v.vr_kiu_hud_spread); // AzaharFrame kiu140
+    f(v.vr_kiu_hud_bar); // AzaharFrame kiu140
+    f(v.vr_kiu_hud_score); // AzaharFrame kiu140
+    f(v.vr_kiu_arm); // AzaharFrame kiu140
+    f(v.vr_kiu_laurel); // AzaharFrame kiu140
     f(v.vr_kiu_reticle_size);
     f(v.vr_kiu_game_camera); // AzaharFrame kiu133
     f(v.vr_kiu_pit_opacity);

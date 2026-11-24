@@ -27,7 +27,9 @@ struct Actions::Impl {
     XrAction stick = XR_NULL_HANDLE;
     XrAction stick_click = XR_NULL_HANDLE;
     XrAction aim_pose = XR_NULL_HANDLE;
-    XrAction haptic = XR_NULL_HANDLE; ///< AzaharFrame kiugyro: Light Gun's recoil (output)
+    XrAction haptic = XR_NULL_HANDLE;
+    XrAction trigger_touch = XR_NULL_HANDLE, grip_touch = XR_NULL_HANDLE,
+             thumb_touch = XR_NULL_HANDLE; ///< AzaharFrame kiu140 ///< AzaharFrame kiugyro: Light Gun's recoil (output)
     bool haptic_bound = false;
     int pulses = 0;
     // Right controller
@@ -231,6 +233,14 @@ bool Actions::Create(XrInstance instance, bool has_frame_controller, bool has_fo
     s.dpad_right = MakeAction(action_set_, "dpad_right", "D-Pad Right",
                               XR_ACTION_TYPE_BOOLEAN_INPUT, nullptr, 0);
 
+    // AzaharFrame kiu140: the finger rests (Pit's hand follows them); never buttons of the game.
+    s.trigger_touch = MakeAction(action_set_, "trigger_touch", "Trigger Touch",
+                                 XR_ACTION_TYPE_BOOLEAN_INPUT, hands, 2);
+    s.grip_touch = MakeAction(action_set_, "grip_touch", "Grip Touch", XR_ACTION_TYPE_BOOLEAN_INPUT,
+                              hands, 2);
+    s.thumb_touch = MakeAction(action_set_, "thumb_touch", "Thumb Touch",
+                               XR_ACTION_TYPE_BOOLEAN_INPUT, hands, 2);
+
 #ifdef AZAHARVR_PC
     s.trackpad = MakeAction(action_set_, "trackpad", "Trackpad", XR_ACTION_TYPE_VECTOR2F_INPUT,
                             hands, 2);
@@ -257,6 +267,27 @@ bool Actions::Create(XrInstance instance, bool has_frame_controller, bool has_fo
             b.push_back({s.haptic, path("/user/hand/left/output/haptic")});
             b.push_back({s.haptic, path("/user/hand/right/output/haptic")});
         }
+        return b;
+    };
+
+    // AzaharFrame kiu140: a profile's touches, added to its bindings when the runtime takes them;
+    // refused, the same bindings again without them (one unknown path refuses them all).
+    const auto with_touch = [&](Bindings b, std::initializer_list<const char*> left,
+                                std::initializer_list<const char*> right) {
+        const auto add = [&](const char* side, std::initializer_list<const char*> names) {
+            for (const char* name : names) {
+                const XrAction action = std::strstr(name, "trigger")   ? s.trigger_touch
+                                        : std::strstr(name, "squeeze") ? s.grip_touch
+                                                                       : s.thumb_touch;
+                if (action != XR_NULL_HANDLE) {
+                    b.push_back({action, path((std::string{"/user/hand/"} + side + "/input/" + name +
+                                               "/touch")
+                                                  .c_str())});
+                }
+            }
+        };
+        add("left", left);
+        add("right", right);
         return b;
     };
 
@@ -299,7 +330,15 @@ bool Actions::Create(XrInstance instance, bool has_frame_controller, bool has_fo
         // SteamVR has taken the grip as squeeze/value and as grip/value.
         constexpr const char* kFrame = "/interaction_profiles/valve/frame_controller";
         s.haptic_bound = true;
-        if (!Suggest(instance, kFrame, with_haptic(frame_bindings("squeeze/value"))) &&
+        const auto frame_touch = [&](Bindings b) {
+            return with_touch(std::move(b),
+                              {"trigger", "squeeze", "thumbstick", "dpad_up", "dpad_down",
+                               "dpad_left", "dpad_right", "view"},
+                              {"trigger", "squeeze", "thumbstick", "a", "b", "x", "y", "menu"});
+        };
+        if (!Suggest(instance, kFrame,
+                     frame_touch(with_haptic(frame_bindings("squeeze/value")))) &&
+            !Suggest(instance, kFrame, with_haptic(frame_bindings("squeeze/value"))) &&
             !Suggest(instance, kFrame, with_haptic(frame_bindings("grip/value")))) {
             s.haptic_bound = false;
             if (!Suggest(instance, kFrame, frame_bindings("squeeze/value"))) {
@@ -327,7 +366,10 @@ bool Actions::Create(XrInstance instance, bool has_frame_controller, bool has_fo
                 {s.aim_pose, path("/user/hand/right/input/aim/pose")},
             };
     constexpr const char* kTouch = "/interaction_profiles/oculus/touch_controller";
-    if (Suggest(instance, kTouch, with_haptic(touch_bindings))) {
+    if (Suggest(instance, kTouch,
+                with_touch(with_haptic(touch_bindings), {"trigger", "thumbstick", "thumbrest", "x", "y"},
+                           {"trigger", "thumbstick", "thumbrest", "a", "b"})) ||
+        Suggest(instance, kTouch, with_haptic(touch_bindings))) {
         s.haptic_bound = s.haptic_bound || !has_frame_controller;
     } else {
         Suggest(instance, kTouch, touch_bindings);
@@ -381,7 +423,11 @@ bool Actions::Create(XrInstance instance, bool has_frame_controller, bool has_fo
         return b;
     };
     constexpr const char* kIndex = "/interaction_profiles/valve/index_controller";
-    if (!Suggest(instance, kIndex, with_haptic(table(kIndexPaths, nullptr, nullptr)))) {
+    if (!Suggest(instance, kIndex,
+                 with_touch(with_haptic(table(kIndexPaths, nullptr, nullptr)),
+                            {"trigger", "thumbstick", "trackpad", "a", "b"},
+                            {"trigger", "thumbstick", "trackpad", "a", "b"})) &&
+        !Suggest(instance, kIndex, with_haptic(table(kIndexPaths, nullptr, nullptr)))) {
         Suggest(instance, kIndex, table(kIndexPaths, nullptr, nullptr));
     }
     if (has_focus3) {
@@ -500,6 +546,10 @@ bool Actions::Sync(XrSession session, XrSpace base, XrTime time, InputFrame& out
         hand.bumper = GetBool(session, s.bumper, sub);
         hand.stick = GetVec2(session, s.stick, sub);
         hand.stick_click = GetBool(session, s.stick_click, sub);
+        // AzaharFrame kiu140: an action no profile bound reads false.
+        hand.trigger_touch = s.trigger_touch != XR_NULL_HANDLE && GetBool(session, s.trigger_touch, sub);
+        hand.grip_touch = s.grip_touch != XR_NULL_HANDLE && GetBool(session, s.grip_touch, sub);
+        hand.thumb_touch = s.thumb_touch != XR_NULL_HANDLE && GetBool(session, s.thumb_touch, sub);
         if (s.trackpad != XR_NULL_HANDLE) { // AzaharVR: PC builds only
             hand.trackpad = GetVec2(session, s.trackpad, sub);
             hand.trackpad_force = GetFloat(session, s.trackpad_force, sub);

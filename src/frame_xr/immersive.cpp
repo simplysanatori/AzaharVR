@@ -38,6 +38,7 @@
 #include "frame_xr/presets.h" // AzaharFrame immersive: preset screen sizes
 #include "frame_xr/render_margin.h" // AzaharFrame fovaxis
 #include "frame_xr/test_switches.h" // AzaharFrame integ9
+#include "video_core/kiu_hud.h" // AzaharFrame kiu140
 #include "video_core/kiu_view_tap.h" // AzaharFrame kiu140
 #include "video_core/vr_immersive.h"
 
@@ -831,6 +832,7 @@ L::ScreenDecision Decision() {
     s.bottom_toggled = g.bottom_toggled;
     s.bottom_focused = g.focus_bottom;
     s.menu_open = g.menu_open;
+    s.cutscene = KiuFirstPerson() && Kiu::FirstPerson::Cutscene(); // AzaharFrame kiu140
     s.view_valid = g.view.valid;
     return L::Decide(s);
 }
@@ -1667,6 +1669,27 @@ void OnFrame(const FrameInfo& info) {
         UpdateNatural(mode);
     }
 
+    // AzaharFrame kiu140: HUD: In View (video_core/kiu_hud.h).
+    VideoCore::KiuHud::Place hud_place;
+    if (g.engaged && IsViewMode(mode) && KiuFirstPerson() && Kiu::FirstPerson::HudInView()) {
+        auto& v = Settings::values;
+        hud_place = VideoCore::KiuHud::PlaceFor(
+            static_cast<int>(v.vr_kiu_hud_size.GetValue()), v.vr_kiu_hud_height.GetValue(),
+            static_cast<int>(v.vr_kiu_hud_spread.GetValue()),
+            VideoCore::KiuHud::SideFrom(v.vr_kiu_hud_bar.GetValue()),
+            VideoCore::KiuHud::SideFrom(v.vr_kiu_hud_score.GetValue()),
+            g.solved.tan_half_y * g.solved.aspect, g.solved.tan_half_y, g.solved.pitch_rad);
+        static bool logged = false;
+        if (!logged) {
+            logged = true;
+            LOG_INFO(Frontend,
+                     "xr: Kid Icarus first person: the HUD in view: {:.2f} x {:.2f} of the screen "
+                     "at {:.2f} up",
+                     hud_place.half_across, hud_place.half_up, hud_place.middle_up);
+        }
+    }
+    VideoCore::KiuHud::g_live.Set(hud_place);
+
     VideoCore::Immersive::VRData data; // CitraVR's "off" values
     data.ipd = g.ipd.Value(); // AzaharFrame ipd
     // AzaharFrame doubling: the pose the game camera is made from goes with it (the immersive
@@ -1696,6 +1719,9 @@ void OnFrame(const FrameInfo& info) {
                                                        g.menu_exact.Weight());
             const ImmersivePreset* preset = FindImmersivePreset(g.title_id);
             data.hud.far_plane = !data.hud.IsIdentity() && preset && preset->hud_far_plane;
+            if (hud_place.on) {
+                data.hud = {}; // AzaharFrame kiu140: its pieces are placed whole instead
+            }
             static int logged[2] = {VideoCore::HudSpacing::kDefaultSpacing,
                                     VideoCore::HudSpacing::kDefaultSpacing};
             if (spacing_x != logged[0] || spacing_y != logged[1]) {
@@ -1996,6 +2022,7 @@ void OnFrame(const FrameInfo& info) {
                      : !g.live      ? "no game on view"
                      : g.focus_bottom ? "bottom screen in focus"
                      : g.menu_open  ? "in-game menu"
+                     : Kiu::FirstPerson::Cutscene() ? "cutscene"
                                     : "bottom screen");
         }
     }

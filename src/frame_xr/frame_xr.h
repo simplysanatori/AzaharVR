@@ -400,6 +400,17 @@ enum class MenuSetting {
                      ///< (vr_kiu_over_shoulder, vr_kiu_game_camera; AzaharFrame kiu133)
     KiuPitOpacity,   ///< `value` percent, 20 to 100 (vr_kiu_pit_opacity; AzaharFrame kiu133)
     KiuSnapTurn,     ///< `value` degrees: 0 Smooth, 30, 45, 60 or 90 (vr_kiu_snap_turn)
+    KiuWristAngle, ///< AzaharFrame kiu140: `value` a slider, 0 to 360 degrees, with Wrist (vr_kiu_wrist_angle)
+    KiuWristAlong, ///< AzaharFrame kiu140: `value` a slider, -12 to 25 cm, with Wrist (vr_kiu_wrist_along)
+    KiuCutscenes, ///< AzaharFrame kiu140: `value` index: Cutscenes' In View, Primary Screen (vr_kiu_cutscenes)
+    KiuHud, ///< AzaharFrame kiu140: `value` index: HUD's Game's Own, In View (vr_kiu_hud)
+    KiuHudSize, ///< AzaharFrame kiu140: `value` a slider, 40 to 200 percent (vr_kiu_hud_size)
+    KiuHudHeight, ///< AzaharFrame kiu140: `value` a slider, -30 to 30 degrees (vr_kiu_hud_height)
+    KiuHudSpread, ///< AzaharFrame kiu140: `value` a slider, 0 to 200 percent (vr_kiu_hud_spread)
+    KiuHudBar, ///< AzaharFrame kiu140: `value` index: Left, Middle, Right (vr_kiu_hud_bar)
+    KiuHudScore, ///< AzaharFrame kiu140: `value` index: Left, Middle, Right (vr_kiu_hud_score)
+    KiuArm, ///< AzaharFrame kiu140: `value` index: Off, On (vr_kiu_arm)
+    KiuLaurel, ///< AzaharFrame kiu140: `value` index: Off, On (vr_kiu_laurel)
     AngelsAimIntroShown, ///< AzaharFrame kiuweap2: `value` 1 (vr_angels_aim_intro_shown, global)
     /// AzaharFrame bfidr: what Black Frame Insertion turned on (bfi_helpers.h): `value` bit 0
     /// vr_bfi_set_dynamic_resolution, bit 1 vr_bfi_set_panel

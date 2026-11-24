@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 
 #include "frame_xr/input/gyro_aim.h"
 #include "frame_xr/vis/stats_place.h"
@@ -31,12 +32,24 @@ Input::Hand WristScreenHand(uint32_t motion_controls) {
     return Input::GyroAimSource(motion_controls) == 2 ? Input::Hand::Right : Input::Hand::Left;
 }
 
-Posef WristScreenLocalPose(Input::Hand hand, bool beside_stats, WristSide side, float width) {
+Posef WristScreenLocalPose(Input::Hand hand, bool beside_stats, WristSide side, float width,
+                           WristAt at) {
     Posef p = WristLocalPose(side); // the left wrist's (stats_place.cpp says how it was found)
     if (beside_stats) {
         // Along the forearm toward the elbow: the way the picture reads is toward the hand.
         const Vec3f toward_hand = Input::Rotate(p.orientation, {1.0f, 0.0f, 0.0f});
         p.position = p.position - toward_hand * WristScreenBesideStats(width);
+    }
+    // AzaharFrame kiu140: round the wrist's line (through the handle's middle, along the picture's
+    // own +X) and along it. The picture keeps reading along the forearm and facing out.
+    if (at.angle_deg != 0.0f || at.up_arm_m != 0.0f) {
+        const Vec3f axis = Input::Rotate(p.orientation, {1.0f, 0.0f, 0.0f});
+        const float half = 0.5f * at.angle_deg * 3.14159265f / 180.0f;
+        const float s = std::sin(half);
+        const Quatf turn{axis.x * s, axis.y * s, axis.z * s, std::cos(half)};
+        const Vec3f middle{kWristMiddleX, p.position.y, p.position.z};
+        p.position = middle + Input::Rotate(turn, p.position - middle) - axis * at.up_arm_m;
+        p.orientation = Input::Normalized(Input::Multiply(turn, p.orientation));
     }
     if (hand == Input::Hand::Right) {
         // Mirrored across the controller's middle (x to -x): the rotation M R M with M the
@@ -51,19 +64,44 @@ Posef WristScreenLocalPose(Input::Hand hand, bool beside_stats, WristSide side, 
 }
 
 Posef WristScreenPose(const Posef& aim, Input::Hand hand, bool beside_stats, WristSide side,
-                      float width) {
-    const Posef local = WristScreenLocalPose(hand, beside_stats, side, width);
+                      float width, WristAt at) {
+    const Posef local = WristScreenLocalPose(hand, beside_stats, side, width, at);
     return {Input::Normalized(Input::Multiply(aim.orientation, local.orientation)),
             Input::Transform(aim, local.position)};
 }
 
+int UprightTurns(const Posef& panel, const Vec3f& head_up, int now) {
+    const float x = Input::Dot(head_up, Input::Rotate(panel.orientation, {1.0f, 0.0f, 0.0f}));
+    const float y = Input::Dot(head_up, Input::Rotate(panel.orientation, {0.0f, 1.0f, 0.0f}));
+    if (x * x + y * y < 0.04f) {
+        return now; // seen edge on, or nothing to go by
+    }
+    const float turned = std::atan2(-x, y) * 180.0f / 3.14159265f; // the picture's top to it
+    float off = turned - 90.0f * static_cast<float>(now);
+    off -= 360.0f * std::round(off / 360.0f);
+    if (std::abs(off) < kUprightDeg) {
+        return now;
+    }
+    return (static_cast<int>(std::lround(turned / 90.0f)) + 4) % 4;
+}
+
+Posef TurnedQuarters(const Posef& panel, int turns) {
+    const float half = 0.25f * 3.14159265f * static_cast<float>(turns);
+    return {Input::Normalized(Input::Multiply(
+                panel.orientation, Quatf{0.0f, 0.0f, std::sin(half), std::cos(half)})),
+            panel.position};
+}
+
 WristScreen::Out WristScreen::Update(bool wanted, bool tracked, const Posef& aim,
                                      Input::Hand hand, bool beside_stats, const Vec3f& eye,
-                                     WristSide side, float width) {
+                                     WristSide side, float width, WristAt at,
+                                     const Vec3f& head_up) {
     Out out;
     const bool was = shown_;
     if (wanted && tracked) {
-        out.pose = WristScreenPose(aim, hand, beside_stats, side, width);
+        out.pose = WristScreenPose(aim, hand, beside_stats, side, width, at);
+        turns_ = UprightTurns(out.pose, head_up, turns_);
+        out.pose = TurnedQuarters(out.pose, turns_);
         out.facing_deg = WristFacingDeg(out.pose, eye);
         out.distance_m = Input::Length(out.pose.position - eye);
         shown_ = WristShown(out.facing_deg, shown_);

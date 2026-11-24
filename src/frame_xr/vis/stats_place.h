@@ -91,6 +91,8 @@ enum class WristSide : uint8_t { Back = 0, Inside = 1 };
 constexpr WristSide WristSideFrom(uint32_t setting) {
     return setting == 1u ? WristSide::Inside : WristSide::Back;
 }
+/// The handle's middle across the controller, which the wrist's line runs through.
+constexpr float kWristMiddleX = -0.0135f;
 Input::Posef WristLocalPose(WristSide side = WristSide::Inside);
 /// In LOCAL space for the left controller's aim pose.
 Input::Posef WristStatsPose(const Input::Posef& left_aim, WristSide side = WristSide::Inside);

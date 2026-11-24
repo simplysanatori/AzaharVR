@@ -12,6 +12,7 @@
 #include "video_core/pica/pica_core.h"
 #include "video_core/rasterizer_accelerated.h"
 #include "video_core/vr_auto_shape.h" // AzaharFrame fixes7
+#include "video_core/kiu_hud.h" // AzaharFrame kiu140
 #include "video_core/kiu_view_tap.h" // AzaharFrame kiu2d
 #include "video_core/vr_immersive.h" // AzaharFrame depth
 #include "video_core/vr_content_repeat.h" // AzaharFrame bfikit
@@ -373,7 +374,46 @@ bool RasterizerAccelerated::ReticleDraw() const {
            VideoCore::Immersive::ReticleScaled(regs.texturing.texture0.GetPhysicalAddress());
 }
 
+bool RasterizerAccelerated::HudDraw() const {
+    if (!VideoCore::KiuHud::g_live.on.load(std::memory_order_relaxed) ||
+        regs.pipeline.use_gs != Pica::PipelineRegs::UseGS::No) {
+        return false;
+    }
+    using F = Pica::FramebufferRegs::BlendFactor;
+    const auto& om = regs.framebuffer.output_merger;
+    VideoCore::KiuHud::Draw d;
+    d.top_viewport = f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f == 240.0f &&
+                     f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f == 400.0f;
+    d.depth_test = om.depth_test_enable != 0;
+    d.blended = om.alphablend_enable != 0 && om.alpha_blending.factor_source_rgb != F::One;
+    d.textured = regs.texturing.main_config.texture0_enable != 0;
+    d.texture = regs.texturing.texture0.GetPhysicalAddress();
+    d.vertices = regs.pipeline.num_vertices;
+    // The reticle is the hand's, not the HUD's.
+    const u32 reticle = VideoCore::Immersive::g_reticle_texture.load(std::memory_order_relaxed);
+    return VideoCore::KiuHud::MayBeHud(d) && !(reticle != 0 && d.texture == reticle);
+}
+
 void RasterizerAccelerated::TurnSoftwareVertices() {
+    // AzaharFrame kiu140: a piece of the HUD, moved into the view (kiu_hud.h); never with the world.
+    if (vertex_batch.size() >= 3 && HudDraw()) {
+        std::vector<VideoCore::KiuHud::Vertex> flat(vertex_batch.size());
+        for (std::size_t i = 0; i < flat.size(); ++i) {
+            const auto& q = vertex_batch[i].position;
+            flat[i] = {q.x, q.y, q.z, q.w};
+        }
+        if (VideoCore::KiuHud::Movable(flat.data(), flat.size())) {
+            const VideoCore::KiuHud::Place place = VideoCore::KiuHud::g_live.Get();
+            for (std::size_t i = 0; i + 2 < flat.size(); i += 3) {
+                VideoCore::KiuHud::Vertex t[3] = {flat[i], flat[i + 1], flat[i + 2]};
+                VideoCore::KiuHud::Move(t, place, vr_factor, vr_factor_y);
+                for (std::size_t k = 0; k < 3; ++k) {
+                    vertex_batch[i + k].position = {t[k].x, t[k].y, t[k].z, t[k].w};
+                }
+            }
+            return;
+        }
+    }
     // AzaharFrame kiu131: Reticle Size: the reticle's draw about its middle on the screen.
     if (!vertex_batch.empty() && ReticleDraw()) {
         const float k = VideoCore::Immersive::g_reticle_scale.load(std::memory_order_relaxed);
@@ -439,6 +479,26 @@ void RasterizerAccelerated::ApplyVRDataToPicaVSUniforms(Pica::Shader::Generator:
 {
     // AzaharFrame oot: whether the draws with these uniforms go through the patched world camera.
     vr_world_uniforms = false;
+    // AzaharFrame kiu140: the angle the world is drawn with (kiu_view_tap.h DrawnAngle).
+    if (const u32 r = VideoCore::Immersive::g_drawn_angle.reg.load(std::memory_order_relaxed);
+        r >= 4 && r + 2 < vs_uniforms.f.size() &&
+        f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f == 240.0f &&
+        f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f == 400.0f) {
+        float m[3][3], rows[4][4];
+        for (u32 i = 0; i < 4; ++i) {
+            for (u32 j = 0; j < 4; ++j) {
+                rows[i][j] = vs_uniforms.f[r - 4 + i][j];
+                if (i < 3 && j < 3) {
+                    m[i][j] = vs_uniforms.f[r + i][j];
+                }
+            }
+        }
+        VideoCore::Immersive::Projection drawn;
+        if (VideoCore::Immersive::LooksLikeWorldView(m) &&
+            VideoCore::Immersive::ProjectionFromRows(rows, drawn)) {
+            VideoCore::Immersive::g_drawn_angle.Count(drawn.tan_half_y);
+        }
+    }
     if (vr_bottom_draw) {
         return; // AzaharFrame kiu140: the bottom screen's own camera
     }

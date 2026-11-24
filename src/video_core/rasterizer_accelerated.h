@@ -152,6 +152,9 @@ public:
     /// AzaharFrame kiu131: whether this draw is the reticle Reticle Size scales (kiu_view_tap.h):
     /// such a draw is not accelerated, so its vertices can be scaled on the CPU.
     bool ReticleDraw() const;
+    /// AzaharFrame kiu140: whether this draw may be a piece of Kid Icarus: Uprising's HUD, moved
+    /// into the view on the CPU (kiu_hud.h).
+    bool HudDraw() const;
 };
 
 } // namespace VideoCore

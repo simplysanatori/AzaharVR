@@ -61,18 +61,42 @@ Input::Hand WristScreenHand(uint32_t motion_controls);
 /// +Z its front).
 /// AzaharFrame kiu131: on the wrist side chosen (stats_place.h WristSide; Inside by default, as
 /// before) and `width` wide (Bottom Screen Size: beside the stats it moves that much further).
+/// AzaharFrame kiu140: and from there `at` (the screen's alone, never the stats').
+struct WristAt {
+    float angle_deg = 0.0f; ///< round the wrist, 0 to 360: from the side chosen over the thumb's
+                            ///< side (Back) or under the hand (Inside), the mirror image on the right
+    float up_arm_m = 0.0f;  ///< along the forearm: toward the elbow, or the hand below 0
+};
+/// The settings' ranges (vr_kiu_wrist_angle degrees, vr_kiu_wrist_along centimetres).
+constexpr int kWristAngleMax = 360, kWristAlongMin = -12, kWristAlongMax = 25;
+constexpr WristAt WristAtFor(int angle_deg, int along_cm) {
+    return {static_cast<float>(angle_deg < 0 ? 0 : angle_deg > kWristAngleMax ? 360 : angle_deg),
+            0.01f * static_cast<float>(along_cm < kWristAlongMin   ? kWristAlongMin
+                                       : along_cm > kWristAlongMax ? kWristAlongMax
+                                                                   : along_cm)};
+}
 Input::Posef WristScreenLocalPose(Input::Hand hand, bool beside_stats,
                                   WristSide side = WristSide::Inside,
-                                  float width = kWristScreenWidth);
+                                  float width = kWristScreenWidth, WristAt at = {});
 /// In LOCAL space for that controller's aim pose.
 Input::Posef WristScreenPose(const Input::Posef& aim, Input::Hand hand, bool beside_stats,
-                             WristSide side = WristSide::Inside, float width = kWristScreenWidth);
+                             WristSide side = WristSide::Inside, float width = kWristScreenWidth,
+                             WristAt at = {});
 /// How far toward the elbow a screen `width` wide moves beside the wrist stats.
 constexpr float WristScreenBesideStats(float width) {
     return 0.5f * 0.10f + 0.5f * width + 0.01f;
 }
 
+/// AzaharFrame kiu140: the quarter turns (0 to 3, counterclockwise as seen) that put the picture's
+/// top nearest to `head_up` as seen on `panel`; `now` stays until it is kUprightDeg off.
+constexpr float kUprightDeg = 60.0f;
+int UprightTurns(const Input::Posef& panel, const Input::Vec3f& head_up, int now);
+/// `panel` turned that many quarters about its front.
+Input::Posef TurnedQuarters(const Input::Posef& panel, int turns);
+
 /// Each display frame: where it is and whether it shows.
+/// AzaharFrame kiu140: with `head_up` given, upright for the eyes in quarter turns: placed over
+/// the wrist it reads with the arm pointing ahead as well as across the body.
 class WristScreen {
 public:
     struct Out {
@@ -85,13 +109,16 @@ public:
     /// `wanted`: Angel's Aim in effect with the switch on; `tracked`: the off hand's controller.
     Out Update(bool wanted, bool tracked, const Input::Posef& aim, Input::Hand hand,
                bool beside_stats, const Input::Vec3f& eye, WristSide side = WristSide::Inside,
-               float width = kWristScreenWidth);
+               float width = kWristScreenWidth, WristAt at = {},
+               const Input::Vec3f& head_up = {0.0f, 0.0f, 0.0f});
     void Reset() {
         shown_ = false;
+        turns_ = 0;
     }
 
 private:
     bool shown_ = false;
+    int turns_ = 0;
 };
 
 /// AzaharFrame kiupanel: Angel's Aim's aim held while the aiming hand points at the wrist screen

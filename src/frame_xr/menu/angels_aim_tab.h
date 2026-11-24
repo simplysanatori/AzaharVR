@@ -143,6 +143,39 @@ inline constexpr const char* kWristSideBack = "Back";
 inline constexpr const char* kWristSideInside = "Inside";
 inline constexpr const char* kWristSideTip =
     "Where wrist displays sit: on the back of your wrist, or on the inside.";
+inline constexpr const char* kKiuWristAngleRow = "Wrist Angle"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuWristAngleTip =
+    "Where round your wrist the Bottom Screen sits. 0\u00B0 is the Wrist Side.";
+inline constexpr const char* kKiuWristAlongRow = "Arm Position"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuWristAlongTip =
+    "How far up your arm the Bottom Screen sits. Below 0 is toward your hand.";
+inline constexpr const char* kKiuCutscenesRow = "Cutscenes"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuCutscenesTip =
+    "Primary Screen: the game's cutscenes play on the Primary Screen, then your view comes back.";
+inline constexpr const char* kKiuHudRow = "HUD"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuHudTip =
+    "In View: the health bar, the score and the rest sit inside your view. Game's Own: where the game puts them.";
+inline constexpr const char* kKiuHudSizeRow = "HUD Size"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuHudSizeTip =
+    "How big the HUD is.";
+inline constexpr const char* kKiuHudHeightRow = "HUD Height"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuHudHeightTip =
+    "How high in your view the HUD sits. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuHudSpreadRow = "HUD Spread"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuHudSpreadTip =
+    "How far apart the left and right of the HUD are.";
+inline constexpr const char* kKiuHudBarRow = "Health Bar"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuHudBarTip =
+    "Which side of the HUD the health bar is on.";
+inline constexpr const char* kKiuHudScoreRow = "Score"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuHudScoreTip =
+    "Which side of the HUD the score is on.";
+inline constexpr const char* kKiuArmRow = "Pit's Arm"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuArmTip =
+    "Your free hand is Pit's arm instead of the controller.";
+inline constexpr const char* kKiuLaurelRow = "Laurel Frame"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuLaurelTip =
+    "A laurel round the Bottom Screen on your wrist.";
 inline constexpr const char* kOverShoulderRow = "Over the Shoulder";
 inline constexpr const char* kOverShoulderTip =
     "Moves your view behind and above Pit, so you can see him.";

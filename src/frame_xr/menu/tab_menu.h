@@ -302,6 +302,17 @@ enum class Id : int {
     WristSide,        ///< index: 0 Back, 1 Inside (vr_wrist_side), global, the Stats tab
     KiuReticleSize,   ///< a slider, 30 to 150 (percent): the game's reticle in first person
     KiuPitOpacity,    ///< AzaharFrame kiu133: a slider, 20 to 100 (percent), with Camera not First Person
+    KiuWristAngle, ///< AzaharFrame kiu140: a slider, 0 to 360 degrees, with Wrist (vr_kiu_wrist_angle)
+    KiuWristAlong, ///< AzaharFrame kiu140: a slider, -12 to 25 cm, with Wrist (vr_kiu_wrist_along)
+    KiuCutscenes, ///< AzaharFrame kiu140: index: Cutscenes' In View, Primary Screen (vr_kiu_cutscenes)
+    KiuHud, ///< AzaharFrame kiu140: index: HUD's Game's Own, In View (vr_kiu_hud)
+    KiuHudSize, ///< AzaharFrame kiu140: a slider, 40 to 200 percent (vr_kiu_hud_size)
+    KiuHudHeight, ///< AzaharFrame kiu140: a slider, -30 to 30 degrees (vr_kiu_hud_height)
+    KiuHudSpread, ///< AzaharFrame kiu140: a slider, 0 to 200 percent (vr_kiu_hud_spread)
+    KiuHudBar, ///< AzaharFrame kiu140: index: Left, Middle, Right (vr_kiu_hud_bar)
+    KiuHudScore, ///< AzaharFrame kiu140: index: Left, Middle, Right (vr_kiu_hud_score)
+    KiuArm, ///< AzaharFrame kiu140: index: Off, On (vr_kiu_arm)
+    KiuLaurel, ///< AzaharFrame kiu140: index: Off, On (vr_kiu_laurel)
     /// AzaharFrame kiu132: a group's title in the Angel's Aim segment's settings (no action;
     /// index: AngelsAimGroupKind)
     AngelsAimGroup,
@@ -472,6 +483,17 @@ struct MenuModel {
     int kiu_bottom_size = 100;      ///< percent (50 to 200)
     int kiu_bottom_opacity = 100;   ///< percent (20 to 100)
     bool kiu_bottom_moved = false;  ///< Persistent is off its default place
+    int kiu_wrist_angle = 0; ///< AzaharFrame kiu140 (vr_kiu_wrist_angle)
+    int kiu_wrist_along = 0; ///< AzaharFrame kiu140 (vr_kiu_wrist_along)
+    int kiu_cutscenes = 1; ///< AzaharFrame kiu140 (vr_kiu_cutscenes)
+    int kiu_hud = 1; ///< AzaharFrame kiu140 (vr_kiu_hud)
+    int kiu_hud_size = 100; ///< AzaharFrame kiu140 (vr_kiu_hud_size)
+    int kiu_hud_height = 6; ///< AzaharFrame kiu140 (vr_kiu_hud_height)
+    int kiu_hud_spread = 100; ///< AzaharFrame kiu140 (vr_kiu_hud_spread)
+    int kiu_hud_bar = 0; ///< AzaharFrame kiu140 (vr_kiu_hud_bar)
+    int kiu_hud_score = 2; ///< AzaharFrame kiu140 (vr_kiu_hud_score)
+    int kiu_arm = 1; ///< AzaharFrame kiu140 (vr_kiu_arm)
+    int kiu_laurel = 1; ///< AzaharFrame kiu140 (vr_kiu_laurel)
     int wrist_side = 0;             ///< 0 Back, 1 Inside (global)
     int kiu_reticle_size = 100;     ///< percent (30 to 150)
     int kiu_view = 0;               ///< AzaharFrame kiu133: Camera, Kiu::FirstPerson::ViewFor

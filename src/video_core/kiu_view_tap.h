@@ -61,6 +61,32 @@ inline std::atomic<bool> g_soft_draw_turn{false};
 /// thread each frame (frame_xr/immersive.cpp).
 inline std::atomic<bool> g_bottom_as_drawn{false};
 
+/// AzaharFrame kiu140: the angle the game draws its world with, counted over the uploads of its
+/// camera into the top screen's viewport, in any view (patched or not): those within kNear of the
+/// angle first person gave the battle camera (`want`, the tangent of half of it up and down) and
+/// the others. A cutscene draws through a camera of its own, which that never reaches
+/// (frame_xr/kiu_cutscene.h). `reg` is the view matrix's register, 0: off. Counted on the
+/// emulation thread, read there at each VBlank (frame_xr/kiu_hooks.cpp).
+struct DrawnAngle {
+    static constexpr float kNear = 0.08f;
+    std::atomic<u32> reg{0};
+    std::atomic<float> want{0.0f};
+    std::atomic<u32> match{0}, other{0};
+    std::atomic<float> last_other{0.0f}; ///< the last other one's tangent (for the log)
+
+    void Count(float tan_half_y) {
+        const float w = want.load(std::memory_order_relaxed);
+        const float off = w > 0.0f ? tan_half_y / w - 1.0f : 1.0f;
+        if (off < kNear && off > -kNear) {
+            match.fetch_add(1, std::memory_order_relaxed);
+        } else {
+            other.fetch_add(1, std::memory_order_relaxed);
+            last_other.store(tan_half_y, std::memory_order_relaxed);
+        }
+    }
+};
+inline DrawnAngle g_drawn_angle;
+
 /// AzaharFrame kiu131: Reticle Size. The draws with this texture (the game's reticle; 0: none)
 /// are shaded on the CPU and scaled by g_reticle_scale about their middle on the screen, before
 /// any kiu2d turn. Set each VBlank by Kid Icarus: Uprising's first person; 0 and 1 elsewhere.

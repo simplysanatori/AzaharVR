@@ -1765,7 +1765,12 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         const bool beside_stats = hand == Input::Hand::Left && visuals.StatsOnWrist();
         const Vis::WristScreen::Out w =
             wrist_screen.Update(wanted, off.active, off.aim, hand, beside_stats,
-                                ToInput(head_view.head).position, side, wrist_w);
+                                ToInput(head_view.head).position, side, wrist_w,
+                                // AzaharFrame kiu140: where round the wrist and along the arm
+                                Vis::WristAtFor(
+                                    static_cast<int>(Settings::values.vr_kiu_wrist_angle.GetValue()),
+                                    Settings::values.vr_kiu_wrist_along.GetValue()),
+                                Input::Rotate(ToInput(head_view.head).orientation, {0, 1, 0}));
         wrist_on = w.shown;
         wrist_wanted = wanted; // AzaharFrame kiupanel
         Immersive::SetWristScreen(w.shown, ToXr(w.pose), {wrist_w, wrist_h}, info.display_time);
@@ -2398,7 +2403,8 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                 id = static_cast<int>(v);
             }
         }
-        if (id >= 0) {
+        // AzaharFrame kiu140: no weapon over a cutscene.
+        if (id >= 0 && !Kiu::FirstPerson::Cutscene()) {
             // AzaharFrame kiuopacity: Weapon Opacity, or AZAHARFRAME_KIU_OPACITY's (live).
             const Vis::OpacityTune see = Vis::ParseOpacityTune(
                 Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_OPACITY"));
@@ -2512,6 +2518,9 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         } else if (gyro_aim_frame.clutch &&
                    gyro_aim_frame.mode == Input::GyroAimMode::LightGun) {
             beam = {}; // AzaharFrame kiuaim3: aim freed: the usual beam, to point anywhere
+        }
+        if (Kiu::FirstPerson::Cutscene()) {
+            beam = {false, true}; // AzaharFrame kiu140: no laser and no beam over a cutscene
         }
         const bool laser_now = Settings::values.vr_light_gun_laser.GetValue() &&
                                gyro_aim_frame.mode == Input::GyroAimMode::LightGun;

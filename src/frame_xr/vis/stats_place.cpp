@@ -157,9 +157,8 @@ Posef WristLocalPose(WristSide side) {
         Input::Normalized(Vec3f{out, 0.0f, 0.0f} * std::cos(tilt) + top * std::sin(tilt));
     const Vec3f x = along * -1.0f;
     const Vec3f y = Input::Cross(z, x);
-    constexpr float kHandleMiddleX = -0.0135f;
     constexpr float kInsideX = 0.022f;
-    const float px = side == WristSide::Back ? 2.0f * kHandleMiddleX - kInsideX : kInsideX;
+    const float px = side == WristSide::Back ? 2.0f * kWristMiddleX - kInsideX : kInsideX;
     return {Input::Normalized(Input::FromBasis(x, y, z)), {px, -0.085f, 0.148f}};
 }
 

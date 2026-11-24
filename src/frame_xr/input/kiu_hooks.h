@@ -805,6 +805,21 @@ inline Player FindPlayer(const Reader& m, const KiuTurn::Build& build = KiuTurn:
     return p;
 }
 
+/// AzaharFrame kiu140: the object the game has while a cutscene it draws itself runs (the desktop,
+/// EUR: Chapter 2's opening from its first frame to its last; 0 in air play, pauses and menus),
+/// or 0. Only checked for being an object (its first word points into the read-only data).
+inline constexpr uint32_t kCutsceneObject = 0xE174E0;
+inline constexpr uint32_t kRodataStart = 0xC96000, kRodataEnd = 0xE00000;
+template <class Reader>
+uint32_t CutsceneObject(const Reader& m) {
+    uint32_t object = 0, vtable = 0;
+    if (!m.Read32(kCutsceneObject, object) || object < 0x08000000u || (object & 3u) != 0 ||
+        !m.Read32(object, vtable) || vtable < kRodataStart || vtable >= kRodataEnd) {
+        return 0;
+    }
+    return object;
+}
+
 // ---- What fills the mailbox ----
 
 /// First person from the game's side. `offset` is in the actor's own axes (y up).

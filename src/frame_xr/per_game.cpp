@@ -209,6 +209,39 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::KiuBottomOpacity:
         f(v.vr_kiu_bottom_opacity);
         return true;
+    case Id::KiuWristAngle: // AzaharFrame kiu140
+        f(v.vr_kiu_wrist_angle);
+        return true;
+    case Id::KiuWristAlong: // AzaharFrame kiu140
+        f(v.vr_kiu_wrist_along);
+        return true;
+    case Id::KiuCutscenes: // AzaharFrame kiu140
+        f(v.vr_kiu_cutscenes);
+        return true;
+    case Id::KiuHud: // AzaharFrame kiu140
+        f(v.vr_kiu_hud);
+        return true;
+    case Id::KiuHudSize: // AzaharFrame kiu140
+        f(v.vr_kiu_hud_size);
+        return true;
+    case Id::KiuHudHeight: // AzaharFrame kiu140
+        f(v.vr_kiu_hud_height);
+        return true;
+    case Id::KiuHudSpread: // AzaharFrame kiu140
+        f(v.vr_kiu_hud_spread);
+        return true;
+    case Id::KiuHudBar: // AzaharFrame kiu140
+        f(v.vr_kiu_hud_bar);
+        return true;
+    case Id::KiuHudScore: // AzaharFrame kiu140
+        f(v.vr_kiu_hud_score);
+        return true;
+    case Id::KiuArm: // AzaharFrame kiu140
+        f(v.vr_kiu_arm);
+        return true;
+    case Id::KiuLaurel: // AzaharFrame kiu140
+        f(v.vr_kiu_laurel);
+        return true;
     case Id::KiuReticleSize:
         f(v.vr_kiu_reticle_size);
         return true;

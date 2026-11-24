@@ -1148,6 +1148,24 @@ struct Values {
     // Its size and opacity in percent (Persistent and Wrist alike).
     SwitchableSetting<u32, true> vr_kiu_bottom_size{100, 50, 200, "vr_kiu_bottom_size"};
     SwitchableSetting<u32, true> vr_kiu_bottom_opacity{100, 20, 100, "vr_kiu_bottom_opacity"};
+    // AzaharFrame kiu140: HUD in Angel's Aim: 0 where the game puts it, 1 in the view, its size in
+    // percent, its middle's height in degrees, how far apart its sides are in percent, and where
+    // the health bar and the score go (0 left, 1 middle, 2 right).
+    SwitchableSetting<u32, true> vr_kiu_hud{1, 0, 1, "vr_kiu_hud"};
+    SwitchableSetting<u32, true> vr_kiu_hud_size{100, 40, 200, "vr_kiu_hud_size"};
+    SwitchableSetting<s32, true> vr_kiu_hud_height{6, -30, 30, "vr_kiu_hud_height"};
+    SwitchableSetting<u32, true> vr_kiu_hud_spread{100, 0, 200, "vr_kiu_hud_spread"};
+    SwitchableSetting<u32, true> vr_kiu_hud_bar{0, 0, 2, "vr_kiu_hud_bar"};
+    SwitchableSetting<u32, true> vr_kiu_hud_score{2, 0, 2, "vr_kiu_hud_score"};
+    // AzaharFrame kiu140: Pit's Arm on the free hand, and the laurel round the Wrist screen.
+    SwitchableSetting<u32, true> vr_kiu_arm{1, 0, 1, "vr_kiu_arm"};
+    SwitchableSetting<u32, true> vr_kiu_laurel{1, 0, 1, "vr_kiu_laurel"};
+    // AzaharFrame kiu140: Cutscenes in Angel's Aim: 0 in the view, 1 on the Primary Screen.
+    SwitchableSetting<u32, true> vr_kiu_cutscenes{1, 0, 1, "vr_kiu_cutscenes"};
+    // AzaharFrame kiu140: the Wrist's place: degrees round the wrist from Wrist Side's, and
+    // centimetres up the arm from there (toward the hand below 0).
+    SwitchableSetting<u32, true> vr_kiu_wrist_angle{0, 0, 360, "vr_kiu_wrist_angle"};
+    SwitchableSetting<s32, true> vr_kiu_wrist_along{0, -12, 25, "vr_kiu_wrist_along"};
     // Persistent's place moved by the grip: degrees right of and below its default place.
     SwitchableSetting<float, true> vr_kiu_bottom_x{0.f, -60.f, 60.f, "vr_kiu_bottom_x"};
     SwitchableSetting<float, true> vr_kiu_bottom_y{0.f, -60.f, 60.f, "vr_kiu_bottom_y"};
