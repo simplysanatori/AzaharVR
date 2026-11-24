@@ -1556,7 +1556,8 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
     // AzaharFrame kiugyro: not while Gyro Aim is on (the reticle steps aside; Light Gun's beam
     // shows where it points).
     const Common::AltCore::Capabilities core_caps = GetCoreCapabilities();
-    const bool allow_touch = core_caps.has_touch && GetAltMenuState().ds_touch_enabled;
+    const bool allow_touch =
+        Common::AltCore::TouchEnabled(core_caps, GetAltMenuState().ds_touch_enabled);
     const int reticle_hand = Input::ReticleDrivingHand(
         (!allow_touch || (core_caps.has_gyro && Settings::values.vr_gyro_aim.GetValue() != 0))
             ? Input::ReticleHand::Off

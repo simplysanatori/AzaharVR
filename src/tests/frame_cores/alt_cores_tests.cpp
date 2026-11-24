@@ -357,6 +357,17 @@ TEST_CASE("GB adapter boots homebrew ROM, renders 160x144, and saves/loads state
     CHECK(!host.IsRunning());
 }
 
+TEST_CASE("Touch Screen Input off is the DS's only", "[frame_cores]") {
+    using Common::AltCore::Capabilities;
+    using Common::AltCore::TouchEnabled;
+    CHECK(TouchEnabled(Capabilities::ForNDS(), true));
+    CHECK(!TouchEnabled(Capabilities::ForNDS(), false));
+    CHECK(!TouchEnabled(Capabilities::ForNDS(true), false));
+    CHECK(!TouchEnabled(Capabilities::ForGBA(), true));
+    CHECK(TouchEnabled(Capabilities::ForN3DS(), true));
+    CHECK(TouchEnabled(Capabilities::ForN3DS(), false));
+}
+
 TEST_CASE("DS and DSi adapters boot with FreeBIOS + JIT, touch, mic, lid, and save states",
           "[frame_cores]") {
     TempDir tmp("nds");

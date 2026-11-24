@@ -129,6 +129,11 @@ struct Capabilities {
     }
 };
 
+/// Whether the Secondary Screen takes touches. The DS's Touch Screen Input is not the 3DS's.
+constexpr bool TouchEnabled(const Capabilities& caps, bool ds_touch_enabled) {
+    return caps.has_touch && (caps.kind == CoreKind::N3DS || ds_touch_enabled);
+}
+
 /// Neutral controller + touch snapshot delivered from FrameXr to an active AltCoreHost.
 enum ButtonBit : uint32_t {
     BtnA      = 1u << 0,

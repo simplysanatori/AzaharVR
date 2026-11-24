@@ -2327,6 +2327,9 @@ void SetCoreCapabilities(const Common::AltCore::Capabilities& caps) {
     if (!caps.has_dynamic_resolution) {
         DynamicResolution::Reset();
     }
+    if (caps.kind == Common::AltCore::CoreKind::N3DS) {
+        SetAltMenuState({}); // the game stopped: the next one starts with the defaults
+    }
 }
 
 Common::AltCore::Capabilities GetCoreCapabilities() {
