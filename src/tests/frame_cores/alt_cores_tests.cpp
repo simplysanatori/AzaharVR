@@ -364,7 +364,7 @@ TEST_CASE("AltCore RomInfo detection and reserved 64-bit keys", "[frame_cores]")
     CHECK(dsi->dsi_enhanced);
 }
 
-TEST_CASE("GBA adapter boots homebrew ROM, renders, and saves/loads state",
+TEST_CASE("GBA adapter boots homebrew ROM, renders, saves/loads state",
           "[frame_cores]") {
     TempDir tmp("gba");
     const fs::path rom_path = tmp.path / "hb.gba";
@@ -544,7 +544,20 @@ TEST_CASE("Touch Screen Input off is the DS's only", "[frame_cores]") {
 }
 
 // The menu sends the new value, not "the other one": the same value twice changes nothing.
-TEST_CASE("Close Lid takes the value it gets", "[frame_cores]") {
+TEST_CASE("Microphone Blow and Close Lid take the value they get", "[frame_cores]") {
+    {
+        FrameCores::NdsCore core;
+        const auto blows = [&core] {
+            std::vector<int16_t> pcm(256, 1);
+            const int n = core.OnMicReadInput(pcm.data(), static_cast<int>(pcm.size()));
+            return std::any_of(pcm.begin(), pcm.begin() + n, [](int16_t s) { return s != 0; });
+        };
+        CHECK(!blows());
+        for (const bool on : {true, true, false, false}) {
+            core.SetMicBlow(on);
+            CHECK(blows() == on);
+        }
+    }
     TempDir tmp("lid");
     const fs::path rom_path = tmp.path / "lid.nds";
     WriteFile(rom_path, MakeLidNdsRom());
@@ -583,6 +596,7 @@ TEST_CASE("DS and DSi adapters boot with FreeBIOS + JIT, touch, mic, lid, and sa
     in.touch_x = 128;
     in.touch_y = 96;
     host.PushInput(in);
+    host.SetMicBlow(true);
     host.SetScreenRotation(90);
     CHECK(host.GetCapabilities().screens.rotation_deg == 90);
     REQUIRE(host.StepFrames(10));
@@ -598,6 +612,7 @@ TEST_CASE("DS and DSi adapters boot with FreeBIOS + JIT, touch, mic, lid, and sa
     host.SetLidClosed(true);
     REQUIRE(host.StepFrames(2));
     host.SetLidClosed(false);
+    host.SetMicBlow(false);
 
     REQUIRE(host.SaveSlot(2));
     REQUIRE(host.StepFrames(4));

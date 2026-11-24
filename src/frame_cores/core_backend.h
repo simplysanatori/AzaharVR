@@ -91,6 +91,7 @@ public:
 
     // Core-specific controls
     virtual void SetSolarLevel(int /*level*/) {}
+    virtual void SetMicBlow(bool /*on*/) {}
     /// DS/DSi: the microphone's input, before Load.
     virtual void SetMicrophone(MicrophoneFactory /*factory*/) {}
     /// Its settings changed (any thread).

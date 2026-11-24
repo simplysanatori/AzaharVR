@@ -293,7 +293,9 @@ void DrawDs(Kit& kit, const DsDrawing& d, int lit) {
 
     // The chosen input: a ring in the primary colour.
     // padsui: the mouse's own targets are not on the 3DS (keys: nor the keyboard's modifier)
-    if (lit >= 0 && !Remap::IsExtra(lit) && lit != DsButton::Modifier) {
+    // (AzaharVR: nor Microphone Blow)
+    if (lit >= 0 && !Remap::IsExtra(lit) && lit != DsButton::Modifier &&
+        lit != DsButton::MicBlow) {
         const DsPoint c = d.Anchor(lit);
         const float r = d.Radius(lit) + 4.0f;
         kit.Stroke({c.x - r, c.y - r, c.x + r, c.y + r}, r, 2.0f, Tok::kPrimary);
@@ -400,6 +402,15 @@ void DrawDsGlyph(Kit& kit, const Rect& b, int target, uint32_t fg, uint32_t bg) 
         kit.Stroke({cx - r, cy - r, cx + r, cy + r}, r, 1.2f, fg, 0.7f);
         const float cr = r * 0.42f, off = r * 0.3f;
         kit.Dot(cx + off, cy - off, cr, fg);
+        break;
+    }
+    case DsButton::MicBlow: {
+        // AzaharVR: a microphone: its capsule, the foot.
+        kit.Dot(cx, cy, r, bg);
+        const float w = r * 0.24f;
+        kit.Fill({cx - w, cy - r * 0.62f, cx + w, cy + r * 0.14f}, w, fg);
+        kit.Line(cx, cy + r * 0.14f, cx, cy + r * 0.56f, 1.6f, fg);
+        kit.Line(cx - r * 0.34f, cy + r * 0.56f, cx + r * 0.34f, cy + r * 0.56f, 1.6f, fg);
         break;
     }
     default:

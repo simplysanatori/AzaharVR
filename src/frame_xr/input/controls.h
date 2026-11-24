@@ -105,6 +105,8 @@ constexpr const char* AnalogControlName(AnalogControl control) {
 struct ControlState {
     std::array<bool, kNumControls> buttons{};
     std::array<Vec2f, kNumAnalogControls> sticks{};
+    /// AzaharVR: another device's Microphone Blow, which no control here drives.
+    bool mic_blow = false;
 
     bool Get(Control control) const {
         return buttons[static_cast<std::size_t>(control)];

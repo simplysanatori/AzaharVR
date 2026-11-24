@@ -200,7 +200,11 @@ struct NdsCore::Impl {
     bool touch_enabled = true;
     int rotation_deg = 0;
     bool metrics_dirty = false;
+    std::atomic<bool> mic_blow_toggle{false};
+    std::atomic<bool> mic_blow_button{false};
     Microphone microphone;
+    uint32_t mic_rng_state = 0x12345678u;
+    int32_t mic_filter = 0;
 
     std::atomic<int64_t> rumble_until_ms{0};
     std::atomic<bool> stop_signalled{false};
@@ -334,6 +338,8 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
     impl->opts = opts;
     impl->stop_signalled.store(false, std::memory_order_relaxed);
     impl->rumble_until_ms.store(0, std::memory_order_relaxed);
+    impl->mic_blow_toggle.store(false, std::memory_order_relaxed);
+    impl->mic_blow_button.store(false, std::memory_order_relaxed);
     impl->touch_enabled = true;
     impl->rotation_deg = 0;
     impl->metrics_dirty = false;
@@ -526,6 +532,8 @@ void NdsCore::Reset() {
 
 void NdsCore::SetInput(const Common::AltCore::InputState& input) {
     impl->input = input;
+    impl->mic_blow_button.store((input.buttons & Common::AltCore::BtnMic) != 0,
+                                std::memory_order_relaxed);
 }
 
 void NdsCore::RunFrame(FrameOutput& out) {
@@ -722,6 +730,10 @@ void NdsCore::CloseMicrophone() {
     impl->microphone.Close();
 }
 
+void NdsCore::SetMicBlow(bool on) {
+    impl->mic_blow_toggle.store(on, std::memory_order_relaxed);
+}
+
 void NdsCore::SetLidClosed(bool closed) {
     if (impl->nds) {
         impl->nds->SetLidClosed(closed);
@@ -809,7 +821,29 @@ void NdsCore::OnMicStop() {
 }
 
 int NdsCore::OnMicReadInput(int16_t* data, int max_length) {
-    return impl->microphone.Read(data, max_length);
+    if (!data || max_length <= 0) {
+        return 0;
+    }
+    const bool blowing = impl->mic_blow_toggle.load(std::memory_order_relaxed) ||
+                         impl->mic_blow_button.load(std::memory_order_relaxed);
+    if (!blowing) {
+        return impl->microphone.Read(data, max_length);
+    }
+
+    // Synthesize smooth band-limited blow noise via xorshift32 + 1-pole low-pass filter
+    uint32_t x = impl->mic_rng_state;
+    int32_t lp = impl->mic_filter;
+    for (int i = 0; i < max_length; ++i) {
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        const int32_t white = static_cast<int32_t>(static_cast<int16_t>(x & 0xFFFFu)) / 2;
+        lp = (lp * 3 + white) / 4;
+        data[i] = static_cast<int16_t>(std::clamp(lp, -32767, 32767));
+    }
+    impl->mic_rng_state = x;
+    impl->mic_filter = lp;
+    return max_length;
 }
 
 void NdsCore::OnRumbleStart(uint32_t duration_ms) {

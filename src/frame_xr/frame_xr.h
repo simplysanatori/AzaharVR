@@ -291,6 +291,7 @@ enum class MenuCommand {
                   ///< button; `text` "checked" when its checkbox is ticked
     Ctgp7Uninstall, ///< asks "Uninstall CTGP-7?" (answered with Ctgp7Dialog)
     // Non-3DS cores (GBA / GB / DS / DSi)
+    DsMicBlow,   ///< toggle/trigger DS microphone blow noise (`value`: 1 on, 0 off)
     DsLidToggle, ///< toggle DS lid closed (`value`: 1 closed, 0 open)
     ImportSave,  ///< open file picker to import a .sav / .dsv save file
 };
@@ -677,6 +678,7 @@ struct AltMenuState {
     bool ds_touch_enabled = true; ///< DS touch input enabled
     int ds_screen_rotation = 0;   ///< 0 = 0°, 1 = 90°, 2 = 270°
     bool ds_lid_closed = false;   ///< DS lid closed
+    bool ds_mic_active = false;   ///< DS microphone blow active
 };
 void SetAltMenuState(const AltMenuState& state);
 AltMenuState GetAltMenuState();

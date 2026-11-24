@@ -43,6 +43,7 @@ struct Capabilities {
     bool has_dynamic_resolution = true;
     bool has_render_margin = true;
     bool has_solar_sensor = false;
+    bool has_mic_blow = false;
     bool has_lid_close = false;
     bool has_dsi_mode = false;
     bool has_screen_rotation = false;
@@ -107,6 +108,7 @@ struct Capabilities {
         c.has_bfi = false;
         c.has_dynamic_resolution = false;
         c.has_render_margin = false;
+        c.has_mic_blow = true;
         c.has_lid_close = true;
         c.has_dsi_mode = true;
         c.has_screen_rotation = true;
@@ -142,6 +144,7 @@ enum ButtonBit : uint32_t {
     BtnL      = 1u << 9,
     BtnX      = 1u << 10,
     BtnY      = 1u << 11,
+    BtnMic    = 1u << 12,
 };
 
 struct InputState {
