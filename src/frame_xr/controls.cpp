@@ -1767,10 +1767,11 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         Vis::WristAt at =
             Vis::WristAtFor(static_cast<int>(Settings::values.vr_kiu_wrist_angle.GetValue()),
                             Settings::values.vr_kiu_wrist_along.GetValue());
-        if (pit_arm_hand == Input::HandIndex(hand) &&
-            visuals.PitForearm(Input::HandIndex(hand), &at.wrist, &at.elbow)) {
+        if (float radius = 0.0f;
+            pit_arm_hand == Input::HandIndex(hand) &&
+            visuals.PitForearm(Input::HandIndex(hand), &at.wrist, &at.elbow, &radius)) {
             at.arm = true;
-            at.out_m = Vis::WristOutFor(Vis::kPitWristRadius);
+            at.out_m = Vis::WristOutFor(radius);
         }
         const Vis::WristScreen::Out w =
             wrist_screen.Update(wanted, off.active, off.aim, hand, beside_stats,

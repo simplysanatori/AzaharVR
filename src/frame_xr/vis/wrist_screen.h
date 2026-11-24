@@ -76,8 +76,6 @@ struct WristAt {
 constexpr float kWristScreenOut = 0.0355f;
 /// The gap between an arm's surface and the panel round it.
 constexpr float kWristScreenGap = 0.004f;
-/// Pit's forearm round the wrist's line (v1's; v2 gives its own).
-constexpr float kPitWristRadius = 0.055f;
 /// How much further out the panel goes round an arm `radius` metres thick (0: none drawn).
 constexpr float WristOutFor(float radius) {
     const float need = radius > 0.0f ? radius + kWristScreenGap - kWristScreenOut : 0.0f;

@@ -158,7 +158,7 @@ public:
     /// while the weapon is drawn in the other. Cleared by TakeInput; GameFrame sets it.
     void SetPitArm(int hand);
     /// AzaharFrame kiu140: where it was last drawn (controller_models.h PitForearm).
-    bool PitForearm(int hand, Input::Vec3f* wrist, Input::Vec3f* elbow) const;
+    bool PitForearm(int hand, Input::Vec3f* wrist, Input::Vec3f* elbow, float* radius) const;
     /// AzaharFrame kiuflash: the weapon's muzzle flash this frame (muzzle_flash.h), drawn with
     /// the weapon set by SetWeapon. Cleared by TakeInput; GameFrame sets it.
     void SetMuzzleFlash(const FlashFrame& flash);

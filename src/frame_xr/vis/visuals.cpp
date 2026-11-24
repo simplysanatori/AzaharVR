@@ -1108,9 +1108,10 @@ void Visuals::Frame(Runtime& rt, const FrameInfo& info, Where where, const Windo
             // AzaharFrame kiu140
             const Input::HandInput& held = in.hand[static_cast<std::size_t>(h)];
             out.pit_arm = h == m.pit_hand;
-            out.pit = {.trigger_touch = held.trigger_touch,
+            // A pulled trigger or grip is touched, on controllers that do not say so too.
+            out.pit = {.trigger_touch = held.trigger_touch || held.trigger > 0.05f,
                        .trigger = held.trigger,
-                       .grip_touch = held.grip_touch,
+                       .grip_touch = held.grip_touch || held.grip > 0.05f,
                        .grip = held.grip,
                        .thumb_stick = std::hypot(held.stick.x, held.stick.y) > 0.1f ||
                                       held.stick_click,
@@ -1147,8 +1148,9 @@ void Visuals::SetPitArm(int hand) { // AzaharFrame kiu140
     impl->pit_hand = hand;
 }
 
-bool Visuals::PitForearm(int hand, Input::Vec3f* wrist, Input::Vec3f* elbow) const {
-    return impl->models.PitForearm(hand, wrist, elbow);
+bool Visuals::PitForearm(int hand, Input::Vec3f* wrist, Input::Vec3f* elbow,
+                         float* radius) const {
+    return impl->models.PitForearm(hand, wrist, elbow, radius);
 }
 
 void Visuals::SetMuzzleFlash(const FlashFrame& flash) { // AzaharFrame kiuflash

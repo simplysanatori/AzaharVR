@@ -43,6 +43,7 @@
 #include "frame_xr/frame_xr.h"
 #include "frame_xr/input/types.h"
 #include "frame_xr/vis/pit_hand.h" // AzaharFrame kiu140
+#include "frame_xr/vis/pit_model.h"
 #include "frame_xr/vis/model_file.h"
 #include "frame_xr/vis/model_plane.h"  // AzaharFrame ctrlfront
 #include "frame_xr/vis/muzzle_flash.h" // AzaharFrame kiuflash
@@ -61,6 +62,9 @@ namespace FrameXr::Vis {
 std::string ControllerModelDir();
 /// Reads both hands' files from it (any thread). False with the file and the reason in `error`.
 bool ReadControllerModels(std::array<ModelFile, 2>& files, std::string& error);
+
+/// AzaharFrame kiu140: the player's hand file, read again (off the main thread) after an import.
+void ReloadPitModel();
 
 class ControllerModels {
 public:
@@ -154,8 +158,8 @@ public:
     }
 
     /// AzaharFrame kiu140: Pit's forearm as last drawn on `h`, wrist to elbow, in that hand's aim
-    /// space (none drawn: false).
-    bool PitForearm(int h, Input::Vec3f* wrist, Input::Vec3f* elbow) const;
+    /// space, and how thick (none drawn: false).
+    bool PitForearm(int h, Input::Vec3f* wrist, Input::Vec3f* elbow, float* radius) const;
 
 private:
     void Setup(Runtime& rt);
@@ -226,9 +230,12 @@ private:
         PitVec3 elbow{};
     };
     std::array<ArmDraw, 2> arm_draws{};
+    std::shared_ptr<const PitModel> pit_model; ///< the player's hand file (null: none)
+    uint32_t pit_generation = 0;               ///< PitModelSource's, when pit_model was taken
     std::array<int64_t, 2> pit_time_ns{};
-    PitHandPose pit_pose;      ///< eased toward the controller's (one hand at a time is Pit's)
-    bool pit_posed = false;
+    std::array<PitHandPose, 2> pit_pose;       ///< eased toward each controller's
+    std::array<bool, 2> pit_posed{};
+    void TakePit();            ///< the newest hand file, if it changed
     void MakePit();            ///< the GPU side, recorded into the frame's commands (once)
     void SkinPit(const std::array<Hand, 2>& hands);
     std::array<std::array<float, 3>, 2> arm_dir{}; ///< the smoothed forearm directions (LOCAL)
