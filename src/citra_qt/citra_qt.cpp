@@ -3754,6 +3754,9 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     if (!alt_core_host->Boot(path, data_dir, /*headless_for_test=*/false)) {
         QMessageBox::critical(this, tr("Unable to Start Game"),
                               tr("Failed to start %1.").arg(QString::fromStdString(info.title)));
+#ifdef ENABLE_FRAME_XR
+        g_frame_game_config_name.clear();
+#endif
         Settings::RestoreGlobalState(false);
         return false;
     }

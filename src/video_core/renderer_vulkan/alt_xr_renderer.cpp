@@ -412,8 +412,8 @@ bool AltXrRenderer::Init() {
 
     VideoCore::VulkanHooks* hooks = VideoCore::GetVulkanHooks();
     VideoCore::XrScreenSink* sink = VideoCore::GetXrScreenSink();
-    if (!hooks || !sink || !sink->IsActive()) {
-        LOG_INFO(Render_Vulkan, "alt_xr: XR session inactive or hooks missing");
+    if (!hooks || !sink) {
+        LOG_ERROR(Render_Vulkan, "alt_xr: no XR");
         return false;
     }
 
@@ -495,11 +495,8 @@ bool AltXrRenderer::Init() {
             return false;
         }
         impl->scheduler->Finish();
-
-        impl->xr_target_generation = sink->SwapchainGeneration();
-        impl->xr_target = std::make_unique<XrPresentTarget>(
-            *impl->instance, *impl->scheduler, *sink, impl->present_vertex_shader,
-            *impl->present_pipeline_layout);
+        // Present makes the XrPresentTarget: the session may not run yet (a game started with the
+        // app), and its swapchains come and go.
         impl->ready = true;
         LOG_INFO(Render_Vulkan, "alt_xr: presenter initialized on XR device");
         return true;

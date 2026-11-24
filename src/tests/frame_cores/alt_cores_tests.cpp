@@ -357,6 +357,30 @@ TEST_CASE("GB adapter boots homebrew ROM, renders 160x144, and saves/loads state
     CHECK(!host.IsRunning());
 }
 
+TEST_CASE("A game does not start without its renderer", "[frame_cores]") {
+    TempDir tmp("norenderer");
+    const fs::path rom_path = tmp.path / "hb.gba";
+    WriteFile(rom_path, MakeHomebrewGbaRom());
+
+    int calls = 0;
+    FrameCores::HostCallbacks cb{};
+    cb.on_capabilities = [&](const auto&) { ++calls; };
+    cb.on_title_id = [&](uint64_t) { ++calls; };
+    cb.on_input_sink = [&](Common::AltCore::InputSink) { ++calls; };
+    cb.on_game_running = [&](bool) { ++calls; };
+    FrameCores::AltCoreHost host;
+    host.SetCallbacks(cb);
+    // Not headless: there is no OpenXR here to draw with
+    CHECK(!host.Boot(rom_path.string(), (tmp.path / "data").string()));
+    CHECK(!host.IsRunning());
+    CHECK(host.GetCapabilities().kind == Common::AltCore::CoreKind::N3DS);
+    CHECK(Common::XrPacer::Get().emu_frame_us.load() == Common::XrPacer::kEmuFrameUs);
+    CHECK(calls == 0);
+    // The host is as new: the next start works
+    REQUIRE(host.Boot(rom_path.string(), (tmp.path / "data").string(), /*headless_for_test=*/true));
+    host.Stop();
+}
+
 TEST_CASE("Touch Screen Input off is the DS's only", "[frame_cores]") {
     using Common::AltCore::Capabilities;
     using Common::AltCore::TouchEnabled;

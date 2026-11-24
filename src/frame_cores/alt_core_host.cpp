@@ -354,6 +354,18 @@ bool AltCoreHost::Boot(const std::string& rom_path, const std::string& data_dir,
         return false;
     }
 
+    if (!headless_for_test) {
+        impl->renderer = std::make_unique<Vulkan::AltXrRenderer>();
+        if (!impl->renderer->Init()) { // the game would play with sound and no picture
+            LOG_ERROR(Render_Vulkan, "AltCoreHost: no renderer, '{}' is not started",
+                      impl->rom_info.title);
+            impl->renderer.reset();
+            impl->core->Unload();
+            impl->core.reset();
+            return false;
+        }
+    }
+
     impl->caps = impl->core->GetCapabilities();
     impl->last_frame = FrameOutput{};
     impl->last_rumble = 0.0f;
@@ -368,14 +380,6 @@ bool AltCoreHost::Boot(const std::string& rom_path, const std::string& data_dir,
     // Configure XR frame pacer for the active core's native frame duration
     const double frame_us = 1'000'000.0 / impl->core->NominalFps();
     SetPacerEmuFrameUs(Common::XrPacer::Get(), frame_us);
-
-    if (!headless_for_test) {
-        impl->renderer = std::make_unique<Vulkan::AltXrRenderer>();
-        if (!impl->renderer->Init()) {
-            LOG_WARNING(Render_Vulkan,
-                        "AltCoreHost: AltXrRenderer::Init returned false (XR inactive)");
-        }
-    }
 
     impl->audio.Init(impl->core->AudioSampleRate(), headless_for_test);
 
