@@ -35,6 +35,13 @@ layout(push_constant) uniform PC {
                   // fan, 2 a projectile's bullet mesh times its vertex colour, 3 one without
                   // +32 (kiuopacity) depth only: a see-through part's first stage
                   // (see_through.h): discarded where it would be, else nothing (no lighting)
+                  // +64 (kiu140w) a weapon's own see-through part (see_through.h): the tangent
+                  // is its image's u, v, the alpha's factor and gain, u_surface its image (the
+                  // colour's factor, the alpha), params.x the alpha it is cut under (no debug
+                  // view); with +4 unlit, the colour's factor in the normal's place
+                  // +128 (with +64) its blended texels, over what is there; with +4 all of them
+                  // +256, +512 (with +64) its back faces, its front faces only
+                  // +1024 (with +64 and +8) its image slides with its texture
 } pc;
 
 layout(location = 0) in vec3 a_position;
@@ -59,6 +66,9 @@ void main() {
     // further from the hand (v_position stays put: the forearm cuts do not move with it).
     if ((int(pc.params.w + 0.5) & 12) == 12) {
         v_uv = a_uv + pc.key.xy;
+        if ((int(pc.params.w + 0.5) & 1024) != 0) { // AzaharFrame kiu140w
+            v_tangent.xy += pc.key.xy;
+        }
         vec3 q = a_position * pc.up.z;
         vec3 sway = vec3(sin(q.y + q.z + pc.up.x), sin(q.z + q.x + pc.up.y),
                          sin(q.x + q.y + pc.up.x + pc.up.y));
@@ -102,9 +112,18 @@ vec3 linearToSrgb(vec3 c) {
     return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
 }
 
+vec3 srgbToLinear(vec3 c) { // AzaharFrame kiu140w
+    c = clamp(c, 0.0, 1.0);
+    return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+}
+
+// AzaharFrame kiu140w: a blended part's alpha (1 for anything else).
+const float SOLID_ALPHA = 0.98; // see_through.h kSolidAlpha
+float g_alpha = 1.0;
+
 // Linear light out (an _SRGB target encodes it), premultiplied by the fade
 vec4 writeLinear(vec3 c) {
-    float a = clamp(pc.params.z, 0.0, 1.0);
+    float a = clamp(pc.params.z, 0.0, 1.0) * g_alpha;
     vec3 v = OUT_LINEAR ? clamp(c, 0.0, 1.0) : linearToSrgb(c);
     return vec4(v * a, a);
 }
@@ -129,6 +148,22 @@ void main() {
     if ((pc.eye.w > 0.0 && v_position.x > pc.eye.w) ||
         (mod(pc.params.w, 4.0) > 1.5 && v_position.x < 0.0)) {
         discard;
+    }
+    // AzaharFrame kiu140w: a weapon's own see-through part.
+    int flags = int(pc.params.w + 0.5);
+    vec4 see = vec4(1.0);
+    float alpha = 1.0;
+    if ((flags & 64) != 0) {
+        see = texture(u_surface, v_tangent.xy);
+        alpha = clamp(see.a * v_tangent.z * v_tangent.w, 0.0, 1.0);
+        bool facing = (flags & 1) != 0 ? !gl_FrontFacing : gl_FrontFacing;
+        if (alpha < pc.params.x || ((flags & 132) == 128 && alpha >= SOLID_ALPHA) ||
+            ((flags & 256) != 0 && facing) || ((flags & 512) != 0 && !facing)) {
+            discard;
+        }
+        if ((flags & 128) != 0) {
+            g_alpha = alpha;
+        }
     }
     if ((int(pc.params.w + 0.5) & 32) != 0) {
         // AzaharFrame kiuopacity: the depth stage (no colour is written).
@@ -173,7 +208,20 @@ void main() {
         fragColor = vec4(OUT_LINEAR ? light : linearToSrgb(light), cover);
         return;
     }
-    if (pc.params.w > 3.5) {
+    if ((flags & 68) == 68) {
+        // AzaharFrame kiu140w: unlit: the game's own colour (its texture's times the combiner's
+        // factor, as the game's numbers are: not linear), blended by its alpha, or its light,
+        // times its alpha, added.
+        vec3 c = clamp(linearToSrgb(texture(u_colour, v_uv).rgb) * see.rgb * v_normal, 0.0, 1.0);
+        if ((flags & 128) != 0) {
+            fragColor = writeLinear(srgbToLinear(c));
+            return;
+        }
+        vec3 light = srgbToLinear(c * alpha) * clamp(pc.params.z, 0.0, 1.0);
+        fragColor = vec4(OUT_LINEAR ? light : linearToSrgb(light), coverOf(light));
+        return;
+    }
+    if ((flags & 4) != 0) {
         // A glow (a weapon's effect card): its texture as light, nothing covered (alpha 0, the
         // pipeline adds it).
         // AzaharFrame kiufix: twice as bright (the game's cards are dim textures it lights up),
@@ -191,9 +239,14 @@ void main() {
         fragColor = vec4(OUT_LINEAR ? glowColour : linearToSrgb(glowColour), cover);
         return;
     }
-    int view = int(pc.params.x + 0.5);
+    int view = (flags & 64) != 0 ? 0 : int(pc.params.x + 0.5);
     vec4 base = texture(u_colour, v_uv);
     vec4 surf = texture(u_surface, v_uv);
+    vec4 tangent = v_tangent;
+    if ((flags & 64) != 0) { // AzaharFrame kiu140w: the weapons' one surface texel and tangent
+        surf = vec4(128.0, 128.0, 255.0, 90.0) / 255.0;
+        tangent = vec4(1.0, 0.0, 0.0, 1.0);
+    }
     vec3 albedo = max(base.rgb, vec3(BASE_FLOOR)) * (pc.params.y > 0.0 ? pc.params.y : 1.0);
     float ao = base.a;
 
@@ -201,9 +254,9 @@ void main() {
     // AzaharFrame kiuguns: a mirrored model (a weapon's left-hand fit) turns its triangles over.
     bool front = mod(pc.params.w, 2.0) > 0.5 ? !gl_FrontFacing : gl_FrontFacing;
     if (!front) ng = -ng;
-    vec3 t = v_tangent.xyz - ng * dot(ng, v_tangent.xyz);
+    vec3 t = tangent.xyz - ng * dot(ng, tangent.xyz);
     t = dot(t, t) > 1e-10 ? normalize(t) : vec3(1.0, 0.0, 0.0);
-    vec3 b = cross(ng, t) * (v_tangent.w < 0.0 ? -1.0 : 1.0);
+    vec3 b = cross(ng, t) * (tangent.w < 0.0 ? -1.0 : 1.0);
     vec3 nt = surf.xyz * 2.0 - 1.0;
     float ntLen = max(length(nt), 1e-3);
     vec3 n = view == 2 ? ng : normalize(t * nt.x + b * nt.y + ng * nt.z);

@@ -241,6 +241,7 @@ struct PartBuilder {
     float scale_u = 1.0f, scale_v = 1.0f;
     std::map<Side, std::vector<float>> vertices; // 12 floats each
     std::map<Side, std::vector<u32>> indices;
+    std::map<Side, std::vector<SeeVertex>> corners; // AzaharFrame kiu140w: per vertex
     std::map<Side, std::map<std::array<s32, 4>, u32>> seen; // shape, vertex, bone, mesh -> index
 };
 
@@ -1331,6 +1332,7 @@ bool ConvertWeapon(int id, std::span<const u8> zrc, Converted& out, std::string&
                     verts.insert(verts.end(), {p[0], p[1], p[2], nn[0], nn[1], nn[2], 1.0f, 0.0f,
                                                0.0f, 1.0f, u, 1.0f - vv});
                     const u32 out_index = static_cast<u32>(verts.size() / 12 - 1);
+                    part.corners[side].push_back({p, v.uv0, v.uv1, v.colour}); // kiu140w
                     seen.emplace(key, out_index);
                     idx.push_back(out_index);
                     if (side == primary) {
@@ -1434,8 +1436,37 @@ bool ConvertWeapon(int id, std::span<const u8> zrc, Converted& out, std::string&
         }
         Bytes bytes = WriteModel(pb, tex, wrap_u, wrap_v, part.sides, part.triangles);
         c.files.emplace_back(part.file, std::move(bytes));
+        // AzaharFrame kiu140w: how see-through it is, in a file beside it (a palm's flames keep
+        // their own look: the glow pass).
+        if (mat && !(part.glow && cls == kPalm)) {
+            std::vector<SeeVertex> corners; // in the model file's order (WriteModel)
+            std::vector<u32> indices;
+            for (const auto& [side, ii] : pb.indices) {
+                if (ii.empty()) {
+                    continue;
+                }
+                const u32 from = static_cast<u32>(corners.size());
+                const auto& cc = pb.corners.at(side);
+                corners.insert(corners.end(), cc.begin(), cc.end());
+                for (const u32 k : ii) {
+                    indices.push_back(from + k);
+                }
+            }
+            std::array<const FrameCgfx::Texture*, 3> textures{};
+            for (std::size_t k = 0; k < 3; k++) {
+                textures[k] = file.FindTexture(mat->mappers[k].texture);
+            }
+            const SeeThrough see =
+                MakeSeeThrough(*mat, textures, pb.mapper, part.glow, corners, indices);
+            if (see.kind != SeeKind::Solid) {
+                part.see = see.kind;
+                part.see_file = part.file.substr(0, part.file.size() - 6) + ".see";
+                c.files.emplace_back(part.see_file, WriteSeeThrough(see));
+            }
+        }
         w.parts.push_back(std::move(part));
     }
+    w.see_known = true;
 
     // The json: the muzzle and the fire parameters.
     if (FrameCgfx::DarcMember(zrc, "character/json.arc!json/00.json", jsonb, error)) {
@@ -1573,9 +1604,15 @@ C4 Texel(const FrameCgfx::Texture* t, float u, float v) {
 
 /// The material's combiner stages run on one texel (PICA's TEV, as the effects study reads it:
 /// the vertex colour as given, lighting as full, the secondary colour as none).
-C4 RunStages(const FrameCgfx::Material& m, const std::array<C4, 3>& tex, const C4& vertex) {
+/// AzaharFrame kiu140w: or lighting as given (`primary`, `secondary`); `open`: the same before
+/// the last stage's clamp (stages after it that only pass it on skipped), per colour and alpha.
+C4 RunStages(const FrameCgfx::Material& m, const std::array<C4, 3>& tex, const C4& vertex,
+             const C4& primary = {1.0f, 1.0f, 1.0f, 1.0f}, const C4& secondary = {}, C4* open = nullptr) {
     C4 prev{0.0f, 0.0f, 0.0f, 0.0f};
     if (m.stages.empty()) {
+        if (open) {
+            *open = tex[0];
+        }
         return tex[0];
     }
     const auto constant = [&](u32 sel) -> C4 {
@@ -1589,9 +1626,9 @@ C4 RunStages(const FrameCgfx::Material& m, const std::array<C4, 3>& tex, const C
             case 0:
                 return vertex;
             case 1:
-                return {1.0f, 1.0f, 1.0f, 1.0f};
+                return primary;
             case 2:
-                return {0.0f, 0.0f, 0.0f, 0.0f};
+                return secondary;
             case 3:
                 return tex[0];
             case 4:
@@ -1653,6 +1690,22 @@ C4 RunStages(const FrameCgfx::Material& m, const std::array<C4, 3>& tex, const C
         }
         out[3] = std::clamp(combine((st.combine >> 16) & 0xF, alpha[0], alpha[1], alpha[2]) * as,
                             0.0f, 1.0f);
+        if (open) {
+            // A stage that replaces with the one before, unscaled, passes it on.
+            const bool colour_on = (st.combine & 0xF) == 0 && (st.source & 0xF) == 0xF &&
+                                   (st.operand & 0xF) == 0 && cs == 1.0f;
+            const bool alpha_on = ((st.combine >> 16) & 0xF) == 0 &&
+                                  ((st.source >> 16) & 0xF) == 0xF &&
+                                  ((st.operand >> 12) & 7) == 0 && as == 1.0f;
+            for (int ch = 0; ch < 3 && !colour_on; ch++) {
+                (*open)[ch] =
+                    combine(st.combine & 0xF, rgb[0][ch], rgb[1][ch], rgb[2][ch]) * cs;
+            }
+            if (!alpha_on) {
+                (*open)[3] =
+                    combine((st.combine >> 16) & 0xF, alpha[0], alpha[1], alpha[2]) * as;
+            }
+        }
         prev = out;
     }
     return prev;
@@ -1723,6 +1776,114 @@ std::array<float, kBulletValues> FitBulletLook(const FrameCgfx::Material& m,
     return v;
 }
 
+// ---- AzaharFrame kiu140w: see-through parts ----
+
+constexpr u32 kSeeVersion = 1;
+constexpr u32 kSeeUnlit = 1, kSeeDepth = 2, kSeeSlides = 4;
+constexpr std::size_t kSeeVertexFloats = 7;
+constexpr float kSeeGainMax = 8.0f;
+
+/// What a combiner is run with for a see-through part: white vertices, full light, a middle
+/// secondary light.
+struct SeeInputs {
+    std::array<C4, 3> tex{};
+    C4 vertex{1.0f, 1.0f, 1.0f, 1.0f};
+    C4 primary{1.0f, 1.0f, 1.0f, 1.0f};
+    C4 secondary{0.5f, 0.5f, 0.5f, 0.5f};
+};
+C4 RunSee(const FrameCgfx::Material& m, const SeeInputs& in, C4* open = nullptr) {
+    if (open) {
+        *open = {};
+    }
+    return RunStages(m, in.tex, in.vertex, in.primary, in.secondary, open);
+}
+
+/// Which inputs a combiner's colour and alpha follow, found by changing each one.
+struct SeeNeeds {
+    std::array<bool, 3> colour_tex{}, alpha_tex{};
+    bool colour_light = false;
+};
+SeeNeeds FindNeeds(const FrameCgfx::Material& m) {
+    SeeNeeds n;
+    u32 seed = 12345;
+    const auto next = [&seed] {
+        seed = seed * 1103515245u + 12345u;
+        const float f = static_cast<float>((seed >> 16) & 0xFF) / 255.0f;
+        return f * f; // toward small values: a scaled stage saturates less
+    };
+    const auto any = [&next] { return C4{next(), next(), next(), next()}; };
+    for (int round = 0; round < 48; round++) {
+        SeeInputs in;
+        in.tex = {any(), any(), any()};
+        in.primary = any();
+        in.secondary = any();
+        const C4 before = RunSee(m, in);
+        const auto differs = [&](const SeeInputs& changed, bool& colour, bool* alpha) {
+            const C4 after = RunSee(m, changed);
+            for (std::size_t c = 0; c < 3; c++) {
+                colour = colour || std::abs(after[c] - before[c]) > 1e-4f;
+            }
+            if (alpha) {
+                *alpha = *alpha || std::abs(after[3] - before[3]) > 1e-4f;
+            }
+        };
+        for (std::size_t k = 0; k < 3; k++) {
+            SeeInputs changed = in;
+            changed.tex[k] = any();
+            differs(changed, n.colour_tex[k], &n.alpha_tex[k]);
+        }
+        SeeInputs changed = in;
+        changed.primary = any();
+        changed.secondary = any();
+        differs(changed, n.colour_light, nullptr);
+    }
+    return n;
+}
+
+C4 MeanTexel(const FrameCgfx::Texture* t) {
+    if (!t || t->width == 0 || t->height == 0) {
+        return {0.5f, 0.5f, 0.5f, 1.0f};
+    }
+    std::array<double, 4> sum{};
+    const std::size_t n = std::size_t{t->width} * t->height;
+    for (std::size_t i = 0; i < n * 4; i++) {
+        sum[i % 4] += t->rgba[i];
+    }
+    C4 out;
+    for (std::size_t c = 0; c < 4; c++) {
+        out[c] = static_cast<float>(sum[c] / (255.0 * static_cast<double>(n)));
+    }
+    return out;
+}
+
+/// A texture coordinate folded into the image by a PICA wrap mode, in texels (its centre at .5).
+float WrapTexel(float at, u32 wrap, u32 n) {
+    const float size = static_cast<float>(n);
+    if (wrap == 2) {
+        return at - std::floor(at / size) * size;
+    }
+    if (wrap == 3) {
+        const float t = at - std::floor(at / (2.0f * size)) * 2.0f * size;
+        return t < size ? t : 2.0f * size - t;
+    }
+    return std::clamp(at, 0.0f, size);
+}
+
+/// The see-through image's alpha (0 to 1) at u, v, filtered as the GPU does.
+float SeeAlpha(const SeeThrough& s, float u, float v) {
+    const float x = u * static_cast<float>(s.width) - 0.5f;
+    const float y = v * static_cast<float>(s.height) - 0.5f;
+    const float fx = std::floor(x), fy = std::floor(y);
+    const auto at = [&](float px, float py) {
+        const auto i = std::min(static_cast<u32>(WrapTexel(px + 0.5f, s.wrap_u, s.width)), s.width - 1);
+        const auto j = std::min(static_cast<u32>(WrapTexel(py + 0.5f, s.wrap_v, s.height)), s.height - 1);
+        return static_cast<float>(s.rgba[(std::size_t{j} * s.width + i) * 4 + 3]) / 255.0f;
+    };
+    const float ax = x - fx, ay = y - fy;
+    return (at(fx, fy) * (1.0f - ax) + at(fx + 1.0f, fy) * ax) * (1.0f - ay) +
+           (at(fx, fy + 1.0f) * (1.0f - ax) + at(fx + 1.0f, fy + 1.0f) * ax) * ay;
+}
+
 constexpr u32 kFlagBullet = 1u << 18; // frame_xr/vis/model_file.h kModelFlagBullet
 
 struct BulletBuilder {
@@ -1733,6 +1894,324 @@ struct BulletBuilder {
 };
 
 } // namespace
+
+SeeThrough MakeSeeThrough(const FrameCgfx::Material& m,
+                          const std::array<const FrameCgfx::Texture*, 3>& textures, int base,
+                          bool effect, std::span<const SeeVertex> vertices,
+                          std::span<const u32> indices) {
+    SeeThrough s;
+    const bool blended = m.blend && !(m.blend_src == 1 && m.blend_dst == 0);
+    if (m.alpha_test && (m.alpha_func == 6 || m.alpha_func == 7)) { // greater, greater or equal
+        s.reference = std::max(
+            0.0f, (static_cast<float>(m.alpha_ref) + (m.alpha_func == 6 ? 0.5f : -0.5f)) / 255.0f);
+    }
+    if (blended) {
+        if (m.blend_dst == 1 && (m.blend_src == 6 || m.blend_src == 1)) {
+            s.kind = SeeKind::Add;
+        } else if (m.blend_dst == 7 && m.blend_src == 6) {
+            s.kind = SeeKind::Blend;
+        } else {
+            return s; // no weapon has another: as it was
+        }
+    } else if (effect) {
+        s.kind = SeeKind::Blend; // drawn on the glow switch, as the game's: solid, cut by its test
+    } else if (s.reference > 0.0f) {
+        s.kind = SeeKind::Cut;
+    } else {
+        return s;
+    }
+    const bool alpha_one = blended && m.blend_src == 1;
+    const SeeNeeds needs = FindNeeds(m);
+    s.depth_write = m.depth_write;
+    s.unlit = s.kind == SeeKind::Add ||
+              (s.kind == SeeKind::Blend && (effect || !m.depth_write) && !needs.colour_light);
+
+    // The image's coordinates: those of the largest texture the alpha follows (none: the base
+    // texture's, for a colour factor). Textures at the same ones are sampled with it, others give
+    // their mean.
+    const auto coord = [&](std::size_t k) {
+        return m.coords.empty() ? FrameCgfx::TexCoord{}
+                                : m.coords[std::min(k, m.coords.size() - 1)];
+    };
+    const auto flat = [&](std::size_t k) {
+        return textures[k] && textures[k]->width && textures[k]->height && coord(k).mapping == 0;
+    };
+    int main = -1;
+    const auto larger = [&](std::size_t k) {
+        return main < 0 || textures[k]->width * textures[k]->height >
+                               textures[static_cast<std::size_t>(main)]->width *
+                                   textures[static_cast<std::size_t>(main)]->height;
+    };
+    for (std::size_t k = 0; k < 3; k++) {
+        if (needs.alpha_tex[k] && flat(k) && larger(k)) {
+            main = static_cast<int>(k);
+        }
+    }
+    if (main < 0 && s.unlit && base >= 0 && flat(static_cast<std::size_t>(base))) {
+        main = base;
+    }
+    const FrameCgfx::TexCoord at = main >= 0 ? coord(static_cast<std::size_t>(main)) : FrameCgfx::TexCoord{};
+    const auto shares = [&](std::size_t k) {
+        const FrameCgfx::TexCoord o = coord(k);
+        return main >= 0 && flat(k) && o.source == at.source && o.scale_u == at.scale_u &&
+               o.scale_v == at.scale_v && o.rotation == at.rotation &&
+               o.translate_u == at.translate_u && o.translate_v == at.translate_v;
+    };
+    std::array<bool, 3> shared{};
+    std::array<C4, 3> mean{};
+    for (std::size_t k = 0; k < 3; k++) {
+        shared[k] = shares(k);
+        mean[k] = MeanTexel(textures[k]);
+    }
+    if (main >= 0) {
+        const auto& t = *textures[static_cast<std::size_t>(main)];
+        s.width = t.width;
+        s.height = t.height;
+        s.wrap_u = m.mappers[static_cast<std::size_t>(main)].wrap_u;
+        s.wrap_v = m.mappers[static_cast<std::size_t>(main)].wrap_v;
+    }
+    const bool base_shared = base >= 0 && shared[static_cast<std::size_t>(base)];
+    // It slides with the base texture when every texture the alpha follows is at the base's own
+    // coordinator (the game animates each on its own).
+    const auto coordinator = [&](std::size_t k) {
+        return std::min(k, m.coords.empty() ? std::size_t{0} : m.coords.size() - 1);
+    };
+    s.slides = base_shared;
+    for (std::size_t k = 0; k < 3 && base >= 0; k++) {
+        if (needs.alpha_tex[k] && flat(k) &&
+            coordinator(k) != coordinator(static_cast<std::size_t>(base))) {
+            s.slides = false;
+        }
+    }
+
+    // The vertex colour: one for every vertex goes through the combiner; one that varies and only
+    // multiplies (its alpha or its red for the alpha; its colour, once or squared, for the colour)
+    // stays with the vertices; any other is its mean.
+    C4 lo{1.0f, 1.0f, 1.0f, 1.0f}, hi{}, vmean{};
+    for (const SeeVertex& v : vertices) {
+        for (std::size_t c = 0; c < 4; c++) {
+            lo[c] = std::min(lo[c], v.colour[c]);
+            hi[c] = std::max(hi[c], v.colour[c]);
+            vmean[c] += v.colour[c] / static_cast<float>(vertices.size());
+        }
+    }
+    const bool rgb_varies = hi[0] - lo[0] > 0.01f || hi[1] - lo[1] > 0.01f || hi[2] - lo[2] > 0.01f;
+    const bool a_varies = hi[3] - lo[3] > 0.01f;
+    const auto texels = [&](u32 x, u32 y) {
+        std::array<C4, 3> t;
+        const float u = (static_cast<float>(x) + 0.5f) / static_cast<float>(s.width);
+        const float v = (static_cast<float>(y) + 0.5f) / static_cast<float>(s.height);
+        for (std::size_t k = 0; k < 3; k++) {
+            t[k] = shared[k] ? Texel(textures[k], u, v) : mean[k];
+        }
+        return t;
+    };
+    // The power of `channel` (3 the alpha, 0 the colour) a result carries: 0, 1, 2, or -1 none of
+    // those.
+    const auto power = [&](bool alpha_result, bool alpha_channel) {
+        int found = -2;
+        for (u32 i = 0; i < 64; i++) {
+            SeeInputs in;
+            in.tex = texels(i * 7919u % s.width, i * 104729u % s.height);
+            if (!alpha_result && base >= 0 && !base_shared) {
+                in.tex[static_cast<std::size_t>(base)] = {1.0f, 1.0f, 1.0f, 1.0f};
+            }
+            C4 whole, half;
+            RunSee(m, in, &whole);
+            for (std::size_t c = 0; c < 4; c++) {
+                if ((c == 3) == alpha_channel) {
+                    in.vertex[c] = 0.5f;
+                }
+            }
+            RunSee(m, in, &half);
+            for (std::size_t c = alpha_result ? 3 : 0; c < (alpha_result ? 4u : 3u); c++) {
+                if (whole[c] < 0.02f) {
+                    continue;
+                }
+                const float r = half[c] / whole[c];
+                const int p = std::abs(r - 1.0f) < 0.02f    ? 0
+                              : std::abs(r - 0.5f) < 0.02f  ? 1
+                              : std::abs(r - 0.25f) < 0.02f ? 2
+                                                            : -1;
+                if (found != -2 && p != found) {
+                    return -1;
+                }
+                found = p;
+            }
+        }
+        return std::max(found, 0);
+    };
+    const int alpha_by_a = a_varies ? power(true, true) : 0;
+    const int alpha_by_r = rgb_varies ? power(true, false) : 0;
+    const int colour_by = s.unlit && rgb_varies ? power(false, false) : 0;
+    // A constant, or one that does not only multiply: baked, with its mean.
+    C4 baked{1.0f, 1.0f, 1.0f, 1.0f}; // for the alpha
+    const bool by_r = alpha_by_r == 1, by_a = alpha_by_a == 1 || alpha_by_a == 2;
+    for (std::size_t c = 0; c < 3; c++) {
+        baked[c] = by_r ? 1.0f : vmean[c];
+    }
+    baked[3] = by_a ? 1.0f : vmean[3];
+    C4 baked_colour = vmean;
+    if (colour_by > 0) {
+        baked_colour = {1.0f, 1.0f, 1.0f, vmean[3]};
+    }
+
+    // Every texel's alpha, and for an unlit part its colour against the base texture's.
+    const std::size_t count = std::size_t{s.width} * s.height;
+    std::vector<float> alpha(count);
+    std::vector<C4> colour(s.unlit ? count : 0);
+    float alpha_most = 1.0f;
+    std::array<double, 3> bb{}, bo{};
+    for (u32 y = 0; y < s.height; y++) {
+        for (u32 x = 0; x < s.width; x++) {
+            const std::size_t i = std::size_t{y} * s.width + x;
+            SeeInputs in;
+            in.tex = texels(x, y);
+            in.vertex = baked;
+            C4 open;
+            const C4 out = RunSee(m, in, &open);
+            alpha[i] = alpha_one ? 1.0f : std::max(by_a || by_r ? open[3] : out[3], 0.0f);
+            if (!blended && effect) { // solid in the game where the test passes
+                alpha[i] = alpha[i] >= s.reference ? 1.0f : 0.0f;
+            }
+            alpha_most = std::max(alpha_most, alpha[i]);
+            if (!s.unlit) {
+                continue;
+            }
+            C4 tex_base{160.0f / 255.0f, 160.0f / 255.0f, 160.0f / 255.0f, 1.0f};
+            if (base >= 0) {
+                auto& b = in.tex[static_cast<std::size_t>(base)];
+                if (!base_shared) {
+                    b = {1.0f, 1.0f, 1.0f, 1.0f};
+                }
+                tex_base = b;
+            }
+            in.vertex = baked_colour;
+            RunSee(m, in, &open);
+            for (std::size_t c = 0; c < 3; c++) {
+                const float o = std::max(open[c], 0.0f);
+                bb[c] += double{tex_base[c]} * tex_base[c];
+                bo[c] += double{tex_base[c]} * o;
+                // Too dark to divide by: the mean's, below.
+                colour[i][c] = tex_base[c] >= 12.0f / 255.0f ? o / tex_base[c] : -1.0f;
+            }
+        }
+    }
+    if (!blended && effect) {
+        s.reference = 0.0f;
+    }
+    float colour_most = 1.0f;
+    for (C4& k : colour) {
+        for (std::size_t c = 0; c < 3; c++) {
+            if (k[c] < 0.0f) {
+                k[c] = bb[c] > 1e-9 ? static_cast<float>(bo[c] / bb[c]) : 1.0f;
+            }
+            k[c] = std::min(k[c], kSeeGainMax);
+            colour_most = std::max(colour_most, k[c]);
+        }
+    }
+    const float gain = by_a || by_r ? std::min(alpha_most, kSeeGainMax) : 1.0f;
+    const auto byte = [](float f) {
+        return static_cast<u8>(std::lround(std::clamp(f, 0.0f, 1.0f) * 255.0f));
+    };
+    s.rgba.resize(count * 4, 255);
+    for (std::size_t i = 0; i < count; i++) {
+        for (std::size_t c = 0; c < 3 && s.unlit; c++) {
+            s.rgba[i * 4 + c] = byte(colour[i][c] / colour_most);
+        }
+        s.rgba[i * 4 + 3] = byte(alpha[i] / gain);
+    }
+    for (const SeeVertex& v : vertices) {
+        const auto& uv = at.source == 1 ? v.uv1 : v.uv0;
+        float factor = 1.0f;
+        if (by_a) {
+            factor *= alpha_by_a == 2 ? v.colour[3] * v.colour[3] : v.colour[3];
+        }
+        if (by_r) {
+            factor *= v.colour[0];
+        }
+        s.vertices.insert(s.vertices.end(),
+                          {uv[0] * at.scale_u + at.translate_u,
+                           1.0f - (uv[1] * at.scale_v + at.translate_v), factor, gain});
+        for (std::size_t c = 0; c < 3; c++) {
+            const float k = std::clamp(v.colour[c], 0.0f, 1.0f);
+            s.vertices.push_back(colour_most *
+                                 (colour_by == 2 ? k * k : colour_by == 1 ? k : 1.0f));
+        }
+    }
+
+    // How much of the surface is see-through: each triangle's, by its area.
+    double area = 0.0, cut = 0.0, middle = 0.0;
+    constexpr int kSteps = 12;
+    const float clear = s.reference > 0.0f ? s.reference : 0.5f / 255.0f;
+    for (std::size_t t = 0; t + 2 < indices.size(); t += 3) {
+        const std::array<std::size_t, 3> k{indices[t], indices[t + 1], indices[t + 2]};
+        if (k[0] >= vertices.size() || k[1] >= vertices.size() || k[2] >= vertices.size()) {
+            continue;
+        }
+        Vec3 e1, e2;
+        for (std::size_t c = 0; c < 3; c++) {
+            e1[c] = vertices[k[1]].position[c] - vertices[k[0]].position[c];
+            e2[c] = vertices[k[2]].position[c] - vertices[k[0]].position[c];
+        }
+        const Vec3 x{e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2],
+                     e1[0] * e2[1] - e1[1] * e2[0]};
+        const double each = std::sqrt(double{x[0]} * x[0] + double{x[1]} * x[1] + double{x[2]} * x[2]) /
+                            (kSteps * kSteps);
+        for (int i = 0; i < kSteps; i++) {
+            for (int j = 0; j < kSteps; j++) { // the unit square folded into the triangle
+                float a = (static_cast<float>(i) + 0.5f) / kSteps;
+                float b = (static_cast<float>(j) + 0.5f) / kSteps;
+                if (a + b > 1.0f) {
+                    a = 1.0f - a;
+                    b = 1.0f - b;
+                }
+                const std::array<float, 3> w{1.0f - a - b, a, b};
+                std::array<float, 3> p{};
+                for (std::size_t n = 0; n < 3; n++) {
+                    for (std::size_t c = 0; c < 3; c++) {
+                        p[c] += w[n] * s.vertices[k[n] * kSeeVertexFloats + c];
+                    }
+                }
+                const float alpha_at = std::min(SeeAlpha(s, p[0], p[1]) * p[2] * gain, 1.0f);
+                area += each;
+                cut += alpha_at < clear ? each : 0.0;
+                middle += alpha_at >= clear && alpha_at < kSeeOpaque ? each : 0.0;
+            }
+        }
+    }
+    if (area > 0.0) {
+        s.cut_area = static_cast<float>(cut / area);
+        s.middle_area = static_cast<float>(middle / area);
+    }
+    // Ordinary parts that are solid wherever they are drawn stay solid.
+    const bool solid = s.kind == SeeKind::Cut ? s.cut_area < kSeeSolidArea
+                       : s.kind == SeeKind::Blend && !effect
+                           ? s.cut_area + s.middle_area < kSeeSolidArea
+                           : false;
+    if (solid) {
+        s.kind = SeeKind::Solid;
+    }
+    return s;
+}
+
+std::vector<u8> WriteSeeThrough(const SeeThrough& s) {
+    Bytes b{'M', 'X', 'F', 'S'};
+    Put32(b, kSeeVersion);
+    Put32(b, static_cast<u32>(s.vertices.size() / kSeeVertexFloats));
+    Put32(b, s.width);
+    Put32(b, s.height);
+    Put32(b, static_cast<u32>(s.kind));
+    Put32(b, (s.unlit ? kSeeUnlit : 0) | (s.depth_write ? kSeeDepth : 0) |
+                 (s.slides ? kSeeSlides : 0));
+    Put32(b, (s.wrap_u & 3) | (s.wrap_v & 3) << 4);
+    PutF(b, s.reference);
+    for (const float f : s.vertices) {
+        PutF(b, f);
+    }
+    b.insert(b.end(), s.rgba.begin(), s.rgba.end());
+    return b;
+}
 
 FlashModels PickBulletModels(int id, const std::vector<std::string>& names) {
     return PickBullets(id, names, "Eff");
@@ -2655,6 +3134,16 @@ bool WriteManifest(const std::string& path, const Manifest& m, std::string& erro
                 out += "\n";
             }
         }
+        // AzaharFrame kiu140w: its see-through parts (a weapon without the line is made again).
+        if (w.see_known) {
+            out += "seethrough 1\n";
+            for (const Part& p : w.parts) {
+                if (p.see != SeeKind::Solid) {
+                    out += fmt::format("see {} {} {}\n", p.file, static_cast<int>(p.see),
+                                       p.see_file);
+                }
+            }
+        }
         // AzaharFrame kiuflash: for a weapon made with its flashes (one made by a build before
         // them, kept as it was, keeps none: it is made again when next asked for).
         const FlashInfo& f = w.flash;
@@ -2886,6 +3375,23 @@ bool ReadManifest(const std::string& path, Manifest& out, std::string& error) {
                 p.texture.clear();
             }
             current->bullets.parts.push_back(std::move(p));
+        } else if (key == "seethrough" && current) { // AzaharFrame kiu140w
+            int version = 0;
+            current->see_known = static_cast<bool>(in >> version) && version == 1;
+        } else if (key == "see" && current) {
+            // A bad one is dropped, and the weapon made again.
+            std::string file, see_file;
+            int kind = 0;
+            in >> file >> kind >> see_file;
+            const auto part = std::find_if(current->parts.begin(), current->parts.end(),
+                                           [&](const Part& p) { return p.file == file; });
+            if (in && kind >= 1 && kind <= 3 && see_file.find('/') == std::string::npos &&
+                see_file.find("..") == std::string::npos && part != current->parts.end()) {
+                part->see = static_cast<SeeKind>(kind);
+                part->see_file = see_file;
+            } else {
+                current->see_known = false;
+            }
         } else if (key == "uvanim" && current) {
             // AzaharFrame kiumodels: a part's texture motion; a bad one is dropped (still).
             std::string file;
@@ -2988,7 +3494,11 @@ public:
         if (old != manifest.weapons.end() && old->source_hash == hash &&
             old->pack_key == PackKey(pack, old->texture_hashes) &&
             std::all_of(old->parts.begin(), old->parts.end(),
-                        [&](const Part& p) { return FileUtil::Exists(dir + p.file); }) &&
+                        [&](const Part& p) {
+                            return FileUtil::Exists(dir + p.file) &&
+                                   (p.see_file.empty() || FileUtil::Exists(dir + p.see_file));
+                        }) &&
+            old->see_known && // AzaharFrame kiu140w
             FlashCurrent(old->flash) && BulletsCurrent(old->bullets) && old->hold.known) {
             res.kept++;
             return true;
@@ -3024,6 +3534,12 @@ public:
                 if (std::none_of(c.info.parts.begin(), c.info.parts.end(),
                                  [&](const Part& q) { return q.file == p.file; })) {
                     FileUtil::Delete(dir + p.file);
+                }
+                // AzaharFrame kiu140w: and a see-through file.
+                if (!p.see_file.empty() &&
+                    std::none_of(c.info.parts.begin(), c.info.parts.end(),
+                                 [&](const Part& q) { return q.see_file == p.see_file; })) {
+                    FileUtil::Delete(dir + p.see_file);
                 }
             }
             for (const FlashPart& p : old->flash.parts) { // AzaharFrame kiuflash

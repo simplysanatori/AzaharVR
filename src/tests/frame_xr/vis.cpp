@@ -895,6 +895,9 @@ TEST_CASE("FrameXr vis: the controller pass's shaders compile", "[frame_xr]") {
     CHECK(!Vulkan::CompileGLSL(v + "#define OUT_LINEAR true\n" + Shaders::kModelFrag,
                                vk::ShaderStageFlagBits::eFragment)
                .empty());
+    CHECK(!Vulkan::CompileGLSL(v + "#define OUT_LINEAR false\n" + Shaders::kModelFrag, // kiu140w
+                               vk::ShaderStageFlagBits::eFragment)
+               .empty());
     CHECK(!Vulkan::CompileGLSL(v + Shaders::kOccluderVert, vk::ShaderStageFlagBits::eVertex)
                .empty());
     // projb: the projection screens' pair (vis/proj_screen.h).

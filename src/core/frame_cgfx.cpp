@@ -635,6 +635,11 @@ struct Cgfx {
         mat.blend = ((colour_op >> 8) & 3) == 1;
         mat.blend_src = (blend_function >> 16) & 0xF;
         mat.blend_dst = (blend_function >> 20) & 0xF;
+        // AzaharFrame kiu140w: the depth operation (its flags, then the command of register
+        // 0x107): bit 1 of the flags, depth written.
+        if (r.U32(mo + 0x120) == 0x00010107u) {
+            mat.depth_write = (r.U32(mo + 0x118) & 2) != 0;
+        }
         const std::size_t fs = r.Rel(mo + 0x288);
         if (fs == 0) {
             return;
@@ -651,6 +656,14 @@ struct Cgfx {
                 if (reg == kStageRegs[i] && !found[i]) {
                     found[i] = Material::Stage{r.U32(k - 4), r.U32(k + 4), r.U32(k + 8),
                                                r.U32(k - 8), r.U32(k + 16)};
+                    // AzaharFrame kiu140w: the alpha test's command (register 0x104) follows the
+                    // last stage's own.
+                    if (i == 5 && k + 28 <= r.Size() && r.U32(k + 24) == 0x000F0104u) {
+                        const u32 test = r.U32(k + 20);
+                        mat.alpha_test = (test & 1) != 0;
+                        mat.alpha_func = (test >> 4) & 7;
+                        mat.alpha_ref = (test >> 8) & 0xFF;
+                    }
                 }
             }
         }
@@ -668,6 +681,7 @@ struct Cgfx {
             ReadEffectState(mo, mat);
         } catch (const Bad&) {
             mat.blend = false;
+            mat.alpha_test = false;
             mat.stages.clear();
         }
         // The rasterization's face culling command (GfxRasterization: value, then the header

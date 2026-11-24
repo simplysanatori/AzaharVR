@@ -145,6 +145,11 @@ struct Material {
         u32 source = 0, operand = 0, combine = 0, constant = 0, scale = 0;
     };
     std::vector<Stage> stages;
+    /// AzaharFrame kiu140w: the alpha test (PICA's compare functions: 1 always, 4 less, 6 greater,
+    /// 7 greater or equal; the reference 0 to 255) and whether it writes depth.
+    bool alpha_test = false;
+    u32 alpha_func = 1, alpha_ref = 0;
+    bool depth_write = true;
 };
 
 struct Vertex {

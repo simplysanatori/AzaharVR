@@ -531,6 +531,14 @@ struct ControllerModels::Gpu {
         bool bullet = false;
         FrameWeapons::UvMotion uv; ///< AzaharFrame kiumodels: how its texture moves
         bool arm = false; ///< AzaharFrame kiuarm: Pit's arm (core kArmFile), drawn on its own
+        /// AzaharFrame kiu140w: how see-through it is (see_through.h), with its own vertices and
+        /// descriptors (its image in the surface's place); none: solid, or a glow.
+        std::optional<SeeFileKind> see;
+        PartKind see_kind = PartKind::Lit;
+        bool see_unlit = false, see_slides = false;
+        float see_reference = 0.0f;
+        vk::Buffer see_vertices;
+        vk::DescriptorSet see_set;
     };
     struct Weapon {
         int id = -1;
@@ -595,6 +603,7 @@ struct ControllerModels::WeaponLoad { // AzaharFrame kiuguns
     FrameWeapons::Weapon info;
     std::vector<ModelFile> files;
     std::size_t part_files = 0; ///< AzaharFrame kiuflash: the parts' (the flash cards' after)
+    std::vector<std::optional<SeeFile>> see; ///< AzaharFrame kiu140w: the parts', as `files`
     std::size_t flash_end = 0;  ///< AzaharFrame kiuflash: then the bullets' files, to the end
     float flash_push = 0.0f;    ///< AzaharFrame kiuflash: FlashPush (metres, the class's fit)
     float flash_push_fist = 0.0f; ///< AzaharFrame kiuinteg: from the fist's front (AimSource::Fist)
@@ -2160,10 +2169,11 @@ void ControllerModels::Setup(Runtime& rt) {
     g.upload_fence = g.device.createFence({});
     // AzaharFrame kiuguns: the weapon in hand: its own sets (freed one weapon at a time), command
     // buffer and fence.
-    const vk::DescriptorPoolSize weapon_size{vk::DescriptorType::eCombinedImageSampler, 64};
+    // AzaharFrame kiu140w: a see-through part has a set of its own.
+    const vk::DescriptorPoolSize weapon_size{vk::DescriptorType::eCombinedImageSampler, 128};
     g.weapon_pool = g.device.createDescriptorPool(
         {.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-         .maxSets = 32,
+         .maxSets = 64,
          .poolSizeCount = 1,
          .pPoolSizes = &weapon_size});
     g.weapon_cmd = g.device.allocateCommandBuffers(
@@ -2263,6 +2273,83 @@ void ControllerModels::Setup(Runtime& rt) {
 
 namespace {
 
+// AzaharFrame kiu140w: AZAHARFRAME_KIU_WEAPON_SEE_THROUGH=0 (live): a weapon's see-through parts
+// drawn solid (as before them).
+bool SeeThroughPartsOn() {
+    return Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_WEAPON_SEE_THROUGH").value_or("1") !=
+           "0";
+}
+
+template <typename WeaponT>
+bool HasSeeParts(const WeaponT& w, bool glow) {
+    return std::any_of(w.parts.begin(), w.parts.end(),
+                       [&](const auto& p) { return p.see && (glow || !p.glow); });
+}
+
+/// What a see-through file's part is drawn as (see_through.h).
+PartKind SeePartKind(const SeeFile& see) {
+    switch (see.kind) {
+    case SeeFileKind::Add:
+        return PartKind::Added;
+    case SeeFileKind::Blend:
+        return see.depth_write && !see.unlit ? PartKind::Blend : PartKind::BlendClear;
+    default:
+        return PartKind::Lit;
+    }
+}
+
+// AzaharFrame kiu140w: one see-through part in a stage, `pc` as for a solid one (its light, matrix
+// and fade): cut under the game's alpha test, its solid texels or (ClearStage) the rest; blended
+// with no depth: its back faces, then its front ones.
+template <typename GpuT, typename PartT>
+void DrawSeePart(vk::CommandBuffer& c, GpuT& g, const PartT& part, PushConstants pc,
+                 const char* side, DrawStage stage, PartKind kind, float w_flags, double now_s) {
+    const bool clear = ClearStage(stage);
+    const bool blend = kind == PartKind::Blend || kind == PartKind::BlendClear;
+    float flags = static_cast<float>(static_cast<int>(w_flags) & 3) + kSeeFlag; // mirror, forearm
+    pc.params[0] = blend && !clear ? std::max(part.see_reference, kSolidAlpha) : part.see_reference;
+    if (part.see_unlit) {
+        flags += 4.0f;
+        // Only as the game moves it (no flicker, no sway).
+        if (part.uv.source == FrameWeapons::UvSource::Game &&
+            (kind == PartKind::Added || part.see_slides)) {
+            const GlowMotion m = AnimateGlow(-1, static_cast<int>(part.uv.source), part.uv.frames,
+                                             part.uv.du, part.uv.dv, std::fmod(now_s, 3600.0),
+                                             FrameWeapons::kGameFps);
+            pc.key = {m.u, m.v, 1.0f, 0.0f};
+            pc.up = {};
+            flags += 8.0f + (part.see_slides ? kSeeSlidesFlag : 0.0f);
+        }
+    }
+    if (clear) {
+        flags += kSeeBlendFlag;
+    }
+    const bool both = stage == DrawStage::ClearColour && kind == PartKind::BlendClear;
+    bool bound = false;
+    for (const float face : {both ? kSeeBackFlag : 0.0f, kSeeFrontFlag}) {
+        if (face == kSeeFrontFlag && !both) {
+            break;
+        }
+        pc.params[3] = StageFlags(stage, flags + face);
+        for (const ModelComponent& comp : part.components) {
+            if (comp.name != side || comp.index_count == 0) {
+                continue;
+            }
+            if (!bound) {
+                c.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g.pipeline_layout, 0,
+                                     part.see_set, {});
+                c.bindVertexBuffers(0, part.see_vertices, vk::DeviceSize{0});
+                c.bindIndexBuffer(part.indices, 0, vk::IndexType::eUint32);
+                bound = true;
+            }
+            c.pushConstants(g.pipeline_layout,
+                            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                            0, sizeof(pc), &pc);
+            c.drawIndexed(comp.index_count, 1, comp.first_index, 0, 0);
+        }
+    }
+}
+
 // AzaharFrame kiuguns: a weapon's parts at the aim pose times each fit (weapon_fit.h).
 // AzaharFrame kiuopacity: in the stages of its Weapon Opacity (see_through.h): at 1 one stage,
 // the draws as before; under it the lit parts' depth, then their colour, then the glows.
@@ -2276,6 +2363,7 @@ void RecordWeapon(vk::CommandBuffer& c, GpuT& g, const WeaponT& w, const Mat& vi
     const Mat aim_m = FromPose(aim.orientation, aim.position);
     // The glow and effect parts (WpnEfe ...) are cards the game blends and animates; drawn plain
     // they float about, so only with AZAHARFRAME_KIU_WEAPON_GLOW=1 (live).
+    // AzaharFrame kiu140w: then with the game's own blend and alpha (but a palm's flames).
     // A palm's flames are its look: kept (in place: FitMotion; moving: AnimateGlow).
     const bool glow =
         w.info.cls == FrameWeapons::kPalm ||
@@ -2285,13 +2373,15 @@ void RecordWeapon(vk::CommandBuffer& c, GpuT& g, const WeaponT& w, const Mat& vi
     // AzaharFrame kiumodels: AZAHARFRAME_KIU_GLOW_MOTION=0 (live): the glows still (as before).
     const bool glow_motion =
         Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_GLOW_MOTION").value_or("1") != "0";
-    for (const DrawStage stage : StagesFor(opacity)) {
+    // AzaharFrame kiu140w: the weapon's own see-through parts (see_through.h).
+    const bool see_on = SeeThroughPartsOn();
+    const bool see_parts = see_on && HasSeeParts(w, glow);
+    for (const DrawStage stage : StagesFor(opacity, see_parts)) {
     for (const FitPart& fit : fits) {
       for (const bool glow_pass : {false, true}) {
-        if ((glow_pass && !glow) || !DrawnIn(stage, glow_pass)) {
+        if (glow_pass && !glow) {
             continue;
         }
-        c.bindPipeline(vk::PipelineBindPoint::eGraphics, g.Of(PipeFor(stage, glow_pass)));
         Mat fit_m{};
         std::copy(fit.transform.begin(), fit.transform.end(), fit_m.begin());
         // The orbitars' and detached parts' float (weapon_fit.h FitMotion), across the ray.
@@ -2335,6 +2425,18 @@ void RecordWeapon(vk::CommandBuffer& c, GpuT& g, const WeaponT& w, const Mat& vi
                                                        : "C";
         for (const auto& part : w.parts) {
             if (part.glow != glow_pass || part.flash || part.bullet || part.arm) {
+                continue;
+            }
+            const bool see = see_on && part.see.has_value();
+            const PartKind kind = see ? part.see_kind : glow_pass ? PartKind::Added : PartKind::Lit;
+            if (!DrawnIn(stage, kind) || (see && part.see_unlit && kind != PartKind::Added &&
+                                          !ClearStage(stage))) {
+                continue;
+            }
+            c.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                           g.Of(PipeFor(stage, kind == PartKind::Added)));
+            if (see) {
+                DrawSeePart(c, g, part, pc, side, stage, kind, w_flags, now_s);
                 continue;
             }
             // AzaharFrame kiumodels: a glow moves (its texture slides, it flickers, a palm's
@@ -3064,9 +3166,12 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
     const auto weapon_drawn = [&](const Hand& hand) {
         return hand.shown && hand.weapon >= 0 && g.weapon_live && g.weapon_live->id == hand.weapon;
     };
-    const std::array<int, 2> order =
-        HandOrder(weapon_drawn(hands[0]) && SeeThrough(hands[0].weapon_opacity),
-                  weapon_drawn(hands[1]) && SeeThrough(hands[1].weapon_opacity));
+    // AzaharFrame kiu140w: or one with see-through parts of its own.
+    const auto weapon_clear = [&](const Hand& hand) {
+        return weapon_drawn(hand) && (SeeThrough(hand.weapon_opacity) ||
+                                      (SeeThroughPartsOn() && HasSeeParts(*g.weapon_live, true)));
+    };
+    const std::array<int, 2> order = HandOrder(weapon_clear(hands[0]), weapon_clear(hands[1]));
     // AzaharFrame kiuweapon: AZAHARFRAME_KIU_WEAPON_DRAW=0 (live): the weapon's model left out
     // (weapon_fit.h kWeaponDrawSwitch); its flash and shots as before.
     // AzaharFrame kiu130: and while the view is over the shoulder, where the game draws Pit with
@@ -3484,6 +3589,18 @@ void ControllerModels::UpdateWeapon(int id) {
                                  not_read);
                     }
                 }
+                // AzaharFrame kiu140w: how see-through it is (one that cannot be read: solid).
+                std::optional<SeeFile> see;
+                if (!part.see_file.empty()) {
+                    see.emplace();
+                    if (!LoadSeeFile(dir + part.see_file,
+                                     file.vertices.size() / kModelVertexFloats, *see, why)) {
+                        LOG_WARNING(Frontend, "xr: weapon in hand: {}: {} (drawn solid)",
+                                    part.see_file, why);
+                        see.reset();
+                    }
+                }
+                l.see.push_back(std::move(see));
                 l.files.push_back(std::move(file));
             }
             l.part_files = l.files.size();
@@ -3636,6 +3753,11 @@ void ControllerModels::UploadWeapon() {
     for (const ModelFile& m : l.files) {
         total += m.vertices.size() * 4 + m.indices.size() * 4 + m.colour.size() + m.surface.size();
     }
+    for (std::size_t i = 0; i < l.see.size() && i < l.files.size(); i++) { // AzaharFrame kiu140w
+        if (l.see[i]) {
+            total += l.files[i].vertices.size() * 4 + l.see[i]->image.size();
+        }
+    }
     g.weapon_staging = g.Buffer(total, vk::BufferUsageFlagBits::eTransferSrc,
                                 vk::MemoryPropertyFlagBits::eHostVisible |
                                     vk::MemoryPropertyFlagBits::eHostCoherent,
@@ -3679,8 +3801,8 @@ void ControllerModels::UploadWeapon() {
             g.UploadImage(u, put(m.surface.data(), m.surface.size()), m.SurfaceWidth(),
                           m.SurfaceHeight(), vk::Format::eR8G8B8A8Unorm, &w->images, &w->views);
         // The texture's own wrap modes (77 of the 108 weapons repeat their UVs).
-        const uint32_t key = ModelWrapU(m.flags) | ModelWrapV(m.flags) << 4;
-        vk::Sampler& sampler = g.weapon_samplers[key];
+        const auto sampler_for = [&g](uint32_t wrap_u, uint32_t wrap_v) {
+        vk::Sampler& sampler = g.weapon_samplers[wrap_u | wrap_v << 4];
         if (!sampler) {
             const auto mode = [](uint32_t pica) {
                 switch (pica) {
@@ -3696,32 +3818,61 @@ void ControllerModels::UploadWeapon() {
                 .magFilter = vk::Filter::eLinear,
                 .minFilter = vk::Filter::eLinear,
                 .mipmapMode = vk::SamplerMipmapMode::eLinear,
-                .addressModeU = mode(ModelWrapU(m.flags)),
-                .addressModeV = mode(ModelWrapV(m.flags)),
+                .addressModeU = mode(wrap_u),
+                .addressModeV = mode(wrap_v),
                 .addressModeW = vk::SamplerAddressMode::eClampToEdge,
                 .maxLod = VK_LOD_CLAMP_NONE,
             });
         }
-        part.set = g.device.allocateDescriptorSets(
-            {.descriptorPool = g.weapon_pool, .descriptorSetCount = 1, .pSetLayouts = &g.set_layout})[0];
-        w->sets.push_back(part.set);
-        const std::array<vk::DescriptorImageInfo, 2> infos{{
-            {sampler, colour, vk::ImageLayout::eShaderReadOnlyOptimal},
-            {sampler, surface, vk::ImageLayout::eShaderReadOnlyOptimal},
-        }};
-        const std::array<vk::WriteDescriptorSet, 2> writes{{
-            {.dstSet = part.set,
-             .dstBinding = 0,
-             .descriptorCount = 1,
-             .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-             .pImageInfo = &infos[0]},
-            {.dstSet = part.set,
-             .dstBinding = 1,
-             .descriptorCount = 1,
-             .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-             .pImageInfo = &infos[1]},
-        }};
-        g.device.updateDescriptorSets(writes, {});
+        return sampler;
+        };
+        const vk::Sampler sampler = sampler_for(ModelWrapU(m.flags), ModelWrapV(m.flags));
+        const auto set_of = [&](vk::Sampler second_sampler, vk::ImageView second) {
+            const vk::DescriptorSet set = g.device.allocateDescriptorSets(
+                {.descriptorPool = g.weapon_pool, .descriptorSetCount = 1, .pSetLayouts = &g.set_layout})[0];
+            w->sets.push_back(set);
+            const std::array<vk::DescriptorImageInfo, 2> infos{{
+                {sampler, colour, vk::ImageLayout::eShaderReadOnlyOptimal},
+                {second_sampler, second, vk::ImageLayout::eShaderReadOnlyOptimal},
+            }};
+            const std::array<vk::WriteDescriptorSet, 2> writes{{
+                {.dstSet = set,
+                 .dstBinding = 0,
+                 .descriptorCount = 1,
+                 .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                 .pImageInfo = &infos[0]},
+                {.dstSet = set,
+                 .dstBinding = 1,
+                 .descriptorCount = 1,
+                 .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                 .pImageInfo = &infos[1]},
+            }};
+            g.device.updateDescriptorSets(writes, {});
+            return set;
+        };
+        part.set = set_of(sampler, surface);
+        // AzaharFrame kiu140w: its see-through draw's vertices and image.
+        if (i < l.see.size() && l.see[i]) {
+            const SeeFile& see = *l.see[i];
+            const std::vector<float> verts = SeeVertices(m.vertices, see);
+            part.see_vertices = g.Buffer(verts.size() * 4,
+                                         vk::BufferUsageFlagBits::eVertexBuffer |
+                                             vk::BufferUsageFlagBits::eTransferDst,
+                                         local, &memory);
+            w->buffers.emplace_back(part.see_vertices, memory);
+            u.copyBuffer(g.weapon_staging, part.see_vertices,
+                         vk::BufferCopy{put(verts.data(), verts.size() * 4), 0, verts.size() * 4});
+            const vk::ImageView image =
+                g.UploadImage(u, put(see.image.data(), see.image.size()), see.width, see.height,
+                              vk::Format::eR8G8B8A8Unorm, &w->images, &w->views);
+            part.see_set = set_of(sampler_for(see.wrap_u, see.wrap_v), image);
+            part.see = see.kind;
+            part.see_kind = SeePartKind(see);
+            part.see_unlit = see.unlit;
+            part.see_slides = see.slides;
+            part.see_reference = see.reference;
+            w->gpu_bytes += verts.size() * 4 + see.image.size() * 4 / 3;
+        }
         part.components = m.components;
         part.glow = i < l.part_files && i < l.info.parts.size() && l.info.parts[i].glow;
         if (i < l.part_files && i < l.info.parts.size()) { // AzaharFrame kiumodels

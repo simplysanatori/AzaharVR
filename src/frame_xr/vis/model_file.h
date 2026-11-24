@@ -112,6 +112,29 @@ struct ModelFile {
 bool LoadModelFile(const std::string& path, ModelFile& out, std::string& error,
                    uint32_t space = kModelFlagAimSpace);
 
+/// AzaharFrame kiu140w: a weapon part's see-through file (core/frame_weapon_models.h
+/// WriteSeeThrough), beside its model: how see-through each spot of it is.
+enum class SeeFileKind : uint8_t { Solid, Cut, Blend, Add }; ///< FrameWeapons::SeeKind
+struct SeeFile {
+    SeeFileKind kind = SeeFileKind::Solid;
+    bool unlit = false;
+    bool depth_write = true;
+    bool slides = false;
+    float reference = 0.0f;
+    uint32_t width = 0, height = 0;
+    uint32_t wrap_u = 2, wrap_v = 2;
+    std::vector<float> vertices; ///< kSeeVertexFloats per vertex: u, v, factor, gain, colour
+    std::vector<uint8_t> image;  ///< width * height * 4: the colour's factor, the alpha
+};
+constexpr uint32_t kSeeVertexFloats = 7;
+/// Reads and checks one; `vertex_count`: its model's. False with the reason in `error`.
+bool LoadSeeFile(const std::string& path, std::size_t vertex_count, SeeFile& out,
+                 std::string& error);
+/// The model's vertices as a see-through draw takes them (model_shaders.h, flag +64): the image's
+/// coordinates, the alpha's factor and its gain in the tangent's place, and, unlit, the colour's
+/// factor in the normal's.
+std::vector<float> SeeVertices(const std::vector<float>& model_vertices, const SeeFile& see);
+
 /// One draw of a model: an index range and its transform (column major 4x4, in model space).
 struct ModelPart {
     uint32_t first_index = 0;
