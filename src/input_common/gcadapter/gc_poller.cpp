@@ -31,6 +31,9 @@ constexpr std::array<GCAdapter::PadButton, Settings::NativeButton::NumButtons> g
     GCAdapter::PadButton::Undefined,
     GCAdapter::PadButton::Undefined,
     GCAdapter::PadButton::Undefined,
+    GCAdapter::PadButton::Undefined,
+    GCAdapter::PadButton::Undefined,
+    GCAdapter::PadButton::Undefined,
 }};
 }
 class GCButton final : public Input::ButtonDevice {

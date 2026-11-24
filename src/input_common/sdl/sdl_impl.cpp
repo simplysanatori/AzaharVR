@@ -191,6 +191,8 @@ constexpr std::array<SDL_GameControllerButton, Settings::NativeButton::NumButton
         SDL_CONTROLLER_BUTTON_INVALID,
         SDL_CONTROLLER_BUTTON_GUIDE,
         SDL_CONTROLLER_BUTTON_INVALID,
+        SDL_CONTROLLER_BUTTON_INVALID,
+        SDL_CONTROLLER_BUTTON_INVALID,
     }};
 constexpr std::array<SDL_GameControllerButton, Settings::NativeButton::NumButtons>
     nintendo_to_3ds_mapping = {{
@@ -211,6 +213,8 @@ constexpr std::array<SDL_GameControllerButton, Settings::NativeButton::NumButton
         SDL_CONTROLLER_BUTTON_INVALID,
         SDL_CONTROLLER_BUTTON_INVALID,
         SDL_CONTROLLER_BUTTON_GUIDE,
+        SDL_CONTROLLER_BUTTON_INVALID,
+        SDL_CONTROLLER_BUTTON_INVALID,
         SDL_CONTROLLER_BUTTON_INVALID,
     }};
 
