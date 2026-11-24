@@ -160,9 +160,10 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
         y += kDividerH;
     };
     // A one-line item: its name, and Installed / Not Installed at the end.
-    const auto status_item = [&](const char* name, bool installed, float right = 0.0f) {
+    const auto status_item = [&](const char* name, bool installed, float right = 0.0f,
+                                 const char* other = kAngelsAimNotInstalled) {
         const float cy = y + kItemH * 0.5f, x1 = c.x1 - right;
-        const char* state = installed ? kAngelsAimInstalled : kAngelsAimNotInstalled;
+        const char* state = installed ? kAngelsAimInstalled : other;
         const float sw = kit.TextWidth(Type::Body, state);
         if (installed) {
             kit.Icon(x1 - sw - 16.0f, cy, 20.0f, Sym::kCheck, false, Tok::kPrimary);
@@ -243,13 +244,16 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
     title(kAngelsAimSuggested);
     status_item(kAngelsAimTexturesPack, m.textures_pack);
     if (m.mapped) { // AzaharFrame kiu140: a hand model from the player's own zip
-        const std::string zip = LabelFor(Id::InstallFromZip);
-        const Target zt{Id::InstallFromZip, static_cast<int>(ZipTarget::Hand)};
+        const bool found = !m.hand_installed && !m.hand_zip.empty();
+        const std::string zip = found ? std::string(kAngelsAimHandInstall) : LabelFor(Id::InstallFromZip);
+        const Target zt{Id::InstallFromZip,
+                        found ? kAngelsAimHandFoundIndex : static_cast<int>(ZipTarget::Hand)};
         const float w = kit.TextWidth(Type::Label, zip) + 8.0f + 18.0f + 48.0f;
         const Rect b{c.x1 - w, y + (kItemH - kButtonH) * 0.5f, c.x1, y + (kItemH + kButtonH) * 0.5f};
         kit.Button(b, ButtonStyle::Tonal, Sym::kFolderOpen, zip, StateOf(view, zt));
         AddHit({b.x0, y, b.x1, y + kItemH}, zt, shown);
-        status_item(kAngelsAimHandModel, m.hand_installed, w + 16.0f);
+        status_item(kAngelsAimHandModel, m.hand_installed, w + 16.0f,
+                    found ? kAngelsAimHandFound : kAngelsAimNotInstalled);
     }
     y += 16.0f;
     // (AzaharFrame kiu132: Aiming Settings, the Controls tab at Aiming, is the Aiming group's

@@ -47,6 +47,7 @@ struct AngelsAimModel {
     bool mapped = false;
     bool mod_installed = false; ///< a C-Stick & Gyro mod (FrameXr::CStickModInstalled)
     bool textures_pack = false; ///< the catalog's weapons and effects pack is on (kAngelsAimPackIds)
+    std::string hand_zip;       ///< AzaharFrame kiu140: a hand model's zip in Downloads, or ""
     bool hand_installed = false; ///< AzaharFrame kiu140: a hand model for Pit's arm is there
     std::string report_url;     ///< Report an Issue's page ("" none)
     bool operator==(const AngelsAimModel&) const = default;
@@ -87,6 +88,11 @@ inline constexpr const char* kAngelsAimTexturesPack = "Kid Icarus Uprising Weapo
 /// AzaharFrame kiu140: the row that takes a hand model from a zip, and its toast (approved
 /// 2026-11-24).
 inline constexpr const char* kAngelsAimHandModel = "Pit's Hand Model";
+/// With such a zip in Downloads and no hand yet (PROPOSED): its state, and Install in place of
+/// Install from Zip (Id::InstallFromZip's index).
+inline constexpr const char* kAngelsAimHandFound = "Found in Downloads";
+inline constexpr const char* kAngelsAimHandInstall = "Install";
+inline constexpr int kAngelsAimHandFoundIndex = 100;
 inline constexpr const char* kAngelsAimHandToast = "Hand Model Installed";
 inline constexpr const char* kAngelsAimSettings = "Settings";
 inline constexpr const char* kAngelsAimInstalled = "Installed";
@@ -190,6 +196,9 @@ inline constexpr const char* kKiuScoreHeightTip =
 inline constexpr const char* kKiuSubtitleHeightRow = "Subtitle Height"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuSubtitleHeightTip =
     "How high the subtitles are. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuSubtitleSizeRow = "Subtitle Size"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuSubtitleSizeTip =
+    "How big the subtitles are.";
 inline constexpr const char* kOverShoulderRow = "Over the Shoulder";
 inline constexpr const char* kOverShoulderTip =
     "Moves your view behind and above Pit, so you can see him.";

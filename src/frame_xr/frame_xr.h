@@ -414,6 +414,7 @@ enum class MenuSetting {
     KiuScoreAcross, ///< AzaharFrame kiu140: `value` a slider, -40 to 40 degrees (vr_kiu_score_across)
     KiuScoreHeight, ///< AzaharFrame kiu140: `value` a slider, -40 to 40 degrees (vr_kiu_score_height)
     KiuSubtitleHeight, ///< AzaharFrame kiu140: `value` a slider, -40 to 40 degrees (vr_kiu_subtitle_height)
+    KiuSubtitleSize, ///< AzaharFrame kiu140: `value` a slider, 50 to 250 percent (vr_kiu_subtitle_size)
     AngelsAimIntroShown, ///< AzaharFrame kiuweap2: `value` 1 (vr_angels_aim_intro_shown, global)
     /// AzaharFrame bfidr: what Black Frame Insertion turned on (bfi_helpers.h): `value` bit 0
     /// vr_bfi_set_dynamic_resolution, bit 1 vr_bfi_set_panel

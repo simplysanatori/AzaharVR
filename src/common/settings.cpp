@@ -383,6 +383,7 @@ void RestoreGlobalState(bool is_powered_on) {
     values.vr_kiu_score_across.SetGlobal(true); // AzaharFrame kiu140
     values.vr_kiu_score_height.SetGlobal(true); // AzaharFrame kiu140
     values.vr_kiu_subtitle_height.SetGlobal(true); // AzaharFrame kiu140
+    values.vr_kiu_subtitle_size.SetGlobal(true); // AzaharFrame kiu140
     values.vr_kiu_bottom_x.SetGlobal(true);
     values.vr_kiu_bottom_y.SetGlobal(true);
     values.vr_kiu_reticle_size.SetGlobal(true);

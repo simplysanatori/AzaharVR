@@ -125,6 +125,7 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_kiu_score_across); // AzaharFrame kiu140
     f(v.vr_kiu_score_height); // AzaharFrame kiu140
     f(v.vr_kiu_subtitle_height); // AzaharFrame kiu140
+    f(v.vr_kiu_subtitle_size); // AzaharFrame kiu140
     f(v.vr_kiu_reticle_size);
     f(v.vr_kiu_game_camera); // AzaharFrame kiu133
     f(v.vr_kiu_pit_opacity);

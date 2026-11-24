@@ -384,6 +384,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::KiuScoreHeight;
     case Id::KiuSubtitleHeight: // AzaharFrame kiu140
         return MenuSetting::KiuSubtitleHeight;
+    case Id::KiuSubtitleSize: // AzaharFrame kiu140
+        return MenuSetting::KiuSubtitleSize;
     case Id::WristSide:
         return MenuSetting::WristSide;
     case Id::KiuReticleSize:
@@ -1155,6 +1157,7 @@ void MenuPanel::BuildModel(const Host& host) {
     m.kiu_score_across = static_cast<int>(v.vr_kiu_score_across.GetValue()); // AzaharFrame kiu140
     m.kiu_score_height = static_cast<int>(v.vr_kiu_score_height.GetValue()); // AzaharFrame kiu140
     m.kiu_subtitle_height = static_cast<int>(v.vr_kiu_subtitle_height.GetValue()); // AzaharFrame kiu140
+    m.kiu_subtitle_size = static_cast<int>(v.vr_kiu_subtitle_size.GetValue()); // AzaharFrame kiu140
     m.wrist_side = static_cast<int>(std::min<u32>(v.vr_wrist_side.GetValue(), 1));
     m.kiu_reticle_size =
         static_cast<int>(std::clamp<u32>(v.vr_kiu_reticle_size.GetValue(), 30, 150));
@@ -1767,6 +1770,11 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         Apply(v.vr_kiu_subtitle_height, r.value, per_game);
         r.setting = MenuSetting::KiuSubtitleHeight;
         break;
+    case Id::KiuSubtitleSize: // AzaharFrame kiu140
+        r.value = std::clamp(value, 50, 250);
+        Apply(v.vr_kiu_subtitle_size, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuSubtitleSize;
+        break;
     case Id::KiuReticleSize:
         r.value = std::clamp(value, 30, 150);
         Apply(v.vr_kiu_reticle_size, static_cast<u32>(r.value), per_game);
@@ -2323,6 +2331,12 @@ void MenuPanel::Click(Target t, Host& host) {
         break;
     // AzaharFrame zipinstall: Install from Zip (citra_qt/frame_mods.cpp)
     case Id::InstallFromZip:
+        if (t.index == Menu::kAngelsAimHandFoundIndex) { // AzaharFrame kiu140: the zip in Downloads
+            view.scroll[static_cast<std::size_t>(view.tab)] = 0.0f;
+            ask_text(MenuCommand::InstallFromZip, model.mods.angels_aim.hand_zip,
+                     static_cast<int>(Menu::ZipTarget::Hand));
+            break;
+        }
         if (t.index == static_cast<int>(Menu::ZipTarget::Textures) ||
             t.index == static_cast<int>(Menu::ZipTarget::Mods) ||
             t.index == static_cast<int>(Menu::ZipTarget::Cheats) || // AzaharFrame ui2

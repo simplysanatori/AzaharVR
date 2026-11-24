@@ -84,6 +84,12 @@ std::string ImportHand(std::span<const uint8_t> zip, std::vector<uint8_t>& out,
 std::string ImportHandFile(const std::string& zip_path, const std::string& user_directory,
                            const HandImportProgress& progress = {});
 
+/// Whether a file is a zip that names such a model (its list of members read, nothing unpacked);
+/// and the newest of those right in a folder (its zips, at most kHandZipsLooked), "" when none.
+inline constexpr std::size_t kHandZipsLooked = 200;
+bool IsHandZip(const std::string& zip_path);
+std::string FindHandZip(const std::string& folder);
+
 /// Whether the player has a hand file.
 bool HandFileExists(const std::string& user_directory);
 

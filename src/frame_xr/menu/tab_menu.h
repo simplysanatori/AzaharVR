@@ -316,6 +316,7 @@ enum class Id : int {
     KiuScoreAcross, ///< AzaharFrame kiu140: a slider, -40 to 40 degrees (vr_kiu_score_across)
     KiuScoreHeight, ///< AzaharFrame kiu140: a slider, -40 to 40 degrees (vr_kiu_score_height)
     KiuSubtitleHeight, ///< AzaharFrame kiu140: a slider, -40 to 40 degrees (vr_kiu_subtitle_height)
+    KiuSubtitleSize, ///< AzaharFrame kiu140: a slider, 50 to 250 percent (vr_kiu_subtitle_size)
     /// AzaharFrame kiu132: a group's title in the Angel's Aim segment's settings (no action;
     /// index: AngelsAimGroupKind)
     AngelsAimGroup,
@@ -506,6 +507,7 @@ struct MenuModel {
     int kiu_score_across = 20; ///< AzaharFrame kiu140 (vr_kiu_score_across)
     int kiu_score_height = 22; ///< AzaharFrame kiu140 (vr_kiu_score_height)
     int kiu_subtitle_height = -18; ///< AzaharFrame kiu140 (vr_kiu_subtitle_height)
+    int kiu_subtitle_size = 130; ///< AzaharFrame kiu140 (vr_kiu_subtitle_size)
     int wrist_side = 0;             ///< 0 Back, 1 Inside (global)
     int kiu_reticle_size = 100;     ///< percent (30 to 150)
     int kiu_view = 0;               ///< AzaharFrame kiu133: Camera, Kiu::FirstPerson::ViewFor

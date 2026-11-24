@@ -205,6 +205,7 @@ private:
     void ZipDone(bool texture, u64 tid, const std::string& mod_id = {});
     void TurnBackOn(); ///< AzaharFrame compat: the "Turned Off" snackbar's action
     void ZipFail(const std::string& error);
+    void ZipHandFound(const std::string& path); ///< AzaharFrame kiu140: the zip RefreshAngelsAim found
     void ZipHand(const std::string& path);   ///< AzaharFrame kiu140: a hand model's zip
     void ZipCheats(const std::string& path); ///< AzaharFrame ui2: a cheat file, or a zip of one
     void ZipCloseJob();
@@ -262,6 +263,7 @@ private:
     int run = -1;
     FrameXr::Menu::ModsListModel mods;
     std::string angels_aim_report_url; ///< AzaharFrame kiufix: the one OpenUrl may open
+    std::string angels_aim_hand_zip; ///< AzaharFrame kiu140: a hand model's zip in Downloads
     FrameXr::Menu::TexturesModel textures;
     std::vector<CustomTex::Pack> packs; ///< as listed, for Activate
     std::string installing;             ///< the mod an install runs for

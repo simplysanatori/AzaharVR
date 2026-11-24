@@ -251,6 +251,9 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::KiuSubtitleHeight: // AzaharFrame kiu140
         f(v.vr_kiu_subtitle_height);
         return true;
+    case Id::KiuSubtitleSize: // AzaharFrame kiu140
+        f(v.vr_kiu_subtitle_size);
+        return true;
     case Id::KiuReticleSize:
         f(v.vr_kiu_reticle_size);
         return true;

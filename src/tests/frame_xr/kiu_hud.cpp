@@ -140,23 +140,29 @@ TEST_CASE("Kid Icarus HUD: the subtitles, where they are asked for", "[frame_xr]
         REQUIRE_FALSE(IsSubtitle(x));
     }
     for (const float height : {-30.0f, -18.0f, 10.0f}) {
-        Wanted w;
-        w.subtitle_height = height;
-        const Place p = At(w);
-        // The whole frame, at two depths of w and with the game drawing past its frame.
-        for (const float whole_w : {1.0f, 3.0f}) {
-            for (const float f : {1.0f, 3.96f}) {
-                Vertex v[3] = {{kSubtitleUp * whole_w, -0.75f * whole_w, 0.2f * whole_w, whole_w},
-                               {kSubtitleUp * whole_w, 0.75f * whole_w, 0.2f * whole_w, whole_w},
-                               {1.0f * whole_w, 1.0f * whole_w, 0.2f * whole_w, whole_w}};
-                REQUIRE(MoveSubtitle(v, 3, p, f, f));
-                const float up = std::atan(v[0].x / v[0].w / f * kTanY) / kRad - 5.0f;
-                const float left = std::atan(v[0].y / v[0].w / f * kTanX) / kRad;
-                const float right = std::atan(v[1].y / v[1].w / f * kTanX) / kRad;
-                REQUIRE(up == Approx(height).margin(0.3));
-                REQUIRE(left == Approx(-right).margin(0.01));
-                REQUIRE(right < 30.0f);
-                REQUIRE(v[2].z / v[2].w == Approx(0.2f));
+        for (const int size : {50, 130, 250}) {
+            Wanted w;
+            w.subtitle_height = height;
+            w.subtitle_size = size;
+            const Place p = At(w);
+            // At two depths of w, the game drawing past its frame or not: the line left of the
+            // middle (a draw log's numbers), its middle straight ahead after.
+            for (const float q : {1.0f, 3.0f}) {
+                for (const float f : {1.0f, 3.96f}) {
+                    Vertex v[4] = {{-0.53f * q, 0.80f * q, 0.2f * q, q},
+                                   {-0.53f * q, -0.15f * q, 0.2f * q, q},
+                                   {-0.77f * q, 0.80f * q, 0.2f * q, q},
+                                   {-0.77f * q, -0.15f * q, 0.2f * q, q}};
+                    REQUIRE(MoveSubtitle(v, 4, p, f, f));
+                    const auto up = [&](int i) { return std::atan(v[i].x / v[i].w / f * kTanY) / kRad - 5.0f; };
+                    const auto side = [&](int i) { return std::atan(v[i].y / v[i].w / f * kTanX) / kRad; };
+                    REQUIRE(0.5f * (up(0) + up(2)) == Approx(height).margin(0.6));
+                    REQUIRE(side(0) == Approx(-side(1)).margin(0.01));
+                    REQUIRE(v[2].z / v[2].w == Approx(0.2f));
+                    // As wide as its share of the frame, the frame 60 degrees at 100.
+                    REQUIRE(std::tan(side(0) * kRad) ==
+                            Approx(0.475f * std::tan(30.0f * kRad) * static_cast<float>(size) / 100.0f).margin(0.002));
+                }
             }
         }
     }

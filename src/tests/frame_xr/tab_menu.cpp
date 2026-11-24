@@ -1628,6 +1628,18 @@ TEST_CASE("Tab menu: a hand model from a zip", "[frame_xr][tabmenu][kiu140]") {
         CHECK(FindHit(d, id, hand)->r.H() >= 48.0f);
         CheckTargets(d);
     }
+    // A zip in Downloads: one press installs it, only while there is no hand yet.
+    m.mods.angels_aim.hand_zip = "/home/user/Downloads/model.zip";
+    m.mods.angels_aim.hand_installed = false;
+    d.Draw(m, v);
+    CHECK(HasHit(d, id, kAngelsAimHandFoundIndex));
+    CHECK(!HasHit(d, id, hand));
+    CheckTargets(d);
+    m.mods.angels_aim.hand_installed = true;
+    d.Draw(m, v);
+    CHECK(!HasHit(d, id, kAngelsAimHandFoundIndex));
+    CHECK(HasHit(d, id, hand));
+    m.mods.angels_aim.hand_zip.clear();
     m.mods.angels_aim.mapped = false; // not mapped: no arm, no row
     d.Draw(m, v);
     CHECK(!HasHit(d, id, hand));

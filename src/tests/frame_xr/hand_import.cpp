@@ -318,6 +318,35 @@ TEST_CASE("Hand importer: a zip with the parts it looks for becomes a hand file"
     CHECK(again == hand);
 }
 
+TEST_CASE("Hand importer: a zip in a folder is known by the model it names", "[kiuhand]") {
+    namespace fs = std::filesystem;
+    const fs::path folder = fs::temp_directory_path() / "frame_hand_found";
+    std::error_code ec;
+    fs::remove_all(folder, ec);
+    fs::create_directories(folder);
+    const auto write = [&folder](const char* name, const std::vector<uint8_t>& bytes) {
+        std::ofstream(folder / name, std::ios::binary)
+            .write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        return (folder / name).string();
+    };
+    const std::vector<uint8_t> good = Zip(Files(Dae()));
+    CHECK(FindHandZip(folder.string()).empty());
+    CHECK_FALSE(IsHandZip(write("other.zip", Zip({{std::string("readme.txt"), std::vector<uint8_t>{1, 2}}}))));
+    CHECK_FALSE(IsHandZip(write("broken.zip", std::vector<uint8_t>(300, 0x50))));
+    CHECK_FALSE(IsHandZip(write("empty.zip", {})));
+    write("model.txt", good); // not named a zip
+    CHECK(FindHandZip(folder.string()).empty());
+    const std::string hand = write("Model.ZIP", good);
+    CHECK(IsHandZip(hand));
+    CHECK(FindHandZip(folder.string()) == hand);
+    CHECK(FindHandZip((folder / "nowhere").string()).empty());
+    // Cut short anywhere: no, and no harm.
+    for (std::size_t n = 0; n < good.size(); n += 1 + good.size() / 97) {
+        IsHandZip(write("cut.zip", {good.begin(), good.begin() + static_cast<std::ptrdiff_t>(n)}));
+    }
+    fs::remove_all(folder, ec);
+}
+
 TEST_CASE("Hand importer: what is missing or wrong is said in a plain sentence", "[kiuhand]") {
     CHECK(Import({}) == "This is not a zip file.");
     CHECK(Import(std::vector<uint8_t>(100, 'x')) == "This is not a zip file.");

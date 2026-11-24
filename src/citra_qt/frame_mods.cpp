@@ -531,6 +531,10 @@ void FrameMods::Command(const FrameXr::MenuRequest& r) {
     }
     // AzaharFrame zipinstall: Install from Zip
     case C::InstallFromZip:
+        if (!r.text.empty() && r.value == static_cast<int>(Menu::ZipTarget::Hand)) {
+            ZipHandFound(r.text); // AzaharFrame kiu140
+            return;
+        }
         ZipStart(r.value);
         return;
     case C::ZipBrowse:
@@ -691,7 +695,8 @@ void FrameMods::RefreshAngelsAim() {
     game += g.version ? " " + Mods::Compat::VersionText(*g.version) : std::string(" version unknown");
     OffThread(
         this,
-        [tid, game] {
+        [tid, game,
+         downloads = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation).toStdString()] {
             Menu::AngelsAimModel m;
             m.shown = true;
             m.recommended = FrameXr::Kiu::IsAngelsAimTitle(tid); // kiufix2: Europe only
@@ -700,6 +705,9 @@ void FrameMods::RefreshAngelsAim() {
             m.textures_pack = AngelsAimPackOn(tid);
             m.hand_installed = FrameXr::Vis::HandFileExists(
                 FileUtil::GetUserPath(FileUtil::UserPath::UserDir)); // AzaharFrame kiu140
+            if (m.mapped && !m.hand_installed) {
+                m.hand_zip = FrameXr::Vis::FindHandZip(downloads);
+            }
             m.report_url = Menu::AngelsAimReportUrl(AppVersion(), game, m.mod_installed);
             return m;
         },
@@ -708,6 +716,7 @@ void FrameMods::RefreshAngelsAim() {
                 return;
             }
             angels_aim_report_url = m.report_url;
+            angels_aim_hand_zip = m.hand_zip;
             LOG_INFO(Frontend, "xr: Angel's Aim: the mod {}, the weapons and effects pack {}",
                      m.mod_installed ? "installed" : "not installed",
                      m.textures_pack ? "on" : "not on");
@@ -2294,6 +2303,22 @@ void FrameMods::ZipFail(const std::string& error) {
 
 // AzaharFrame kiu140: a hand model for Pit's arm, from the player's own zip: made into the hand file
 // in the user directory (hand_import.h) and shown at once.
+void FrameMods::ZipHandFound(const std::string& path) {
+    if (zip.working || path != angels_aim_hand_zip) { // only the one that was found
+        return;
+    }
+    ZipCloseJob();
+    zip.target = Menu::ZipTarget::Hand;
+    zip.choices.clear();
+    zip.dialog = {};
+    zip_choices.clear();
+    zip_question = ZipQuestion::None;
+    zip.chips = QuickFolders();
+    zip.browse = false;
+    zip.open = true;
+    ZipHand(path);
+}
+
 void FrameMods::ZipHand(const std::string& path) {
     zip.working = true;
     zip.phase = "Installing";

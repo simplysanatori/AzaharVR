@@ -1873,6 +1873,83 @@ std::string ImportHand(std::span<const uint8_t> zip, std::vector<uint8_t>& out, 
     }
 }
 
+bool IsHandZip(const std::string& zip_path) {
+    std::ifstream in(zip_path, std::ios::binary | std::ios::ate);
+    const std::streamoff length = in ? std::streamoff{in.tellg()} : std::streamoff{-1};
+    if (length < 22 || static_cast<uint64_t>(length) > kHandZipMaxBytes) {
+        return false;
+    }
+    const auto read = [&in](std::streamoff at, std::size_t count) {
+        std::vector<uint8_t> b(count);
+        in.clear();
+        in.seekg(at);
+        in.read(reinterpret_cast<char*>(b.data()), static_cast<std::streamsize>(count));
+        if (!in || in.gcount() != static_cast<std::streamsize>(count)) {
+            b.clear();
+        }
+        return b;
+    };
+    const std::streamoff tail_at = std::max<std::streamoff>(0, length - 22 - 65535);
+    const std::vector<uint8_t> tail = read(tail_at, static_cast<std::size_t>(length - tail_at));
+    for (std::size_t at = tail.size() < 22 ? 0 : tail.size() - 22 + 1; at-- > 0;) {
+        if (U32(tail, at) != 0x06054b50u) {
+            continue;
+        }
+        const uint32_t size = U32(tail, at + 12), offset = U32(tail, at + 16);
+        constexpr uint32_t kMost = 4u << 20;
+        if (size > kMost || uint64_t{offset} + size > static_cast<uint64_t>(tail_at) + at) {
+            return false;
+        }
+        const std::vector<uint8_t> list = read(offset, size);
+        for (std::size_t p = 0; p + 46 <= list.size() && U32(list, p) == 0x02014b50u;) {
+            const std::size_t name = U16(list, p + 28), more = std::size_t{U16(list, p + 30)} + U16(list, p + 32);
+            if (list.size() - p - 46 < name) {
+                return false;
+            }
+            const std::string_view n(reinterpret_cast<const char*>(list.data() + p + 46), name);
+            const std::size_t slash = n.find_last_of("/\\");
+            if ((slash == std::string_view::npos ? n : n.substr(slash + 1)) == kModelName) {
+                return true;
+            }
+            p += 46 + name + more;
+        }
+        return false;
+    }
+    return false;
+}
+
+std::string FindHandZip(const std::string& folder) {
+    namespace fs = std::filesystem;
+    std::vector<std::pair<fs::file_time_type, std::string>> zips;
+    std::error_code ec;
+    for (fs::directory_iterator it(folder, ec), end; !ec && it != end; it.increment(ec)) {
+        std::error_code each;
+        try { // a name this system's narrow strings can't hold is left out
+            std::string extension = it->path().extension().string();
+            std::transform(extension.begin(), extension.end(), extension.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (extension != ".zip" || !it->is_regular_file(each)) {
+                continue;
+            }
+            const auto when = it->last_write_time(each);
+            if (!each) {
+                zips.emplace_back(when, it->path().string());
+            }
+        } catch (const std::exception&) {
+        }
+    }
+    std::sort(zips.begin(), zips.end(), std::greater<>());
+    if (zips.size() > kHandZipsLooked) {
+        zips.resize(kHandZipsLooked);
+    }
+    for (const auto& [when, path] : zips) {
+        if (IsHandZip(path)) {
+            return path;
+        }
+    }
+    return {};
+}
+
 std::string ImportHandFile(const std::string& zip_path, const std::string& user_directory, const HandImportProgress& progress) {
     std::vector<uint8_t> zip;
     {

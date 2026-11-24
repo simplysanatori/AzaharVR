@@ -37,7 +37,8 @@ TEST_CASE("FrameXr hudmove: not beside Angel's Aim's HUD", "[frame_xr][hudmove][
     for (const auto id :
          {Menu::Id::KiuHud, Menu::Id::KiuHudSize, Menu::Id::KiuHudLinked, Menu::Id::KiuHudAcross,
           Menu::Id::KiuHudHeight, Menu::Id::KiuBarAcross, Menu::Id::KiuBarHeight,
-          Menu::Id::KiuScoreAcross, Menu::Id::KiuScoreHeight, Menu::Id::KiuSubtitleHeight}) {
+          Menu::Id::KiuScoreAcross, Menu::Id::KiuScoreHeight, Menu::Id::KiuSubtitleHeight,
+          Menu::Id::KiuSubtitleSize}) {
         REQUIRE(Menu::PerGameSetting(id));
     }
 }

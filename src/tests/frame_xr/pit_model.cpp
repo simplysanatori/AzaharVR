@@ -305,8 +305,13 @@ TEST_CASE("Hand file: the forearm turns to the elbow, the hand stays", "[kiuhand
     const auto straight = PitModelEvaluate(m, &PitHandNamedPose(PitHandNamed::Relaxed), nullptr);
     const auto moved = Apply(bones[0], m.elbow.data());
     const float length = std::hypot(m.elbow[0], m.elbow[1], m.elbow[2]);
-    CHECK(std::hypot(moved[0], moved[1], moved[2]) == Approx(length).margin(1e-5)); // its length is the file's
-    const float along = (moved[0] * elbow[0] + moved[1] * elbow[1] + moved[2] * elbow[2]) / (length * std::hypot(elbow[0], elbow[1], elbow[2]));
+    // Its length is the file's, slid from the hand as the wrist bends (none straight).
+    const float slid = std::hypot(moved[0], moved[1], moved[2]) - length;
+    CHECK(slid > 0.0f);
+    CHECK(slid <= 0.03f + 1e-5f);
+    const auto level = Apply(PitModelEvaluate(m, &PitHandNamedPose(PitHandNamed::Relaxed), &m.elbow)[0], m.elbow.data());
+    CHECK(std::hypot(level[0], level[1], level[2]) == Approx(length).margin(1e-5));
+    const float along = (moved[0] * elbow[0] + moved[1] * elbow[1] + moved[2] * elbow[2]) / ((length + slid) * std::hypot(elbow[0], elbow[1], elbow[2]));
     CHECK(along == Approx(1.0f).margin(1e-5));
     for (std::size_t j = 1; j < m.joints.size(); j++) {
         for (std::size_t k = 0; k < 12; k++) {

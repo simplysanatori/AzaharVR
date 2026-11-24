@@ -40,6 +40,7 @@ struct Wanted {
     float bar_across = -20.0f, bar_height = 22.0f;
     float score_across = 20.0f, score_height = 22.0f;
     float subtitle_height = -18.0f;
+    int subtitle_size = 130;
 };
 
 /// How the HUD's frame is drawn, in the screen's own coordinates (-1 to 1 over the picture shown):
@@ -51,7 +52,7 @@ struct Place {
     float middle_up = 0.0f;
     float bar_across = 0.0f, bar_up = 0.0f;
     float score_across = 0.0f, score_up = 0.0f;
-    float subtitle_up = 0.0f;
+    float subtitle_up = 0.0f, subtitle_half_across = 0.0f, subtitle_half_up = 0.0f;
 };
 
 /// Degrees across at HUD Size 100 %, and the height of the frame's middle.
@@ -63,8 +64,6 @@ inline constexpr float kTopUp = 0.6f, kBarAside = -0.2f, kScoreAside = 0.4f;
 inline constexpr float kBarLeft = -1.0f, kBarRight = -0.33f;
 inline constexpr float kScoreLeft = 0.58f, kScoreRight = 1.0f;
 inline constexpr float kGroupUp = 0.86f, kLinkGap = 0.08f;
-/// Where the subtitles' text is in the frame (desktop pictures: one line, from 0.75 left).
-inline constexpr float kSubtitleUp = -0.65f;
 /// Pieces in the frame's lower part go this much (half frames) further down: clear of the reticle.
 inline constexpr float kLow = -0.35f, kLowDown = 0.7f;
 
@@ -89,7 +88,11 @@ inline Place PlaceFor(const Wanted& w, float tan_half_x, float tan_half_y, float
     p.half_across = t / tan_half_x;
     p.half_up = t / kFrameAspect / tan_half_y;
     p.middle_up = up_at(kMiddleDeg);
-    p.subtitle_up = up_at(w.subtitle_height) - p.half_up * kSubtitleUp;
+    const float st = std::tan(0.5f * kWidthDeg * kDeg) *
+                     static_cast<float>(std::clamp(w.subtitle_size, 50, 250)) / 100.0f;
+    p.subtitle_half_across = st / tan_half_x;
+    p.subtitle_half_up = st / kFrameAspect / tan_half_y;
+    p.subtitle_up = up_at(w.subtitle_height);
     constexpr float kBarMiddle = 0.5f * (kBarLeft + kBarRight);
     constexpr float kScoreMiddle = 0.5f * (kScoreLeft + kScoreRight);
     if (w.linked) {
@@ -179,33 +182,43 @@ inline void Move(Vertex* t, std::size_t n, const Place& p, float factor_across, 
     }
 }
 
-/// The subtitles' quads moved: the game's frame, smaller, with the text at its own height. They may
-/// cover the whole frame. False (nothing moved) for a quad that is not flat.
+/// The subtitles' quads (the line and its shadow) moved whole, their middle straight ahead at the
+/// height asked for, in the size asked for. They may cover the whole frame. False (nothing moved)
+/// for quads that are not flat.
 inline bool MoveSubtitle(Vertex* v, std::size_t n, const Place& p, float factor_across,
                          float factor_up) {
+    float u0 = 1e9f, u1 = -1e9f, a0 = 1e9f, a1 = -1e9f;
     for (std::size_t i = 0; i < n; ++i) {
-        if (!(v[i].w > 1e-4f) || std::abs(v[i].w - v[0].w) > 1e-3f * v[0].w) {
+        if (!(v[i].w > 1e-4f) || std::abs(v[i].w - v[0].w) > 1e-3f * v[0].w ||
+            !std::isfinite(v[i].x) || !std::isfinite(v[i].y)) {
             return false;
         }
+        u0 = std::min(u0, v[i].x / v[i].w);
+        u1 = std::max(u1, v[i].x / v[i].w);
+        a0 = std::min(a0, v[i].y / v[i].w);
+        a1 = std::max(a1, v[i].y / v[i].w);
     }
+    const float mid_up = 0.5f * (u0 + u1), mid_across = 0.5f * (a0 + a1);
     for (std::size_t i = 0; i < n; ++i) {
-        const float up = v[i].x / v[i].w, across = v[i].y / v[i].w, z = v[i].z / v[i].w;
-        v[i] = {2.0f * (p.subtitle_up + p.half_up * up) * factor_up,
-                2.0f * p.half_across * across * factor_across, 2.0f * z, 2.0f};
+        const float up = v[i].x / v[i].w - mid_up, across = v[i].y / v[i].w - mid_across;
+        const float z = v[i].z / v[i].w;
+        v[i] = {2.0f * (p.subtitle_up + p.subtitle_half_up * up) * factor_up,
+                2.0f * p.subtitle_half_across * across * factor_across, 2.0f * z, 2.0f};
     }
-    return true;
+    return n != 0;
 }
 
 /// The place in force. One writer (the XR thread, once a frame), read by the emulation thread a
 /// draw; a read across a write mixes two frames' numbers, which are the same or next to it.
 struct Live {
-    std::array<std::atomic<float>, 8> f{};
+    std::array<std::atomic<float>, 10> f{};
     std::atomic<bool> on{false};
 
     void Set(const Place& p) {
-        const float v[8] = {p.half_across, p.half_up,      p.middle_up, p.bar_across,
-                            p.bar_up,      p.score_across, p.score_up,  p.subtitle_up};
-        for (int i = 0; i < 8; ++i) {
+        const float v[10] = {p.half_across, p.half_up,      p.middle_up, p.bar_across,
+                            p.bar_up,      p.score_across, p.score_up,  p.subtitle_up,
+                             p.subtitle_half_across, p.subtitle_half_up};
+        for (int i = 0; i < 10; ++i) {
             f[i].store(v[i], std::memory_order_relaxed);
         }
         on.store(p.on, std::memory_order_release);
@@ -213,9 +226,10 @@ struct Live {
     Place Get() const {
         Place p;
         p.on = on.load(std::memory_order_acquire);
-        float* const v[8] = {&p.half_across, &p.half_up,      &p.middle_up, &p.bar_across,
-                             &p.bar_up,      &p.score_across, &p.score_up,  &p.subtitle_up};
-        for (int i = 0; i < 8; ++i) {
+        float* const v[10] = {&p.half_across, &p.half_up,      &p.middle_up, &p.bar_across,
+                             &p.bar_up,      &p.score_across, &p.score_up,  &p.subtitle_up,
+                             &p.subtitle_half_across, &p.subtitle_half_up};
+        for (int i = 0; i < 10; ++i) {
             *v[i] = f[i].load(std::memory_order_relaxed);
         }
         return p;

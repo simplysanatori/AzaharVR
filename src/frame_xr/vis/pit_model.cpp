@@ -116,6 +116,10 @@ PitMat34 About(const M3& d, V3 pivot_from, V3 pivot_to) {
             d[6], d[7], d[8], pivot_to.z - r.z};
 }
 
+/// How far the forearm slides from the hand as the wrist bends, over the wrist band's radius (times
+/// the bend's sine), and the most it does, in metres.
+constexpr float kPitBandSlide = 0.6f, kPitBandSlideMost = 0.03f;
+
 /// The shortest rotation taking unit `from` to unit `to`.
 M3 Between(V3 from, V3 to) {
     const V3 axis = Cross(from, to);
@@ -428,11 +432,17 @@ std::vector<PitMat34> PitModelEvaluate(const PitModel& model, const PitHandPose*
         }
     }
     M3 forearm = kIdentity3;
+    V3 slid{};
     if (elbow) {
         const V3 from = V3{model.elbow[0], model.elbow[1], model.elbow[2]} - wrist;
         const V3 to = V3{(*elbow)[0], (*elbow)[1], (*elbow)[2]} - wrist;
         const float lf = Length(from), lt = Length(to);
         if (lf > 1e-5f && lt > 1e-5f && std::isfinite(lt)) {
+            const V3 f{from.x / lf, from.y / lf, from.z / lf}, t{to.x / lt, to.y / lt, to.z / lt};
+            const float bent = Dot(f, t) < 0.0f ? 1.0f : Length(Cross(f, t));
+            // Toward the elbow as the wrist bends, so the wrist band's near edge stays off the hand.
+            const float back = std::min(kPitBandSlide * model.wrist_radius * bent, kPitBandSlideMost);
+            slid = {t.x * back, t.y * back, t.z * back};
             forearm = Between({from.x / lf, from.y / lf, from.z / lf}, {to.x / lt, to.y / lt, to.z / lt});
         }
     }
@@ -448,7 +458,7 @@ std::vector<PitMat34> PitModelEvaluate(const PitModel& model, const PitHandPose*
             const std::size_t parent = rooted ? 0 : static_cast<std::size_t>(j.parent);
             if (j.role == kPitForearm || j.role == kPitElbow) {
                 turn[i] = forearm;
-                bones[i] = About(forearm, wrist, wrist);
+                bones[i] = About(forearm, wrist, {wrist.x + slid.x, wrist.y + slid.y, wrist.z + slid.z});
             } else if (j.role < 0 || !pose) {
                 // With its parent (without a pose only the forearm moves).
                 turn[i] = rooted ? kIdentity3 : turn[parent];

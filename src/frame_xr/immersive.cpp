@@ -1682,6 +1682,7 @@ void OnFrame(const FrameInfo& info) {
         wanted.bar_height = static_cast<float>(v.vr_kiu_bar_height.GetValue());
         wanted.score_across = static_cast<float>(v.vr_kiu_score_across.GetValue());
         wanted.score_height = static_cast<float>(v.vr_kiu_score_height.GetValue());
+        wanted.subtitle_size = static_cast<int>(v.vr_kiu_subtitle_size.GetValue());
         wanted.subtitle_height = static_cast<float>(v.vr_kiu_subtitle_height.GetValue());
         hud_place = VideoCore::KiuHud::PlaceFor(wanted, g.solved.tan_half_y * g.solved.aspect,
                                                 g.solved.tan_half_y, g.solved.pitch_rad);
