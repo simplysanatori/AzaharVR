@@ -243,12 +243,15 @@ if (COMMAND target_disable_warnings)
     target_disable_warnings(gbads_core)
 endif()
 
-# gba-ds's game.c (its second screens), whole and unmodified, behind a host interface: README.md.
+# gba-ds's game.c (its second screens) and logo.c, whole and unmodified, behind a host interface: README.md.
 # POSIX only (pthread.h, dirent.h, typeof): without it a game has its maps alone.
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND EXISTS "${GBADS_SRC_DIR}/game.c")
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND EXISTS "${GBADS_SRC_DIR}/game.c"
+    AND EXISTS "${GBADS_SRC_DIR}/logo.c")
     add_library(gbads_game STATIC EXCLUDE_FROM_ALL
         "${CMAKE_CURRENT_SOURCE_DIR}/game/gbads_game.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/game/gbads_game.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/game/gbads_logo.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/game/gbads_logo.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/game/gbads_rename.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/game/gbads_ui_stubs.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/game/sdl/SDL.h"

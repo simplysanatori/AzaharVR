@@ -17,6 +17,7 @@ typedef struct GbadsHost {
     void* ctx;
     struct Emu* emu;      /* the host's open game: game.c's own `emu` is this one */
     const char* rom_path; /* must outlive the run */
+    const char* logo_dir; /* the game's own, for its logo's picture; so must this. NULL: no logos */
     /* The top of a pass, the first one once the set-up is done. False: the loop ends by itself. */
     bool (*events)(void* ctx, bool* turn_page);
     uint32_t (*keys)(void* ctx);
@@ -28,7 +29,7 @@ typedef struct GbadsHost {
     bool (*alive)(void* ctx);
     /* profile_set_rom, which others may be reading the profiles around. */
     void (*set_rom)(void* ctx, const char* code, uint32_t crc);
-    /* From any thread of game.c's. */
+    /* From any thread of game.c's or logo.c's. */
     void (*log)(void* ctx, const char* text);
 } GbadsHost;
 

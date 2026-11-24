@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include "gbads_game.h"
+#include "gbads_logo.h"
 #include "gbads_rename.h"
 
 /* every header of game.c's, before the macros below can touch one */
@@ -189,6 +190,7 @@ static void gds_config(Config* c) {
     c->shader = SH_OFF;
     c->rewind = c->fastForward = c->audioAuto = c->keepSound = c->pinCores = c->perfMax = false;
     c->autoSave = c->autoLoad = c->barHint = false;
+    c->customLogos = CL_OFF, c->logoFolder[0] = 0;
     c->stateDir[0] = c->assetDir[0] = c->cheatDir[0] = c->romDir[0] = c->screenshotDir[0] = c->patchDir[0] = 0;
     strcpy(c->toggleButton, "off");   /* (it would be drawn on the second screen) */
     c->solarLevel = emu_solar_level;  /* (sun_load gives it back) */
@@ -224,6 +226,7 @@ static void gds_fresh(void) {
 
 /* After game_run, or instead of the rest of it: both leave the same. */
 static void gds_put_back(void) {
+    gds_logo_end(); /* first: its thread reads the profiles, which set_rom below changes */
     keeper_stop();
     ahead_stop();
     mapcap_destroy(mc);
@@ -241,6 +244,7 @@ static void gds_put_back(void) {
     ui_free_image(mapTex);
     ui_free_image(hudTex);
     ui_free_image(combatTex);
+    ui_free_image(logoTex);
     ui_free_image(logoCanvasTex);
     memset(H.rec, 0, sizeof(H.rec));
     /* the game drawn whole again: the host may go on with it */
@@ -274,6 +278,7 @@ static void gds_run_host(const GbadsHost* host) {
     gds_clock_ns = 1000000000u;
     gds_config(&H.c);
     gds_fresh();
+    gds_logo_begin(host->log, host->ctx);
     if (!setjmp(H.out)) {
         H.live = true;
         game_run(&H.c, host->rom_path, false);

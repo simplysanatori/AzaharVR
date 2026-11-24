@@ -85,7 +85,14 @@
 #define mkdirs gds_mkdirs
 #define hotkeys_resolve gds_hotkeys_resolve
 #define hotkeyBtnNames gds_hotkeyBtnNames
+#define logo_busy gds_logo_busy
+#define logo_extract gds_logo_extract
+#define logo_front gds_logo_front
 #define logo_generation gds_logo_generation
+#define logo_pause gds_logo_pause
+#define logo_progress gds_logo_progress
+#define logo_request gds_logo_request
+#define logo_shutdown gds_logo_shutdown
 #define patch_choice_find gds_patch_choice_find
 #define patch_choice_load gds_patch_choice_load
 #define patch_choice_same gds_patch_choice_same

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -19,9 +20,11 @@
 #include "frame_cores/frame_driver.h"
 #include "frame_cores/gbads_driver.h"
 #include "gbads_game.h"
+#include "gbads_logo.h"
 
 extern "C" {
 #include "emu.h"
+#include "profiles.h"
 #include <mgba/core/core.h>
 }
 
@@ -79,6 +82,7 @@ struct FakeLoop {
     int restarts = 0;
     int loads = 0;
     std::string rom;
+    std::string logo_dir;
 };
 FakeLoop g_fake;
 
@@ -106,6 +110,7 @@ const GbadsLoop kFakeLoop{
         ++g_fake.running;
         ++g_fake.runs;
         g_fake.rom = h->rom_path;
+        g_fake.logo_dir = h->logo_dir ? h->logo_dir : "";
         g_fake.body(*h);
         --g_fake.running;
     },
@@ -438,22 +443,38 @@ TEST_CASE("GbaDsDriver: reset, loaded states and pages", "[frame_cores]") {
     CHECK(g_fake.turns == 1);
 }
 
+TEST_CASE("GbaDsDriver: logos are kept in the game's own folder", "[frame_cores]") {
+    FakeGame game;
+    CHECK(MakeFake(game));
+    CHECK(g_fake.logo_dir.empty()); // no folder, no logos
+
+    g_fake = FakeLoop{};
+    g_fake.body = Passes;
+    DriverServices services = game.Services();
+    services.game_dir = "/games/1";
+    CHECK(GbaDsDriver::Make(services, kFakeLoop, QuickLimits()));
+    CHECK(g_fake.logo_dir == "/games/1/logo");
+}
+
 // ---------------------------------------------------------------- game.c itself, on ROMs made here
 
 namespace {
 
 /// An endless loop and a header with a game code, nothing of any game. The test draws the picture.
 struct MadeGame {
+    fs::path folder; ///< nothing but this game's
     fs::path path;
+    std::string game_dir;
     ::Emu emu{};
     bool open = false;
     int steps = 0;
     std::vector<int16_t> scratch = std::vector<int16_t>(8192, 0);
 
-    explicit MadeGame(const char* code) {
+    explicit MadeGame(const char* code, bool title = false) {
         const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
-        path = fs::temp_directory_path() /
-               ("azaharvr_gbads_test_" + std::to_string(stamp) + ".gba");
+        folder = fs::temp_directory_path() / ("azaharvr_gbads_test_" + std::to_string(stamp));
+        fs::create_directories(folder);
+        path = folder / "game.gba";
         std::vector<uint8_t> rom(std::size_t{1} << 20, 0xFF);
         std::fill_n(rom.begin(), 0x200, uint8_t{0});
         const uint32_t branch = 0xEA00002E; // to 0xC0
@@ -464,6 +485,9 @@ struct MadeGame {
         std::memcpy(rom.data() + 0xB0, "00", 2);
         rom[0xB2] = 0x96;
         std::memcpy(rom.data() + 0xC0, loop.data(), sizeof(loop));
+        if (title) {
+            PutTitle(rom);
+        }
         std::ofstream(path, std::ios::binary)
             .write(reinterpret_cast<const char*>(rom.data()),
                    static_cast<std::streamsize>(rom.size()));
@@ -474,16 +498,72 @@ struct MadeGame {
             emu_close(&emu);
         }
         std::error_code ec;
-        fs::remove(path, ec);
+        fs::remove_all(folder, ec);
     }
     MadeGame(const MadeGame&) = delete;
     MadeGame& operator=(const MadeGame&) = delete;
+
+    /// A title screen the ROM draws by itself, in any core: on BG0 a box of 10x6 tiles at tile
+    /// (5, 3), yellow, with a hole at its tile (3, 2) and its last one red.
+    static void PutTitle(std::vector<uint8_t>& rom) {
+        const std::array<uint32_t, 8> code{
+            0xE28F0038, //       add r0, pc, #0x38 (the table, at 0x100)
+            0xE4901004, // next: ldr r1, [r0], #4
+            0xE3510000, //       cmp r1, #0
+            0x0A000002, //       beq done
+            0xE4902004, //       ldr r2, [r0], #4
+            0xE1C120B0, //       strh r2, [r1]
+            0xEAFFFFF9, //       b next
+            0xEAFFFFFE, // done: b done
+        };
+        std::vector<uint32_t> table;
+        const auto put = [&table](uint32_t address, uint32_t value) {
+            table.push_back(address);
+            table.push_back(value);
+        };
+        put(0x05000000, 0x2000);
+        put(0x05000002, 0x039F); // (31, 28, 0)
+        put(0x05000004, 0x109F); // (31, 4, 4)
+        for (uint32_t k = 0; k < 32; k += 2) {
+            put(0x06000020 + k, 0x1111);
+            put(0x06000040 + k, 0x2222);
+        }
+        for (uint32_t y = 0; y < 6; ++y) {
+            for (uint32_t x = 0; x < 10; ++x) {
+                const bool hole = x == 3 && y == 2;
+                const bool last = x == 9 && y == 5;
+                put(0x06003800 + ((y + 3) * 32 + x + 5) * 2, hole ? 0 : last ? 2 : 1);
+            }
+        }
+        put(0x04000008, 0x0700);
+        put(0x04000000, 0x0100);
+        table.push_back(0);
+        std::memcpy(rom.data() + 0xC0, code.data(), sizeof(code));
+        std::memcpy(rom.data() + 0x100, table.data(), table.size() * sizeof(uint32_t));
+    }
+
+    /// With a folder of the game's, for its logo.
+    void MakeGameDir() {
+        game_dir = (folder / "games").string();
+        fs::create_directories(game_dir);
+    }
+    std::vector<std::string> Files() const {
+        std::vector<std::string> files;
+        for (const auto& entry : fs::recursive_directory_iterator(folder)) {
+            if (!entry.is_directory()) {
+                files.push_back(entry.path().lexically_relative(folder).generic_string());
+            }
+        }
+        std::sort(files.begin(), files.end());
+        return files;
+    }
 
     DriverServices Services() {
         DriverServices s;
         s.core = emu.core;
         s.emu = &emu;
         s.rom_path = path.string();
+        s.game_dir = game_dir;
         s.step = [this](uint32_t keys) {
             ++steps;
             emu_frame(&emu, keys);
@@ -735,4 +815,264 @@ TEST_CASE("gba-ds's game.c: the table's two more cores", "[frame_cores]") {
         CHECK(out.primary.width == GBA_W);
         CHECK(out.primary.height == GBA_H);
     }
+}
+
+// ---------------------------------------------------------------- logo.c
+
+namespace {
+
+constexpr uint32_t kGrey = 0xFF303030;
+constexpr uint32_t kBarOnGrey = 0xFF188B97; // kBar at 128 / 255 over kGrey
+
+/// The queue has nothing of this game's any more.
+bool LogoDone(const char* code) {
+    for (int i = 0; i < 12000; ++i) {
+        if (!gds_logo_busy(code)) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
+    }
+    return false;
+}
+
+/// The box of MadeGame's title screen, half as bright, in the middle of the GBA's grey screen.
+bool HasLogo(const DriverPicture& picture) {
+    return picture.pixels && picture.width == GBA_W && picture.height == GBA_H &&
+           At(picture, 0, 0) == kGrey && At(picture, 79, 56) == kGrey &&
+           At(picture, 80, 56) == kBarOnGrey && At(picture, 158, 56) == kBarOnGrey &&
+           At(picture, 160, 56) == kGrey && At(picture, 80 + 28, 56 + 20) == kGrey &&
+           At(picture, 80, 103) == kBarOnGrey && At(picture, 80, 104) == kGrey;
+}
+
+std::size_t Threads() {
+    std::size_t n = 0;
+    for (auto it = fs::directory_iterator("/proc/self/task"); it != fs::directory_iterator{};
+         ++it) {
+        ++n;
+    }
+    return n;
+}
+
+struct Pixels {
+    int w = 0;
+    int h = 0;
+    std::vector<uint8_t> rgba;
+};
+
+Pixels ReadLogo(const fs::path& path) {
+    Pixels out;
+    uint8_t* px = gds_logo_read(path.string().c_str(), &out.w, &out.h);
+    if (!px) {
+        return {};
+    }
+    out.rgba.assign(px, px + static_cast<std::size_t>(out.w) * out.h * 4);
+    std::free(px);
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("gba-ds's logo.c: a logo's file", "[frame_cores]") {
+    const auto name = [](const std::string& dir, const char* code, uint32_t crc) {
+        std::array<char, 1200> out{};
+        const bool ok = gds_logo_path(dir.c_str(), code, crc, out.data(), out.size());
+        CHECK(ok == (out[0] != 0));
+        return std::string(out.data());
+    };
+    const auto rev = [](const char* code) {
+        const MapProfile* p = profile_find(code);
+        REQUIRE(p);
+        return p->logo.rev;
+    };
+    REQUIRE(rev("AMKE") == 0);
+    CHECK(name("/d/logo", "AMKE", 0x1234) == "/d/logo/AMKE.png");
+    // Made again when its recipe changes
+    REQUIRE(rev("AMTE") > 0);
+    CHECK(name("/d", "AMTE", 0x1234) == "/d/AMTE-r" + std::to_string(rev("AMTE")) + ".png");
+    // One for each ROM file where hacks share a code
+    REQUIRE(profile_find("BPRE"));
+    REQUIRE(profile_find("BPRE")->logoPerRom);
+    CHECK(name("/d", "BPRE", 0x00A1B2C3) == "/d/BPRE-00A1B2C3.png");
+
+    CHECK(name("/d", "ZZZE", 1).empty()); // no profile
+    CHECK(name("", "AMKE", 1).empty());
+    CHECK(name("/" + std::string(1010, 'd'), "AMKE", 1).size() == 1020);
+    CHECK(name("/" + std::string(1020, 'd'), "AMKE", 1).empty()); // would be cut
+    std::array<char, 8> small{};
+    CHECK_FALSE(gds_logo_path("/d/logo", "AMKE", 1, small.data(), small.size()));
+    CHECK_FALSE(gds_logo_path(nullptr, "AMKE", 1, small.data(), small.size()));
+}
+
+TEST_CASE("gba-ds's logo.c: a picture, written and read", "[frame_cores]") {
+    MadeGame game("ZZZE");
+    const fs::path file = game.folder / "a.png";
+    const std::string path = file.string();
+    const auto draw = [](int w, int h) {
+        Pixels p{w, h, {}};
+        for (int i = 0; i < w * h; ++i) {
+            const auto value = static_cast<uint8_t>(i * 7 + i / w);
+            p.rgba.insert(p.rgba.end(), {value, static_cast<uint8_t>(value ^ 0x5A),
+                                         static_cast<uint8_t>(i),
+                                         static_cast<uint8_t>(i % 3 ? 255 : 0)});
+        }
+        return p;
+    };
+    const std::array<std::array<int, 2>, 3> sizes{{{GBA_W, GBA_H}, {1, 1}, {113, 47}}};
+    for (const auto& size : sizes) {
+        const Pixels drawn = draw(size[0], size[1]);
+        REQUIRE(gds_logo_write(path.c_str(), drawn.rgba.data(), drawn.w, drawn.h));
+        const Pixels read = ReadLogo(file);
+        CHECK(read.w == drawn.w);
+        CHECK(read.h == drawn.h);
+        CHECK(read.rgba == drawn.rgba);
+    }
+    CHECK(game.Files() == std::vector<std::string>{"a.png", "game.gba"}); // no .tmp
+
+    // What is no logo of ours is not read, and not put in place
+    const fs::path none = game.folder / "b.png";
+    CHECK_FALSE(gds_logo_write(none.string().c_str(), draw(GBA_W + 1, 8).rgba.data(), GBA_W + 1,
+                               8));
+    CHECK_FALSE(gds_logo_write((game.folder / "no" / "b.png").string().c_str(),
+                               draw(8, 8).rgba.data(), 8, 8));
+    CHECK(ReadLogo(none).rgba.empty());
+    CHECK(ReadLogo(game.path).rgba.empty());
+    CHECK(game.Files() == std::vector<std::string>{"a.png", "game.gba"});
+    // cut short
+    fs::resize_file(file, fs::file_size(file) / 2);
+    CHECK(ReadLogo(file).rgba.empty());
+}
+
+TEST_CASE("gba-ds's logo.c: a title screen's logo", "[frame_cores]") {
+    MadeGame game("AMKE", true);
+    REQUIRE(game.open);
+    game.MakeGameDir();
+    const unsigned long opened = game.emu.frames;
+    const uint32_t counted = game.emu.core->frameCounter(game.emu.core);
+    const std::vector<uint32_t> fb(game.emu.fb, game.emu.fb + kPixels);
+    emu_audio_read(&game.emu, game.scratch.data(), game.scratch.size() / 2);
+
+    auto driver = game.Make();
+    REQUIRE(driver);
+    bool playing = false;
+    SECTION("made while the game waits") {}
+    SECTION("made beside the game") {
+        playing = true;
+    }
+    if (playing) {
+        while (gds_logo_busy("AMKE")) {
+            const int before = game.steps;
+            const DriverFrame out = Run(*driver);
+            REQUIRE(game.steps == before + 1);
+            REQUIRE(out.audio_pcm.size() / 2 < 1100);
+            REQUIRE(game.steps < 1000000);
+        }
+        CHECK(game.emu.frames == opened + static_cast<unsigned long>(game.steps));
+    } else {
+        REQUIRE(LogoDone("AMKE"));
+        CHECK(game.steps == 0);
+        CHECK(game.emu.frames == opened);
+        CHECK(game.emu.core->frameCounter(game.emu.core) == counted);
+        CHECK(std::equal(fb.begin(), fb.end(), game.emu.fb));
+        CHECK(emu_audio_read(&game.emu, game.scratch.data(), game.scratch.size() / 2) == 0);
+    }
+
+    // As the ROM drew it, and nothing else on the disk
+    const std::vector<std::string> files{"game.gba", "games/logo/AMKE.png"};
+    REQUIRE(game.Files() == files);
+    const Pixels logo = ReadLogo(game.folder / "games/logo/AMKE.png");
+    REQUIRE(logo.w == 80);
+    REQUIRE(logo.h == 48);
+    const auto pixel = [&logo](std::size_t x, std::size_t y) {
+        const uint8_t* p = logo.rgba.data() + (y * 80 + x) * 4;
+        return std::array<int, 4>{p[0], p[1], p[2], p[3]};
+    };
+    CHECK(pixel(0, 0) == std::array<int, 4>{0xFF, 0xE7, 0x00, 0xFF});
+    CHECK(pixel(79, 47) == std::array<int, 4>{0xFF, 0x21, 0x21, 0xFF});
+    CHECK(pixel(24, 16)[3] == 0);
+    CHECK(pixel(31, 23)[3] == 0);
+    CHECK(pixel(32, 23)[3] == 0xFF);
+
+    // On the Secondary Screen from the next frame, and at once the next time
+    Run(*driver);
+    CHECK(HasLogo(Run(*driver).secondary));
+    CHECK(driver->SecondarySize() == std::pair<uint32_t, uint32_t>{GBA_W, GBA_H});
+    driver.reset();
+    const uint32_t generation = gds_logo_generation();
+    driver = game.Make();
+    REQUIRE(driver);
+    CHECK_FALSE(gds_logo_busy("AMKE"));
+    CHECK(HasLogo(Run(*driver).secondary));
+    driver.reset();
+    CHECK(gds_logo_generation() == generation);
+    CHECK(game.Files() == files);
+}
+
+TEST_CASE("gba-ds's logo.c: no logo to be found", "[frame_cores]") {
+    MadeGame game("AMKE"); // draws nothing
+    REQUIRE(game.open);
+    game.MakeGameDir();
+    uint32_t generation = gds_logo_generation();
+    {
+        auto driver = game.Make();
+        REQUIRE(driver);
+        REQUIRE(LogoDone("AMKE"));
+        CHECK(gds_logo_generation() == generation + 1);
+        // Not tried again in each frame
+        for (int i = 1; i <= 30; ++i) {
+            CHECK(Run(*driver).secondary.pixels == nullptr); // as without logos
+            REQUIRE(game.steps == i);
+        }
+        CHECK_FALSE(gds_logo_busy("AMKE"));
+    }
+    // Nor when the game is opened again
+    generation = gds_logo_generation();
+    auto driver = game.Make();
+    REQUIRE(driver);
+    CHECK_FALSE(gds_logo_busy("AMKE"));
+    Run(*driver);
+    CHECK(gds_logo_generation() == generation);
+    CHECK(game.Files() == std::vector<std::string>{"game.gba"});
+}
+
+TEST_CASE("gba-ds's logo.c: a game closed meanwhile", "[frame_cores]") {
+    {
+        MadeGame warm("AMKE"); // (threads the first driver of the process may leave)
+        REQUIRE(warm.open);
+        REQUIRE(warm.Make());
+    }
+    MadeGame game("AMKE", true);
+    REQUIRE(game.open);
+    game.MakeGameDir();
+    const std::size_t threads = Threads();
+    for (const int frames : {0, 1, 5}) {
+        auto driver = game.Make();
+        REQUIRE(driver);
+        for (int i = 0; i < frames; ++i) {
+            Run(*driver);
+        }
+        driver.reset();
+        CHECK_FALSE(gds_logo_busy(nullptr));
+        // (a joined thread may be listed for a moment)
+        for (int i = 0; i < 100 && Threads() > threads; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{10});
+        }
+        CHECK(Threads() <= threads);
+    }
+    // Another game, right after one closed
+    game.Make();
+    MadeGame other("AMKE", true);
+    REQUIRE(other.open);
+    other.MakeGameDir();
+    {
+        auto driver = other.Make();
+        REQUIRE(driver);
+        REQUIRE(LogoDone("AMKE"));
+        Run(*driver);
+        CHECK(HasLogo(Run(*driver).secondary));
+    }
+    // What was cut short is not what failed: asked for again
+    auto driver = game.Make();
+    REQUIRE(driver);
+    REQUIRE(LogoDone("AMKE"));
+    CHECK(game.Files() == std::vector<std::string>{"game.gba", "games/logo/AMKE.png"});
 }
