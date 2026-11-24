@@ -7,6 +7,10 @@
 #include <cstdint>
 #include <memory>
 
+namespace Frontend {
+class EmuWindow;
+}
+
 namespace Vulkan {
 
 struct AltScreenImage {
@@ -18,11 +22,12 @@ struct AltScreenImage {
 };
 
 /**
- * Lightweight Vulkan XR presenter for non-3DS cores (GBA, GB/GBC, DS/DSi).
- * Adopts the process's OpenXR Vulkan device via VideoCore::GetVulkanHooks(),
- * creates its own Vulkan::Instance, Scheduler, and XrPresentTarget, uploads CPU
- * screen buffers, presents into the XR swapchains (Primary on TopLeft, optional
- * Secondary on Bottom), and bumps Common::XrPacer::Get().game_swaps.
+ * Lightweight Vulkan presenter for non-3DS cores (GBA, GB/GBC, DS/DSi), in VR and in the window.
+ * Adopts the process's OpenXR Vulkan device via VideoCore::GetVulkanHooks() if there is one,
+ * creates its own Vulkan::Instance and Scheduler, and uploads CPU screen buffers. While the
+ * headset shows the screens it presents into the XR swapchains (Primary on TopLeft, optional
+ * Secondary on Bottom) and bumps Common::XrPacer::Get().game_swaps; otherwise into the window
+ * (AltWindowTarget). It picks per frame, as RendererVulkan does, so a game goes on over a switch.
  */
 class AltXrRenderer {
 public:
@@ -32,16 +37,23 @@ public:
     AltXrRenderer(const AltXrRenderer&) = delete;
     AltXrRenderer& operator=(const AltXrRenderer&) = delete;
 
-    /// Initializes Vulkan resources against VideoCore::GetVulkanHooks() and
-    /// VideoCore::GetXrScreenSink(). Returns false if XR is inactive/unavailable.
-    bool Init();
+    /// `window` (and `secondary_window`, for Separate Windows) must outlive this; without one the
+    /// screens show in VR only. False if neither output can be used.
+    bool Init(Frontend::EmuWindow* window = nullptr,
+              Frontend::EmuWindow* secondary_window = nullptr);
 
     /// Tears down Vulkan resources, clears SetScreensLive(false) and SetQueueMutex(nullptr).
     void Shutdown();
 
-    /// Uploads and submits one frame to the XR swapchains, bumping game_swaps.
-    /// `secondary` may have pixels == nullptr when no secondary screen is active.
-    bool Present(const AltScreenImage& primary, const AltScreenImage& secondary);
+    /// The output changed since the last Present (VR or flat, the window's size): a paused game is
+    /// to be presented again.
+    bool NeedsPresent() const;
+
+    /// Uploads and submits one frame. `secondary` may have pixels == nullptr when no secondary
+    /// screen is active. With `skippable` (fast forward) the window may miss frames its display
+    /// could not show anyway.
+    bool Present(const AltScreenImage& primary, const AltScreenImage& secondary,
+                 bool skippable = false);
 
     bool IsReady() const;
 

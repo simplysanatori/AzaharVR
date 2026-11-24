@@ -2,6 +2,8 @@
 // Licensed under GPLv2 or any later version
 // Refer to the misc/licenses/gplv2.txt file included.
 
+#pragma once
+
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -21,6 +23,9 @@ class Instance;
 class Swapchain;
 class Scheduler;
 class RenderManager;
+
+/// The display is slower than the 3DS's screens (or such a limit applies): no FIFO then.
+bool IsLowRefreshRate();
 
 struct Frame {
     u32 width;
