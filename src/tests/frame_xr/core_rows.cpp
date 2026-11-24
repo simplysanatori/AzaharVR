@@ -301,7 +301,7 @@ TEST_CASE("Core rows: Second Screen and Allow Game Editing", "[frame_xr][tabmenu
     CHECK(SecondScreenOptions(gba) == std::vector<std::string>{"PokeDaisy", "Off"});
     CHECK(SecondScreenValue(gba, 1) == 2);
     CHECK(SecondScreenIndex(gba, 2) == 1);
-    CHECK(SecondScreenIndex(gba, 1) == 1); // GBA DS not there: falls to the next
+    CHECK(SecondScreenIndex(gba, 1) == 0); // GBA DS not there: the first it has, as ChooseDriver
     gba.second_screen_choices = kGbaDs | kOff;
     CHECK(SecondScreenIndex(gba, 0) == 0);
     CHECK(SecondScreenValue(gba, 0) == 1);
