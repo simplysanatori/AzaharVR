@@ -110,6 +110,8 @@ inline bool IsSheet(const Sheet& s, const uint8_t* vertices, const uint8_t* indi
 
 /// How far out the strip goes, of the edge's distance from the sheet's middle.
 inline constexpr float kOut = 2.5f;
+/// A test: the rim's length (AZAHARFRAME_KIU_SHEETS_OUT, live; kOut without it).
+inline std::atomic<float> g_out{kOut};
 /// Alpha up to this is faded out already: half a step of the game's 8 bits.
 inline constexpr float kNoAlpha = 0.5f / 255.0f;
 inline constexpr std::size_t kMaxVertices = 3072;

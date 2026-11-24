@@ -60,6 +60,7 @@ constexpr const char* kSwitchFp2d = "AZAHARFRAME_KIU_FP_2D"; // AzaharFrame kiu2
 constexpr const char* kSwitchReticleSize = "AZAHARFRAME_KIU_RETICLE_SIZE"; // AzaharFrame kiu131
 constexpr const char* kSwitchReticleTexture = "AZAHARFRAME_KIU_RETICLE_TEX";
 constexpr const char* kSwitchSheets = "AZAHARFRAME_KIU_SHEETS"; // AzaharFrame kiu140
+constexpr const char* kSwitchSheetsOut = "AZAHARFRAME_KIU_SHEETS_OUT"; // AzaharFrame kiu140
 constexpr const char* kSwitchTrace = "AZAHARFRAME_KIU_HOOK_TRACE";
 // AzaharFrame kiuvr (kiu_first_person.h)
 constexpr const char* kSwitchFpTrace = "AZAHARFRAME_KIU_FP_TRACE";
@@ -589,6 +590,11 @@ void Hook(int64_t ticks) {
         VideoCore::KiuSheets::g_mode.store(
             VideoCore::KiuSheets::ModeFor(first_person && mapped && s.code_ok, s.cutscene,
                                           sheets_text ? sheets_text->c_str() : nullptr),
+            std::memory_order_relaxed);
+        const auto out_text = Switch(kSwitchSheetsOut);
+        const float out = out_text ? std::strtof(out_text->c_str(), nullptr) : 0.0f;
+        VideoCore::KiuSheets::g_out.store(
+            out >= 1.0f && out <= 4.0f ? out : VideoCore::KiuSheets::kOut,
             std::memory_order_relaxed);
     }
     // AzaharFrame kiu131: Reticle Size: the game's reticle's draws (its texture) scaled about
