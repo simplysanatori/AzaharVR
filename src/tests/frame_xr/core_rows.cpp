@@ -331,8 +331,8 @@ TEST_CASE("Core rows: the game editing notice", "[frame_xr][tabmenu]") {
     namespace A = Common::AltCore;
     CHECK(std::string(A::kGameEditingTitle) == "PokeDaisy Edits Your Game");
     CHECK(std::string(A::kGameEditingBody) ==
-          "Features such as Fly, the PC, items and wild encounters change the game while it runs. "
-          "This can corrupt your save. Azahar VR backs up the save first.");
+          "Fly, the PC, items and wild encounters edit your game as you play. "
+          "This can corrupt your save. Your save is backed up first.");
     CHECK(std::string(A::kGameEditingConfirm) == "Turn On");
     CHECK(std::string(A::kGameEditingCancel) == "Cancel");
 }

@@ -148,8 +148,8 @@ constexpr uint32_t SecondScreenBit(uint32_t choice) {
 /// Shown once, the first time Allow Game Editing is turned on (UISettings game_editing_warning).
 inline constexpr const char* kGameEditingTitle = "PokeDaisy Edits Your Game";
 inline constexpr const char* kGameEditingBody =
-    "Features such as Fly, the PC, items and wild encounters change the game while it runs. This "
-    "can corrupt your save. Azahar VR backs up the save first.";
+    "Fly, the PC, items and wild encounters edit your game as you play. This can corrupt your "
+    "save. Your save is backed up first.";
 inline constexpr const char* kGameEditingConfirm = "Turn On";
 inline constexpr const char* kGameEditingCancel = "Cancel";
 

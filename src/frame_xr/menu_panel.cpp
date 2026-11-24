@@ -1383,7 +1383,7 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
     case Id::HideBottomScreen:
         Apply(v.vr_hide_bottom_screen, value != 0, per_game);
         r.setting = MenuSetting::HideBottomScreen;
-        ShowToastText("Hide Secondary Screen: From the Next Start", ToastTime::Long);
+        ShowToastText("Hide Secondary Screen: Restart Game to Apply", ToastTime::Long);
         break;
     case Id::ScreenShape:
         Apply(v.vr_top_aspect, std::min<u32>(u, 6), per_game); // AzaharFrame fixes7: 6 Automatic
@@ -1434,7 +1434,7 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
     case Id::AsyncShaders:
         Apply(v.async_shader_compilation, value != 0, per_game);
         r.setting = MenuSetting::AsyncShaders;
-        ShowToastText("Async Shader Compilation: From the Next Start", ToastTime::Long);
+        ShowToastText("Async Shader Compilation: Restart Game to Apply", ToastTime::Long);
         break;
     case Id::AccurateImageCopies: // AzaharFrame accxfer, xfergpu: from the next image copy
         r.value = static_cast<int>(std::min<u32>(u, 2));
@@ -1865,7 +1865,7 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = static_cast<int>(std::min<u32>(u, 2));
         Apply(v.ds_console_mode, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::DsConsoleMode;
-        ShowToastText("Console Mode: From the Next Start", ToastTime::Long);
+        ShowToastText("Console Mode: Restart Game to Apply", ToastTime::Long);
         break;
     case Id::DsTouchEnabled:
         Apply(v.ds_touch_enabled, value != 0, per_game);
@@ -1885,7 +1885,7 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = Menu::SecondScreenValue(model.core, value);
         Apply(v.gba_second_screen, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::SecondScreen;
-        ShowToastText("Second Screen: From the Next Start", ToastTime::Long);
+        ShowToastText("Second Screen: Restart Game to Apply", ToastTime::Long);
         break;
     case Id::AllowGameEditing:
         r.value = value != 0 ? 1 : 0;
@@ -1921,13 +1921,13 @@ void MenuPanel::UseGlobal(Id id, Host& host) {
     if (id == Id::InternalResolution) {
         DynamicResolution::Reset(); // from the global value, no step off
     } else if (id == Id::HideBottomScreen && hide != v.vr_hide_bottom_screen.GetValue()) {
-        ShowToastText("Hide Secondary Screen: From the Next Start", ToastTime::Long);
+        ShowToastText("Hide Secondary Screen: Restart Game to Apply", ToastTime::Long);
     } else if (id == Id::AsyncShaders && async != v.async_shader_compilation.GetValue()) {
-        ShowToastText("Async Shader Compilation: From the Next Start", ToastTime::Long);
+        ShowToastText("Async Shader Compilation: Restart Game to Apply", ToastTime::Long);
     } else if (id == Id::DsConsoleMode && console != v.ds_console_mode.GetValue()) {
-        ShowToastText("Console Mode: From the Next Start", ToastTime::Long);
+        ShowToastText("Console Mode: Restart Game to Apply", ToastTime::Long);
     } else if (id == Id::SecondScreen && second != v.gba_second_screen.GetValue()) {
-        ShowToastText("Second Screen: From the Next Start", ToastTime::Long);
+        ShowToastText("Second Screen: Restart Game to Apply", ToastTime::Long);
     }
     LOG_INFO(Frontend, "xr: in-game menu: {}: Use Global Value", Menu::LabelFor(id));
     MenuRequest r;

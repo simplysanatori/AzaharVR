@@ -494,8 +494,8 @@ int main(int argc, char** argv) {
         frame_xr::ui::InitFonts();
         ok &= toast_shot("toasts.png",
                          {Input::kReticleHint, Input::kMouseHint,
-                          "Async Shader Compilation: From the Next Start",
-                          "Hide Secondary Screen: From the Next Start",
+                          "Async Shader Compilation: Restart Game to Apply",
+                          "Hide Secondary Screen: Restart Game to Apply",
                           "Bottom Screen Reticle: Right Controller", "At Edge: Snap to Middle",
                           "Preparing Shaders 3 / 9", // AzaharFrame integ3: the stall lane's shader notice
                           VideoCore::PreloadBudget::kTooLargeToast, // AzaharFrame memguard

@@ -1641,13 +1641,13 @@ std::string ExplainFor(Id id) {
     case Id::GbaSolarLevel:
         return "Simulated sunlight level for games with a solar sensor.";
     case Id::DsConsoleMode:
-        return "The console the game runs on, from the next start. Automatic picks the game's own.";
-    case Id::SecondScreen: // UNAPPROVED
-        return "What the Secondary Screen shows for this game, from the next start.";
-    case Id::AllowGameEditing: // UNAPPROVED
-        return "Lets PokeDaisy change the game while it runs. The save is backed up first.";
+        return "Automatic picks DS or DSi to suit the game.";
+    case Id::SecondScreen:
+        return "What the Secondary Screen shows.";
+    case Id::AllowGameEditing:
+        return "Lets PokeDaisy edit your game. Backs up your save first.";
     case Id::DsTouchEnabled:
-        return "Lets you touch the Secondary Screen by pointing at it.";
+        return "Point at the Secondary Screen to touch it.";
     case Id::DsMicBlow:
         return "Simulate blowing into the DS microphone.";
     case Id::DsLidToggle:
