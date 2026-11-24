@@ -66,7 +66,19 @@ struct WristAt {
     float angle_deg = 0.0f; ///< round the wrist, 0 to 360: from the side chosen over the thumb's
                             ///< side (Back) or under the hand (Inside), the mirror image on the right
     float up_arm_m = 0.0f;  ///< along the forearm: toward the elbow, or the hand below 0
+    float out_m = 0.0f;     ///< away from the wrist's line: what an arm drawn there needs
 };
+/// The wrist's line to the panel, with nothing drawn there (stats_place.h's side places).
+constexpr float kWristScreenOut = 0.0355f;
+/// The gap between an arm's surface and the panel round it.
+constexpr float kWristScreenGap = 0.004f;
+/// Pit's forearm round the wrist's line (v1's; v2 gives its own).
+constexpr float kPitWristRadius = 0.055f;
+/// How much further out the panel goes round an arm `radius` metres thick (0: none drawn).
+constexpr float WristOutFor(float radius) {
+    const float need = radius > 0.0f ? radius + kWristScreenGap - kWristScreenOut : 0.0f;
+    return need > 0.0f ? need : 0.0f;
+}
 /// The settings' ranges (vr_kiu_wrist_angle degrees, vr_kiu_wrist_along centimetres).
 constexpr int kWristAngleMax = 360, kWristAlongMin = -12, kWristAlongMax = 25;
 constexpr WristAt WristAtFor(int angle_deg, int along_cm) {

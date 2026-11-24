@@ -371,6 +371,23 @@ TEST_CASE("FrameXr kiu140: the wrist screen's place round the wrist and up the a
     REQUIRE(Input::Dot(at(0, -5).position - at(0, 0).position, toward_hand) == Approx(0.05f));
     REQUIRE(Vis::WristAtFor(999, 99).angle_deg == 360.0f);
     REQUIRE(Vis::WristAtFor(-3, -99).up_arm_m == Approx(-0.12f));
+    // Out to clear an arm: straight away from the wrist's line, nothing without one.
+    REQUIRE(Vis::WristOutFor(0.0f) == 0.0f);
+    REQUIRE(Vis::WristOutFor(0.03f) == 0.0f);
+    REQUIRE(Vis::WristOutFor(0.06f) == Approx(0.0285f));
+    for (int deg = 0; deg < 360; deg += 15) {
+        auto a = Vis::WristAtFor(deg, 6);
+        const Posef near = Vis::WristScreenLocalPose(Hand::Left, false, WristSide::Back,
+                                                     Vis::kWristScreenWidth, a);
+        a.out_m = 0.02f;
+        const Posef far = Vis::WristScreenLocalPose(Hand::Left, false, WristSide::Back,
+                                                    Vis::kWristScreenWidth, a);
+        const Vec3f moved = far.position - near.position;
+        REQUIRE(Input::Length(moved) == Approx(0.02f).margin(1e-5));
+        REQUIRE(std::abs(Input::Dot(moved, Axis(near, {1, 0, 0}))) < 1e-4f);
+        REQUIRE(Input::Dot(Input::Normalized(moved), Axis(near, {0, 0, 1})) > 0.95f);
+        REQUIRE(Input::Dot(Axis(far, {0, 0, 1}), Axis(near, {0, 0, 1})) > 0.9999f);
+    }
 
     // Upright in quarter turns, with hysteresis.
     const Posef flat{{}, {0, 0, 0}}; // its top up, its front +z

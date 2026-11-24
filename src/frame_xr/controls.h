@@ -300,6 +300,7 @@ private:
     /// AzaharFrame kiupanel: the switch on in Angel's Aim this frame; the aim held while the
     /// beam is on the wrist screen, and the ray it holds (the last one published unheld).
     bool wrist_wanted = false;
+    int pit_arm_hand = -1; ///< AzaharFrame kiu140: the hand Pit's Arm was last drawn on (-1: none)
     Vis::WristAimHold wrist_aim_hold;
     Kiu::FirstPerson::Hand wrist_held_hand;
     /// AzaharFrame kiu131: Bottom Screen: Persistent held by a grip (the hand, or -1), the hold

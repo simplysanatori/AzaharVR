@@ -1763,13 +1763,15 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
             Vis::WristScreenHand(Settings::values.vr_motion_controls.GetValue());
         const Input::HandInput& off = in.hand[static_cast<std::size_t>(Input::HandIndex(hand))];
         const bool beside_stats = hand == Input::Hand::Left && visuals.StatsOnWrist();
+        // AzaharFrame kiu140: past Pit's Arm, where it was drawn on that hand last frame.
+        Vis::WristAt at =
+            Vis::WristAtFor(static_cast<int>(Settings::values.vr_kiu_wrist_angle.GetValue()),
+                            Settings::values.vr_kiu_wrist_along.GetValue());
+        at.out_m = Vis::WristOutFor(pit_arm_hand == Input::HandIndex(hand) ? Vis::kPitWristRadius : 0.0f);
         const Vis::WristScreen::Out w =
             wrist_screen.Update(wanted, off.active, off.aim, hand, beside_stats,
                                 ToInput(head_view.head).position, side, wrist_w,
-                                // AzaharFrame kiu140: where round the wrist and along the arm
-                                Vis::WristAtFor(
-                                    static_cast<int>(Settings::values.vr_kiu_wrist_angle.GetValue()),
-                                    Settings::values.vr_kiu_wrist_along.GetValue()),
+                                at, // AzaharFrame kiu140
                                 Input::Rotate(ToInput(head_view.head).orientation, {0, 1, 0}));
         wrist_on = w.shown;
         wrist_wanted = wanted; // AzaharFrame kiupanel
@@ -2394,6 +2396,7 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     // AzaharFrame kiuflash: Projectiles, the same way (each shot flies into the screen).
     const bool projectiles_on = weapon_on && Settings::values.vr_light_gun_projectile.GetValue();
     bool weapon_shown = false;
+    pit_arm_hand = -1; // AzaharFrame kiu140
     Kiu::SetWanted(weapon_on, kiu && (recoil_on || flash_on || projectiles_on), kiu);
     if (weapon_on) {
         FrameWeapons::Request(); // made the first time they are wanted (once a boot)
@@ -2421,6 +2424,7 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
             if (Settings::values.vr_kiu_arm.GetValue() != 0 && Kiu::FirstPerson::AngelsAim() &&
                 !Kiu::FirstPerson::OutsideViewOn()) {
                 visuals.SetPitArm(gyro_aim_hand ^ 1);
+                pit_arm_hand = gyro_aim_hand ^ 1;
             }
         }
     }

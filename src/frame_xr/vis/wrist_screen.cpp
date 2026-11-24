@@ -42,13 +42,18 @@ Posef WristScreenLocalPose(Input::Hand hand, bool beside_stats, WristSide side, 
     }
     // AzaharFrame kiu140: round the wrist's line (through the handle's middle, along the picture's
     // own +X) and along it. The picture keeps reading along the forearm and facing out.
-    if (at.angle_deg != 0.0f || at.up_arm_m != 0.0f) {
+    if (at.angle_deg != 0.0f || at.up_arm_m != 0.0f || at.out_m != 0.0f) {
         const Vec3f axis = Input::Rotate(p.orientation, {1.0f, 0.0f, 0.0f});
         const float half = 0.5f * at.angle_deg * 3.14159265f / 180.0f;
         const float s = std::sin(half);
         const Quatf turn{axis.x * s, axis.y * s, axis.z * s, std::cos(half)};
         const Vec3f middle{kWristMiddleX, p.position.y, p.position.z};
         p.position = middle + Input::Rotate(turn, p.position - middle) - axis * at.up_arm_m;
+        if (at.out_m != 0.0f) {
+            const Vec3f off = p.position - middle;
+            const Vec3f across = off - axis * Input::Dot(off, axis);
+            p.position = p.position + Input::Normalized(across) * at.out_m;
+        }
         p.orientation = Input::Normalized(Input::Multiply(turn, p.orientation));
     }
     if (hand == Input::Hand::Right) {
