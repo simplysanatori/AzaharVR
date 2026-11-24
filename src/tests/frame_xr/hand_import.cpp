@@ -304,6 +304,14 @@ TEST_CASE("Hand importer: a zip with the parts it looks for becomes a hand file"
         CHECK(p[0] > -3.5f * scale);
     }
     CHECK_FALSE(ring);
+    // The arm's end fades out; everything else is solid.
+    bool solid = false, gone = false;
+    for (std::size_t i = 2; i < m.surface.size(); i += 4) {
+        solid = solid || m.surface[i] == 255;
+        gone = gone || m.surface[i] == 0;
+    }
+    CHECK(solid);
+    CHECK(gone);
     // The same zip, the same bytes; saved through a file beside it, then renamed.
     std::vector<uint8_t> again;
     CHECK(Import(Zip(Files(Dae())), &again) == "");

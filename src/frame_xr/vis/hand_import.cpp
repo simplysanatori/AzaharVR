@@ -1621,9 +1621,8 @@ std::vector<uint8_t> Build(std::span<const uint8_t> zip_bytes, const HandImportP
                     colour[at + k] = static_cast<uint8_t>(std::lround(std::clamp(tone[k], 0.0, 255.0)));
                 }
                 colour[at + 3] = 235;
-                // solid: a rounded end, drawn without blending (the file's format has an opacity, were a
-                // fade wanted); a little shade toward the end
-                surface[at + 2] = 255;
+                // fades out toward the end; a little shade there too
+                surface[at + 2] = static_cast<uint8_t>(std::lround(255.0 * fade * fade * (3.0 - 2.0 * fade)));
                 colour[at + 3] = static_cast<uint8_t>(std::lround(150.0 + 85.0 * fade));
                 surface[at + 3] = kSkin;
             }

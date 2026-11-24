@@ -296,7 +296,7 @@ struct ControllerModels::Gpu {
     /// AzaharFrame kiuopacity: a see-through part's added light, its coverage held (MAX).
     vk::Pipeline pipeline_add_held;
     /// AzaharFrame kiu140: Pit's arm: its own colours (pit_hand_shader.h), solid, and fading.
-    vk::Pipeline pipeline_pit, pipeline_pit_fade;
+    vk::Pipeline pipeline_pit, pipeline_pit_fade, pipeline_pit_depth;
     vk::Pipeline Of(Pipe p) const {
         switch (p) {
         case Pipe::Added:
@@ -897,7 +897,7 @@ void ControllerModels::DestroyXr() {
             g.device.destroyQueryPool(g.queries);
         }
         for (const vk::Pipeline p : {g.pipeline_depth, g.pipeline_fade, g.pipeline_add_held,
-                                     g.pipeline_pit, g.pipeline_pit_fade}) { // kiuopacity, kiu140
+                                     g.pipeline_pit, g.pipeline_pit_fade, g.pipeline_pit_depth}) { // kiuopacity, kiu140
             if (p) {
                 g.device.destroyPipeline(p);
             }
@@ -2107,12 +2107,16 @@ void ControllerModels::Setup(Runtime& rt) {
             shader_stages[1].module = pit_frag;
             const auto made_pit = variant(&depth_state, &blend);
             const auto made_pit_fade = variant(&depth_state, &fade_blend);
+            const auto made_pit_depth = variant(&depth_state, &depth_only_blend);
             g.device.destroyShaderModule(pit_frag);
             if (made_pit.result == vk::Result::eSuccess) {
                 g.pipeline_pit = made_pit.value;
             }
             if (made_pit_fade.result == vk::Result::eSuccess) {
                 g.pipeline_pit_fade = made_pit_fade.value;
+            }
+            if (made_pit_depth.result == vk::Result::eSuccess) {
+                g.pipeline_pit_depth = made_pit_depth.value;
             }
         }
         shader_stages[1].module = frag;
@@ -2645,9 +2649,7 @@ void RecordPit(vk::CommandBuffer& c, GpuT& g, const Mat& model, const Mat& view_
     pc.up = {up[0], up[1], up[2], 0.0f};
     pc.params = {0.0f, 1.0f, std::clamp(fade, 0.0f, 1.0f), mirrored ? 1.0f : 0.0f};
     pc.mvp = Multiply(view_proj, model);
-    c.bindPipeline(vk::PipelineBindPoint::eGraphics,
-                   (fade < 0.999f || g.pit.see_through) && g.pipeline_pit_fade ? g.pipeline_pit_fade
-                                                                               : g.pipeline_pit);
+    const bool faded = (fade < 0.999f || g.pit.see_through) && g.pipeline_pit_fade;
     c.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g.pipeline_layout, 0, g.pit.set, {});
     c.bindVertexBuffers(0, g.pit.vertices[static_cast<std::size_t>(h)], vk::DeviceSize{0});
     c.bindIndexBuffer(g.pit.indices, 0, vk::IndexType::eUint32);
@@ -2655,7 +2657,13 @@ void RecordPit(vk::CommandBuffer& c, GpuT& g, const Mat& model, const Mat& view_
                     vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0,
                     sizeof(pc), &pc);
     // The plate (the last indices) is on the left arm alone.
-    c.drawIndexed(mirrored ? g.pit.body_indices : g.pit.all_indices, 1, 0, 0, 0);
+    const uint32_t count = mirrored ? g.pit.body_indices : g.pit.all_indices;
+    if (faded && g.pipeline_pit_depth) { // only its nearest surface, or its inside shows through
+        c.bindPipeline(vk::PipelineBindPoint::eGraphics, g.pipeline_pit_depth);
+        c.drawIndexed(count, 1, 0, 0, 0);
+    }
+    c.bindPipeline(vk::PipelineBindPoint::eGraphics, faded ? g.pipeline_pit_fade : g.pipeline_pit);
+    c.drawIndexed(count, 1, 0, 0, 0);
 }
 
 // AzaharFrame kiuflash: the muzzle flash's cards of its kind (muzzle_flash.h), added to what is
