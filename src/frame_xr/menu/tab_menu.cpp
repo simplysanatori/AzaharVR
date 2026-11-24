@@ -136,6 +136,9 @@ std::string SliderText(Id id, float value) {
     if (id == Id::KiuScoreHeight) { // AzaharFrame kiu140
         return Format("%.0f\u00B0", value);
     }
+    if (id == Id::KiuSubtitleHeight) { // AzaharFrame kiu140
+        return Format("%.0f\u00B0", value);
+    }
     if (id == Id::AutosaveEvery) { // AzaharFrame autosave: the stop's minutes
         const int i = std::clamp(static_cast<int>(std::lround(value)), 0,
                                  static_cast<int>(kAutosaveEvery.size()) - 1);
@@ -301,6 +304,9 @@ Row RowFor(Id id, const MenuModel& m) {
         break;
     case Id::KiuScoreHeight: // AzaharFrame kiu140
         slider(m.kiu_score_height);
+        break;
+    case Id::KiuSubtitleHeight: // AzaharFrame kiu140
+        slider(m.kiu_subtitle_height);
         break;
     case Id::KiuReticleSize:
         slider(m.kiu_reticle_size);
@@ -479,9 +485,16 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
         rows.push_back(full(row(Id::FillView, RowKind::Button)));
         // AzaharFrame hudmove: HUD Spacing, 0 to 150 %, 100 the game's own (Experimental chip, never
         // locked: outside the Full modes it does nothing, and its tooltip says so).
+        const bool spacing = HudSpacingRowsShown(
+            AngelsAimRowsShown(m.mods.angels_aim.shown && m.mods.angels_aim.mapped,
+                               m.immersive_mode),
+            m.kiu_hud); // AzaharFrame kiu140
         for (const auto& [id, value] :
              {std::pair{Id::HudSpacingX, m.hud_spacing_x},
               std::pair{Id::HudSpacingY, m.hud_spacing_y}}) {
+            if (!spacing) {
+                continue;
+            }
             Row r = row(id, RowKind::Slider);
             const SliderRange hr = SliderFor(id);
             const float v = std::clamp(static_cast<float>(value), hr.min, hr.max);
@@ -573,6 +586,7 @@ SettingsSection SectionOf(Id id) {
     case Id::KiuBarHeight: // AzaharFrame kiu140
     case Id::KiuScoreAcross: // AzaharFrame kiu140
     case Id::KiuScoreHeight: // AzaharFrame kiu140
+    case Id::KiuSubtitleHeight: // AzaharFrame kiu140
     case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
@@ -662,6 +676,7 @@ bool PerGameSetting(Id id) {
     case Id::KiuBarHeight: // AzaharFrame kiu140
     case Id::KiuScoreAcross: // AzaharFrame kiu140
     case Id::KiuScoreHeight: // AzaharFrame kiu140
+    case Id::KiuSubtitleHeight: // AzaharFrame kiu140
     case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
@@ -843,6 +858,9 @@ std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& m) {
     if (m.kiu_hud != 0 && m.kiu_hud_linked == 0) { // AzaharFrame kiu140
         rows.push_back(Id::KiuScoreHeight);
     }
+    if (m.kiu_hud != 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuSubtitleHeight);
+    }
     rows.push_back(Id::KiuReticleSize);
     return rows;
 }
@@ -875,7 +893,7 @@ std::vector<AngelsAimRowGroup> AngelsAimGroups(const MenuModel& model) {
     }
     aiming.rows.push_back(Id::AngelsAimSettings); // the Controls tab at Aiming, as before
     AngelsAimRowGroup view{AngelsAimGroupKind::View, {Id::ImmersiveMode}};
-    for (const Id id : {Id::KiuOverShoulder, Id::KiuPitOpacity, Id::KiuSnapTurn, Id::KiuCutscenes, Id::KiuHud, Id::KiuHudSize, Id::KiuHudLinked, Id::KiuHudAcross, Id::KiuHudHeight, Id::KiuBarAcross, Id::KiuBarHeight, Id::KiuScoreAcross, Id::KiuScoreHeight}) {
+    for (const Id id : {Id::KiuOverShoulder, Id::KiuPitOpacity, Id::KiuSnapTurn, Id::KiuCutscenes, Id::KiuHud, Id::KiuHudSize, Id::KiuHudLinked, Id::KiuHudAcross, Id::KiuHudHeight, Id::KiuBarAcross, Id::KiuBarHeight, Id::KiuScoreAcross, Id::KiuScoreHeight, Id::KiuSubtitleHeight}) {
         if (has(fp, id)) {
             view.rows.push_back(id);
         }
@@ -1287,6 +1305,8 @@ std::string LabelFor(Id id) {
         return kKiuScoreAcrossRow;
     case Id::KiuScoreHeight: // AzaharFrame kiu140
         return kKiuScoreHeightRow;
+    case Id::KiuSubtitleHeight: // AzaharFrame kiu140
+        return kKiuSubtitleHeightRow;
     case Id::KiuReticleSize:
         return kReticleSizeRow;
     case Id::KiuOverShoulder: // AzaharFrame kiu133
@@ -1696,6 +1716,8 @@ std::string ExplainFor(Id id) {
         return kKiuScoreAcrossTip;
     case Id::KiuScoreHeight: // AzaharFrame kiu140
         return kKiuScoreHeightTip;
+    case Id::KiuSubtitleHeight: // AzaharFrame kiu140
+        return kKiuSubtitleHeightTip;
     case Id::KiuReticleSize:
         return kReticleSizeTip;
     case Id::KiuOverShoulder: // AzaharFrame kiu133
@@ -1844,6 +1866,9 @@ SliderRange SliderFor(Id id) {
         return {-40.0f, 40.0f, 1.0f};
     }
     if (id == Id::KiuScoreHeight) { // AzaharFrame kiu140
+        return {-40.0f, 40.0f, 1.0f};
+    }
+    if (id == Id::KiuSubtitleHeight) { // AzaharFrame kiu140
         return {-40.0f, 40.0f, 1.0f};
     }
     if (id == Id::KiuReticleSize) { // 30 to 150 %

@@ -39,6 +39,7 @@ struct Wanted {
     float across = 0.0f, height = 22.0f; ///< linked
     float bar_across = -20.0f, bar_height = 22.0f;
     float score_across = 20.0f, score_height = 22.0f;
+    float subtitle_height = -18.0f;
 };
 
 /// How the HUD's frame is drawn, in the screen's own coordinates (-1 to 1 over the picture shown):
@@ -50,6 +51,7 @@ struct Place {
     float middle_up = 0.0f;
     float bar_across = 0.0f, bar_up = 0.0f;
     float score_across = 0.0f, score_up = 0.0f;
+    float subtitle_up = 0.0f;
 };
 
 /// Degrees across at HUD Size 100 %, and the height of the frame's middle.
@@ -61,6 +63,8 @@ inline constexpr float kTopUp = 0.6f, kBarAside = -0.2f, kScoreAside = 0.4f;
 inline constexpr float kBarLeft = -1.0f, kBarRight = -0.33f;
 inline constexpr float kScoreLeft = 0.58f, kScoreRight = 1.0f;
 inline constexpr float kGroupUp = 0.86f, kLinkGap = 0.08f;
+/// Where the subtitles' text is in the frame (desktop pictures: one line, from 0.75 left).
+inline constexpr float kSubtitleUp = -0.65f;
 /// Pieces in the frame's lower part go this much (half frames) further down: clear of the reticle.
 inline constexpr float kLow = -0.35f, kLowDown = 0.7f;
 
@@ -85,6 +89,7 @@ inline Place PlaceFor(const Wanted& w, float tan_half_x, float tan_half_y, float
     p.half_across = t / tan_half_x;
     p.half_up = t / kFrameAspect / tan_half_y;
     p.middle_up = up_at(kMiddleDeg);
+    p.subtitle_up = up_at(w.subtitle_height) - p.half_up * kSubtitleUp;
     constexpr float kBarMiddle = 0.5f * (kBarLeft + kBarRight);
     constexpr float kScoreMiddle = 0.5f * (kScoreLeft + kScoreRight);
     if (w.linked) {
@@ -112,12 +117,21 @@ struct Draw {
     bool textured = false;
     uint32_t texture = 0; ///< physical address
     uint32_t vertices = 0;
+    uint32_t width = 0, height = 0, format = 0; ///< texture 0's
 };
 inline constexpr uint32_t kVramStart = 0x18000000, kVramEnd = 0x18600000;
 inline constexpr uint32_t kMaxVertices = 1024;
 constexpr bool MayBeHud(const Draw& d) {
     return d.top_viewport && !d.depth_test && d.blended && d.textured && d.vertices != 0 &&
            d.vertices <= kMaxVertices && !(d.texture >= kVramStart && d.texture < kVramEnd);
+}
+
+/// The subtitles: two quads of an image drawn into video memory first (a desktop draw log,
+/// Chapter 2's climb: 512 x 128, RGBA8, the only blended draw of one).
+constexpr bool IsSubtitle(const Draw& d) {
+    return d.top_viewport && !d.depth_test && d.blended && d.textured && d.vertices == 12 &&
+           d.texture >= kVramStart && d.texture < kVramEnd && d.width == 512 && d.height == 128 &&
+           d.format == 0;
 }
 
 struct Vertex {
@@ -165,16 +179,33 @@ inline void Move(Vertex* t, std::size_t n, const Place& p, float factor_across, 
     }
 }
 
+/// The subtitles' quads moved: the game's frame, smaller, with the text at its own height. They may
+/// cover the whole frame. False (nothing moved) for a quad that is not flat.
+inline bool MoveSubtitle(Vertex* v, std::size_t n, const Place& p, float factor_across,
+                         float factor_up) {
+    for (std::size_t i = 0; i < n; ++i) {
+        if (!(v[i].w > 1e-4f) || std::abs(v[i].w - v[0].w) > 1e-3f * v[0].w) {
+            return false;
+        }
+    }
+    for (std::size_t i = 0; i < n; ++i) {
+        const float up = v[i].x / v[i].w, across = v[i].y / v[i].w, z = v[i].z / v[i].w;
+        v[i] = {2.0f * (p.subtitle_up + p.half_up * up) * factor_up,
+                2.0f * p.half_across * across * factor_across, 2.0f * z, 2.0f};
+    }
+    return true;
+}
+
 /// The place in force. One writer (the XR thread, once a frame), read by the emulation thread a
 /// draw; a read across a write mixes two frames' numbers, which are the same or next to it.
 struct Live {
-    std::array<std::atomic<float>, 7> f{};
+    std::array<std::atomic<float>, 8> f{};
     std::atomic<bool> on{false};
 
     void Set(const Place& p) {
-        const float v[7] = {p.half_across, p.half_up,      p.middle_up, p.bar_across,
-                            p.bar_up,      p.score_across, p.score_up};
-        for (int i = 0; i < 7; ++i) {
+        const float v[8] = {p.half_across, p.half_up,      p.middle_up, p.bar_across,
+                            p.bar_up,      p.score_across, p.score_up,  p.subtitle_up};
+        for (int i = 0; i < 8; ++i) {
             f[i].store(v[i], std::memory_order_relaxed);
         }
         on.store(p.on, std::memory_order_release);
@@ -182,9 +213,9 @@ struct Live {
     Place Get() const {
         Place p;
         p.on = on.load(std::memory_order_acquire);
-        float* const v[7] = {&p.half_across, &p.half_up,      &p.middle_up, &p.bar_across,
-                             &p.bar_up,      &p.score_across, &p.score_up};
-        for (int i = 0; i < 7; ++i) {
+        float* const v[8] = {&p.half_across, &p.half_up,      &p.middle_up, &p.bar_across,
+                             &p.bar_up,      &p.score_across, &p.score_up,  &p.subtitle_up};
+        for (int i = 0; i < 8; ++i) {
             *v[i] = f[i].load(std::memory_order_relaxed);
         }
         return p;

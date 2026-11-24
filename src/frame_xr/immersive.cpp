@@ -1682,6 +1682,7 @@ void OnFrame(const FrameInfo& info) {
         wanted.bar_height = static_cast<float>(v.vr_kiu_bar_height.GetValue());
         wanted.score_across = static_cast<float>(v.vr_kiu_score_across.GetValue());
         wanted.score_height = static_cast<float>(v.vr_kiu_score_height.GetValue());
+        wanted.subtitle_height = static_cast<float>(v.vr_kiu_subtitle_height.GetValue());
         hud_place = VideoCore::KiuHud::PlaceFor(wanted, g.solved.tan_half_y * g.solved.aspect,
                                                 g.solved.tan_half_y, g.solved.pitch_rad);
         static bool logged = false;
@@ -2140,6 +2141,7 @@ void Uninstall() {
     }
     // The XR thread has stopped: this thread is the only writer now.
     VideoCore::Immersive::Publish({});
+    VideoCore::KiuHud::g_live.Set({}); // AzaharFrame kiu140: flat, the HUD is the game's again
     VideoCore::Immersive::g_xr_active = false;
     VideoCore::Immersive::g_measure_camera = false; // AzaharFrame depth
 }

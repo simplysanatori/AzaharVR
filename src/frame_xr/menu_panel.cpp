@@ -382,6 +382,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::KiuScoreAcross;
     case Id::KiuScoreHeight: // AzaharFrame kiu140
         return MenuSetting::KiuScoreHeight;
+    case Id::KiuSubtitleHeight: // AzaharFrame kiu140
+        return MenuSetting::KiuSubtitleHeight;
     case Id::WristSide:
         return MenuSetting::WristSide;
     case Id::KiuReticleSize:
@@ -1152,6 +1154,7 @@ void MenuPanel::BuildModel(const Host& host) {
     m.kiu_bar_height = static_cast<int>(v.vr_kiu_bar_height.GetValue()); // AzaharFrame kiu140
     m.kiu_score_across = static_cast<int>(v.vr_kiu_score_across.GetValue()); // AzaharFrame kiu140
     m.kiu_score_height = static_cast<int>(v.vr_kiu_score_height.GetValue()); // AzaharFrame kiu140
+    m.kiu_subtitle_height = static_cast<int>(v.vr_kiu_subtitle_height.GetValue()); // AzaharFrame kiu140
     m.wrist_side = static_cast<int>(std::min<u32>(v.vr_wrist_side.GetValue(), 1));
     m.kiu_reticle_size =
         static_cast<int>(std::clamp<u32>(v.vr_kiu_reticle_size.GetValue(), 30, 150));
@@ -1758,6 +1761,11 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = std::clamp(value, -40, 40);
         Apply(v.vr_kiu_score_height, r.value, per_game);
         r.setting = MenuSetting::KiuScoreHeight;
+        break;
+    case Id::KiuSubtitleHeight: // AzaharFrame kiu140
+        r.value = std::clamp(value, -40, 40);
+        Apply(v.vr_kiu_subtitle_height, r.value, per_game);
+        r.setting = MenuSetting::KiuSubtitleHeight;
         break;
     case Id::KiuReticleSize:
         r.value = std::clamp(value, 30, 150);

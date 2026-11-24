@@ -315,6 +315,7 @@ enum class Id : int {
     KiuBarHeight, ///< AzaharFrame kiu140: a slider, -40 to 40 degrees (vr_kiu_bar_height)
     KiuScoreAcross, ///< AzaharFrame kiu140: a slider, -40 to 40 degrees (vr_kiu_score_across)
     KiuScoreHeight, ///< AzaharFrame kiu140: a slider, -40 to 40 degrees (vr_kiu_score_height)
+    KiuSubtitleHeight, ///< AzaharFrame kiu140: a slider, -40 to 40 degrees (vr_kiu_subtitle_height)
     /// AzaharFrame kiu132: a group's title in the Angel's Aim segment's settings (no action;
     /// index: AngelsAimGroupKind)
     AngelsAimGroup,
@@ -414,6 +415,12 @@ constexpr bool AngelsAimRowsShown(bool kiu_open, int immersive_mode) {
     return kiu_open && immersive_mode == 4;
 }
 
+/// AzaharFrame kiu140: HUD Spacing's rows: not while Angel's Aim's HUD is In View, which places the
+/// HUD's pieces whole and leaves HUD Spacing out (immersive.cpp).
+constexpr bool HudSpacingRowsShown(bool angels_aim, int kiu_hud) {
+    return !angels_aim || kiu_hud == 0;
+}
+
 /// AzaharFrame kiu132: the Angel's Aim segment's settings come in these groups, in this order
 /// (Mods & Pack, the segment's own catalogue rows, is drawn after them).
 enum class AngelsAimGroupKind : int { Aiming, View, BottomScreen, Weapon, ModsAndPack, Count };
@@ -498,6 +505,7 @@ struct MenuModel {
     int kiu_bar_height = 22; ///< AzaharFrame kiu140 (vr_kiu_bar_height)
     int kiu_score_across = 20; ///< AzaharFrame kiu140 (vr_kiu_score_across)
     int kiu_score_height = 22; ///< AzaharFrame kiu140 (vr_kiu_score_height)
+    int kiu_subtitle_height = -18; ///< AzaharFrame kiu140 (vr_kiu_subtitle_height)
     int wrist_side = 0;             ///< 0 Back, 1 Inside (global)
     int kiu_reticle_size = 100;     ///< percent (30 to 150)
     int kiu_view = 0;               ///< AzaharFrame kiu133: Camera, Kiu::FirstPerson::ViewFor

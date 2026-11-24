@@ -375,8 +375,8 @@ bool RasterizerAccelerated::ReticleDraw() const {
            VideoCore::Immersive::ReticleScaled(regs.texturing.texture0.GetPhysicalAddress());
 }
 
-bool RasterizerAccelerated::HudDraw() const {
-    if (!VideoCore::KiuHud::g_live.on.load(std::memory_order_relaxed) ||
+bool RasterizerAccelerated::HudDraw(bool* subtitle) const {
+    if (!VideoCore::KiuHud::g_live.on.load(std::memory_order_relaxed) || vr_immersive_mode < 2 ||
         regs.pipeline.use_gs != Pica::PipelineRegs::UseGS::No) {
         return false;
     }
@@ -394,9 +394,16 @@ bool RasterizerAccelerated::HudDraw() const {
     d.textured = regs.texturing.main_config.texture0_enable != 0;
     d.texture = regs.texturing.texture0.GetPhysicalAddress();
     d.vertices = regs.pipeline.num_vertices;
+    d.width = regs.texturing.texture0.width;
+    d.height = regs.texturing.texture0.height;
+    d.format = static_cast<u32>(regs.texturing.texture0_format.Value());
+    if (subtitle) {
+        *subtitle = VideoCore::KiuHud::IsSubtitle(d);
+    }
     // The reticle is the hand's, not the HUD's.
     const u32 reticle = VideoCore::Immersive::g_reticle_texture.load(std::memory_order_relaxed);
-    return VideoCore::KiuHud::MayBeHud(d) && !(reticle != 0 && d.texture == reticle);
+    return VideoCore::KiuHud::IsSubtitle(d) ||
+           (VideoCore::KiuHud::MayBeHud(d) && !(reticle != 0 && d.texture == reticle));
 }
 
 bool RasterizerAccelerated::SheetDraw() const {
@@ -481,21 +488,40 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
         AddSheetRim();
     }
     // AzaharFrame kiu140: a piece of the HUD, moved into the view (kiu_hud.h); never with the world.
-    if (vertex_batch.size() >= 3 && HudDraw()) {
+    bool subtitle = false;
+    if (vertex_batch.size() >= 3 && HudDraw(&subtitle)) {
         std::vector<VideoCore::KiuHud::Vertex> flat(vertex_batch.size());
         for (std::size_t i = 0; i < flat.size(); ++i) {
             const auto& q = vertex_batch[i].position;
             flat[i] = {q.x, q.y, q.z, q.w};
         }
+        const VideoCore::KiuHud::Place place = VideoCore::KiuHud::g_live.Get();
+        if (VideoCore::Immersive::g_draw_log.load(std::memory_order_relaxed)) { // test aid
+            std::string at;
+            for (std::size_t k = 0; k < std::min<std::size_t>(flat.size(), 18); ++k) {
+                at += fmt::format(" {:.2f},{:.2f},{:.2f},{:.2f}", flat[k].x, flat[k].y, flat[k].z,
+                                  flat[k].w);
+            }
+            LOG_INFO(Render, "kiu hud: texture {:08X} {}:{}",
+                     regs.texturing.texture0.GetPhysicalAddress(),
+                     subtitle ? "the subtitles" : "a piece", at);
+        }
+        const auto put = [&] {
+            for (std::size_t i = 0; i < flat.size(); ++i) {
+                vertex_batch[i].position = {flat[i].x, flat[i].y, flat[i].z, flat[i].w};
+            }
+        };
+        if (subtitle && VideoCore::KiuHud::MoveSubtitle(flat.data(), flat.size(), place, vr_factor,
+                                                        vr_factor_y)) {
+            put();
+            return;
+        }
         if (VideoCore::KiuHud::Movable(flat.data(), flat.size())) {
-            const VideoCore::KiuHud::Place place = VideoCore::KiuHud::g_live.Get();
             const std::size_t step = flat.size() % 6 == 0 ? 6 : 3; // quads
             for (std::size_t i = 0; i + step <= flat.size(); i += step) {
                 VideoCore::KiuHud::Move(flat.data() + i, step, place, vr_factor, vr_factor_y);
             }
-            for (std::size_t i = 0; i < flat.size(); ++i) {
-                vertex_batch[i].position = {flat[i].x, flat[i].y, flat[i].z, flat[i].w};
-            }
+            put();
             return;
         }
     }

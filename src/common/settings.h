@@ -1156,6 +1156,7 @@ struct Values {
     SwitchableSetting<u32, true> vr_kiu_hud_linked{1, 0, 1, "vr_kiu_hud_linked"};
     SwitchableSetting<s32, true> vr_kiu_hud_across{0, -40, 40, "vr_kiu_hud_across"};
     SwitchableSetting<s32, true> vr_kiu_hud_height{22, -40, 40, "vr_kiu_hud_height"};
+    SwitchableSetting<s32, true> vr_kiu_subtitle_height{-18, -40, 40, "vr_kiu_subtitle_height"};
     SwitchableSetting<s32, true> vr_kiu_bar_across{-20, -40, 40, "vr_kiu_bar_across"};
     SwitchableSetting<s32, true> vr_kiu_bar_height{22, -40, 40, "vr_kiu_bar_height"};
     SwitchableSetting<s32, true> vr_kiu_score_across{20, -40, 40, "vr_kiu_score_across"};

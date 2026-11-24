@@ -169,24 +169,27 @@ inline constexpr const char* kKiuArmTip =
 inline constexpr const char* kKiuHudLinkedRow = "Health and Score"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuHudLinkedTip =
     "Linked: side by side, moved as one. Separate: each has its own place.";
-inline constexpr const char* kKiuHudAcrossRow = "HUD Sideways"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuHudAcrossRow = "HUD Left/Right"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuHudAcrossTip =
     "How far left or right the health bar and score are. 0\u00B0 is straight ahead.";
 inline constexpr const char* kKiuHudHeightRow = "HUD Height"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuHudHeightTip =
     "How high the health bar and score are. 0\u00B0 is straight ahead.";
-inline constexpr const char* kKiuBarAcrossRow = "Health Bar Sideways"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuBarAcrossRow = "Health Bar Left/Right"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuBarAcrossTip =
     "How far left or right the health bar is. 0\u00B0 is straight ahead.";
 inline constexpr const char* kKiuBarHeightRow = "Health Bar Height"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuBarHeightTip =
     "How high the health bar is. 0\u00B0 is straight ahead.";
-inline constexpr const char* kKiuScoreAcrossRow = "Score Sideways"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuScoreAcrossRow = "Score Left/Right"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuScoreAcrossTip =
     "How far left or right the score is. 0\u00B0 is straight ahead.";
 inline constexpr const char* kKiuScoreHeightRow = "Score Height"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuScoreHeightTip =
     "How high the score is. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuSubtitleHeightRow = "Subtitle Height"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuSubtitleHeightTip =
+    "How high the subtitles are. 0\u00B0 is straight ahead.";
 inline constexpr const char* kOverShoulderRow = "Over the Shoulder";
 inline constexpr const char* kOverShoulderTip =
     "Moves your view behind and above Pit, so you can see him.";

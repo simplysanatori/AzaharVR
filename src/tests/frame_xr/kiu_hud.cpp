@@ -127,3 +127,39 @@ TEST_CASE("Kid Icarus HUD: the bar and the score, linked and apart", "[frame_xr]
     REQUIRE(See(0.0f, 0.0f, p).up == Approx(6.0f).margin(0.2));
     REQUIRE(See(0.0f, 0.0f, At()).up == Approx(6.0f).margin(0.2));
 }
+
+TEST_CASE("Kid Icarus HUD: the subtitles, where they are asked for", "[frame_xr][kiu140]") {
+    Draw d{true, false, true, true, 0x181A8000, 12, 512, 128, 0};
+    REQUIRE(IsSubtitle(d));
+    for (const auto change : {0, 1, 2, 3}) {
+        Draw x = d;
+        x.width = change == 0 ? 256 : x.width;
+        x.texture = change == 1 ? 0x2188B680 : x.texture;
+        x.vertices = change == 2 ? 6 : x.vertices;
+        x.top_viewport = change != 3;
+        REQUIRE_FALSE(IsSubtitle(x));
+    }
+    for (const float height : {-30.0f, -18.0f, 10.0f}) {
+        Wanted w;
+        w.subtitle_height = height;
+        const Place p = At(w);
+        // The whole frame, at two depths of w and with the game drawing past its frame.
+        for (const float whole_w : {1.0f, 3.0f}) {
+            for (const float f : {1.0f, 3.96f}) {
+                Vertex v[3] = {{kSubtitleUp * whole_w, -0.75f * whole_w, 0.2f * whole_w, whole_w},
+                               {kSubtitleUp * whole_w, 0.75f * whole_w, 0.2f * whole_w, whole_w},
+                               {1.0f * whole_w, 1.0f * whole_w, 0.2f * whole_w, whole_w}};
+                REQUIRE(MoveSubtitle(v, 3, p, f, f));
+                const float up = std::atan(v[0].x / v[0].w / f * kTanY) / kRad - 5.0f;
+                const float left = std::atan(v[0].y / v[0].w / f * kTanX) / kRad;
+                const float right = std::atan(v[1].y / v[1].w / f * kTanX) / kRad;
+                REQUIRE(up == Approx(height).margin(0.3));
+                REQUIRE(left == Approx(-right).margin(0.01));
+                REQUIRE(right < 30.0f);
+                REQUIRE(v[2].z / v[2].w == Approx(0.2f));
+            }
+        }
+    }
+    Vertex world[3] = {{0, 0, 0, 1}, {0, 1, 0, 4}, {1, 1, 0, 1}};
+    REQUIRE_FALSE(MoveSubtitle(world, 3, At(), 1.0f, 1.0f));
+}
