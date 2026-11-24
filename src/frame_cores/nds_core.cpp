@@ -686,11 +686,19 @@ bool NdsCore::LoadStateFromMemory(const uint8_t* data, std::size_t size) {
     if (!impl->loaded || !impl->nds || !data || size == 0) {
         return false;
     }
+    impl->FlushPendingSaves(true); // what the game saved before the load
     std::vector<uint8_t> copy(data, data + size);
     melonDS::Savestate state(copy.data(), static_cast<melonDS::u32>(copy.size()), false);
     impl->nds->GetRenderer().PreSavestate();
     const bool ok = impl->nds->DoSavestate(&state) && !state.Error;
     impl->nds->GetRenderer().PostSavestate();
+    {
+        // melonDS reports the state's save data as a save. The save file changes only when the
+        // game saves, as for the other consoles: a load never replaces a newer save.
+        std::lock_guard lock(impl->save_mutex);
+        impl->nds_save_dirty = false;
+        impl->gba_save_dirty = false;
+    }
     return ok;
 }
 

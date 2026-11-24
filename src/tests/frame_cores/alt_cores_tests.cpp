@@ -11,13 +11,20 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <span>
+#include <string>
 #include <thread>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include "common/alt_core_types.h"
 #include "common/xr_pacer.h"
+#include "common/zstd_compression.h"
+#include "core/autosave.h"
+#include "core/savestate.h"
 #include "frame_cores/alt_core_host.h"
 #include "frame_cores/audio_resampler.h"
 #include "frame_cores/nds_core.h"
@@ -296,6 +303,41 @@ std::vector<uint8_t> MakeLidNdsRom() {
     return rom;
 }
 
+/// Holds a button for a moment, then long enough for the save file to be written.
+void Press(FrameCores::AltCoreHost& host, uint32_t button) {
+    Common::AltCore::InputState in{};
+    in.buttons = button;
+    host.PushInput(in);
+    REQUIRE(host.StepFrames(10));
+    host.PushInput({});
+    REQUIRE(host.StepFrames(120));
+}
+
+/// What the game shows a moment later.
+uint32_t PixelSoon(FrameCores::AltCoreHost& host) {
+    REQUIRE(host.StepFrames(10));
+    REQUIRE(host.LastFrame().primary.pixels != nullptr);
+    return host.LastFrame().primary.pixels[0];
+}
+
+/// A host whose loads are kept: `loads.back()` is the last one.
+void KeepLoads(FrameCores::AltCoreHost& host, std::vector<FrameCores::LoadDone>& loads) {
+    FrameCores::HostFrontend frontend;
+    frontend.on_loaded = [&loads](const FrameCores::LoadDone& done) { loads.push_back(done); };
+    host.SetFrontend(std::move(frontend));
+}
+
+uint64_t NowSeconds() {
+    const auto now = std::chrono::system_clock::now().time_since_epoch();
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(now).count());
+}
+
+std::vector<uint8_t> ReadFile(const fs::path& p) {
+    std::ifstream in(p, std::ios::binary);
+    return std::vector<uint8_t>(std::istreambuf_iterator<char>(in),
+                                std::istreambuf_iterator<char>{});
+}
+
 #ifndef _WIN32
 thread_local sigjmp_buf g_test_jmp;
 thread_local std::atomic<bool> g_test_jmp_armed{false};
@@ -400,7 +442,7 @@ TEST_CASE("GBA adapter boots homebrew ROM, renders, saves/loads state",
     host.SetSolarLevel(5);
     REQUIRE(host.QuickSave());
     REQUIRE(host.SaveSlot(1));
-    CHECK(!host.ListSaveSlots().empty());
+    CHECK(Core::ListSaveStatesIn(host.StatesDir(), host.GetRomInfo().title_id, 0).size() == 2);
     REQUIRE(host.StepFrames(5));
     REQUIRE(host.LoadSlot(1));
     REQUIRE(host.QuickLoad());
@@ -457,7 +499,8 @@ TEST_CASE("Each game has its own folder, whatever its file is called", "[frame_c
                           /*headless_for_test=*/true));
         REQUIRE(host.SaveSlot(1));
         host.Stop();
-        CHECK(fs::exists(fs::path(FrameCores::GameFolder(data, info)) / "game.slot1.state"));
+        CHECK(fs::exists(Core::StatePathIn(FrameCores::GameFolder(data, info) + "/",
+                                           info.title_id, 0, 1)));
     }
 }
 
@@ -575,6 +618,8 @@ TEST_CASE("Stopping a game gives the 3DS its state back and writes no state", "[
     CHECK(running);
     host.SetTouchEnabled(false);
     REQUIRE(host.StepFrames(5));
+    const std::string states = host.StatesDir();
+    const uint64_t key = host.GetRomInfo().title_id;
     host.Stop();
 
     CHECK(caps.kind == Common::AltCore::CoreKind::N3DS);
@@ -582,7 +627,8 @@ TEST_CASE("Stopping a game gives the 3DS its state back and writes no state", "[
     CHECK(!sink);
     CHECK(!running);
     CHECK(Common::XrPacer::Get().emu_frame_us.load() == Common::XrPacer::kEmuFrameUs);
-    CHECK(fs::is_empty(tmp.path / "data" / "ds" / "states"));
+    CHECK(Core::ListSaveStatesIn(states, key, 0).empty());
+    CHECK(!fs::exists(Core::Autosave::Dir(states)));
 }
 
 TEST_CASE("Touch Screen Input off is the DS's only", "[frame_cores]") {
@@ -685,6 +731,219 @@ TEST_CASE("DS and DSi adapters boot with FreeBIOS + JIT, touch, mic, lid, and sa
     REQUIRE(host.StepFrames(6));
     REQUIRE(host.SaveSlot(3));
     REQUIRE(host.LoadSlot(3));
+    host.Stop();
+}
+
+TEST_CASE("Autosaves: rotation, the menu's own, Keep lowered, loading", "[frame_cores]") {
+    namespace A = Core::Autosave;
+    TempDir tmp("autosave");
+    const fs::path rom_path = tmp.path / "hb.gb";
+    WriteFile(rom_path, MakeBatteryGbRom());
+    std::vector<FrameCores::LoadDone> loads;
+    FrameCores::AltCoreHost host;
+    KeepLoads(host, loads);
+    REQUIRE(host.Boot(rom_path.string(), (tmp.path / "data").string(), /*headless_for_test=*/true));
+    const uint64_t key = host.GetRomInfo().title_id;
+    const std::string dir = A::Dir(host.StatesDir());
+    CHECK(A::List(dir, key, 0).empty());
+
+    // Three older ones, and one of another game
+    const uint64_t now = NowSeconds();
+    const std::vector<uint8_t> body{1, 2, 3};
+    fs::create_directories(dir);
+    for (const uint64_t ago : {100, 200, 300}) {
+        Core::WriteStateFile(A::PathFor(dir, key, 0, static_cast<s64>(now - ago)),
+                             Core::CurrentStateHeader(key, now - ago), body);
+    }
+    const std::string other = A::PathFor(dir, key + 1, 0, static_cast<s64>(now - 400));
+    Core::WriteStateFile(other, Core::CurrentStateHeader(key + 1, now - 400), body);
+
+    Press(host, Common::AltCore::BtnA);
+    const uint32_t pixel_a = PixelSoon(host);
+    REQUIRE(host.MakeAutosave(A::Reason::Timer, 2));
+    CHECK(!host.StatesBusy());
+    auto list = A::List(dir, key, 0);
+    REQUIRE(list.size() == 2);
+    CHECK(list[0].time >= now);
+    CHECK(!list[0].other);
+    CHECK(fs::exists(list[0].thumb));
+    CHECK(list[1].time == now - 100);
+    CHECK(fs::exists(other));
+
+    // The menu's has its own file and prunes nothing
+    REQUIRE(host.MakeAutosave(A::Reason::MenuOpen, 1));
+    REQUIRE(host.MakeAutosave(A::Reason::MenuOpen, 1));
+    list = A::List(dir, key, 0);
+    CHECK(list.size() == 3);
+    CHECK(std::count_if(list.begin(), list.end(), [](const auto& e) { return e.menu; }) == 1);
+
+    host.PruneAutosaves(1);
+    list = A::List(dir, key, 0);
+    std::erase_if(list, [](const auto& e) { return e.menu; });
+    REQUIRE(list.size() == 1);
+    CHECK(list[0].time >= now);
+
+    // Loaded by the time the list showed, not another state in its file
+    Press(host, Common::AltCore::BtnB);
+    const uint32_t pixel_b = PixelSoon(host);
+    CHECK(pixel_b != pixel_a);
+    CHECK(!host.LoadAutosave(list[0].path, list[0].time + 1));
+    CHECK(loads.back().result == FrameCores::LoadResult::Gone);
+    CHECK(PixelSoon(host) == pixel_b);
+    REQUIRE(host.LoadAutosave(list[0].path, list[0].time));
+    CHECK(loads.back().what == FrameCores::LoadDone::What::Autosave);
+    CHECK(loads.back().time == list[0].time);
+    CHECK(PixelSoon(host) == pixel_a);
+    REQUIRE(host.UndoLoad());
+    CHECK(PixelSoon(host) == pixel_b);
+    host.Stop();
+    CHECK(!host.MakeAutosave(A::Reason::Timer, 2)); // no game
+}
+
+TEST_CASE("Undo Load goes back once, also after Import Save", "[frame_cores]") {
+    TempDir tmp("undo");
+    const std::string data = (tmp.path / "data").string();
+    const fs::path rom_path = tmp.path / "hb.gb";
+    WriteFile(rom_path, MakeBatteryGbRom());
+    const fs::path save =
+        fs::path(FrameCores::GameFolder(data, *FrameCores::ProbeRom(rom_path.string()))) / "hb.sav";
+    std::vector<FrameCores::LoadDone> loads;
+    FrameCores::AltCoreHost host;
+    KeepLoads(host, loads);
+    REQUIRE(host.Boot(rom_path.string(), data, /*headless_for_test=*/true));
+    CHECK(!host.UndoLoad()); // nothing loaded yet
+
+    Press(host, Common::AltCore::BtnA);
+    const uint32_t pixel_a = PixelSoon(host);
+    REQUIRE(host.SaveSlot(1));
+    Press(host, Common::AltCore::BtnB);
+    const uint32_t pixel_b = PixelSoon(host);
+    REQUIRE(pixel_b != pixel_a);
+
+    REQUIRE(host.LoadSlot(1));
+    CHECK(PixelSoon(host) == pixel_a);
+    REQUIRE(host.UndoLoad());
+    CHECK(loads.back().what == FrameCores::LoadDone::What::Undo);
+    CHECK(PixelSoon(host) == pixel_b);
+    CHECK(!host.UndoLoad());
+    CHECK(PixelSoon(host) == pixel_b);
+
+    // A load that fails leaves the earlier load's Undo
+    REQUIRE(host.LoadSlot(1));
+    CHECK(!host.LoadSlot(2));
+    REQUIRE(host.UndoLoad());
+    CHECK(PixelSoon(host) == pixel_b);
+
+    // A restart forgets it
+    REQUIRE(host.LoadSlot(1));
+    host.Reset();
+    CHECK(!host.UndoLoad());
+
+    // Import Save: the game and its save file both go back
+    Press(host, Common::AltCore::BtnB);
+    REQUIRE(FirstByte(save) == 0x22);
+    std::vector<uint8_t> imported(0x2000, 0);
+    imported[0] = 0x11;
+    WriteFile(tmp.path / "import.sav", imported);
+    CHECK(!host.ImportSave((tmp.path / "missing.sav").string()));
+    CHECK(PixelSoon(host) == pixel_b);
+    REQUIRE(host.ImportSave((tmp.path / "import.sav").string()));
+    CHECK(loads.back().what == FrameCores::LoadDone::What::Import);
+    REQUIRE(host.StepFrames(120));
+    CHECK(PixelSoon(host) == pixel_a);
+    REQUIRE(host.UndoLoad());
+    REQUIRE(host.StepFrames(120));
+    CHECK(PixelSoon(host) == pixel_b);
+    host.Stop();
+    CHECK(FirstByte(save) == 0x22);
+}
+
+TEST_CASE("A state of another game is refused", "[frame_cores]") {
+    TempDir tmp("othergame");
+    const std::string data = (tmp.path / "data").string();
+    std::vector<uint8_t> one = MakeBatteryGbRom();
+    std::vector<uint8_t> two = one;
+    two[0x134] ^= 0x01; // another title
+    WriteFile(tmp.path / "one.gb", one);
+    WriteFile(tmp.path / "two.gb", two);
+
+    FrameCores::AltCoreHost host;
+    std::vector<FrameCores::LoadDone> loads;
+    KeepLoads(host, loads);
+    REQUIRE(host.Boot((tmp.path / "one.gb").string(), data, /*headless_for_test=*/true));
+    REQUIRE(host.StepFrames(10));
+    REQUIRE(host.SaveSlot(1));
+    const std::string file =
+        Core::StatePathIn(host.StatesDir(), host.GetRomInfo().title_id, 0, 1);
+
+    REQUIRE(host.Boot((tmp.path / "two.gb").string(), data, /*headless_for_test=*/true));
+    const uint64_t key = host.GetRomInfo().title_id;
+    Press(host, Common::AltCore::BtnB);
+    const uint32_t pixel = PixelSoon(host);
+    fs::create_directories(host.StatesDir());
+    fs::copy_file(file, Core::StatePathIn(host.StatesDir(), key, 0, 1));
+    CHECK(Core::ListSaveStatesIn(host.StatesDir(), key, 0).empty());
+    for (const bool anyway : {false, true}) {
+        CHECK(!host.LoadSlot(1, anyway));
+        CHECK(loads.back().result == FrameCores::LoadResult::OtherGame);
+    }
+    CHECK(PixelSoon(host) == pixel);
+    CHECK(!host.UndoLoad());
+    host.Stop();
+}
+
+TEST_CASE("A load that fails changes nothing", "[frame_cores]") {
+    using FrameCores::LoadResult;
+    TempDir tmp("failedload");
+    const std::string data = (tmp.path / "data").string();
+    const bool ds = GENERATE(false, true);
+    const fs::path rom_path = tmp.path / (ds ? "hb.nds" : "hb.gb");
+    WriteFile(rom_path, ds ? MakeLidNdsRom() : MakeBatteryGbRom());
+
+    FrameCores::AltCoreHost host;
+    std::vector<FrameCores::LoadDone> loads;
+    KeepLoads(host, loads);
+    REQUIRE(host.Boot(rom_path.string(), data, /*headless_for_test=*/true));
+    REQUIRE(host.StepFrames(30));
+    const uint64_t key = host.GetRomInfo().title_id;
+    const auto slot = [&](u32 n) { return Core::StatePathIn(host.StatesDir(), key, 0, n); };
+    const auto header = Core::CurrentStateHeader(key, NowSeconds());
+    const uint32_t pixel = PixelSoon(host);
+    REQUIRE(host.SaveSlot(1));
+    const std::vector<uint8_t> good = ReadFile(slot(1));
+    REQUIRE(good.size() > header.size());
+    const std::vector<uint8_t> raw = Common::Compression::DecompressDataZSTD(
+        std::span<const uint8_t>{good}.subspan(header.size()));
+    REQUIRE(raw.size() > 1000);
+
+    CHECK(!host.LoadSlot(2)); // none
+    CHECK(loads.back().result == LoadResult::Gone);
+    WriteFile(slot(3), {1, 2, 3}); // not a state
+    CHECK(!host.LoadSlot(3));
+    CHECK(loads.back().result == LoadResult::Failed);
+    Core::WriteStateFile(slot(4), header, std::vector<uint8_t>{1, 2, 3}); // not compressed
+    CHECK(!host.LoadSlot(4));
+    CHECK(loads.back().result == LoadResult::Failed);
+    Core::WriteStateFileFrom(slot(5), header, std::vector<uint8_t>(64, 0xAB)); // not the core's
+    CHECK(!host.LoadSlot(5));
+    CHECK(loads.back().result == LoadResult::Failed);
+    Core::WriteStateFileFrom(slot(6), header,
+                             std::span<const uint8_t>{raw}.first(raw.size() / 4)); // cut short
+    CHECK(!host.LoadSlot(6));
+    CHECK(loads.back().result == LoadResult::Failed);
+    CHECK(PixelSoon(host) == pixel);
+    CHECK(!host.UndoLoad());
+
+    // Another build's: only with Load Anyway
+    const auto old = Core::MakeStateHeader(key, std::string(40, '0'), "1.1.1", "AZF 1.1.1",
+                                           NowSeconds());
+    Core::WriteStateFile(slot(7), old, std::span<const uint8_t>{good}.subspan(header.size()));
+    CHECK(!host.LoadSlot(7));
+    CHECK(loads.back().result == LoadResult::OtherBuild);
+    CHECK(loads.back().version == "1.1.1");
+    CHECK(host.LoadSlot(7, /*anyway=*/true));
+    CHECK(loads.back().result == LoadResult::Ok);
+    CHECK(PixelSoon(host) == pixel);
     host.Stop();
 }
 

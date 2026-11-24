@@ -30,6 +30,7 @@ target_include_directories(frame_cores SYSTEM PRIVATE
 target_link_libraries(frame_cores
     PUBLIC
         citra_common
+        citra_core
         audio_core
         video_core
     PRIVATE

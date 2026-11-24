@@ -8,16 +8,23 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
-#include <cstdio>
-#include <ctime>
+#include <cstring>
+#include <deque>
+#include <exception>
 #include <filesystem>
+#include <fstream>
 #include <mutex>
+#include <span>
 #include <thread>
 #include <utility>
 
 #include "common/logging/log.h"
+#include "common/scm_rev.h"
 #include "common/settings.h"
+#include "common/transient_memory.h"
 #include "common/xr_pacer.h"
+#include "common/zstd_compression.h"
+#include "core/savestate.h"
 #include "frame_cores/gb_core.h"
 #include "frame_cores/gba_core.h"
 #include "frame_cores/nds_core.h"
@@ -47,26 +54,12 @@ int64_t SteadyNowNs() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
 }
 
-std::string FormatFileTime(const std::filesystem::path& p) {
-    std::error_code ec;
-    const auto ftime = std::filesystem::last_write_time(p, ec);
-    if (ec) {
-        return {};
-    }
-    const auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
-        ftime - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
-    const std::time_t tt = std::chrono::system_clock::to_time_t(sctp);
-    std::tm tm{};
-#ifdef _WIN32
-    localtime_s(&tm, &tt);
-#else
-    localtime_r(&tt, &tm);
-#endif
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d", tm.tm_year + 1900, tm.tm_mon + 1,
-                  tm.tm_mday, tm.tm_hour, tm.tm_min);
-    return std::string(buf);
+uint64_t UnixNow() {
+    const auto now = std::chrono::system_clock::now().time_since_epoch();
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(now).count());
 }
+
+constexpr std::size_t kStateHeaderSize = 256; // Core::MakeStateHeader
 
 CorePaths BuildCorePaths(const RomInfo& info, const std::string& data_dir) {
     const std::filesystem::path base =
@@ -92,6 +85,25 @@ std::unique_ptr<CoreBackend> CreateBackend(Common::AltCore::CoreKind kind) {
         return nullptr;
     }
 }
+
+/// What AltCoreHost's state functions ask of the emulation thread.
+struct StateRequest {
+    enum class Kind { Save, Autosave, Load, LoadAutosave, Undo, Import, Prune };
+    Kind kind = Kind::Save;
+    int slot = 0;
+    Core::Autosave::Reason reason = Core::Autosave::Reason::Timer;
+    uint32_t keep = 0;
+    std::string path;
+    uint64_t time = 0;
+    bool anyway = false;
+};
+
+/// The moment before a load. Guarded by core_mutex.
+struct UndoState {
+    std::vector<uint8_t> state;
+    uint64_t time = 0;
+    bool imported = false; ///< the load was Import Save: the earlier save is in "<save>.bak"
+};
 
 } // namespace
 
@@ -131,10 +143,340 @@ struct AltCoreHost::Impl {
     std::thread emu_thread;
     float last_rumble = 0.0f;
 
+    std::mutex request_mutex;
+    std::deque<StateRequest> requests;    ///< guarded by request_mutex
+    std::atomic<int> requests_open{0};    ///< waiting or under way
+    std::atomic<int64_t> last_frame_ns{0}; ///< when a frame ended (steady clock)
+    UndoState undo;
+
+    std::atomic<bool> write_ok{true}; ///< the writer's last state
+    Core::Autosave::Writer writer;    ///< last: its thread ends before the rest goes
+
+    std::string StatesDir() const {
+        return (std::filesystem::path(paths.game_dir) / "").string();
+    }
+
     std::string SlotPath(int slot) const {
-        return (std::filesystem::path(paths.game_dir) /
-                (rom_stem + ".slot" + std::to_string(slot) + ".state"))
-            .string();
+        return Core::StatePathIn(StatesDir(), rom_info.title_id, 0, static_cast<u32>(slot));
+    }
+
+    /// The battery save, where the cores keep it.
+    std::string SavePath() const {
+        return (std::filesystem::path(paths.game_dir) / (rom_stem + ".sav")).string();
+    }
+
+    bool Ask(StateRequest request) {
+        if (!running.load(std::memory_order_acquire)) {
+            return false;
+        }
+        requests_open.fetch_add(1, std::memory_order_acq_rel);
+        if (headless) {
+            write_ok.store(true);
+            const bool ok = RunRequest(request);
+            requests_open.fetch_sub(1, std::memory_order_acq_rel);
+            writer.WaitIdle();
+            return ok && write_ok.load();
+        }
+        std::lock_guard lock(request_mutex);
+        requests.push_back(std::move(request));
+        return true;
+    }
+
+    /// Emulation thread, between two frames. `stopping`: only what saves.
+    void RunRequests(bool stopping) {
+        while (requests_open.load(std::memory_order_acquire) > 0) {
+            StateRequest request;
+            {
+                std::lock_guard lock(request_mutex);
+                if (requests.empty()) {
+                    return;
+                }
+                request = std::move(requests.front());
+                requests.pop_front();
+            }
+            using Kind = StateRequest::Kind;
+            if (!stopping || request.kind == Kind::Save || request.kind == Kind::Autosave) {
+                RunRequest(request);
+            }
+            requests_open.fetch_sub(1, std::memory_order_acq_rel);
+        }
+    }
+
+    bool RunRequest(const StateRequest& request) {
+        switch (request.kind) {
+        case StateRequest::Kind::Save:
+        case StateRequest::Kind::Autosave:
+            return MakeState(request);
+        case StateRequest::Kind::Load:
+        case StateRequest::Kind::LoadAutosave:
+            return LoadState(request);
+        case StateRequest::Kind::Undo:
+            return Undo();
+        case StateRequest::Kind::Import:
+            return Import(request.path);
+        case StateRequest::Kind::Prune:
+            writer.WaitIdle(); // a write under way prunes to the old Keep
+            Core::Autosave::Prune(Core::Autosave::Dir(StatesDir()), rom_info.title_id, 0,
+                                  request.keep);
+            return true;
+        }
+        return false;
+    }
+
+    /// The Primary Screen's last picture for an autosave's entry, BGRA. core_mutex held.
+    std::vector<u8> PictureLocked(u32& width, u32& height) const {
+        const auto& screen = last_frame.primary;
+        if (!screen.pixels || screen.width == 0 || screen.height == 0) {
+            return {};
+        }
+        width = screen.width;
+        height = screen.height;
+        const std::size_t stride = screen.stride_pixels ? screen.stride_pixels : width;
+        std::vector<u8> out(static_cast<std::size_t>(width) * height * 4);
+        for (std::size_t y = 0; y < height; ++y) {
+            std::memcpy(out.data() + y * width * 4, screen.pixels + y * stride,
+                        static_cast<std::size_t>(width) * 4);
+        }
+        if (!screen.bgra) {
+            for (std::size_t i = 0; i < out.size(); i += 4) {
+                std::swap(out[i], out[i + 2]);
+            }
+        }
+        return out;
+    }
+
+    /// Makes a slot's state or an autosave and hands it to the writer.
+    bool MakeState(const StateRequest& request) {
+        namespace Autosave = Core::Autosave;
+        const bool autosave = request.kind == StateRequest::Kind::Autosave;
+        const uint64_t now = UnixNow();
+        Autosave::Writer::Job job;
+        job.autosave = autosave;
+        job.reason = request.reason;
+        job.program_id = rom_info.title_id;
+        if (autosave) {
+            job.dir = Autosave::Dir(StatesDir());
+            job.path = request.reason == Autosave::Reason::MenuOpen
+                           ? Autosave::MenuPathFor(job.dir, job.program_id, 0)
+                           : Autosave::PathFor(job.dir, job.program_id, 0,
+                                               static_cast<s64>(now));
+            job.keep = Autosave::ClampKeep(request.keep);
+        } else {
+            job.path = SlotPath(request.slot);
+            job.slot_save = true;
+            job.slot = static_cast<u32>(request.slot);
+        }
+
+        const auto t0 = std::chrono::steady_clock::now();
+        std::vector<uint8_t> state;
+        std::vector<u8> picture;
+        u32 width = 0;
+        u32 height = 0;
+        bool ok = false;
+        {
+            std::lock_guard lock(core_mutex);
+            ok = core && core->SaveStateToMemory(state);
+            if (ok && autosave) {
+                picture = PictureLocked(width, height);
+            }
+        }
+        if (!ok) {
+            LOG_ERROR(Core, "AltCoreHost: no state for {}", job.path);
+            Autosave::Writer::Done done;
+            done.path = job.path;
+            done.reason = job.reason;
+            done.autosave = autosave;
+            done.slot_save = job.slot_save;
+            done.slot = job.slot;
+            done.failure = Autosave::Failure::Serialize;
+            if (frontend.on_written) {
+                frontend.on_written(done);
+            }
+            return false;
+        }
+        job.header = Core::CurrentStateHeader(job.program_id, now);
+        job.hold = std::make_shared<Common::TransientMemory::Hold>(state.size());
+        job.raw.assign(reinterpret_cast<const char*>(state.data()), state.size());
+        job.serialize_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now() - t0)
+                               .count();
+        std::string thumb = Autosave::ThumbPathFor(job.path);
+        writer.Submit(std::move(job));
+        if (!picture.empty()) {
+            writer.SubmitThumb(std::move(thumb), std::move(picture), width, height);
+        }
+        return true;
+    }
+
+    /// Reads a state file of this game into `state`.
+    LoadResult ReadState(const StateRequest& request, const std::string& path,
+                         std::vector<uint8_t>& state, LoadDone& done) {
+        writer.WaitIdle(); // a save to this file may still be on its way
+        const auto info = Core::GetSaveStateInfoAt(path, rom_info.title_id);
+        done.time = info.time;
+        std::ifstream in(path, std::ios::binary | std::ios::ate);
+        if (!in || (info.slot == 0 && request.time != 0 && info.time != request.time)) {
+            return LoadResult::Gone;
+        }
+        std::vector<u8> file(static_cast<std::size_t>(in.tellg()));
+        in.seekg(0);
+        if (!in.read(reinterpret_cast<char*>(file.data()),
+                     static_cast<std::streamsize>(file.size()))) {
+            return LoadResult::Failed;
+        }
+        switch (Core::CheckStateHeader(file, rom_info.title_id, Common::g_scm_rev,
+                                       request.anyway)) {
+        case Core::HeaderCheck::Ok:
+            break;
+        case Core::HeaderCheck::NotAState:
+            return LoadResult::Failed;
+        case Core::HeaderCheck::OtherGame:
+            return LoadResult::OtherGame;
+        case Core::HeaderCheck::OtherBuild:
+            done.version = Core::FrameVersionOf(info.build_name, info.build_version);
+            return LoadResult::OtherBuild;
+        }
+        try {
+            state = Common::Compression::DecompressDataZSTD(
+                std::span<const u8>{file}.subspan(kStateHeaderSize));
+        } catch (const std::exception& e) { // a damaged size
+            LOG_ERROR(Core, "AltCoreHost: {} not read: {}", path, e.what());
+            return LoadResult::Failed;
+        }
+        return state.empty() ? LoadResult::Failed : LoadResult::Ok;
+    }
+
+    /// Before a state from another build is loaded: the battery save, kept beside it.
+    bool BackUpSaveLocked() {
+        core->FlushBatterySave();
+        std::error_code ec;
+        const std::string save = SavePath();
+        if (!std::filesystem::exists(save, ec)) {
+            return true; // nothing to back up
+        }
+        std::filesystem::copy_file(save, save + ".before-load-anyway",
+                                   std::filesystem::copy_options::overwrite_existing, ec);
+        return !ec;
+    }
+
+    /// Loads `state`; on failure the game is as it was.
+    bool LoadLocked(const std::vector<uint8_t>& state, const UndoState& before) {
+        if (core->LoadStateFromMemory(state.data(), state.size())) {
+            return true;
+        }
+        // Part of it may have been read.
+        if (!core->LoadStateFromMemory(before.state.data(), before.state.size())) {
+            LOG_ERROR(Core, "AltCoreHost: the moment before the load could not be restored");
+        }
+        return false;
+    }
+
+    /// After a load: no sound of before it, and while paused one frame, so its picture shows.
+    void ShowLoadedLocked() {
+        audio.Flush();
+        if (headless || !paused.load(std::memory_order_acquire)) {
+            return;
+        }
+        double ms = 0.0;
+        ExecuteSingleFrameLocked(ms);
+        core->CloseMicrophone();
+        audio.Flush();
+        if (callbacks.on_rumble && last_rumble > 0.0f) {
+            callbacks.on_rumble(0.0f);
+            last_rumble = 0.0f;
+        }
+    }
+
+    bool MomentLocked(UndoState& before) {
+        before.time = UnixNow();
+        return core->SaveStateToMemory(before.state);
+    }
+
+    bool Finish(const LoadDone& done) {
+        const bool ok = done.result == LoadResult::Ok;
+        if (!ok) {
+            LOG_ERROR(Core, "AltCoreHost: not loaded (slot {}, result {}) {}", done.slot,
+                      static_cast<int>(done.result), done.path);
+        }
+        if (frontend.on_loaded) {
+            frontend.on_loaded(done);
+        }
+        return ok;
+    }
+
+    bool LoadState(const StateRequest& request) {
+        LoadDone done;
+        const bool autosave = request.kind == StateRequest::Kind::LoadAutosave;
+        done.what = autosave ? LoadDone::What::Autosave : LoadDone::What::Slot;
+        done.slot = request.slot;
+        done.path = request.path;
+        std::vector<uint8_t> state;
+        done.result =
+            ReadState(request, autosave ? request.path : SlotPath(request.slot), state, done);
+        if (done.result == LoadResult::Ok) {
+            done.result = LoadResult::Failed;
+            std::lock_guard lock(core_mutex);
+            UndoState before;
+            if (core && (!request.anyway || BackUpSaveLocked()) && MomentLocked(before) &&
+                LoadLocked(state, before)) {
+                done.result = LoadResult::Ok;
+                undo = std::move(before);
+                ShowLoadedLocked();
+            }
+        }
+        return Finish(done);
+    }
+
+    bool Undo() {
+        LoadDone done;
+        done.what = LoadDone::What::Undo;
+        {
+            std::lock_guard lock(core_mutex);
+            const UndoState to = std::exchange(undo, {}); // one use
+            UndoState before;
+            if (core && !to.state.empty() && MomentLocked(before)) {
+                done.time = to.time;
+                // The import's save goes out first: a GB or GBA state leaves the file alone.
+                bool ok = true;
+                if (to.imported) {
+                    last_frame = FrameOutput{}; // the core starts again
+                    core->FlushBatterySave();
+                    ok = core->ImportBatterySave(SavePath() + ".bak");
+                }
+                if (LoadLocked(ok ? to.state : before.state, before) && ok) {
+                    done.result = LoadResult::Ok;
+                }
+                ShowLoadedLocked();
+            }
+        }
+        return Finish(done);
+    }
+
+    bool Import(const std::string& path) {
+        LoadDone done;
+        done.what = LoadDone::What::Import;
+        done.path = path;
+        {
+            std::lock_guard lock(core_mutex);
+            UndoState before;
+            if (core) {
+                core->FlushBatterySave();
+                std::error_code ec;
+                before.imported = std::filesystem::exists(SavePath(), ec);
+            }
+            if (core && MomentLocked(before)) {
+                last_frame = FrameOutput{}; // the core starts again
+                if (core->ImportBatterySave(path)) {
+                    done.result = LoadResult::Ok;
+                    undo = std::move(before);
+                } else {
+                    // The core may have started again: back to where the game was.
+                    core->LoadStateFromMemory(before.state.data(), before.state.size());
+                }
+                ShowLoadedLocked();
+            }
+        }
+        return Finish(done);
     }
 
     Common::AltCore::InputState ReadInput() {
@@ -214,6 +556,7 @@ struct AltCoreHost::Impl {
         const auto t1 = std::chrono::steady_clock::now();
         frame_time_ms_out =
             std::chrono::duration<double, std::milli>(t1 - t0).count();
+        last_frame_ns.store(SteadyNowNs(), std::memory_order_relaxed);
     }
 
     void RunEmuThread() {
@@ -230,6 +573,7 @@ struct AltCoreHost::Impl {
         bool was_paused = false;
 
         while (!stop_requested.load(std::memory_order_acquire)) {
+            RunRequests(false);
             if (paused.load(std::memory_order_acquire)) {
                 if (redraw.exchange(false, std::memory_order_acq_rel) ||
                     (renderer && renderer->NeedsPresent())) {
@@ -324,6 +668,7 @@ struct AltCoreHost::Impl {
                 window_slow = 0;
             }
         }
+        RunRequests(true); // the quit's autosave
     }
 };
 
@@ -425,6 +770,19 @@ bool AltCoreHost::Boot(const std::string& rom_path, const std::string& data_dir,
         impl->callbacks.on_game_running(true);
     }
 
+    impl->last_frame_ns.store(0, std::memory_order_relaxed);
+    // A game's last state may still be written after it stopped: its own callback each.
+    impl->writer.SetOnDone(
+        [host = impl.get(), written = impl->frontend.on_written](const auto& done) {
+            host->write_ok.store(done.ok);
+            if (written) {
+                written(done);
+            }
+        });
+    if (!impl->writer.Busy()) { // what a write cut short left
+        Core::RemoveStaleStateTemps(impl->StatesDir(), impl->rom_info.title_id);
+    }
+
     impl->running.store(true, std::memory_order_release);
 
     if (!headless_for_test) {
@@ -446,7 +804,16 @@ void AltCoreHost::Stop() {
     impl->stop_requested.store(true, std::memory_order_release);
 
     if (impl->emu_thread.joinable()) {
-        impl->emu_thread.join();
+        impl->emu_thread.join(); // makes a state asked for before (the writer writes it on its own)
+    }
+    {
+        std::lock_guard lock(impl->request_mutex);
+        impl->requests.clear();
+        impl->requests_open.store(0, std::memory_order_release);
+    }
+    {
+        std::lock_guard lock(impl->core_mutex);
+        impl->undo = {};
     }
 
     if (was_running) {
@@ -531,6 +898,7 @@ void AltCoreHost::Reset() {
     std::lock_guard lock(impl->core_mutex);
     if (impl->core) {
         impl->last_frame = FrameOutput{}; // its pixels are the core's
+        impl->undo = {};
         impl->core->Reset();
         impl->audio.Flush();
     }
@@ -597,51 +965,71 @@ bool AltCoreHost::SaveSlot(int slot) {
     if (slot < 0 || slot > 10) {
         return false;
     }
-    std::lock_guard lock(impl->core_mutex);
-    if (!impl->core) {
-        return false;
-    }
-    return impl->core->SaveStateToFile(impl->SlotPath(slot));
+    StateRequest request;
+    request.kind = StateRequest::Kind::Save;
+    request.slot = slot;
+    return impl->Ask(std::move(request));
 }
 
-bool AltCoreHost::LoadSlot(int slot) {
+bool AltCoreHost::LoadSlot(int slot, bool anyway) {
     if (slot < 0 || slot > 10) {
         return false;
     }
-    std::lock_guard lock(impl->core_mutex);
-    if (!impl->core) {
-        return false;
-    }
-    const bool ok = impl->core->LoadStateFromFile(impl->SlotPath(slot));
-    if (ok) {
-        impl->audio.Flush();
-    }
-    return ok;
+    StateRequest request;
+    request.kind = StateRequest::Kind::Load;
+    request.slot = slot;
+    request.anyway = anyway;
+    return impl->Ask(std::move(request));
 }
 
-std::vector<SaveSlotInfo> AltCoreHost::ListSaveSlots() const {
-    std::vector<SaveSlotInfo> result;
-    std::error_code ec;
-    for (int slot = 0; slot <= 10; ++slot) {
-        const std::string path = impl->SlotPath(slot);
-        if (std::filesystem::is_regular_file(path, ec)) {
-            result.push_back(SaveSlotInfo{slot, FormatFileTime(path), path});
-        }
-    }
-    return result;
+bool AltCoreHost::MakeAutosave(Core::Autosave::Reason reason, uint32_t keep) {
+    StateRequest request;
+    request.kind = StateRequest::Kind::Autosave;
+    request.reason = reason;
+    request.keep = keep;
+    return impl->Ask(std::move(request));
+}
+
+bool AltCoreHost::LoadAutosave(const std::string& path, uint64_t time, bool anyway) {
+    StateRequest request;
+    request.kind = StateRequest::Kind::LoadAutosave;
+    request.path = path;
+    request.time = time;
+    request.anyway = anyway;
+    return impl->Ask(std::move(request));
+}
+
+bool AltCoreHost::UndoLoad() {
+    StateRequest request;
+    request.kind = StateRequest::Kind::Undo;
+    return impl->Ask(std::move(request));
 }
 
 bool AltCoreHost::ImportSave(const std::string& sav_path) {
-    std::lock_guard lock(impl->core_mutex);
-    if (!impl->core) {
-        return false;
-    }
-    impl->last_frame = FrameOutput{}; // the core may start again
-    const bool ok = impl->core->ImportBatterySave(sav_path);
-    if (ok) {
-        impl->audio.Flush();
-    }
-    return ok;
+    StateRequest request;
+    request.kind = StateRequest::Kind::Import;
+    request.path = sav_path;
+    return impl->Ask(std::move(request));
+}
+
+void AltCoreHost::PruneAutosaves(uint32_t keep) {
+    StateRequest request;
+    request.kind = StateRequest::Kind::Prune;
+    request.keep = keep;
+    impl->Ask(std::move(request));
+}
+
+bool AltCoreHost::StatesBusy() const {
+    return impl->requests_open.load(std::memory_order_acquire) > 0;
+}
+
+std::string AltCoreHost::StatesDir() const {
+    return impl->StatesDir();
+}
+
+bool AltCoreHost::FramesRecent() const {
+    const int64_t last = impl->last_frame_ns.load(std::memory_order_relaxed);
+    return last > 0 && SteadyNowNs() - last < 1'000'000'000;
 }
 
 const RomInfo& AltCoreHost::GetRomInfo() const {
@@ -746,6 +1134,7 @@ void AltCoreHost::SetConsoleMode(bool dsi) {
         return;
     }
     impl->last_frame = FrameOutput{}; // the core starts again
+    impl->undo = {};                  // a state of the other console
     impl->core->SetConsoleMode(dsi);
     impl->caps = impl->core->GetCapabilities();
     impl->audio.Flush();
