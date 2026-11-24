@@ -214,6 +214,9 @@ private:
     bool LoadROM(const QString& filename);
     void BootGame(const QString& filename);
     void ShutdownGame();
+    /// A DS, GBA or GB game runs: emulation_running is true, but there is no emu_thread and no 3DS
+    /// application in `system`.
+    bool AltGameRunning() const;
 #ifdef ENABLE_ALT_CORES
     bool BootAltGame(const QString& filename);
     void ShutdownAltGame();

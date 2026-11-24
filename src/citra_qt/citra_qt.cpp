@@ -3404,7 +3404,12 @@ void GMainWindow::ConnectMenuEvents() {
     // way, at 1x): a paused game runs for that one frame, as there.
     g_frame_report_problem = [this] {
         FrameCrashDialog::ProblemContext context;
-        if (emulation_running) {
+        if (AltGameRunning()) {
+#ifdef ENABLE_ALT_CORES
+            context.title_id = alt_core_host->GetRomInfo().title_id;
+#endif
+            context.title = game_title.toStdString();
+        } else if (emulation_running) {
             system.GetAppLoader().ReadProgramId(context.title_id);
             context.title = game_title.toStdString();
             context.screenshot = [this](std::function<void(QByteArray)> done) {
@@ -3692,6 +3697,14 @@ bool GMainWindow::LoadROM(const QString& filename) {
 #endif
 
     return true;
+}
+
+bool GMainWindow::AltGameRunning() const {
+#ifdef ENABLE_ALT_CORES
+    return alt_core_host && alt_core_host->IsRunning();
+#else
+    return false;
+#endif
 }
 
 #ifdef ENABLE_ALT_CORES
