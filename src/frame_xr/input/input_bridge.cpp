@@ -3,11 +3,14 @@
 // Refer to the license.txt file included.
 
 #include <algorithm>
+#include "common/alt_core_types.h"
 #include "common/settings.h"
+#include "frame_xr/frame_xr.h"
 #include "frame_xr/input/devices.h" // AzaharFrame pads
 #include "frame_xr/input/input_bridge.h"
 #include "frame_xr/kiu_probe.h" // AzaharFrame kiugyro
 #include "frame_xr/kiu_turn.h"  // AzaharFrame kiuturn
+#include "frame_xr/session.h"
 #include "input_common/frame_xr.h"
 #include "input_common/main.h"
 
@@ -182,6 +185,10 @@ const MapperOutput& InputBridge::Process(const InputFrame& frame, const PanelGeo
         }
     }
     InputCommon::FrameXr::GetPad().SetControls(last_.controls);
+    const bool alt_active = FrameXr::HasAltInputSink();
+    const Common::AltCore::Capabilities caps =
+        alt_active ? FrameXr::GetCoreCapabilities() : Common::AltCore::Capabilities::ForN3DS();
+    const AltMenuState alt_menu = alt_active ? FrameXr::GetAltMenuState() : AltMenuState{};
     for (int i = 0; i < result.event_count; ++i) {
         const TouchEvent& event = result.events[static_cast<std::size_t>(i)];
         switch (event.type) {
@@ -195,6 +202,106 @@ const MapperOutput& InputBridge::Process(const InputFrame& frame, const PanelGeo
             InputCommon::FrameXr::SendTouchReleased();
             break;
         }
+        if (alt_active) {
+            if (event.type == TouchEventType::Released) {
+                alt_touching_ = false;
+            } else if (caps.has_touch && alt_menu.ds_touch_enabled) {
+                float u = std::clamp(event.x / kBottomScreenWidthPx, 0.0f, 1.0f);
+                float v = std::clamp(event.y / kBottomScreenHeightPx, 0.0f, 1.0f);
+                // Beam touches already hit the rotated quad in its local UV frame; viewer-space
+                // touch sources (touchpad/mouse/reticle) rotate into the screen's native axes.
+                if (touchpad_.owner() != TouchSource::Beam) {
+                    if (caps.screens.rotation_deg == 90) {
+                        const float nu = v;
+                        const float nv = 1.0f - u;
+                        u = nu;
+                        v = nv;
+                    } else if (caps.screens.rotation_deg == 270) {
+                        const float nu = 1.0f - v;
+                        const float nv = u;
+                        u = nu;
+                        v = nv;
+                    }
+                }
+                const uint32_t tw = std::max<uint32_t>(1, caps.screens.touch_width);
+                const uint32_t th = std::max<uint32_t>(1, caps.screens.touch_height);
+                alt_touch_x_ = static_cast<uint16_t>(
+                    std::clamp<int>(static_cast<int>(u * static_cast<float>(tw)), 0,
+                                    static_cast<int>(tw - 1)));
+                alt_touch_y_ = static_cast<uint16_t>(
+                    std::clamp<int>(static_cast<int>(v * static_cast<float>(th)), 0,
+                                    static_cast<int>(th - 1)));
+                alt_touching_ = true;
+            } else {
+                alt_touching_ = false;
+            }
+        }
+    }
+    if (alt_active) {
+        using namespace Common::AltCore;
+        InputState state{};
+        const auto& c = last_.controls;
+        if (c.Get(Control::A)) {
+            state.buttons |= BtnA;
+        }
+        if (c.Get(Control::B)) {
+            state.buttons |= BtnB;
+        }
+        if (c.Get(Control::X)) {
+            state.buttons |= BtnX;
+        }
+        if (c.Get(Control::Y)) {
+            state.buttons |= BtnY;
+        }
+        if (c.Get(Control::BumperL)) {
+            state.buttons |= BtnL;
+        }
+        if (c.Get(Control::BumperR)) {
+            state.buttons |= BtnR;
+        }
+        if (c.Get(Control::Menu)) {
+            state.buttons |= BtnStart;
+        }
+        if (c.Get(Control::View)) {
+            state.buttons |= BtnSelect;
+        }
+        if (c.Get(Control::DpadUp)) {
+            state.buttons |= BtnUp;
+        }
+        if (c.Get(Control::DpadDown)) {
+            state.buttons |= BtnDown;
+        }
+        if (c.Get(Control::DpadLeft)) {
+            state.buttons |= BtnLeft;
+        }
+        if (c.Get(Control::DpadRight)) {
+            state.buttons |= BtnRight;
+        }
+        // Left stick -> D-pad fallback for retro cores.
+        constexpr float kStickDpadThreshold = 0.35f;
+        const Vec2f stick = c.GetStick(AnalogControl::StickL);
+        if (stick.x > kStickDpadThreshold) {
+            state.buttons |= BtnRight;
+        } else if (stick.x < -kStickDpadThreshold) {
+            state.buttons |= BtnLeft;
+        }
+        if (stick.y > kStickDpadThreshold) {
+            state.buttons |= BtnUp;
+        } else if (stick.y < -kStickDpadThreshold) {
+            state.buttons |= BtnDown;
+        }
+        if (caps.has_rewind && c.Get(Control::TriggerL)) {
+            state.buttons |= BtnRewind;
+        }
+        if (caps.has_mic_blow && (c.Get(Control::TriggerL) || alt_menu.ds_mic_active)) {
+            state.buttons |= BtnMic;
+        }
+        if (caps.has_touch && alt_menu.ds_touch_enabled && alt_touching_) {
+            state.touching = true;
+            state.touch_x = alt_touch_x_;
+            state.touch_y = alt_touch_y_;
+        }
+        FrameXr::DeliverAltInput(state);
     }
     return last_;
 }
@@ -205,6 +312,12 @@ void InputBridge::Release() {
     pc_out_ = {};
     if (touchpad_.Reset() || mapper_touching) { // AzaharFrame touchpad
         InputCommon::FrameXr::SendTouchReleased();
+    }
+    alt_touching_ = false;
+    alt_touch_x_ = 0;
+    alt_touch_y_ = 0;
+    if (FrameXr::HasAltInputSink()) {
+        FrameXr::DeliverAltInput(Common::AltCore::InputState{});
     }
     touchpad_cursor_ = {};
     edge_stick_ = {}; // AzaharFrame kiu

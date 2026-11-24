@@ -305,6 +305,16 @@ enum class Id : int {
     /// AzaharFrame kiu132: a group's title in the Angel's Aim segment's settings (no action;
     /// index: AngelsAimGroupKind)
     AngelsAimGroup,
+    // Non-3DS core rows (GBA / GB / DS / DSi)
+    CoreHeader,
+    GbaSolarLevel,
+    GbaRewind,
+    DsConsoleMode,
+    DsTouchEnabled,
+    DsMicBlow,
+    DsLidToggle,
+    DsScreenRotation,
+    ImportSave,
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -529,6 +539,37 @@ struct MenuModel {
     /// AzaharFrame useglobal: per-game rows the running game has its own value for (the scope
     /// control's Per-Game count and Use Global Values for All; AzaharFrame reticle).
     std::array<bool, kIdCount> game_value{};
+    /// Active core capabilities (defaults to 3DS so default-constructed MenuModel stays identical).
+    struct CoreMenuCaps {
+        bool is_3ds = true;
+        bool has_stereo_3d = true;
+        bool has_immersive_modes = true;
+        bool has_touch = true;
+        bool has_gyro = true;
+        bool has_mods = true;
+        bool has_texture_packs = true;
+        bool has_3ds_cheats = true;
+        bool has_alt_cheats = false;
+        bool has_flat_mode = true;
+        bool has_bfi = true;
+        bool has_dynamic_resolution = true;
+        bool has_render_margin = true;
+        bool has_solar_sensor = false;
+        bool has_mic_blow = false;
+        bool has_lid_close = false;
+        bool has_dsi_mode = false;
+        bool has_screen_rotation = false;
+        bool has_rewind = false;
+        bool has_save_import = false;
+        bool has_bottom = true;
+        bool operator==(const CoreMenuCaps&) const = default;
+    } core;
+    int gba_solar_level = 0;      ///< 0..10
+    int ds_console_mode = 0;      ///< 0 DS, 1 DSi
+    bool ds_touch_enabled = true; ///< DS touch input switch
+    int ds_screen_rotation = 0;   ///< 0 = 0°, 1 = 90°, 2 = 270°
+    bool ds_lid_closed = false;   ///< DS lid closed toggle
+    bool ds_mic_active = false;   ///< DS microphone blow toggle
     bool operator==(const MenuModel&) const = default;
 };
 
@@ -738,7 +779,7 @@ public:
     }
 
 private:
-    void DrawRail(Kit& kit, const MenuView& view);
+    void DrawRail(Kit& kit, const MenuModel& model, const MenuView& view);
     void DrawMain(Kit& kit, const MenuModel& model, const MenuView& view, const Rect& pane);
     void DrawSlots(Kit& kit, const MenuModel& model, const MenuView& view, const Rect& pane);
     /// AzaharFrame autosave: Load State's Autosave card, and its list when open.

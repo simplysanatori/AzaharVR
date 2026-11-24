@@ -26,6 +26,18 @@ notice "Copyright Citra Emulator Project / Azahar Emulator Project, licensed
 under GPLv3 or any later version". The GPLv2 text is kept in the repository
 in [misc/licenses/gplv2.txt](misc/licenses/gplv2.txt).
 
+## melonDS
+
+Nintendo DS and DSi emulation is provided by melonDS (https://github.com/melonDS-emu/melonDS) by the melonDS team, licensed under the GNU General Public License, version 3 or any later version. Full licence text: [steam-frame/portable/licenses/melonDS-LICENSE.txt](steam-frame/portable/licenses/melonDS-LICENSE.txt).
+
+## gba-ds
+
+Game Boy Advance core modules and second-screen map capture are provided by gba-ds (https://github.com/kyannon/gba-ds) by kyannon, licensed under the GNU General Public License, version 3 only. Because gba-ds is GPL-3.0-only, combined builds including it are distributed under the GNU General Public License, version 3 only. Full licence text: [steam-frame/portable/licenses/gba-ds-LICENSE.txt](steam-frame/portable/licenses/gba-ds-LICENSE.txt).
+
+## mGBA
+
+Game Boy Advance, Game Boy, and Game Boy Color emulation is powered by libmgba from mGBA (https://github.com/mgba-emu/mgba) by endrift and contributors, licensed under the Mozilla Public License, version 2.0. Full licence text: [steam-frame/portable/licenses/mGBA-LICENSE.txt](steam-frame/portable/licenses/mGBA-LICENSE.txt).
+
 ## 3ds-game-fixes
 
 The Cheats window's "Download Cheats" button (and the Cheats list of the VR menu's Mods tab) first fetches the Developer cheats and code patches for a game from https://github.com/simplysanatori/3ds-game-fixes, the maintainer's own repository, released under the MIT licence (its LICENSE file). Nothing from it is shipped: the files for the open game are downloaded only when the button is clicked or a fix is installed.

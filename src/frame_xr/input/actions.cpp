@@ -438,6 +438,18 @@ bool Actions::Pulse(XrSession session, int hand, int64_t duration_ns, float ampl
     return XR_SUCCEEDED(result);
 }
 
+bool Actions::StopHaptic(XrSession session, int hand) {
+    if (impl_ == nullptr || impl_->haptic == XR_NULL_HANDLE || !impl_->haptic_bound ||
+        session == XR_NULL_HANDLE || hand < 0 || hand >= kNumHands) {
+        return false;
+    }
+    XrHapticActionInfo info{XR_TYPE_HAPTIC_ACTION_INFO};
+    info.action = impl_->haptic;
+    info.subactionPath = impl_->hand_path[static_cast<std::size_t>(hand)];
+    const XrResult result = xrStopHapticFeedback(session, &info);
+    return XR_SUCCEEDED(result);
+}
+
 bool Actions::CreateSpaces(XrSession session) {
     if (impl_ == nullptr) {
         return false;

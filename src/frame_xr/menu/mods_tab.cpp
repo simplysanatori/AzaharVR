@@ -30,6 +30,12 @@ ModsSegment ShownSegment(const ModsTabModel& m, ModsSegment chosen) {
 }
 
 void TabMenu::DrawMods(Kit& kit, const MenuModel& model, const MenuView& view, const Rect& pane) {
+    if (!model.core.is_3ds) {
+        if (model.core.has_alt_cheats) {
+            DrawCheats(kit, model, view, pane);
+        }
+        return;
+    }
     constexpr float kPad = 24.0f, kSegH = 48.0f, kGap = 12.0f;
     const Rect c{pane.x0 + kPad, pane.y0 + kPad, pane.x1 - kPad, pane.y1 - kPad};
     // AzaharFrame ctgp7: CTGP-7 as a fourth segment while Mario Kart 7 is open. AzaharFrame

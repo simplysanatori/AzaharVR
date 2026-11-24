@@ -69,6 +69,9 @@ public:
     /// The frequency is the runtime's. False when the runtime has no haptics bound.
     bool Pulse(XrSession session, int hand, int64_t duration_ns, float amplitude);
 
+    /// Stops any active haptic feedback on one controller (0 left, 1 right).
+    bool StopHaptic(XrSession session, int hand);
+
 private:
     struct Impl;
     Impl* impl_ = nullptr;

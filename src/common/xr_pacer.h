@@ -426,9 +426,14 @@ constexpr Off DecideLock(const LockInputs& in) {
 }
 
 /// The speed the lock runs the game at: one picture per two display periods (x1.00282 at
-/// 120 Hz: 60.000 pictures a second).
+/// 120 Hz for 3DS: 60.000 pictures a second). `frame_us` <= 0 falls back to `kEmuFrameUs`.
+inline double LockSpeed(int64_t period_ns, double frame_us) {
+    const double base_us = frame_us > 0.0 ? frame_us : kEmuFrameUs;
+    return period_ns > 0 ? base_us / (2.0 * static_cast<double>(period_ns) / 1000.0) : 1.0;
+}
+
 inline double LockSpeed(int64_t period_ns) {
-    return period_ns > 0 ? kEmuFrameUs / (2.0 * static_cast<double>(period_ns) / 1000.0) : 1.0;
+    return LockSpeed(period_ns, kEmuFrameUs);
 }
 
 /// With the gate the lock aims just after the window opens (0.1 P in, 0.4 P early of the middle):
@@ -485,6 +490,8 @@ private:
 struct Shared {
     // Emulation thread (video_core/gpu.cpp): the game's top screen swaps so far (pacing2).
     std::atomic<uint64_t> game_swaps{0};
+    // Active core's native frame period in microseconds (defaults to 3DS kEmuFrameUs).
+    std::atomic<double> emu_frame_us{kEmuFrameUs};
     // XR side.
     std::atomic<bool> lock_switch{true};  ///< AZAHARFRAME_XR_PACE_LOCK (not 0)
     std::atomic<bool> file_off{false};    ///< user/xr_pace_off exists
@@ -548,7 +555,7 @@ public:
             last_seq = s.phase_seq.load(std::memory_order_relaxed); // a fresh start when back on
             return step;
         }
-        step.speed = LockSpeed(in.period_ns);
+        step.speed = LockSpeed(in.period_ns, s.emu_frame_us.load(std::memory_order_relaxed));
         const uint32_t seq = s.phase_seq.load(std::memory_order_acquire);
         const double period_us = static_cast<double>(in.period_ns) / 1000.0;
         if (seq != last_seq) {

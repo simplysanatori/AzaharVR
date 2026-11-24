@@ -87,6 +87,9 @@ const std::vector<std::string>& SupportedExtensions() {
     // Keep in sync with GameList::supported_file_extensions (citra_qt/game_list.cpp).
     static const std::vector<std::string> extensions = {
         "3dsx", "elf", "axf", "cci", "cxi", "app", "z3dsx", "zcci", "zcxi", "bcci", "3ds",
+#ifdef ENABLE_ALT_CORES
+        "nds", "dsi", "gba", "gb", "gbc",
+#endif
     };
     return extensions;
 }

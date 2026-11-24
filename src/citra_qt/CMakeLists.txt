@@ -448,6 +448,10 @@ if (ENABLE_DISCORD_RPC)
     target_compile_definitions(citra_qt PRIVATE -DENABLE_DISCORD_RPC)
 endif()
 
+if (ENABLE_FRAME_XR OR ENABLE_ALT_CORES)
+    target_link_libraries(citra_qt PRIVATE frame_cores)
+endif()
+
 if (ENABLE_WEB_SERVICE)
     target_link_libraries(citra_qt PRIVATE web_service)
 endif()

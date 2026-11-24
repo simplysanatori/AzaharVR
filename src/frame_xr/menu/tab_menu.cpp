@@ -263,15 +263,28 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
     };
     std::vector<Row> rows;
     if (tab == Tab::Position) {
-        rows.push_back(row(Id::HideBottomScreen, RowKind::Switch, 0, m.hide_bottom_screen));
-        rows.push_back(row(Id::ScreenLayout, RowKind::Segmented, m.screen_layout));
-        rows.push_back(row(Id::MoveScreens, RowKind::Segmented, m.move_screens)); // AzaharFrame menu
-        rows.push_back(row(Id::ScreenShape, RowKind::MenuButton, m.screen_shape));
-        rows.push_back(row(Id::ScreenCurve, RowKind::MenuButton, m.screen_curve));
-        Row offset = row(Id::ImmersiveOffset, RowKind::Offset);
-        offset.value = m.immersive_offset;
-        offset.on = m.immersive_offset_set;
-        rows.push_back(offset);
+        if (m.core.is_3ds) {
+            rows.push_back(row(Id::HideBottomScreen, RowKind::Switch, 0, m.hide_bottom_screen));
+            rows.push_back(row(Id::ScreenLayout, RowKind::Segmented, m.screen_layout));
+            rows.push_back(row(Id::MoveScreens, RowKind::Segmented, m.move_screens)); // AzaharFrame menu
+            rows.push_back(row(Id::ScreenShape, RowKind::MenuButton, m.screen_shape));
+            rows.push_back(row(Id::ScreenCurve, RowKind::MenuButton, m.screen_curve));
+            Row offset = row(Id::ImmersiveOffset, RowKind::Offset);
+            offset.value = m.immersive_offset;
+            offset.on = m.immersive_offset_set;
+            rows.push_back(offset);
+        } else {
+            if (m.core.has_bottom) {
+                rows.push_back(row(Id::HideBottomScreen, RowKind::Switch, 0, m.hide_bottom_screen));
+                rows.push_back(row(Id::ScreenLayout, RowKind::Segmented, m.screen_layout));
+                rows.push_back(row(Id::MoveScreens, RowKind::Segmented, m.move_screens));
+            }
+            rows.push_back(row(Id::ScreenCurve, RowKind::MenuButton, m.screen_curve));
+            if (m.core.has_screen_rotation) {
+                rows.push_back(row(Id::DsScreenRotation, RowKind::Segmented,
+                                   std::clamp(m.ds_screen_rotation, 0, 2)));
+            }
+        }
     } else if (tab == Tab::Settings) {
         // Render Margin and on: the Full (6DoF) modes only.
         const auto full = [&](Row r) {
@@ -283,10 +296,51 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
         // AzaharFrame autosave: in three sections (owner decision, round 2). General: the
         // settings that are the same in every game, and the list's end.
         if (section == SettingsSection::General) {
+            if (!m.core.is_3ds) {
+                const bool has_core_rows = m.core.has_solar_sensor || m.core.has_rewind ||
+                                           m.core.has_dsi_mode || m.core.has_touch ||
+                                           m.core.has_mic_blow || m.core.has_lid_close ||
+                                           m.core.has_save_import;
+                if (has_core_rows) {
+                    rows.push_back(row(Id::CoreHeader, RowKind::Header));
+                    if (m.core.has_solar_sensor) {
+                        Row solar = row(Id::GbaSolarLevel, RowKind::Slider);
+                        const SliderRange sr = SliderFor(Id::GbaSolarLevel);
+                        const float sv =
+                            std::clamp(static_cast<float>(m.gba_solar_level), sr.min, sr.max);
+                        solar.t = (sv - sr.min) / (sr.max - sr.min);
+                        solar.stops = 10;
+                        solar.value = SliderText(Id::GbaSolarLevel, sv);
+                        rows.push_back(solar);
+                    }
+                    if (m.core.has_rewind) {
+                        rows.push_back(row(Id::GbaRewind, RowKind::Button));
+                    }
+                    if (m.core.has_dsi_mode) {
+                        rows.push_back(row(Id::DsConsoleMode, RowKind::Segmented,
+                                           std::clamp(m.ds_console_mode, 0, 1)));
+                    }
+                    if (m.core.has_touch) {
+                        rows.push_back(row(Id::DsTouchEnabled, RowKind::Switch, 0,
+                                           m.ds_touch_enabled));
+                    }
+                    if (m.core.has_mic_blow) {
+                        rows.push_back(row(Id::DsMicBlow, RowKind::Switch, 0, m.ds_mic_active));
+                    }
+                    if (m.core.has_lid_close) {
+                        rows.push_back(row(Id::DsLidToggle, RowKind::Switch, 0, m.ds_lid_closed));
+                    }
+                    if (m.core.has_save_import) {
+                        rows.push_back(row(Id::ImportSave, RowKind::Button));
+                    }
+                }
+            }
             rows.push_back(row(Id::Background, RowKind::Segmented, m.background));
             rows.push_back(row(Id::WindowScale, RowKind::Segmented, m.window_scale));
             rows.push_back(row(Id::FaceButtons, RowKind::Segmented, m.face_buttons));
-            rows.push_back(row(Id::MotionControls, RowKind::Segmented, m.motion_controls));
+            if (m.core.has_gyro) {
+                rows.push_back(row(Id::MotionControls, RowKind::Segmented, m.motion_controls));
+            }
             // AzaharFrame kiufix: Aiming and its rows are on the Controls tab now (DrawControls).
             rows.push_back(row(Id::ShowControllers, RowKind::Switch, 0, m.show_controllers));
             if (m.show_controllers) { // AzaharFrame ctrlfront
@@ -316,13 +370,56 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
             saves(Id::AutosaveEvery, static_cast<float>(every) / 4.0f, 4, every);
             saves(Id::AutosaveKeep, static_cast<float>(keep - 1) / 9.0f, 9, keep);
             rows.push_back(row(Id::MoreSettings, RowKind::Link));
-            rows.push_back(row(Id::SwitchToFlat, RowKind::Button)); // AzaharFrame menuux
+            if (m.core.has_flat_mode) {
+                rows.push_back(row(Id::SwitchToFlat, RowKind::Button)); // AzaharFrame menuux
+            }
             rows.push_back(row(Id::HelpHeader, RowKind::Header)); // AzaharFrame crashreport
             rows.push_back(row(Id::ReportProblem, RowKind::Link));
             rows.push_back(row(Id::AboutApp, RowKind::Link));
             return rows;
         }
         if (section == SettingsSection::Graphics) {
+            if (!m.core.is_3ds) {
+                if (m.core.has_stereo_3d) {
+                    Row depth = row(Id::Depth3d, RowKind::Slider);
+                    const SliderRange dr = SliderFor(Id::Depth3d);
+                    depth.t = (static_cast<float>(m.depth_3d) - dr.min) / (dr.max - dr.min);
+                    depth.value = SliderText(Id::Depth3d, static_cast<float>(m.depth_3d));
+                    rows.push_back(depth);
+                }
+                if (m.core.has_dsi_mode) {
+                    Row res =
+                        row(Id::InternalResolution, RowKind::MenuButton, m.internal_resolution - 1);
+                    if (m.internal_resolution < 1 || m.internal_resolution > kMaxResolution) {
+                        res.value = m.internal_resolution < 1
+                                        ? "Auto"
+                                        : std::to_string(m.internal_resolution) + "x";
+                        res.selected = -1;
+                    }
+                    rows.push_back(res);
+                }
+                if (m.core.has_dynamic_resolution) {
+                    Row dynamic = row(Id::DynamicResolution, RowKind::Switch, 0,
+                                      m.dynamic_resolution);
+                    if (dynamic.lock == Lock::None && m.internal_resolution == 1) {
+                        dynamic.lock = Lock::AtLowest;
+                    }
+                    rows.push_back(dynamic);
+                }
+                if (m.core.has_bfi) {
+                    Row bfi =
+                        row(Id::MotionClarityNormal, RowKind::Switch, 0, m.motion_clarity_normal);
+                    if (m.bfi_uneven_hz > 0) {
+                        bfi.value = Immersive::Names::NeedsRefreshNote(m.bfi_uneven_hz);
+                    }
+                    rows.push_back(bfi);
+                    if (m.motion_clarity_normal) {
+                        rows.push_back(row(Id::MatchBottomNormal, RowKind::Switch, 0,
+                                           m.match_bottom));
+                    }
+                }
+                return rows;
+            }
             // AzaharFrame depth3d
             Row depth = row(Id::Depth3d, RowKind::Slider);
             const SliderRange dr = SliderFor(Id::Depth3d);
@@ -972,6 +1069,14 @@ const std::vector<std::string>& OptionsFor(Id id) {
     case Id::MarginX: // AzaharFrame fovaxis
     case Id::MarginY:
         return kWider;
+    case Id::DsConsoleMode: {
+        static const std::vector<std::string> kDsConsole{"DS", "DSi"};
+        return kDsConsole;
+    }
+    case Id::DsScreenRotation: {
+        static const std::vector<std::string> kDsRot{"0°", "90°", "270°"};
+        return kDsRot;
+    }
     default:
         return kNone;
     }
@@ -1289,6 +1394,24 @@ std::string LabelFor(Id id) {
         return "Official Website";
     case Id::Ctgp7Uninstall:
         return "Uninstall";
+    case Id::CoreHeader:
+        return "Console";
+    case Id::GbaSolarLevel:
+        return "Solar Sensor Level";
+    case Id::GbaRewind:
+        return "Rewind";
+    case Id::DsConsoleMode:
+        return "Console Mode";
+    case Id::DsTouchEnabled:
+        return "Touch Screen Input";
+    case Id::DsMicBlow:
+        return "Microphone Blow";
+    case Id::DsLidToggle:
+        return "Close Lid";
+    case Id::DsScreenRotation:
+        return "Screen Rotation";
+    case Id::ImportSave:
+        return "Import Save";
     default:
         return {};
     }
@@ -1514,6 +1637,22 @@ std::string ExplainFor(Id id) {
         return "Minutes of play between autosaves.";
     case Id::AutosaveKeep:
         return "How many autosaves the game keeps. The oldest go.";
+    case Id::GbaSolarLevel:
+        return "Simulated sunlight level for games with a solar sensor.";
+    case Id::GbaRewind:
+        return "Step backwards through recent gameplay.";
+    case Id::DsConsoleMode:
+        return "Switch between DS and DSi hardware behaviour (applies on restart).";
+    case Id::DsTouchEnabled:
+        return "Allow pointing and touching the DS bottom screen.";
+    case Id::DsMicBlow:
+        return "Simulate blowing into the DS microphone.";
+    case Id::DsLidToggle:
+        return "Close or open the DS lid (puts supported games into sleep mode).";
+    case Id::DsScreenRotation:
+        return "Rotate the DS screens for Book Mode games.";
+    case Id::ImportSave:
+        return "Import an existing save file for this game.";
     default:
         return {};
     }
@@ -1626,6 +1765,9 @@ SliderRange SliderFor(Id id) {
     if (id == Id::KiuReticleSize) { // 30 to 150 %
         return {30.0f, 150.0f, 10.0f};
     }
+    if (id == Id::GbaSolarLevel) {
+        return {0.0f, 10.0f, 1.0f};
+    }
     return {};
 }
 
@@ -1674,7 +1816,7 @@ void TabMenu::Draw(Kit& kit, const MenuModel& model, const MenuView& view) {
     anchors.clear();
     const Rect panel{0, 0, kPanelW, kPanelH};
     kit.Fill(panel, kPanelRadius, Tok::kSurfaceContainer);
-    DrawRail(kit, view);
+    DrawRail(kit, model, view);
     const Rect pane{kRailW, kPaneMargin, kPanelW - kPaneMargin, kPanelH - kPaneMargin};
     kit.Fill(pane, kPaneRadius, Tok::kSurface);
     switch (view.tab) {
@@ -1712,16 +1854,43 @@ void TabMenu::Draw(Kit& kit, const MenuModel& model, const MenuView& view) {
     DrawTooltip(kit, view, pane);
 }
 
-void TabMenu::DrawRail(Kit& kit, const MenuView& view) {
-    const float total = kRailItemH * static_cast<float>(kTabs.size());
+void TabMenu::DrawRail(Kit& kit, const MenuModel& model, const MenuView& view) {
+    if (model.core.is_3ds) {
+        const float total = kRailItemH * static_cast<float>(kTabs.size());
+        float y = (kPanelH - total) * 0.5f;
+        const Rect all{0, 0, kPanelW, kPanelH};
+        for (int i = 0; i < static_cast<int>(kTabs.size()); i++) {
+            const Rect r{0.0f, y, kRailW, y + kRailItemH};
+            const Target t{Id::TabButton, i};
+            const bool active = static_cast<int>(view.tab) == i;
+            kit.RailItem(r, kTabs[static_cast<std::size_t>(i)].icon,
+                         kTabs[static_cast<std::size_t>(i)].label, active, StateOf(view, t));
+            AddHit(r, t, all);
+            y += kRailItemH;
+        }
+        return;
+    }
+    std::vector<int> shown_tabs;
+    for (int i = 0; i < static_cast<int>(kTabs.size()); i++) {
+        const Tab tab = static_cast<Tab>(i);
+        if (tab == Tab::Homebrew) {
+            continue;
+        }
+        if (tab == Tab::Mods && !model.core.has_alt_cheats) {
+            continue;
+        }
+        shown_tabs.push_back(i);
+    }
+    const float total = kRailItemH * static_cast<float>(shown_tabs.size());
     float y = (kPanelH - total) * 0.5f;
     const Rect all{0, 0, kPanelW, kPanelH};
-    for (int i = 0; i < static_cast<int>(kTabs.size()); i++) {
+    for (const int i : shown_tabs) {
         const Rect r{0.0f, y, kRailW, y + kRailItemH};
         const Target t{Id::TabButton, i};
         const bool active = static_cast<int>(view.tab) == i;
-        kit.RailItem(r, kTabs[static_cast<std::size_t>(i)].icon, kTabs[static_cast<std::size_t>(i)].label,
-                     active, StateOf(view, t));
+        const char* label =
+            static_cast<Tab>(i) == Tab::Mods ? "Cheats" : kTabs[static_cast<std::size_t>(i)].label;
+        kit.RailItem(r, kTabs[static_cast<std::size_t>(i)].icon, label, active, StateOf(view, t));
         AddHit(r, t, all);
         y += kRailItemH;
     }
@@ -1760,9 +1929,12 @@ void TabMenu::DrawMain(Kit& kit, const MenuModel& model, const MenuView& view, c
     }};
     const float gap = 12.0f;
     const Rect flat{c.x0, c.y1 - 56.0f, c.x1, c.y1};
+    const bool flat_ok = model.core.has_flat_mode;
     kit.Button(flat, ButtonStyle::Tonal, Sym::kTv, LabelFor(Id::SwitchToFlat),
-               StateOf(view, {Id::SwitchToFlat}), Type::Title);
-    AddHit(flat, {Id::SwitchToFlat}, pane);
+               StateOf(view, {Id::SwitchToFlat}, flat_ok), Type::Title);
+    if (flat_ok) {
+        AddHit(flat, {Id::SwitchToFlat}, pane);
+    }
     constexpr int kColumns = 4;
     const float tw = (c.W() - gap * (kColumns - 1)) / kColumns;
     const float th = (flat.y0 - gap - y - gap) / 2.0f;
@@ -2534,10 +2706,13 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
     const Rect list{pane.x0, seg.y1 + 8.0f, pane.x1, pane.y1 - 8.0f};
     constexpr float kChoiceH = kControlH + 8.0f;
     constexpr float kSupportH = 16.0f; ///< the Touchpad's supporting line and its gaps
-    // At Edge, Reticle Speed, Aim Only While Pressed and Right Stick Moves Touch only while the
-    // reticle is on.
-    const bool reticle_on = model.bottom_screen_reticle != 0;
-    const float rows_h = kChoiceH + kSupportH + kChoiceH + (reticle_on ? 3.0f * kChoiceH : 0.0f);
+    const bool show_touch_rows = model.core.is_3ds || model.core.has_touch;
+    const bool show_aim_rows = model.core.is_3ds || model.core.has_gyro;
+    const bool reticle_on = show_touch_rows && model.bottom_screen_reticle != 0;
+    const float rows_h =
+        show_touch_rows
+            ? (kChoiceH + kSupportH + kChoiceH + (reticle_on ? 3.0f * kChoiceH : 0.0f))
+            : 0.0f;
     // The picture keeps the height it has with the reticle off and nothing below (the page as it
     // was); the rest goes under it.
     const float picture_h = (c.y1 - (kChoiceH + kSupportH + kChoiceH)) - 4.0f - list.y0;
@@ -2549,10 +2724,11 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
     // Aim (stored 2).
     // AzaharFrame kiurows: the rows only Kid Icarus: Uprising has (KiuOnlyControlsRow) are added
     // only while it is the game (model.mods.angels_aim.shown).
-    const std::vector<Id> aim_rows = AimingRows(model); // AzaharFrame kiu132: shared
+    const std::vector<Id> aim_rows = show_aim_rows ? AimingRows(model) : std::vector<Id>{}; // AzaharFrame kiu132: shared
     constexpr float kDividerH = 24.0f;
-    const float content_h = picture_h + 4.0f + rows_h + kDividerH +
-                            kChoiceH * static_cast<float>(aim_rows.size()) + 8.0f;
+    const float aim_block_h =
+        show_aim_rows ? (kDividerH + kChoiceH * static_cast<float>(aim_rows.size())) : 0.0f;
+    const float content_h = picture_h + 4.0f + rows_h + aim_block_h + 8.0f;
     const float max_scroll = std::max(0.0f, std::ceil(content_h - list.H()));
     layout.max_scroll = max_scroll;
     layout.scroll_step = kChoiceH;
@@ -2674,29 +2850,33 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
     if (diagram) {
         diagram(kit, area, model.controls_page);
     }
-    const Rect tp_row = choice_row(Id::TouchpadTouch, rows_y0, model.touchpad_touch);
-    const float support_y = tp_row.y1 + 6.0f;
-    const bool tp_enabled = model.locked[static_cast<std::size_t>(Id::TouchpadTouch)] == Lock::None;
-    kit.TextMid(c.x0, support_y, Type::Tooltip, Tok::kOnSurfaceVariant,
-                kit.Fit(Type::Tooltip, TouchpadSupporting(model.touchpad_touch), c.W()), 0,
-                tp_enabled ? 1.0f : kDisabledContent);
-    const Rect reticle_row =
-        choice_row(Id::BottomScreenReticle, support_y + 10.0f, model.bottom_screen_reticle);
-    if (reticle_on) {
-        const Rect speed_row = slider_row(Id::ReticleSpeed, reticle_row.y1, model.reticle_speed);
-        const float mid = (c.x0 + c.x1) * 0.5f;
-        const Rect edge_row = choice_row(Id::ReticleAtEdge, speed_row.y1, model.reticle_at_edge);
-        const Rect pair{c.x0 - 12.0f, edge_row.y1, c.x1 + 12.0f, edge_row.y1 + kChoiceH};
-        switch_half(Id::ReticleCenter, {pair.x0, pair.y0, mid - 12.0f, pair.y1},
-                    model.reticle_center);
-        switch_half(Id::ReticleStick, {mid + 12.0f, pair.y0, pair.x1, pair.y1},
-                    model.reticle_stick);
+    if (show_touch_rows) {
+        const Rect tp_row = choice_row(Id::TouchpadTouch, rows_y0, model.touchpad_touch);
+        const float support_y = tp_row.y1 + 6.0f;
+        const bool tp_enabled =
+            model.locked[static_cast<std::size_t>(Id::TouchpadTouch)] == Lock::None;
+        kit.TextMid(c.x0, support_y, Type::Tooltip, Tok::kOnSurfaceVariant,
+                    kit.Fit(Type::Tooltip, TouchpadSupporting(model.touchpad_touch), c.W()), 0,
+                    tp_enabled ? 1.0f : kDisabledContent);
+        const Rect reticle_row =
+            choice_row(Id::BottomScreenReticle, support_y + 10.0f, model.bottom_screen_reticle);
+        if (reticle_on) {
+            const Rect speed_row = slider_row(Id::ReticleSpeed, reticle_row.y1, model.reticle_speed);
+            const float mid = (c.x0 + c.x1) * 0.5f;
+            const Rect edge_row = choice_row(Id::ReticleAtEdge, speed_row.y1, model.reticle_at_edge);
+            const Rect pair{c.x0 - 12.0f, edge_row.y1, c.x1 + 12.0f, edge_row.y1 + kChoiceH};
+            switch_half(Id::ReticleCenter, {pair.x0, pair.y0, mid - 12.0f, pair.y1},
+                        model.reticle_center);
+            switch_half(Id::ReticleStick, {mid + 12.0f, pair.y0, pair.x1, pair.y1},
+                        model.reticle_stick);
+        }
     }
 
     // ---- AzaharFrame kiufix: Aiming (moved from Settings, General) ----
-    float y = rows_y0 + rows_h + 8.0f;
-    kit.Line(c.x0, y, c.x1, y, 1.0f, Tok::kOutlineVariant);
-    y += kDividerH - 8.0f;
+    if (show_aim_rows) {
+        float y = rows_y0 + rows_h + 8.0f;
+        kit.Line(c.x0, y, c.x1, y, 1.0f, Tok::kOutlineVariant);
+        y += kDividerH - 8.0f;
     const auto switch_row = [&](Id id, bool on) {
         switch_half(id, {c.x0 - 12.0f, y, c.x1 + 12.0f, y + kChoiceH}, on);
     };
@@ -2806,6 +2986,7 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
         }
         y += kChoiceH;
     }
+    }
     kit.ClearClip();
     DrawScrollbar(kit, view, list, pane.x1, content_h, max_scroll, scroll); // AzaharFrame scroll
     DrawScopeMenu(kit, model, view, pane);
@@ -2906,15 +3087,21 @@ void TabMenu::DrawRows(Kit& kit, const MenuModel& model, const MenuView& view, c
             const float bw = (room - 12.0f - 10.0f) * 0.5f; // filled: a wider gap to the toggle
             const Rect a{c.x0, top, c.x0 + bw, top + kControlH};
             const Rect b{a.x1 + 12.0f, top, a.x1 + 12.0f + bw, top + kControlH};
+            const bool can_swap = model.core.is_3ds || model.core.has_bottom;
             kit.Button(a, ButtonStyle::Tonal, Sym::kRecenter, LabelFor(Id::ResetPosition),
                        StateOf(view, {Id::ResetPosition}));
             kit.Button(b, ButtonStyle::Tonal, Sym::kSwapVert, LabelFor(Id::SwapScreens),
-                       StateOf(view, {Id::SwapScreens}));
+                       StateOf(view, {Id::SwapScreens}, can_swap));
             AddHit(a, {Id::ResetPosition}, pane);
-            AddHit(b, {Id::SwapScreens}, pane);
+            if (can_swap) {
+                AddHit(b, {Id::SwapScreens}, pane);
+            }
         } else {
             // AzaharFrame autosave: the section (General, Graphics, Immersive).
-            const auto& sections = OptionsFor(Id::SettingsSection);
+            static const std::vector<std::string> kSectionsNoImmersive{"General", "Graphics"};
+            const auto& sections = model.core.has_immersive_modes
+                                       ? OptionsFor(Id::SettingsSection)
+                                       : kSectionsNoImmersive;
             const Rect seg{c.x0, top, c.x0 + kit.SegmentedWidth(sections, room),
                            top + kControlH};
             const int hover = view.hover.id == Id::SettingsSection ? view.hover.index : -1;

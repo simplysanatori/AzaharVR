@@ -198,6 +198,9 @@ endif()
 if(ENABLE_FRAME_XR) # AzaharFrame
     add_compile_definitions(ENABLE_FRAME_XR)
 endif()
+if(ENABLE_FRAME_XR OR ENABLE_ALT_CORES)
+    add_compile_definitions(ENABLE_ALT_CORES)
+endif()
 
 add_subdirectory(common)
 add_subdirectory(core)
@@ -205,6 +208,10 @@ add_subdirectory(video_core)
 add_subdirectory(audio_core)
 add_subdirectory(network)
 add_subdirectory(input_common)
+
+if (ENABLE_FRAME_XR OR ENABLE_ALT_CORES)
+    add_subdirectory(frame_cores)
+endif()
 
 if (ENABLE_TESTS)
     add_subdirectory(tests)

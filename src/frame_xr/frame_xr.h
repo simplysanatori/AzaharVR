@@ -23,6 +23,7 @@
 #include <string>
 #include <vector>
 
+#include "common/alt_core_types.h"
 #include "common/common_types.h"
 #include "frame_xr/image_lag.h" // AzaharFrame imglag: ShownPicture
 #include "frame_xr/input/input_frame.h"
@@ -289,6 +290,11 @@ enum class MenuCommand {
     Ctgp7Dialog,  ///< the segment's question: `value` 1 its confirm, 0 cancel, 2 its third
                   ///< button; `text` "checked" when its checkbox is ticked
     Ctgp7Uninstall, ///< asks "Uninstall CTGP-7?" (answered with Ctgp7Dialog)
+    // Non-3DS cores (GBA / GB / DS / DSi)
+    DsMicBlow,   ///< toggle/trigger DS microphone blow noise (`value`: 1 on, 0 off)
+    DsLidToggle, ///< toggle DS lid closed (`value`: 1 closed, 0 open)
+    ImportSave,  ///< open file picker to import a .sav / .dsv save file
+    GbaRewind,   ///< trigger GBA rewind
 };
 enum class MenuSetting {
     HideBottomScreen,
@@ -404,6 +410,11 @@ enum class MenuSetting {
     /// AzaharFrame bfidr: what Black Frame Insertion turned on (bfi_helpers.h): `value` bit 0
     /// vr_bfi_set_dynamic_resolution, bit 1 vr_bfi_set_panel
     BfiHelperMarks,
+    // Non-3DS cores (GBA / GB / DS / DSi)
+    GbaSolarLevel,    ///< `value`: 0 to 10 (solar sensor level)
+    DsConsoleMode,    ///< `value`: 0 DS, 1 DSi
+    DsTouchEnabled,   ///< `value`: 0 Off, 1 On
+    DsScreenRotation, ///< `value`: 0 (0°), 1 (90°), 2 (270°)
 };
 struct MenuRequest {
     MenuCommand command = MenuCommand::Continue;
@@ -643,5 +654,34 @@ XrInstance Instance();
 XrSystemId System();
 XrSession Session();
 XrSwapchain ScreenSwapchain(VideoCore::XrScreen screen);
+
+// ---- Non-3DS core seams (GBA, GB/GBC, DS/DSi) ----------------------------------
+
+/// Sets the active core's capabilities (3DS by default). Any thread.
+void SetCoreCapabilities(const Common::AltCore::Capabilities& caps);
+Common::AltCore::Capabilities GetCoreCapabilities();
+
+/// Updates dynamic screen metrics (e.g. GBA secondary map aspect/visibility, DS Book Mode
+/// rotation) without replacing the rest of the core's capabilities. Any thread.
+void UpdateCoreScreenMetrics(const Common::AltCore::ScreenMetrics& metrics);
+
+/// Installs (or clears with nullptr) the neutral input sink for a running non-3DS core. Any thread.
+void SetAltInputSink(Common::AltCore::InputSink sink);
+
+/// Sets continuous controller rumble strength in [0.0, 1.0] (0 stops). Applied on the XR thread
+/// and automatically stopped when the menu opens or the game stops. Any thread.
+void SetRumble(float strength);
+
+/// Current menu state for non-3DS core controls (displayed in the VR menu and updated when changed).
+struct AltMenuState {
+    int gba_solar_level = 0;      ///< 0 to 10
+    int ds_console_mode = 0;      ///< 0 DS, 1 DSi
+    bool ds_touch_enabled = true; ///< DS touch input enabled
+    int ds_screen_rotation = 0;   ///< 0 = 0°, 1 = 90°, 2 = 270°
+    bool ds_lid_closed = false;   ///< DS lid closed
+    bool ds_mic_active = false;   ///< DS microphone blow active
+};
+void SetAltMenuState(const AltMenuState& state);
+AltMenuState GetAltMenuState();
 
 } // namespace FrameXr

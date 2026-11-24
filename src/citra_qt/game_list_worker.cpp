@@ -22,6 +22,9 @@
 #include "core/hle/service/am/am.h"
 #include "core/hle/service/fs/archive.h"
 #include "core/loader/loader.h"
+#ifdef ENABLE_ALT_CORES
+#include "frame_cores/rom_info.h"
+#endif
 
 namespace {
 bool HasSupportedFileExtension(const std::string& file_name) {
@@ -52,6 +55,44 @@ void GameListWorker::AddFstEntriesToGameList(const std::string& dir_path, unsign
         const std::string physical_name = directory + DIR_SEP + virtual_name;
         const bool is_dir = FileUtil::IsDirectory(physical_name);
         if (!is_dir && HasSupportedFileExtension(physical_name)) {
+#ifdef ENABLE_ALT_CORES
+            const Common::AltCore::CoreKind alt_kind = FrameCores::DetectCoreKind(physical_name);
+            if (alt_kind != Common::AltCore::CoreKind::N3DS) {
+                const auto info = FrameCores::ProbeRom(physical_name);
+                if (!info) {
+                    return true;
+                }
+                const char* type_label = "NDS";
+                switch (info->kind) {
+                case Common::AltCore::CoreKind::DSi:
+                    type_label = "DSi";
+                    break;
+                case Common::AltCore::CoreKind::GBA:
+                    type_label = "GBA";
+                    break;
+                case Common::AltCore::CoreKind::GB:
+                    type_label = "GB/GBC";
+                    break;
+                default:
+                    type_label = "NDS";
+                    break;
+                }
+                emit EntryReady(
+                    {
+                        new GameListItemPath(QString::fromStdString(physical_name),
+                                             QString::fromStdString(info->title), info->icon_rgba,
+                                             info->icon_w, info->icon_h, info->title_id,
+                                             media_type),
+                        new GameListItemCompat(QStringLiteral("99")),
+                        new GameListItem(QString::fromLatin1(type_label)),
+                        new GameListItem(QString::fromLatin1(type_label)),
+                        new GameListItemSize(FileUtil::GetSize(physical_name)),
+                        new GameListItemPlayTime(play_time_manager.GetPlayTime(info->title_id)),
+                    },
+                    parent_dir);
+                return true;
+            }
+#endif
             std::unique_ptr<Loader::AppLoader> loader = Loader::GetLoader(physical_name);
             if (!loader) {
                 return true;

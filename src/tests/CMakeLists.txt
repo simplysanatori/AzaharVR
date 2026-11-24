@@ -186,6 +186,10 @@ if (BSD STREQUAL "NetBSD")
 endif()
 
 target_link_libraries(tests PRIVATE citra_common citra_core video_core audio_core)
+if (TARGET frame_cores)
+    target_sources(tests PRIVATE frame_cores/alt_cores_tests.cpp)
+    target_link_libraries(tests PRIVATE frame_cores)
+endif()
 target_link_libraries(tests PRIVATE input_common) # AzaharFrame
 target_link_libraries(tests PRIVATE httplib) # AzaharFrame crashreport: Send Report to 127.0.0.1
 target_link_libraries(tests PRIVATE json-headers) # AzaharFrame jsoncrash: pack_config.h; emfallback: the recipe parser header

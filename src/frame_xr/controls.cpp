@@ -373,6 +373,8 @@ void VrUi::DestroyXr() {
     uploader.Shutdown();
     actions.Destroy();
     actions_ok = false;
+    rumble_active = false;
+    rumble_last_ns = 0;
     picker_shown = false;
     chord_down = false;
     SwallowHeld(); // flat starts with the chord still held
@@ -1369,8 +1371,9 @@ void VrUi::AddCursor(const XrPosef& pose, float size_m, std::vector<Quad>& layer
 }
 
 uint32_t VrUi::CurveFor(const Immersive::ScreenLayers& shown) const {
-    if (!cylinder_ok || !shown.top_pointable) {
-        return 0; // the runtime has no cylinder, or the immersive screen is on view
+    if (!cylinder_ok || !shown.top_pointable ||
+        GetCoreCapabilities().screens.rotation_deg != 0) {
+        return 0; // the runtime has no cylinder, the immersive screen is on view, or rotated
     }
     return std::min(Settings::values.vr_screen_curve.GetValue(), Rig::kMaxCurveDeg);
 }
@@ -1552,8 +1555,10 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
     // in a game: no beam, no pointer, no stats grab. Anywhere else a normal pointer.
     // AzaharFrame kiugyro: not while Gyro Aim is on (the reticle steps aside; Light Gun's beam
     // shows where it points).
+    const Common::AltCore::Capabilities core_caps = GetCoreCapabilities();
+    const bool allow_touch = core_caps.has_touch && GetAltMenuState().ds_touch_enabled;
     const int reticle_hand = Input::ReticleDrivingHand(
-        Settings::values.vr_gyro_aim.GetValue() != 0
+        (!allow_touch || (core_caps.has_gyro && Settings::values.vr_gyro_aim.GetValue() != 0))
             ? Input::ReticleHand::Off
             : Input::ReticleHandFrom(Settings::values.vr_bottom_screen_reticle.GetValue()),
         where == Vis::Where::Game && have_input && info.screens_live, in);
@@ -1635,6 +1640,24 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
     visuals.Frame(rt, info, where, window, stats_screens, vis_in, have_input, layers,
                   cursor_chain.handle, dim_chain.handle);
     AddMouseRing(info, layers); // AzaharFrame padsui
+    // Continuous controller rumble for cores that request it (GBA rumble cart / DS Rumble Pak);
+    // suppressed whenever the menu or keyboard is open, focus is lost, or no game is running.
+    const float rumble_want =
+        (game_running && !menu_shown && !swkbd_shown && focused && actions_ok)
+            ? GetRumbleStrength()
+            : 0.0f;
+    if (rumble_want > 0.001f) {
+        if (!rumble_active || info.display_time - rumble_last_ns >= 30'000'000) {
+            actions.Pulse(info.session, 0, 60'000'000, rumble_want);
+            actions.Pulse(info.session, 1, 60'000'000, rumble_want);
+            rumble_active = true;
+            rumble_last_ns = info.display_time;
+        }
+    } else if (rumble_active) {
+        actions.StopHaptic(info.session, 0);
+        actions.StopHaptic(info.session, 1);
+        rumble_active = false;
+    }
     last_time = info.display_time;
 }
 
@@ -1933,7 +1956,9 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     int gyro_aim_hand = -1; // its controller (not the headset), while on
     Input::LightGunTarget aim_hit; // AzaharFrame kiuaim2: Direct Aim's ray on the top screen
     {
-        gyro_aim_frame.mode = Input::GyroAimModeFrom(Settings::values.vr_gyro_aim.GetValue());
+        gyro_aim_frame.mode = GetCoreCapabilities().has_gyro
+                                  ? Input::GyroAimModeFrom(Settings::values.vr_gyro_aim.GetValue())
+                                  : Input::GyroAimMode::Off;
         // AzaharFrame kiufire: Trigger Layout, Kid Icarus: Uprising only.
         gyro_aim_frame.kiu_fire_and_power =
             Settings::values.vr_kiu_trigger_layout.GetValue() == Input::KiuTriggers::kFireAndPower &&

@@ -35,6 +35,11 @@
 namespace FrameXr {
 struct MenuRequest; // AzaharFrame tabmenu
 }
+#ifdef ENABLE_ALT_CORES
+namespace FrameCores {
+class AltCoreHost;
+}
+#endif
 
 // Needs to be included at the end due to https://bugreports.qt.io/browse/QTBUG-73263
 #include <filesystem>
@@ -209,6 +214,12 @@ private:
     bool LoadROM(const QString& filename);
     void BootGame(const QString& filename);
     void ShutdownGame();
+#ifdef ENABLE_ALT_CORES
+    bool BootAltGame(const QString& filename);
+    void ShutdownAltGame();
+    void FramePushAltCheats();
+    void FrameSyncAltMenuState();
+#endif
 
 #ifdef ENABLE_DISCORD_RPC
     void SetDiscordEnabled(bool state);
@@ -551,6 +562,9 @@ private:
     // AzaharFrame memwarn
 #ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
     std::unique_ptr<FrameMemWarn> frame_memwarn;
+#endif
+#ifdef ENABLE_ALT_CORES
+    std::unique_ptr<FrameCores::AltCoreHost> alt_core_host;
 #endif
     bool frame_memwarn_asking = false;       ///< its dialog shows (VR menu or Qt)
     bool frame_memwarn_textures = false; ///< AzaharFrame savemem: it offers Turn Off Custom Textures

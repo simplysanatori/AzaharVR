@@ -397,6 +397,8 @@ private:
     std::atomic<bool> game_running{false};
     std::atomic<bool> launch_pending{false};
     XrTime launch_time = 0;
+    bool rumble_active = false;
+    XrTime rumble_last_ns = 0;
 };
 
 } // namespace FrameXr

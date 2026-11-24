@@ -63,6 +63,13 @@
 #include "video_core/custom_textures/custom_tex_manager.h" // AzaharFrame savemem
 #include "citra_qt/camera/qt_multimedia_camera.h"
 #include "citra_qt/camera/still_image_camera.h"
+#ifdef ENABLE_ALT_CORES
+#include "frame_cores/alt_core_host.h"
+#include "frame_cores/rom_info.h"
+#endif
+#ifdef ENABLE_FRAME_XR
+#include "frame_xr/menu/cheats_tab.h"
+#endif
 #include "citra_qt/citra_qt.h"
 #include "citra_qt/compatibility_list.h"
 #include "citra_qt/configuration/config.h"
@@ -1450,8 +1457,45 @@ GMainWindow::GMainWindow(Core::System& system_)
             };
             FrameXr::SetFrontendHooks(std::move(hooks));
             FrameXr::SetFlatInput(FrameMode::ReadGamepad);
+#ifdef ENABLE_ALT_CORES
+            {
+                FrameCores::HostCallbacks cb{};
+                cb.on_capabilities = [](const Common::AltCore::Capabilities& c) {
+                    FrameXr::SetCoreCapabilities(c);
+                };
+                cb.on_screen_metrics = [](const Common::AltCore::ScreenMetrics& m) {
+                    FrameXr::UpdateCoreScreenMetrics(m);
+                };
+                cb.on_title_id = [](uint64_t tid) { FrameXr::SetGameTitleId(tid); };
+                cb.on_input_sink = [](Common::AltCore::InputSink s) {
+                    FrameXr::SetAltInputSink(std::move(s));
+                };
+                cb.on_rumble = [](float r) { FrameXr::SetRumble(r); };
+                cb.on_game_running = [](bool running) { FrameXr::SetGameRunning(running); };
+                cb.on_stats = [](const FrameCores::HostStats& st) {
+                    FrameXr::EmuStats es;
+                    es.game_fps = st.game_fps;
+                    es.emulation_speed = st.emulation_speed;
+                    es.frame_ms = st.frame_ms;
+                    es.frame_peak_ms = st.frame_peak_ms;
+                    es.slow_frames = st.slow_frames;
+                    FrameXr::SetEmuStats(es);
+                };
+                cb.on_toast = [](const std::string& msg) {
+                    FrameXr::ShowToastText(msg, FrameXr::ToastTime::Short);
+                };
+                FrameCores::AltCoreHost::SetDefaultCallbacks(std::move(cb));
+            }
+#endif
             // Both bumpers + View + Menu, in VR or flat: the other mode, kept for the next start.
             g_frame_xr_switch = [this](bool vr) {
+#ifdef ENABLE_ALT_CORES
+                if (!vr && alt_core_host && alt_core_host->IsRunning()) {
+                    FrameXr::ShowToastText("Flat Mode Is Not Available for This Core",
+                                           FrameXr::ToastTime::Long);
+                    return;
+                }
+#endif
                 const auto apply = [vr] {
                     if (!FrameXr::SetVr(vr)) {
                         LOG_WARNING(Frontend, "xr: cannot switch to {} (no XR any more)",
@@ -1479,6 +1523,18 @@ GMainWindow::GMainWindow(Core::System& system_)
                 });
             };
             g_frame_xr_fast_forward = [this](bool on, const char* why) {
+#ifdef ENABLE_ALT_CORES
+                if (alt_core_host && alt_core_host->IsRunning()) {
+                    if (on == g_frame_xr_fast_forward_on) {
+                        return;
+                    }
+                    g_frame_xr_fast_forward_on = on;
+                    alt_core_host->SetFastForward(on, Settings::values.turbo_limit.GetValue());
+                    FrameXr::SetFastForwardShown(on);
+                    LOG_INFO(Frontend, "xr: alt fast forward {} ({})", on ? "on" : "off", why);
+                    return;
+                }
+#endif
                 if (on && (!emulation_running || !system.IsPoweredOn())) {
                     return;
                 }
@@ -1652,6 +1708,18 @@ GMainWindow::GMainWindow(Core::System& system_)
             };
             g_frame_xr_quick_save = [this, notify] {
                 static QElapsedTimer last;
+#ifdef ENABLE_ALT_CORES
+                if (alt_core_host && alt_core_host->IsRunning()) {
+                    if (last.isValid() && last.elapsed() < 500) {
+                        return;
+                    }
+                    last.start();
+                    if (alt_core_host->QuickSave()) {
+                        notify(FrameXr::Toast::QuickSaved, tr("Quick Saved"));
+                    }
+                    return;
+                }
+#endif
                 if (!emulation_running || !system.IsPoweredOn() ||
                     (last.isValid() && last.elapsed() < 700)) {
                     return;
@@ -1696,6 +1764,20 @@ GMainWindow::GMainWindow(Core::System& system_)
             };
             g_frame_xr_quick_load = [this, notify] {
                 static QElapsedTimer last;
+#ifdef ENABLE_ALT_CORES
+                if (alt_core_host && alt_core_host->IsRunning()) {
+                    if (last.isValid() && last.elapsed() < 500) {
+                        return;
+                    }
+                    last.start();
+                    if (alt_core_host->QuickLoad()) {
+                        notify(FrameXr::Toast::QuickLoaded, tr("Quick Loaded"));
+                    } else {
+                        notify(FrameXr::Toast::NoQuickSave, tr("No Quick Save"));
+                    }
+                    return;
+                }
+#endif
                 if (!emulation_running || !system.IsPoweredOn() ||
                     (last.isValid() && last.elapsed() < 700)) {
                     return;
@@ -1726,6 +1808,22 @@ GMainWindow::GMainWindow(Core::System& system_)
                     if (!g_frame_mirror || g_frame_mirror->MenuOpen() == open) {
                         return;
                     }
+#ifdef ENABLE_ALT_CORES
+                    if (alt_core_host && alt_core_host->IsRunning()) {
+                        if (open && g_frame_xr_fast_forward) {
+                            g_frame_xr_fast_forward(false, "the in-game menu opened");
+                        }
+                        alt_core_host->Pause(open);
+                        if (open) {
+                            FramePushMenuInfo();
+                            FramePushAltCheats();
+                            FrameSyncAltMenuState();
+                        }
+                        g_frame_mirror->SetMenuOpen(open);
+                        FrameXr::SetInGameMenu(open);
+                        return;
+                    }
+#endif
                     // AzaharFrame savestate: closed with a notice unanswered: its "no", before the
                     // game resumes (a half-loaded state stops the game here)
                     if (!open && frame_notice_answer) {
@@ -3596,10 +3694,144 @@ bool GMainWindow::LoadROM(const QString& filename) {
     return true;
 }
 
+#ifdef ENABLE_ALT_CORES
+bool GMainWindow::BootAltGame(const QString& filename) {
+    if (emu_thread) {
+        ShutdownGame();
+    }
+    if (alt_core_host && alt_core_host->IsRunning()) {
+        ShutdownAltGame();
+    }
+#ifdef ENABLE_FRAME_XR
+    if (!FrameXr::IsStarted() || !FrameXr::VrShowing()) {
+        QMessageBox::information(
+            this, tr("VR Required"),
+            tr("DS, DSi, GBA, and GB/GBC games currently run in VR mode only."));
+        return false;
+    }
+#endif
+    const std::string path = filename.toStdString();
+    const auto info_opt = FrameCores::ProbeRom(path);
+    if (!info_opt) {
+        QMessageBox::critical(this, tr("Unable to Load ROM"),
+                              tr("Could not read ROM header from:\n%1").arg(filename));
+        return false;
+    }
+    const FrameCores::RomInfo& info = *info_opt;
+
+    StoreRecentFile(filename);
+    const std::string config_file_name = fmt::format("{:016X}", info.title_id);
+    LOG_INFO(Frontend, "Loading per application config file for alt title {}", config_file_name);
+    QtConfig per_game_config(config_file_name, QtConfig::ConfigType::PerGameConfig);
+#ifdef ENABLE_FRAME_XR
+    g_frame_game_config_name = config_file_name;
+#endif
+
+    if (!alt_core_host) {
+        alt_core_host = std::make_unique<FrameCores::AltCoreHost>();
+    }
+    const std::string data_dir = FileUtil::GetUserPath(FileUtil::UserPath::UserDir);
+    if (!alt_core_host->Boot(path, data_dir, /*headless_for_test=*/false)) {
+        QMessageBox::critical(this, tr("Unable to Start Game"),
+                              tr("Failed to start %1.").arg(QString::fromStdString(info.title)));
+        Settings::RestoreGlobalState(false);
+        return false;
+    }
+
+    game_path = filename;
+    game_title = QString::fromStdString(info.title);
+    emulation_running = true;
+    game_list->hide();
+    if (g_frame_mirror) {
+        g_frame_mirror->SetGameRunning(true);
+    }
+#ifdef ENABLE_FRAME_XR
+    FramePushMenuInfo();
+    FramePushAltCheats();
+    FrameSyncAltMenuState();
+#endif
+    UpdateWindowTitle();
+    PreventOSSleep();
+    play_time_manager->SetProgramId(info.title_id);
+    play_time_manager->Start();
+    LOG_INFO(Frontend, "Alt core booted: {} ({:016X})", info.title, info.title_id);
+    return true;
+}
+
+void GMainWindow::ShutdownAltGame() {
+    if (!alt_core_host || !alt_core_host->IsRunning()) {
+        return;
+    }
+#ifdef ENABLE_FRAME_XR
+    if (g_frame_xr_fast_forward) {
+        g_frame_xr_fast_forward(false, "the game stopped");
+    }
+    if (g_frame_mirror && g_frame_mirror->MenuOpen()) {
+        g_frame_mirror->SetMenuOpen(false);
+        FrameXr::SetInGameMenu(false);
+    }
+    g_frame_game_config_name.clear();
+#endif
+    play_time_manager->Stop();
+    AllowOSSleep();
+    alt_core_host->Stop();
+    emulation_running = false;
+    game_path.clear();
+    game_title.clear();
+    if (g_frame_mirror) {
+        g_frame_mirror->SetGameRunning(false);
+    }
+    game_list->show();
+    Settings::RestoreGlobalState(false);
+    UpdateWindowTitle();
+    LOG_INFO(Frontend, "Alt core stopped");
+}
+
+void GMainWindow::FramePushAltCheats() {
+#ifdef ENABLE_FRAME_XR
+    if (!alt_core_host || !alt_core_host->IsRunning()) {
+        return;
+    }
+    FrameXr::Menu::CheatsModel model;
+    for (const auto& c : alt_core_host->ListCheats()) {
+        FrameXr::Menu::CheatItem item;
+        item.name = c.name;
+        item.enabled = c.enabled;
+        item.source = FrameXr::Menu::CheatSource::User;
+        model.cheats.push_back(std::move(item));
+    }
+    FrameXr::SetInGameMenuCheats(model);
+#endif
+}
+
+void GMainWindow::FrameSyncAltMenuState() {
+#ifdef ENABLE_FRAME_XR
+    if (!alt_core_host || !alt_core_host->IsRunning()) {
+        return;
+    }
+    FrameXr::AltMenuState st = FrameXr::GetAltMenuState();
+    const auto caps = alt_core_host->GetCapabilities();
+    st.ds_console_mode = (caps.kind == Common::AltCore::CoreKind::DSi) ? 1 : 0;
+    st.ds_screen_rotation =
+        caps.screens.rotation_deg == 90 ? 1 : (caps.screens.rotation_deg == 270 ? 2 : 0);
+    FrameXr::SetAltMenuState(st);
+#endif
+}
+#endif
+
 void GMainWindow::BootGame(const QString& filename) {
     if (emu_thread) {
         ShutdownGame();
     }
+#ifdef ENABLE_ALT_CORES
+    if (alt_core_host && alt_core_host->IsRunning()) {
+        ShutdownAltGame();
+    }
+    if (FrameCores::DetectCoreKind(filename.toStdString()) != Common::AltCore::CoreKind::N3DS) {
+        BootAltGame(filename);
+        return;
+    }
+#endif
 
     // NOTE: We could make this not hardcoded, but it's a temp thing anyway so probs not worth. -OS
     if (Settings::values.graphics_api.GetValue() == Settings::GraphicsAPI::Vulkan &&
@@ -3946,6 +4178,12 @@ void GMainWindow::BootGame(const QString& filename) {
 }
 
 void GMainWindow::ShutdownGame() {
+#ifdef ENABLE_ALT_CORES
+    if (alt_core_host && alt_core_host->IsRunning()) {
+        ShutdownAltGame();
+        return;
+    }
+#endif
     if (!emulation_running || frame_autosave_quitting) {
         return;
     }
@@ -5090,6 +5328,12 @@ void GMainWindow::OnResumeGame(bool first_start) {
 }
 
 void GMainWindow::OnRestartGame() {
+#ifdef ENABLE_ALT_CORES
+    if (alt_core_host && alt_core_host->IsRunning()) {
+        alt_core_host->Reset();
+        return;
+    }
+#endif
     if (!system.IsPoweredOn()) {
         return;
     }
@@ -5098,6 +5342,12 @@ void GMainWindow::OnRestartGame() {
 }
 
 void GMainWindow::OnPauseGame() {
+#ifdef ENABLE_ALT_CORES
+    if (alt_core_host && alt_core_host->IsRunning()) {
+        alt_core_host->Pause(true);
+        return;
+    }
+#endif
     system.frame_limiter.SetFrameAdvancing(true);
     qt_cameras->PauseCameras();
 
@@ -5112,6 +5362,12 @@ void GMainWindow::OnPauseGame() {
 }
 
 void GMainWindow::OnPauseContinueGame() {
+#ifdef ENABLE_ALT_CORES
+    if (alt_core_host && alt_core_host->IsRunning()) {
+        alt_core_host->Pause(!alt_core_host->IsPaused());
+        return;
+    }
+#endif
     if (emulation_running) {
         if (emu_thread->IsRunning() && !system.frame_limiter.IsFrameAdvancing()) {
             OnPauseGame();
@@ -5256,6 +5512,25 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         return;
     case C::SaveSlot:
     case C::LoadSlot: {
+#ifdef ENABLE_ALT_CORES
+        if (alt_core_host && alt_core_host->IsRunning()) {
+            if (r.value < 1 || r.value > 10) {
+                return;
+            }
+            const bool save = r.command == C::SaveSlot;
+            close_menu();
+            if (save) {
+                if (alt_core_host->SaveSlot(r.value)) {
+                    FrameXr::ShowToastText(fmt::format("Saved Slot {}", r.value));
+                }
+            } else {
+                if (alt_core_host->LoadSlot(r.value)) {
+                    FrameXr::ShowToastText(fmt::format("Loaded Slot {}", r.value));
+                }
+            }
+            return;
+        }
+#endif
         if (r.value < 1 || r.value >= static_cast<int>(Core::SaveStateSlotCount)) {
             return;
         }
@@ -5407,9 +5682,75 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case C::ToggleCheat: // AzaharFrame cheatstab: the Mods tab's Cheats segment (frame_cheats.cpp)
     case C::DownloadCheats:
     case C::AddCheat: // AzaharFrame ui2
+#ifdef ENABLE_ALT_CORES
+        if (alt_core_host && alt_core_host->IsRunning()) {
+            if (r.command == C::ToggleCheat && r.value >= 0) {
+                alt_core_host->HandleMenuCommand(FrameCores::AltMenuCommand::ToggleCheat, r.value);
+                FramePushAltCheats();
+            } else if (r.command == C::AddCheat && !r.text.empty()) {
+                alt_core_host->HandleMenuCommand(FrameCores::AltMenuCommand::AddCheat, 0, r.text);
+                FramePushAltCheats();
+            }
+            return;
+        }
+#endif
         if (g_frame_cheats) {
             g_frame_cheats->Command(r);
         }
+        return;
+    case C::DsMicBlow:
+#ifdef ENABLE_ALT_CORES
+        if (alt_core_host && alt_core_host->IsRunning()) {
+            auto st = FrameXr::GetAltMenuState();
+            st.ds_mic_active = !st.ds_mic_active;
+            FrameXr::SetAltMenuState(st);
+            alt_core_host->SetMicBlow(st.ds_mic_active);
+            FrameXr::ShowToastText(st.ds_mic_active ? "Microphone Blow: On"
+                                                    : "Microphone Blow: Off");
+        }
+#endif
+        return;
+    case C::DsLidToggle:
+#ifdef ENABLE_ALT_CORES
+        if (alt_core_host && alt_core_host->IsRunning()) {
+            auto st = FrameXr::GetAltMenuState();
+            st.ds_lid_closed = !st.ds_lid_closed;
+            FrameXr::SetAltMenuState(st);
+            alt_core_host->SetLidClosed(st.ds_lid_closed);
+            FrameXr::ShowToastText(st.ds_lid_closed ? "Lid Closed" : "Lid Opened");
+        }
+#endif
+        return;
+    case C::GbaRewind:
+#ifdef ENABLE_ALT_CORES
+        if (alt_core_host && alt_core_host->IsRunning()) {
+            close_menu();
+            if (alt_core_host->RewindStep()) {
+                FrameXr::ShowToastText("Rewound");
+            } else {
+                FrameXr::ShowToastText("Nothing to Rewind");
+            }
+        }
+#endif
+        return;
+    case C::ImportSave:
+#ifdef ENABLE_ALT_CORES
+        if (alt_core_host && alt_core_host->IsRunning()) {
+            g_frame_mirror->SetMenuWindow(true);
+            QTimer::singleShot(0, this, [this] {
+                const QString path = QFileDialog::getOpenFileName(
+                    this, tr("Import Battery Save"), QString{},
+                    tr("Save Files (*.sav *.dsv *.srm);;All Files (*)"));
+                if (!path.isEmpty() && alt_core_host && alt_core_host->IsRunning()) {
+                    if (alt_core_host->ImportSave(path.toStdString())) {
+                        FrameXr::ShowToastText("Save Imported", FrameXr::ToastTime::Long);
+                    } else {
+                        FrameXr::ShowToastText("Save Import Failed", FrameXr::ToastTime::Long);
+                    }
+                }
+            });
+        }
+#endif
         return;
     case C::SelectTexturePack: // AzaharFrame texui: the Mods tab (frame_mods.cpp)
     case C::LoadModCatalog:
@@ -5831,6 +6172,52 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::AutosaveKeep:
         set(v.autosave_keep, Core::Autosave::ClampKeep(u));
         break;
+    case S::GbaSolarLevel:
+#ifdef ENABLE_ALT_CORES
+        if (alt_core_host && alt_core_host->IsRunning()) {
+            const int lvl = std::clamp(r.value, 0, 10);
+            alt_core_host->SetSolarLevel(lvl);
+            auto st = FrameXr::GetAltMenuState();
+            st.gba_solar_level = lvl;
+            FrameXr::SetAltMenuState(st);
+        }
+#endif
+        return;
+    case S::DsConsoleMode:
+#ifdef ENABLE_ALT_CORES
+        if (alt_core_host && alt_core_host->IsRunning()) {
+            const bool dsi = r.value != 0;
+            alt_core_host->SetConsoleMode(dsi);
+            auto st = FrameXr::GetAltMenuState();
+            st.ds_console_mode = dsi ? 1 : 0;
+            FrameXr::SetAltMenuState(st);
+            FrameXr::ShowToastText(dsi ? "Console Mode: DSi" : "Console Mode: DS");
+        }
+#endif
+        return;
+    case S::DsTouchEnabled:
+#ifdef ENABLE_ALT_CORES
+        if (alt_core_host && alt_core_host->IsRunning()) {
+            const bool on = r.value != 0;
+            alt_core_host->SetTouchEnabled(on);
+            auto st = FrameXr::GetAltMenuState();
+            st.ds_touch_enabled = on;
+            FrameXr::SetAltMenuState(st);
+        }
+#endif
+        return;
+    case S::DsScreenRotation:
+#ifdef ENABLE_ALT_CORES
+        if (alt_core_host && alt_core_host->IsRunning()) {
+            const int idx = std::clamp(r.value, 0, 2);
+            const int deg = idx == 1 ? 90 : (idx == 2 ? 270 : 0);
+            alt_core_host->SetScreenRotation(deg);
+            auto st = FrameXr::GetAltMenuState();
+            st.ds_screen_rotation = idx;
+            FrameXr::SetAltMenuState(st);
+        }
+#endif
+        return;
     }
     if (r.setting == S::AutosaveKeep) { // AzaharFrame autosave: lowered: this game's oldest go
         FrameAutosaveKeepChanged();
@@ -6277,6 +6664,17 @@ void GMainWindow::FrameRefreshSlotsAfterSave(u32 slot) {
 
 void GMainWindow::FramePushMenuInfo() {
 #ifdef ENABLE_FRAME_XR
+#ifdef ENABLE_ALT_CORES
+    if (alt_core_host && alt_core_host->IsRunning()) {
+        std::vector<FrameXr::MenuSaveSlot> menu_slots;
+        for (const auto& st : alt_core_host->ListSaveSlots()) {
+            menu_slots.push_back({st.slot, st.time, false});
+        }
+        FrameXr::SetInGameMenuInfo(game_title.toStdString(), menu_slots,
+                                   !g_frame_game_config_name.empty());
+        return;
+    }
+#endif
     if (!system.IsPoweredOn()) {
         return;
     }

@@ -66,6 +66,17 @@ namespace {
 
 std::unique_ptr<Runtime> g_runtime;
 
+std::mutex g_caps_mutex;
+Common::AltCore::Capabilities g_caps = Common::AltCore::Capabilities::ForN3DS();
+
+std::mutex g_alt_input_mutex;
+Common::AltCore::InputSink g_alt_input_sink;
+
+std::atomic<float> g_rumble_strength{0.0f};
+
+std::mutex g_alt_menu_mutex;
+AltMenuState g_alt_menu_state{};
+
 using Clock = std::chrono::steady_clock;
 
 double Ms(Clock::duration d) {
@@ -171,6 +182,12 @@ XrExtent2Df NormalTopSize(float scale) {
     constexpr float kDensity = 240.0f;
     constexpr float kTopHeightPx = 240.0f;
     const float height = kTopHeightPx / kDensity * Input::ScreenRig::ClampScale(scale);
+    const Common::AltCore::Capabilities caps = GetCoreCapabilities();
+    if (caps.kind != Common::AltCore::CoreKind::N3DS) {
+        const float aspect =
+            caps.screens.top_aspect > 0.0f ? caps.screens.top_aspect : (4.0f / 3.0f);
+        return {height * aspect, height};
+    }
     return {height * Immersive::TopAspect(), height};
 }
 
@@ -191,6 +208,14 @@ XrExtent2Df NormalBottomSize(float scale) {
     // CitraVR: 240 px per metre, 0.75^2 the scale. AzaharFrame move: times the second slot's
     // own scale (Detach Screens).
     constexpr float kDensity = 240.0f;
+    const Common::AltCore::Capabilities caps = GetCoreCapabilities();
+    if (caps.kind != Common::AltCore::CoreKind::N3DS) {
+        const float base_scale = caps.screens.equal_screens ? 1.0f : (0.75f * 0.75f);
+        const float height = base_scale * Input::ScreenRig::ClampScale(scale);
+        const float aspect =
+            caps.screens.bottom_aspect > 0.0f ? caps.screens.bottom_aspect : (4.0f / 3.0f);
+        return {height * aspect, height};
+    }
     const float s = 0.75f * 0.75f * Input::ScreenRig::ClampScale(scale);
     return {320.0f / kDensity * s, 240.0f / kDensity * s};
 }
@@ -587,7 +612,11 @@ void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
     const bool flashed = dr_second.bfi;
     const uint32_t late_lit = bfi_second.late_lit;
     bfi_second = {};
-    DynamicResolution::NoteSecond(dr_second);
+    if (GetCoreCapabilities().has_dynamic_resolution) {
+        DynamicResolution::NoteSecond(dr_second);
+    } else if (DynamicResolution::Drop() != 0) {
+        DynamicResolution::Reset();
+    }
     if (screens_live.load()) {
         PerfLine::Window& w = perf_window;
         w.seconds += seconds;
@@ -1024,9 +1053,14 @@ void Runtime::FrameLoop() {
                        state.load(),
                        fs.shouldRender == XR_TRUE,
                        screens_live.load()};
+        const Common::AltCore::Capabilities core_caps = GetCoreCapabilities();
+        const bool top_is_stereo = top_stereo.load(std::memory_order_relaxed);
+        const bool packed_now = packed_top && top_is_stereo;
         // AzaharFrame fixes7: Screen Shape: Automatic, before the callbacks read the shape.
-        AutoShape::Frame(info.screens_live,
-                         Settings::values.vr_top_aspect.GetValue() == AutoShape::kAutomatic);
+        if (core_caps.kind == Common::AltCore::CoreKind::N3DS) {
+            AutoShape::Frame(info.screens_live,
+                             Settings::values.vr_top_aspect.GetValue() == AutoShape::kAutomatic);
+        }
         {
             std::vector<FrameCallback> callbacks;
             {
@@ -1047,8 +1081,8 @@ void Runtime::FrameLoop() {
             const Immersive::PathState ps = Immersive::ScreensPathState();
             Vis::PathInputs pin;
             pin.forced = proj_forced;
-            pin.game_on_view = ps.game_on_view;
-            pin.full_mode = ps.full_mode;
+            pin.game_on_view = ps.game_on_view && core_caps.has_immersive_modes;
+            pin.full_mode = ps.full_mode && core_caps.has_immersive_modes;
             // AZAHARFRAME_XR_SINGLE_FLASH (Motion Clarity's override) counts as the setting.
             // fixa: the Full modes' own Motion Clarity, read alone.
             pin.clarity = clarity_override.value_or(
@@ -1141,7 +1175,7 @@ void Runtime::FrameLoop() {
         bool screens_swapped = false;
         // AzaharFrame doubling: the two eyes' top images of separate swapchains from different
         // game frames (a release of the set came between); never with set releases or packed.
-        if (!packed_top && screens_live) {
+        if (!packed_top && top_is_stereo && screens_live) {
             const ScreenChain& l = screens[static_cast<std::size_t>(VideoCore::XrScreen::TopLeft)];
             const ScreenChain& r = screens[static_cast<std::size_t>(VideoCore::XrScreen::TopRight)];
             if (l.has_image && r.has_image && l.frame_serial != r.frame_serial) {
@@ -1250,6 +1284,7 @@ void Runtime::FrameLoop() {
                 // Wide modes held while the top screen is swapped out of the Primary slot
                 // (HeldForSwap: only the top screen flashes, and only as the Primary one).
                 const bool asked =
+                    core_caps.has_bfi &&
                     MotionClarity::InEffect(Settings::values.vr_motion_clarity_immersive.GetValue(),
                                             Settings::values.vr_motion_clarity_normal.GetValue(),
                                             clarity_override, shown.full_mode) &&
@@ -1280,7 +1315,8 @@ void Runtime::FrameLoop() {
                 const bool top_shown = draw.swapped ? draw.top_visible : shown.show_top;
                 const bool bottom_shown =
                     draw.swapped || (shown.show_bottom && draw.bottom_visible);
-                const std::size_t screens_now = (top_shown ? 2 : 0) + (bottom_shown ? 1 : 0);
+                const std::size_t screens_now =
+                    (top_shown ? (top_is_stereo ? 2 : 1) : 0) + (bottom_shown ? 1 : 0);
                 const bool room =
                     !wanted || !ui ||
                     backing_room.Next(MotionClarity::BackingRoom::Fits(
@@ -1377,7 +1413,7 @@ void Runtime::FrameLoop() {
                 // AzaharFrame flash3: LayerChain: while a swapchain made anew has no picture, the
                 // old one with its last picture (no blink of the compositor's background).
                 const ScreenChain& chain = LayerChain(static_cast<std::size_t>(
-                    packed_top && top ? VideoCore::XrScreen::TopLeft : s));
+                    packed_now && top ? VideoCore::XrScreen::TopLeft : s));
                 // AzaharFrame integ9: the toast's inputs take the screen whether or not its layer
                 // is left out this refresh (SINGLE_FLASH), so the toast's depth holds still.
                 const ToastDepth::ScreenUse use =
@@ -1453,7 +1489,7 @@ void Runtime::FrameLoop() {
                 q.image_rect = {{0, 0},
                                 {static_cast<int32_t>(chain.width),
                                  static_cast<int32_t>(chain.height)}};
-                if (packed_top && top) {
+                if (packed_now && top) {
                     const int32_t half =
                         static_cast<int32_t>((chain.height - VideoCore::kXrPackedGap) / 2);
                     q.image_rect.extent.height = half;
@@ -1545,7 +1581,7 @@ void Runtime::FrameLoop() {
             const auto has_picture = [&](VideoCore::XrScreen s) {
                 const bool top = s != VideoCore::XrScreen::Bottom;
                 const ScreenChain& chain = LayerChain(static_cast<std::size_t>( // flash3
-                    packed_top && top ? VideoCore::XrScreen::TopLeft : s));
+                    packed_now && top ? VideoCore::XrScreen::TopLeft : s));
                 return chain.handle != XR_NULL_HANDLE && chain.has_image;
             };
             badge_anchor.live = true;
@@ -1573,7 +1609,7 @@ void Runtime::FrameLoop() {
             // less 3D depth (common/frame_vr_depth.h); the immersive and the swapped one do not.
             // AzaharFrame move: swapped, the top screen is in the second slot at its own scale.
             Settings::frame_vr_depth_scale =
-                !shown.top_pointable ? 1.0f
+                !core_caps.has_stereo_3d || !shown.top_pointable ? 1.0f
                 : draw.swapped
                     ? Input::ScreenRig::DepthScale(place.second_free ? place.second_scale : 1.0f)
                     : Input::ScreenRig::DepthScale(place.top_scale);
@@ -1584,13 +1620,18 @@ void Runtime::FrameLoop() {
                 add_screen(VideoCore::XrScreen::Bottom, local_space, draw.bottom_pose,
                            draw.bottom_size, XR_EYE_VISIBILITY_BOTH, draw.bottom_curve);
                 if (draw.top_visible) {
-                    add_screen(VideoCore::XrScreen::TopLeft, local_space, draw.top_pose,
-                               draw.top_size, XR_EYE_VISIBILITY_LEFT, draw.top_curve);
-                    add_screen(VideoCore::XrScreen::TopRight, local_space, draw.top_pose,
-                               draw.top_size, XR_EYE_VISIBILITY_RIGHT, draw.top_curve);
+                    if (top_is_stereo) {
+                        add_screen(VideoCore::XrScreen::TopLeft, local_space, draw.top_pose,
+                                   draw.top_size, XR_EYE_VISIBILITY_LEFT, draw.top_curve);
+                        add_screen(VideoCore::XrScreen::TopRight, local_space, draw.top_pose,
+                                   draw.top_size, XR_EYE_VISIBILITY_RIGHT, draw.top_curve);
+                    } else {
+                        add_screen(VideoCore::XrScreen::TopLeft, local_space, draw.top_pose,
+                                   draw.top_size, XR_EYE_VISIBILITY_BOTH, draw.top_curve);
+                    }
                 }
             } else {
-                // Each eye sees its own top image on the same quad.
+                // Each eye sees its own top image on the same quad (or both eyes share TopLeft for mono cores).
                 const auto add_bottom = [&] {
                     if (shown.show_bottom && draw.bottom_visible) {
                         add_screen(VideoCore::XrScreen::Bottom, local_space, shown.bottom_pose,
@@ -1604,10 +1645,16 @@ void Runtime::FrameLoop() {
                     // AzaharFrame curve: draw.top_curve is 0 for the immersive screen.
                     // AzaharFrame heldquad: each eye's pose and size (a held picture is resized
                     // about each eye); the toast takes eye 0's first.
-                    add_screen(VideoCore::XrScreen::TopLeft, shown.top_space, shown.top_pose[0],
-                               shown.top_size[0], XR_EYE_VISIBILITY_LEFT, draw.top_curve);
-                    add_screen(VideoCore::XrScreen::TopRight, shown.top_space, shown.top_pose[1],
-                               shown.top_size[1], XR_EYE_VISIBILITY_RIGHT, draw.top_curve);
+                    if (top_is_stereo) {
+                        add_screen(VideoCore::XrScreen::TopLeft, shown.top_space, shown.top_pose[0],
+                                   shown.top_size[0], XR_EYE_VISIBILITY_LEFT, draw.top_curve);
+                        add_screen(VideoCore::XrScreen::TopRight, shown.top_space,
+                                   shown.top_pose[1], shown.top_size[1], XR_EYE_VISIBILITY_RIGHT,
+                                   draw.top_curve);
+                    } else {
+                        add_screen(VideoCore::XrScreen::TopLeft, shown.top_space, shown.top_pose[0],
+                                   shown.top_size[0], XR_EYE_VISIBILITY_BOTH, draw.top_curve);
+                    }
                 }
                 if (!shown.bottom_first) {
                     add_bottom();
@@ -2192,6 +2239,9 @@ void SetGameRunning(bool running) {
     // AzaharFrame ui2: each game (Restart too, which never stops the screens) starts from the
     // setting, without what the last one learnt.
     DynamicResolution::Reset();
+    if (!running) {
+        SetRumble(0.0f);
+    }
     if (auto* rt = GetRuntime(); rt && rt->ui) {
         rt->ui->SetGameRunning(running);
     }
@@ -2264,6 +2314,74 @@ XrSwapchain ScreenSwapchain(VideoCore::XrScreen screen) {
         return rt->screens[static_cast<std::size_t>(screen)].handle;
     }
     return XR_NULL_HANDLE;
+}
+
+void SetCoreCapabilities(const Common::AltCore::Capabilities& caps) {
+    {
+        std::scoped_lock lock{g_caps_mutex};
+        g_caps = caps;
+    }
+    if (auto* rt = GetRuntime()) {
+        rt->SetTopStereo(caps.screens.top_stereo);
+    }
+    if (!caps.has_dynamic_resolution) {
+        DynamicResolution::Reset();
+    }
+}
+
+Common::AltCore::Capabilities GetCoreCapabilities() {
+    std::scoped_lock lock{g_caps_mutex};
+    return g_caps;
+}
+
+void UpdateCoreScreenMetrics(const Common::AltCore::ScreenMetrics& metrics) {
+    {
+        std::scoped_lock lock{g_caps_mutex};
+        g_caps.screens = metrics;
+    }
+    if (auto* rt = GetRuntime()) {
+        rt->SetTopStereo(metrics.top_stereo);
+    }
+}
+
+void SetAltInputSink(Common::AltCore::InputSink sink) {
+    std::scoped_lock lock{g_alt_input_mutex};
+    g_alt_input_sink = std::move(sink);
+}
+
+bool HasAltInputSink() {
+    std::scoped_lock lock{g_alt_input_mutex};
+    return static_cast<bool>(g_alt_input_sink);
+}
+
+void DeliverAltInput(const Common::AltCore::InputState& state) {
+    Common::AltCore::InputSink sink;
+    {
+        std::scoped_lock lock{g_alt_input_mutex};
+        sink = g_alt_input_sink;
+    }
+    if (sink) {
+        sink(state);
+    }
+}
+
+void SetRumble(float strength) {
+    const float clamped = std::isfinite(strength) ? std::clamp(strength, 0.0f, 1.0f) : 0.0f;
+    g_rumble_strength.store(clamped, std::memory_order_relaxed);
+}
+
+float GetRumbleStrength() {
+    return g_rumble_strength.load(std::memory_order_relaxed);
+}
+
+void SetAltMenuState(const AltMenuState& state) {
+    std::scoped_lock lock{g_alt_menu_mutex};
+    g_alt_menu_state = state;
+}
+
+AltMenuState GetAltMenuState() {
+    std::scoped_lock lock{g_alt_menu_mutex};
+    return g_alt_menu_state;
 }
 
 } // namespace FrameXr

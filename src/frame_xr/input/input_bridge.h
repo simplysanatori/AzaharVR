@@ -102,6 +102,9 @@ private:
     TouchpadTouch touchpad_;
     TouchpadCursor touchpad_cursor_;
     Vec2f edge_stick_; ///< AzaharFrame kiu
+    bool alt_touching_ = false;
+    uint16_t alt_touch_x_ = 0;
+    uint16_t alt_touch_y_ = 0;
     MapperOutput last_;
 };
 

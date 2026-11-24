@@ -10,10 +10,26 @@
 #include "common/string_util.h"
 #include "core/loader/loader.h"
 #include "core/loader/smdh.h"
+#ifdef ENABLE_ALT_CORES
+#include "frame_cores/rom_info.h"
+#endif
 
 namespace frame_xr::picker {
 
 std::optional<GameMeta> ReadMetadataWithLoader(const std::string& path) {
+#ifdef ENABLE_ALT_CORES
+    if (FrameCores::DetectCoreKind(path) != Common::AltCore::CoreKind::N3DS) {
+        if (const auto info = FrameCores::ProbeRom(path)) {
+            GameMeta meta;
+            meta.title = info->title;
+            meta.icon_w = info->icon_w;
+            meta.icon_h = info->icon_h;
+            meta.icon_rgba = info->icon_rgba;
+            return meta;
+        }
+        return std::nullopt;
+    }
+#endif
     std::unique_ptr<Loader::AppLoader> loader = Loader::GetLoader(path);
     if (!loader) {
         return std::nullopt;

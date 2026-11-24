@@ -28,6 +28,9 @@ add_library(frame_xr_picker STATIC
     logo_loader.h
 )
 target_link_libraries(frame_xr_picker PUBLIC frame_xr_picker_core PRIVATE citra_core citra_common lodepng)
+if (TARGET frame_cores)
+    target_link_libraries(frame_xr_picker PRIVATE frame_cores)
+endif()
 # Development builds live outside the checkout (e.g. ../build-xr): find the art in it.
 target_compile_definitions(frame_xr_picker PRIVATE
     AZAHARFRAME_SOURCE_ART="${CMAKE_SOURCE_DIR}/steam-frame/art")

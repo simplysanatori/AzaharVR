@@ -782,7 +782,8 @@ void Runtime::ReleaseFrame(bool gpu_finished, const VideoCore::XrContentPose& co
             chain.shown_index = chain.index;
         }
         // A packed top screen counts for both eyes (the log line keeps its meaning).
-        const bool both = packed_top && i == static_cast<std::size_t>(VideoCore::XrScreen::TopLeft);
+        const bool both = packed_top && top_stereo.load(std::memory_order_relaxed) &&
+                          i == static_cast<std::size_t>(VideoCore::XrScreen::TopLeft);
         for (std::size_t k = i; k <= (both ? i + 1 : i); k++) {
             stats.releases[k]++;
             if (!gpu_finished) {
@@ -839,7 +840,15 @@ void Runtime::UpdateImageLag(const char* why) {
 }
 
 bool Runtime::PackedTop() const {
-    return packed_top;
+    return packed_top && top_stereo.load(std::memory_order_relaxed);
+}
+
+bool Runtime::TopStereo() const {
+    return top_stereo.load(std::memory_order_relaxed);
+}
+
+void Runtime::SetTopStereo(bool stereo) {
+    top_stereo.store(stereo, std::memory_order_relaxed);
 }
 
 void Runtime::SetQueueMutex(std::mutex* mutex) {

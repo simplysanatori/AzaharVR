@@ -180,6 +180,8 @@ public:
     void ReleaseFrame(bool gpu_finished, const VideoCore::XrContentPose& content) override;
     void WaitPresentSlot(uint64_t game_swaps) override; // AzaharFrame pacing
     bool PackedTop() const override;
+    bool TopStereo() const override;
+    void SetTopStereo(bool stereo) override;
     /// AzaharFrame fixa: Match Bottom Screen Brightness's dim for the bottom screen's next pictures
     /// (the shader method; motion_clarity.h DimMethod), set by the frame loop each refresh.
     float ScreenDim(VideoCore::XrScreen screen) const override {
@@ -244,6 +246,8 @@ public:
     bool set_release = true;
     /// AZAHARFRAME_XR_PACKED (default 1): both top screen images in the TopLeft swapchain.
     bool packed_top = true;
+    /// True for stereoscopic primary screen (3DS); false for monoscopic cores (GBA/GB/DS).
+    std::atomic<bool> top_stereo{true};
     /// Game frames released (ReleaseFrame), the serial of the newest (the handoff thread's).
     uint64_t release_serial = 0;
     /// AzaharFrame flash: the game picture of the next release (ShownPicture::picture), from
@@ -362,5 +366,10 @@ private:
 };
 
 Runtime* GetRuntime();
+
+/// Internal seams for InputBridge / VrUi (implemented in app.cpp).
+bool HasAltInputSink();
+void DeliverAltInput(const Common::AltCore::InputState& state);
+float GetRumbleStrength();
 
 } // namespace FrameXr

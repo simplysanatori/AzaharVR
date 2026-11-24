@@ -554,6 +554,9 @@ bool IsViewMode(u32 mode) {
 // AzaharFrame widerview: the level in use (the setting, or AZAHARFRAME_IMMERSIVE_WIDER).
 // AzaharFrame fovaxis: per axis (frame_xr/render_margin.h); the variable sets both.
 u32 WiderLevel(Margin::Axis axis = Margin::Axis::Horizontal) {
+    if (!GetCoreCapabilities().has_render_margin) {
+        return 0;
+    }
     if (g.tuning.wider_level >= 0) {
         return static_cast<u32>(g.tuning.wider_level);
     }
@@ -819,6 +822,9 @@ void KiuFirstPersonFrame(u32 mode) {
 // AzaharFrame immersive: the immersive mode in use, the setting's (every game can turn it on).
 // AzaharFrame kiumode: as drawn: Angel's Aim (4) is mode 3 here and for the renderer (data.mode).
 u32 ModeInUse() {
+    if (!GetCoreCapabilities().has_immersive_modes) {
+        return 0;
+    }
     return Settings::ImmersiveRenderMode();
 }
 
@@ -2201,8 +2207,17 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
     out.top_size[0] = out.top_size[1] = placement.top_size;
     out.bottom_pose = placement.bottom_pose;
     out.bottom_size = placement.bottom_size;
-    out.show_bottom = BottomShown();
+    const Common::AltCore::Capabilities core_caps = GetCoreCapabilities();
+    out.show_bottom = BottomShown() && core_caps.screens.has_bottom;
     out.full_mode = g.live && IsViewMode(g.mode); // AzaharFrame flash2
+    if (core_caps.screens.rotation_deg != 0 && !g.engaged) {
+        // DS Book Mode: rotate each screen quad around its local +Z axis (clockwise degrees).
+        const float half = -static_cast<float>(core_caps.screens.rotation_deg) * L::kDegToRad * 0.5f;
+        const XrQuaternionf qz{0.0f, 0.0f, std::sin(half), std::cos(half)};
+        out.top_pose[0].orientation = Normalized(Mul(out.top_pose[0].orientation, qz));
+        out.top_pose[1].orientation = out.top_pose[0].orientation;
+        out.bottom_pose.orientation = Normalized(Mul(out.bottom_pose.orientation, qz));
+    }
 
     if (g.engaged && !IsViewMode(g.mode)) {
         // Mode 1: fixed in the room, ahead of where the head was when the game started (or the

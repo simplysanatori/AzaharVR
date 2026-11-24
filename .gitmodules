@@ -100,3 +100,12 @@
 [submodule "externals/astcenc"]
 	path = externals/astcenc
 	url = https://github.com/ARM-software/astc-encoder
+[submodule "externals/melonDS"]
+	path = externals/melonDS
+	url = https://github.com/melonDS-emu/melonDS
+[submodule "externals/gba-ds"]
+	path = externals/gba-ds
+	url = https://github.com/kyannon/gba-ds
+[submodule "externals/mgba"]
+	path = externals/mgba
+	url = https://github.com/mgba-emu/mgba

@@ -136,6 +136,14 @@ public:
     virtual void NoteEmuWait(uint32_t us) = 0;
     /// The desktop window was drawn and presented, taking `cpu_us` on the emu thread.
     virtual void NoteWindowPresent(uint32_t cpu_us) = 0;
+
+    /// True when the primary (top) screen is stereoscopic (left + right eyes, 3DS).
+    /// False for monoscopic cores (GBA, GB/GBC, DS/DSi), where TopLeft fills the whole
+    /// swapchain height and is submitted once with XR_EYE_VISIBILITY_BOTH.
+    virtual bool TopStereo() const {
+        return true;
+    }
+    virtual void SetTopStereo(bool /*stereo*/) {}
 };
 
 namespace Detail {

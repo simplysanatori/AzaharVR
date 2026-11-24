@@ -211,6 +211,36 @@ public:
                 LongTitleRole);
     }
 
+    /// Overload for DS/DSi/GBA/GB/GBC ROMs with pre-decoded RGBA8 icon and title.
+    GameListItemPath(const QString& game_path, const QString& title,
+                     const std::vector<u8>& icon_rgba, u32 icon_w, u32 icon_h, u64 program_id,
+                     Service::FS::MediaType media_type) {
+        setData(type(), TypeRole);
+        setData(game_path, FullPathRole);
+        setData(qulonglong(program_id), ProgramIdRole);
+        setData(qulonglong(0), ExtdataIdRole);
+        setData(quint32(media_type), MediaTypeRole);
+        setData(quint32(0), CanInsertRole);
+        setData(title, TitleRole);
+        setData(title, LongTitleRole);
+
+        const auto icon_pref = UISettings::values.game_list_icon_size.GetValue();
+        if (icon_pref == UISettings::GameListIconSize::NoIcon) {
+            setData(QPixmap(), Qt::DecorationRole);
+        } else if (!icon_rgba.empty() && icon_w > 0 && icon_h > 0 &&
+                   icon_rgba.size() >= static_cast<std::size_t>(icon_w) * icon_h * 4) {
+            const int dim = IconSizes.at(icon_pref);
+            QImage img(icon_rgba.data(), static_cast<int>(icon_w), static_cast<int>(icon_h),
+                       static_cast<int>(icon_w * 4), QImage::Format_RGBA8888);
+            setData(QPixmap::fromImage(img.copy().scaled(dim, dim, Qt::KeepAspectRatio,
+                                                         Qt::FastTransformation)),
+                    Qt::DecorationRole);
+        } else {
+            const bool large = icon_pref == UISettings::GameListIconSize::LargeIcon;
+            setData(GetDefaultIcon(large), Qt::DecorationRole);
+        }
+    }
+
     int type() const override {
         return static_cast<int>(GameListItemType::Game);
     }
