@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -143,18 +144,25 @@ inline std::vector<Added> Rim(const std::vector<Vertex>& in, float out) {
         }
     }
     // The same place is the same point: the same vertex shaded twice, or one the model keeps twice.
-    std::vector<uint32_t> order(n), point(n);
-    std::iota(order.begin(), order.end(), 0u);
-    std::sort(order.begin(), order.end(),
-              [&](uint32_t a, uint32_t b) { return in[a].pos < in[b].pos; });
-    uint32_t points = 0;
-    for (std::size_t i = 0; i < n; ++i) {
-        if (i != 0 && in[order[i]].pos != in[order[i - 1]].pos) {
-            ++points;
+    std::vector<uint32_t> point(n), first; // a vertex's point; a point's first vertex
+    std::vector<uint32_t> slots(std::bit_ceil(n * 2), UINT32_MAX);
+    for (uint32_t i = 0; i < n; ++i) {
+        uint32_t h = 0;
+        for (const float x : in[i].pos) {
+            h = (h ^ std::bit_cast<uint32_t>(x + 0.0f)) * 0x9E3779B1u; // + 0: -0 is 0
+            h ^= h >> 15;
         }
-        point[order[i]] = points;
+        std::size_t at = h & (slots.size() - 1);
+        while (slots[at] != UINT32_MAX && in[first[slots[at]]].pos != in[i].pos) {
+            at = (at + 1) & (slots.size() - 1);
+        }
+        if (slots[at] == UINT32_MAX) {
+            slots[at] = static_cast<uint32_t>(first.size());
+            first.push_back(i);
+        }
+        point[i] = slots[at];
     }
-    ++points;
+    const uint32_t points = static_cast<uint32_t>(first.size());
     // The sheets: points joined by triangles.
     std::vector<uint32_t> root(points);
     std::iota(root.begin(), root.end(), 0u);
@@ -164,34 +172,33 @@ inline std::vector<Added> Rim(const std::vector<Vertex>& in, float out) {
         }
         return p;
     };
-    struct Edge {
-        uint32_t lo, hi; ///< points
-        uint32_t a, b;   ///< the vertices, as the triangle goes round
-    };
-    std::vector<Edge> edges;
+    // Each triangle's edges: the two points (lower first) and the corner it starts at.
+    const auto next = [](uint32_t corner) { return corner - corner % 3 + (corner + 1) % 3; };
+    std::vector<uint64_t> edges;
     edges.reserve(n);
-    for (std::size_t t = 0; t < n; t += 3) {
+    for (uint32_t t = 0; t < n; t += 3) {
         const uint32_t p[3] = {point[t], point[t + 1], point[t + 2]};
         if (p[0] == p[1] || p[1] == p[2] || p[2] == p[0]) {
             continue; // no area
         }
         for (uint32_t i = 0; i < 3; ++i) {
-            const uint32_t j = (i + 1) % 3;
-            edges.push_back({std::min(p[i], p[j]), std::max(p[i], p[j]),
-                             static_cast<uint32_t>(t) + i, static_cast<uint32_t>(t) + j});
-            root[find(p[i])] = find(p[j]);
+            const uint32_t a = p[i], b = p[(i + 1) % 3];
+            edges.push_back(uint64_t{std::min(a, b)} << 40 | uint64_t{std::max(a, b)} << 20 |
+                            (t + i));
+            root[find(a)] = find(b);
         }
     }
-    std::sort(edges.begin(), edges.end(), [](const Edge& a, const Edge& b) {
-        return std::pair{a.lo, a.hi} < std::pair{b.lo, b.hi};
-    });
+    std::sort(edges.begin(), edges.end());
+    struct Edge {
+        uint32_t a, b; ///< vertices, as the triangle goes round
+    };
     std::vector<Edge> open;
     for (std::size_t i = 0, j; i < edges.size(); i = j) {
-        for (j = i + 1; j < edges.size() && edges[j].lo == edges[i].lo && edges[j].hi == edges[i].hi;
-             ++j) {
+        for (j = i + 1; j < edges.size() && edges[j] >> 20 == edges[i] >> 20; ++j) {
         }
         if (j == i + 1) {
-            open.push_back(edges[i]);
+            const uint32_t corner = static_cast<uint32_t>(edges[i] & 0xFFFFF);
+            open.push_back({corner, next(corner)});
         }
     }
     // Each sheet's middle.
@@ -217,6 +224,7 @@ inline std::vector<Added> Rim(const std::vector<Vertex>& in, float out) {
             ++m.count;
         }
     }
+    rim.reserve(open.size() * 6);
     const auto outside = [&](uint32_t i) {
         const Middle& m = middles[find(point[i])];
         const auto at = [&](float x, std::size_t k) {
@@ -238,8 +246,13 @@ inline std::vector<Added> Rim(const std::vector<Vertex>& in, float out) {
             continue; // faded out already
         }
         // The triangle over the edge goes round the other way: the sheet's own facing.
-        const Added a{e.a, in[e.a]}, b{e.b, in[e.b]}, a2{e.a, outside(e.a)}, b2{e.b, outside(e.b)};
-        rim.insert(rim.end(), {b, a, a2, b, a2, b2});
+        const Added b{e.b, in[e.b]}, a2{e.a, outside(e.a)};
+        rim.push_back(b);
+        rim.push_back({e.a, in[e.a]});
+        rim.push_back(a2);
+        rim.push_back(b);
+        rim.push_back(a2);
+        rim.push_back({e.b, outside(e.b)});
     }
     return rim;
 }
