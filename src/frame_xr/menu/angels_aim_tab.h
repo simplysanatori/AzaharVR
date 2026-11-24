@@ -84,7 +84,8 @@ inline constexpr const char* kAngelsAimModName = "Darkshade's C-Stick & Gyro Mod
 inline constexpr const char* kAngelsAimSuggested = "Suggested";
 /// One row for the weapons and effects textures, named as the catalog names the pack.
 inline constexpr const char* kAngelsAimTexturesPack = "Kid Icarus Uprising Weapons HD";
-/// AzaharFrame kiu140 PROPOSED: the row that takes a hand model from a zip, and its toast.
+/// AzaharFrame kiu140: the row that takes a hand model from a zip, and its toast (approved
+/// 2026-11-24).
 inline constexpr const char* kAngelsAimHandModel = "Pit's Hand Model";
 inline constexpr const char* kAngelsAimHandToast = "Hand Model Installed";
 inline constexpr const char* kAngelsAimSettings = "Settings";
