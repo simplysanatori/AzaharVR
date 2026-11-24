@@ -281,9 +281,6 @@ Row RowFor(Id id, const MenuModel& m) {
     case Id::KiuArm: // AzaharFrame kiu140
         segmented(std::clamp(m.kiu_arm, 0, 1));
         break;
-    case Id::KiuLaurel: // AzaharFrame kiu140
-        segmented(std::clamp(m.kiu_laurel, 0, 1));
-        break;
     case Id::KiuHudLinked: // AzaharFrame kiu140
         segmented(std::clamp(m.kiu_hud_linked, 0, 1));
         break;
@@ -569,7 +566,6 @@ SettingsSection SectionOf(Id id) {
     case Id::KiuHud: // AzaharFrame kiu140
     case Id::KiuHudSize: // AzaharFrame kiu140
     case Id::KiuArm: // AzaharFrame kiu140
-    case Id::KiuLaurel: // AzaharFrame kiu140
     case Id::KiuHudLinked: // AzaharFrame kiu140
     case Id::KiuHudAcross: // AzaharFrame kiu140
     case Id::KiuHudHeight: // AzaharFrame kiu140
@@ -659,7 +655,6 @@ bool PerGameSetting(Id id) {
     case Id::KiuHud: // AzaharFrame kiu140
     case Id::KiuHudSize: // AzaharFrame kiu140
     case Id::KiuArm: // AzaharFrame kiu140
-    case Id::KiuLaurel: // AzaharFrame kiu140
     case Id::KiuHudLinked: // AzaharFrame kiu140
     case Id::KiuHudAcross: // AzaharFrame kiu140
     case Id::KiuHudHeight: // AzaharFrame kiu140
@@ -827,9 +822,6 @@ std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& m) {
         rows.push_back(Id::KiuHudSize);
     }
     rows.push_back(Id::KiuArm);
-    if (m.kiu_bottom_screen == 2) { // AzaharFrame kiu140
-        rows.push_back(Id::KiuLaurel);
-    }
     if (m.kiu_hud != 0) { // AzaharFrame kiu140
         rows.push_back(Id::KiuHudLinked);
     }
@@ -890,7 +882,7 @@ std::vector<AngelsAimRowGroup> AngelsAimGroups(const MenuModel& model) {
     }
     AngelsAimRowGroup bottom{AngelsAimGroupKind::BottomScreen, {}};
     for (const Id id : {Id::KiuBottomScreen, Id::KiuBottomSize, Id::KiuBottomOpacity,
-                        Id::KiuWristAngle, Id::KiuWristAlong, Id::KiuLaurel, Id::KiuBottomReset}) {
+                        Id::KiuWristAngle, Id::KiuWristAlong, Id::KiuBottomReset}) {
         if (has(fp, id)) {
             bottom.rows.push_back(id);
         }
@@ -1103,10 +1095,6 @@ const std::vector<std::string>& OptionsFor(Id id) {
         static const std::vector<std::string> kChoices{"Off", "On"};
         return kChoices;
     }
-    case Id::KiuLaurel: { // AzaharFrame kiu140: the stored order
-        static const std::vector<std::string> kChoices{"Off", "On"};
-        return kChoices;
-    }
     case Id::KiuHudLinked: { // AzaharFrame kiu140: the stored order
         static const std::vector<std::string> kChoices{"Separate", "Linked"};
         return kChoices;
@@ -1285,8 +1273,6 @@ std::string LabelFor(Id id) {
         return kKiuHudSizeRow;
     case Id::KiuArm: // AzaharFrame kiu140
         return kKiuArmRow;
-    case Id::KiuLaurel: // AzaharFrame kiu140
-        return kKiuLaurelRow;
     case Id::KiuHudLinked: // AzaharFrame kiu140
         return kKiuHudLinkedRow;
     case Id::KiuHudAcross: // AzaharFrame kiu140
@@ -1696,8 +1682,6 @@ std::string ExplainFor(Id id) {
         return kKiuHudSizeTip;
     case Id::KiuArm: // AzaharFrame kiu140
         return kKiuArmTip;
-    case Id::KiuLaurel: // AzaharFrame kiu140
-        return kKiuLaurelTip;
     case Id::KiuHudLinked: // AzaharFrame kiu140
         return kKiuHudLinkedTip;
     case Id::KiuHudAcross: // AzaharFrame kiu140

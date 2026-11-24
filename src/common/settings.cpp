@@ -375,7 +375,6 @@ void RestoreGlobalState(bool is_powered_on) {
     values.vr_kiu_hud.SetGlobal(true); // AzaharFrame kiu140
     values.vr_kiu_hud_size.SetGlobal(true); // AzaharFrame kiu140
     values.vr_kiu_arm.SetGlobal(true); // AzaharFrame kiu140
-    values.vr_kiu_laurel.SetGlobal(true); // AzaharFrame kiu140
     values.vr_kiu_hud_linked.SetGlobal(true); // AzaharFrame kiu140
     values.vr_kiu_hud_across.SetGlobal(true); // AzaharFrame kiu140
     values.vr_kiu_hud_height.SetGlobal(true); // AzaharFrame kiu140

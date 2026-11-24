@@ -161,9 +161,6 @@ inline constexpr const char* kKiuHudSizeTip =
 inline constexpr const char* kKiuArmRow = "Pit's Arm"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuArmTip =
     "Your free hand is Pit's arm instead of the controller.";
-inline constexpr const char* kKiuLaurelRow = "Laurel Frame"; // AzaharFrame kiu140 PROPOSED
-inline constexpr const char* kKiuLaurelTip =
-    "A laurel round the Bottom Screen on your wrist.";
 inline constexpr const char* kKiuHudLinkedRow = "Health and Score"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuHudLinkedTip =
     "Linked: side by side, moved as one. Separate: each has its own place.";

@@ -159,9 +159,6 @@ public:
     void SetPitArm(int hand);
     /// AzaharFrame kiu140: where it was last drawn (controller_models.h PitForearm).
     bool PitForearm(int hand, Input::Vec3f* wrist, Input::Vec3f* elbow) const;
-    /// AzaharFrame kiu140: the laurel (laurel_frame.h) round the wrist screen on `hand`: its pose
-    /// (LOCAL) and width in metres. Cleared by TakeInput; GameFrame sets it.
-    void SetLaurel(int hand, const Input::Posef& pose, float width);
     /// AzaharFrame kiuflash: the weapon's muzzle flash this frame (muzzle_flash.h), drawn with
     /// the weapon set by SetWeapon. Cleared by TakeInput; GameFrame sets it.
     void SetMuzzleFlash(const FlashFrame& flash);

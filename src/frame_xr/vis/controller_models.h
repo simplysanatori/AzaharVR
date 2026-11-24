@@ -94,10 +94,6 @@ public:
         /// its fingers from what the controller feels; drawn while the weapon is in the other.
         bool pit_arm = false;
         PitHandInputs pit;
-        /// AzaharFrame kiu140: the laurel round the wrist screen on this hand (laurel_frame.h):
-        /// the screen's pose (LOCAL) and its width in metres (0: none).
-        Input::Posef laurel_pose{};
-        float laurel_width = 0.0f;
     };
 
     /// XR thread, each frame while models are wanted (anything shown or not): reads the files

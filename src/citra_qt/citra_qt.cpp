@@ -5802,9 +5802,6 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::KiuArm: // AzaharFrame kiu140
         set(v.vr_kiu_arm, std::clamp<u32>(u, 0, 1));
         break;
-    case S::KiuLaurel: // AzaharFrame kiu140
-        set(v.vr_kiu_laurel, std::clamp<u32>(u, 0, 1));
-        break;
     case S::KiuHudLinked: // AzaharFrame kiu140
         set(v.vr_kiu_hud_linked, std::clamp<u32>(u, 0, 1));
         break;

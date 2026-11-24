@@ -227,9 +227,6 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::KiuArm: // AzaharFrame kiu140
         f(v.vr_kiu_arm);
         return true;
-    case Id::KiuLaurel: // AzaharFrame kiu140
-        f(v.vr_kiu_laurel);
-        return true;
     case Id::KiuHudLinked: // AzaharFrame kiu140
         f(v.vr_kiu_hud_linked);
         return true;

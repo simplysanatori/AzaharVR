@@ -406,7 +406,6 @@ enum class MenuSetting {
     KiuHud, ///< AzaharFrame kiu140: `value` index: HUD's Game's Own, In View (vr_kiu_hud)
     KiuHudSize, ///< AzaharFrame kiu140: `value` a slider, 40 to 200 percent (vr_kiu_hud_size)
     KiuArm, ///< AzaharFrame kiu140: `value` index: Off, On (vr_kiu_arm)
-    KiuLaurel, ///< AzaharFrame kiu140: `value` index: Off, On (vr_kiu_laurel)
     KiuHudLinked, ///< AzaharFrame kiu140: `value` index: Separate, Linked (vr_kiu_hud_linked)
     KiuHudAcross, ///< AzaharFrame kiu140: `value` a slider, -40 to 40 degrees (vr_kiu_hud_across)
     KiuHudHeight, ///< AzaharFrame kiu140: `value` a slider, -40 to 40 degrees (vr_kiu_hud_height)

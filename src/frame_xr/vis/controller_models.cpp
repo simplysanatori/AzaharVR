@@ -24,7 +24,6 @@
 #include "frame_xr/retired_swapchains.h" // AzaharFrame projdef
 #include "frame_xr/session.h"
 #include "frame_xr/vis/controller_models.h"
-#include "frame_xr/vis/laurel_frame.h" // AzaharFrame kiu140
 #include "frame_xr/vis/see_through.h" // AzaharFrame kiuopacity
 #include "frame_xr/vis/model_shaders.h"
 #include "frame_xr/vis/proj_screen.h" // AzaharFrame projscreen
@@ -577,12 +576,12 @@ struct ControllerModels::Gpu {
     std::string weapon_fit_logged;
     std::string weapon_draw_logged; ///< AzaharFrame kiuweapon
 
-    // ---- AzaharFrame kiu140: Pit's hand and the laurel (pit_hand.h, laurel_frame.h) ----
+    // ---- AzaharFrame kiu140: Pit's hand (pit_hand.h) ----
     struct Pit {
         int state = 0; ///< 0 not made, 1 made, 2 failed
-        vk::Buffer vertices, indices; ///< the hand's, then the laurel's, in one buffer each
+        vk::Buffer vertices, indices;
         float* map = nullptr;         ///< the hand's vertices (written when its pose changes)
-        uint32_t hand_indices = 0, laurel_indices = 0;
+        uint32_t hand_indices = 0;
         vk::DescriptorPool pool;
         vk::DescriptorSet set;
         vk::Sampler sampler;
@@ -2539,8 +2538,7 @@ void RecordArm(vk::CommandBuffer& c, GpuT& g, const PartT& part, const Mat& view
     }
 }
 
-// AzaharFrame kiu140: Pit's hand or the laurel: `count` indices from `first`, lit and solid, at
-// `model` (LOCAL).
+// AzaharFrame kiu140: Pit's hand: `count` indices from `first`, lit and solid, at `model` (LOCAL).
 template <typename GpuT>
 void RecordPit(vk::CommandBuffer& c, GpuT& g, const Mat& model, const Mat& view_proj,
                const XrVector3f& eye_pos, const Mat& head, float fade, bool mirrored,
@@ -3141,14 +3139,13 @@ void ControllerModels::FitArms(const ViewPose& views, const std::array<Hand, 2>&
 }
 
 // AzaharFrame kiu140: the hand's vertices (host visible, written again when its pose changes: one
-// image is drawn at a time, and Record runs once the last one is done), the laurel's after them, the
-// indices, and the palette; the copies go into this frame's commands.
+// image is drawn at a time, and Record runs once the last one is done), the indices,
+// and the palette; the copies go into this frame's commands.
 void ControllerModels::MakePit() {
     Gpu& g = *gpu;
     Gpu::Pit& p = g.pit;
     p.state = 2;
     try {
-        const LaurelMesh& laurel = LaurelFrame();
         const std::span<const uint32_t> hand = PitHandIndices(false);
         const std::size_t hand_floats = std::size_t{PitHandVertexCount()} * kPitVertexFloats;
         const auto host = vk::MemoryPropertyFlagBits::eHostVisible |
@@ -3159,18 +3156,13 @@ void ControllerModels::MakePit() {
             g.buffers.emplace_back(out, memory);
             return g.device.mapMemory(memory, 0, size);
         };
-        p.map = static_cast<float*>(make((hand_floats + laurel.vertices.size()) * sizeof(float),
+        p.map = static_cast<float*>(make(hand_floats * sizeof(float),
                                          vk::BufferUsageFlagBits::eVertexBuffer, p.vertices));
-        std::copy(laurel.vertices.begin(), laurel.vertices.end(), p.map + hand_floats);
         auto* indices = static_cast<uint32_t*>(
-            make((hand.size() + laurel.indices.size()) * sizeof(uint32_t),
+            make(hand.size() * sizeof(uint32_t),
                  vk::BufferUsageFlagBits::eIndexBuffer, p.indices));
         std::copy(hand.begin(), hand.end(), indices);
-        for (std::size_t k = 0; k < laurel.indices.size(); ++k) {
-            indices[hand.size() + k] = laurel.indices[k] + PitHandVertexCount();
-        }
         p.hand_indices = static_cast<uint32_t>(hand.size());
-        p.laurel_indices = static_cast<uint32_t>(laurel.indices.size());
 
         const std::vector<uint8_t> colour = PitHandPalette(PitHandDefaultColours());
         const std::vector<uint8_t> surface = PitHandSurface();
@@ -3215,8 +3207,7 @@ void ControllerModels::MakePit() {
         }
         g.device.updateDescriptorSets(writes, {});
         p.state = 1;
-        LOG_INFO(Frontend, "xr: Pit's hand: {} triangles, the laurel {}", p.hand_indices / 3,
-                 p.laurel_indices / 3);
+        LOG_INFO(Frontend, "xr: Pit's hand: {} triangles", p.hand_indices / 3);
     } catch (const std::exception& error) {
         LOG_ERROR(Frontend, "xr: Pit's hand could not be made ({}): the controller shows",
                   error.what());
@@ -3283,11 +3274,11 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
     vk::CommandBuffer& c = g.cmd;
     c.reset();
     c.begin({.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-    // AzaharFrame kiu140: Pit's hand and the laurel, made the first time one shows.
+    // AzaharFrame kiu140: Pit's hand, made the first time it shows.
     {
         bool wanted = false;
         for (std::size_t h = 0; h < 2; h++) {
-            wanted = wanted || arm_draws[h].pit || (hands[h].shown && hands[h].laurel_width > 0.0f);
+            wanted = wanted || arm_draws[h].pit;
         }
         if (wanted && g.pit.state == 0) {
             MakePit();
@@ -3505,17 +3496,7 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
             // AzaharFrame kiuarm: Pit's arm: in place of the controller, or under the weapon (a
             // see-through weapon shows it through).
             const ArmDraw& arm = arm_draws[static_cast<std::size_t>(h)];
-            // AzaharFrame kiu140: the laurel round the wrist screen, and Pit's own hand.
-            if (hand.laurel_width > 0.0f && g.pit.state == 1) {
-                const XrPosef at = ToXr(hand.laurel_pose);
-                Mat scale{};
-                scale[0] = scale[5] = scale[10] = hand.laurel_width;
-                scale[15] = 1.0f;
-                RecordPit(c, g, Multiply(FromPose(at.orientation, at.position), scale), view_proj,
-                          views.eye[e].position, head, hand.fade, false, g.pit.hand_indices,
-                          g.pit.laurel_indices);
-                c.bindPipeline(vk::PipelineBindPoint::eGraphics, g.pipeline);
-            }
+            // AzaharFrame kiu140: Pit's own hand.
             if (arm.pit && g.pit.state == 1) {
                 const XrPosef aim = ToXr(hand.aim);
                 Mat fit_m{};

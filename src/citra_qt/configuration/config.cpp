@@ -684,7 +684,6 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.vr_kiu_hud); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_hud_size); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_arm); // AzaharFrame kiu140
-    ReadGlobalSetting(Settings::values.vr_kiu_laurel); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_hud_linked); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_hud_across); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_hud_height); // AzaharFrame kiu140
@@ -1449,7 +1448,6 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.vr_kiu_hud); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_hud_size); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_arm); // AzaharFrame kiu140
-    WriteGlobalSetting(Settings::values.vr_kiu_laurel); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_hud_linked); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_hud_across); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_hud_height); // AzaharFrame kiu140

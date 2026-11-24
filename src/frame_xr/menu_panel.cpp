@@ -368,8 +368,6 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::KiuHudSize;
     case Id::KiuArm: // AzaharFrame kiu140
         return MenuSetting::KiuArm;
-    case Id::KiuLaurel: // AzaharFrame kiu140
-        return MenuSetting::KiuLaurel;
     case Id::KiuHudLinked: // AzaharFrame kiu140
         return MenuSetting::KiuHudLinked;
     case Id::KiuHudAcross: // AzaharFrame kiu140
@@ -1144,7 +1142,6 @@ void MenuPanel::BuildModel(const Host& host) {
     m.kiu_hud = static_cast<int>(v.vr_kiu_hud.GetValue()); // AzaharFrame kiu140
     m.kiu_hud_size = static_cast<int>(v.vr_kiu_hud_size.GetValue()); // AzaharFrame kiu140
     m.kiu_arm = static_cast<int>(v.vr_kiu_arm.GetValue()); // AzaharFrame kiu140
-    m.kiu_laurel = static_cast<int>(v.vr_kiu_laurel.GetValue()); // AzaharFrame kiu140
     m.kiu_hud_linked = static_cast<int>(v.vr_kiu_hud_linked.GetValue()); // AzaharFrame kiu140
     m.kiu_hud_across = static_cast<int>(v.vr_kiu_hud_across.GetValue()); // AzaharFrame kiu140
     m.kiu_hud_height = static_cast<int>(v.vr_kiu_hud_height.GetValue()); // AzaharFrame kiu140
@@ -1723,11 +1720,6 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = std::clamp(value, 0, 1);
         Apply(v.vr_kiu_arm, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::KiuArm;
-        break;
-    case Id::KiuLaurel: // AzaharFrame kiu140
-        r.value = std::clamp(value, 0, 1);
-        Apply(v.vr_kiu_laurel, static_cast<u32>(r.value), per_game);
-        r.setting = MenuSetting::KiuLaurel;
         break;
     case Id::KiuHudLinked: // AzaharFrame kiu140
         r.value = std::clamp(value, 0, 1);
@@ -2749,7 +2741,6 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::KiuCutscenes: // AzaharFrame kiu140
     case Id::KiuHud: // AzaharFrame kiu140
     case Id::KiuArm: // AzaharFrame kiu140
-    case Id::KiuLaurel: // AzaharFrame kiu140
     case Id::KiuHudLinked: // AzaharFrame kiu140
     case Id::WristSide:       // Back, Inside
     case Id::WindowScale:
