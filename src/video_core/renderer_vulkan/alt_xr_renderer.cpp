@@ -428,6 +428,14 @@ bool AltXrRenderer::Init() {
             return false;
         }
         impl->scheduler = std::make_unique<Scheduler>(*impl->instance);
+        // The scheduler calls both on every submission, and an empty std::function throws. The 3DS
+        // path sets them in its rasterizer and pipeline cache, which are not made here.
+        impl->scheduler->RegisterOnSubmit([] {});
+        impl->scheduler->RegisterOnDispatch([i = impl.get()] {
+            if (i->update_queue) {
+                i->update_queue->Flush();
+            }
+        });
         impl->queue_reg = std::make_unique<XrQueueRegistration>(*impl->instance, *impl->scheduler);
         sink->SetTopStereo(false);
 
