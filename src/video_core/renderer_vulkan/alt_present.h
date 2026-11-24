@@ -32,6 +32,30 @@ struct AltPresentUniformData {
 static_assert(sizeof(AltPresentUniformData) == 112,
               "AltPresentUniformData must match present shader push constants");
 
+/// The overlay's texture among the present shader's three: the right eye's, which these games
+/// never have.
+constexpr u32 kAltOverlaySlot = 1;
+
+/// A screen's quad. Upright (not `landscape`): turned 90 degrees anticlockwise, as the 3DS's
+/// screens. An overlay is drawn by the same quad, so it covers the screen exactly.
+constexpr std::array<AltScreenVertex, 4> AltScreenQuad(float x, float y, float w, float h,
+                                                       bool landscape) {
+    if (landscape) {
+        return {{
+            {x, y, 0.0f, 0.0f},
+            {x + w, y, 1.0f, 0.0f},
+            {x, y + h, 0.0f, 1.0f},
+            {x + w, y + h, 1.0f, 1.0f},
+        }};
+    }
+    return {{
+        {x, y, 1.0f, 0.0f},
+        {x + w, y, 1.0f, 1.0f},
+        {x, y + h, 0.0f, 0.0f},
+        {x + w, y + h, 0.0f, 1.0f},
+    }};
+}
+
 inline std::array<f32, 4 * 4> Orthographic(u32 width, u32 height) {
     // clang-format off
     return {2.f / width, 0.f,          0.f, -1.f,

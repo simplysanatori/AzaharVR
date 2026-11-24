@@ -4,6 +4,7 @@
 
 #include <algorithm>
 
+#include "common/alt_core_types.h"
 #include "common/param_package.h"
 #include "frame_xr/immersive_names.h" // AzaharFrame kiu
 #include "frame_xr/input/controls.h"
@@ -60,6 +61,10 @@ const char* ButtonName(int button) {
         return "Power";
     case NB::MicBlow:
         return "Microphone Blow";
+    case NB::QuickMenu:
+        return Common::AltCore::kUnapprovedQuickMenuLabel;
+    case NB::TurnPage:
+        return "Turn Secondary Screen Page";
     default:
         return "?";
     }

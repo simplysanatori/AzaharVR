@@ -15,6 +15,7 @@
 #include "frame_cores/driver_runner.h"
 #include "frame_cores/frame_driver.h"
 #include "frame_cores/second_screen.h"
+#include "video_core/renderer_vulkan/alt_present.h"
 
 using namespace FrameCores;
 namespace fs = std::filesystem;
@@ -75,11 +76,15 @@ struct Script {
     int steps = 1;
     bool own_thread = false;
     bool touch = false;
+    bool held = false;
+    bool quick_menu = false;
+    DriverPicture overlay;
     std::pair<uint32_t, uint32_t> size{};
     DriverInput last;
     DriverServices services;
     int resets = 0;
     int loads = 0;
+    int pages = 0;
     int gone = 0;
     bool can_edit = false;
     bool editing = false;
@@ -114,6 +119,10 @@ public:
             run();
         }
         out.audio_pcm = {1, 2};
+        CHECK_FALSE(out.held);
+        CHECK(out.overlay.pixels == nullptr);
+        out.held = script.held;
+        out.overlay = script.overlay;
     }
     void Reset() override {
         ++script.resets;
@@ -121,11 +130,17 @@ public:
     void AfterStateLoad() override {
         ++script.loads;
     }
+    void TurnPage() override {
+        ++script.pages;
+    }
     std::pair<uint32_t, uint32_t> SecondarySize() const override {
         return script.size;
     }
     bool HasTouch() const override {
         return script.touch;
+    }
+    bool HasQuickMenu() const override {
+        return script.quick_menu;
     }
 
 private:
@@ -298,6 +313,126 @@ TEST_CASE("DriverRunner counts the steps of a frame", "[frame_cores]") {
     runner.Stop();
     CHECK(script.gone == 1);
     CHECK(runner.StateSafeNow());
+}
+
+TEST_CASE("DriverRunner: a held frame is one without a step", "[frame_cores]") {
+    FakeCore core;
+    Script script;
+    Capabilities caps = Capabilities::ForGBA();
+    DriverRunner runner;
+    FrameOutput out;
+    runner.Start(DriverKind::Plain, {}, core.Services(), {}, With(script), {}, caps);
+    runner.RunFrame({}, out, caps);
+    CHECK_FALSE(out.held);
+
+    script.held = true;
+    script.steps = 0;
+    runner.RunFrame({}, out, caps);
+    runner.RunFrame({}, out, caps);
+    CHECK(out.held);
+    CHECK(runner.Missteps() == 0);
+    script.steps = 1; // said held, and ran
+    runner.RunFrame({}, out, caps);
+    CHECK(runner.Missteps() == 1);
+
+    script.held = false; // the next frame is told afresh
+    runner.RunFrame({}, out, caps);
+    CHECK_FALSE(out.held);
+    CHECK(runner.Missteps() == 1);
+    script.steps = 0;
+    runner.RunFrame({}, out, caps);
+    CHECK(runner.Missteps() == 2);
+    runner.Stop();
+}
+
+TEST_CASE("DriverRunner: an overlay is there only while the driver gives one", "[frame_cores]") {
+    FakeCore core;
+    Script script;
+    Capabilities caps = Capabilities::ForGBA();
+    DriverRunner runner;
+    FrameOutput out;
+    runner.Start(DriverKind::Plain, {}, core.Services(), {}, With(script), {}, caps);
+    runner.RunFrame({}, out, caps);
+    CHECK_FALSE(out.overlay.HasPicture());
+
+    const std::vector<uint32_t> px(6, 0x80000000u);
+    script.overlay = {px.data(), 3, 2, 3};
+    runner.RunFrame({}, out, caps);
+    REQUIRE(out.overlay.HasPicture());
+    CHECK(out.overlay.pixels == px.data());
+    CHECK(out.overlay.width == 3);
+    CHECK(out.overlay.height == 2);
+    CHECK_FALSE(out.overlay.bgra);
+
+    script.overlay = {};
+    runner.RunFrame({}, out, caps);
+    CHECK_FALSE(out.overlay.HasPicture());
+    runner.Stop();
+}
+
+TEST_CASE("DriverRunner: the quick menu's button and capability", "[frame_cores]") {
+    using namespace Common::AltCore;
+    FakeCore core;
+    Script script;
+    Capabilities caps = Capabilities::ForGBA();
+    DriverRunner runner;
+    FrameOutput out;
+    runner.Start(DriverKind::Plain, {}, core.Services(), {}, With(script), {}, caps);
+    CHECK_FALSE(caps.has_quick_menu);
+
+    InputState in;
+    in.buttons = BtnQuickMenu | BtnA;
+    runner.RunFrame(in, out, caps);
+    CHECK(script.last.quick_menu);
+    CHECK(script.last.keys == BtnA); // no key of the game's
+    in.buttons = BtnMic | BtnA;
+    runner.RunFrame(in, out, caps);
+    CHECK_FALSE(script.last.quick_menu);
+
+    script.quick_menu = true;
+    runner.Start(DriverKind::Plain, {}, core.Services(), {}, With(script), {}, caps);
+    CHECK(caps.has_quick_menu);
+    runner.Stop();
+}
+
+TEST_CASE("DriverRunner: pages are the driver's, offered to GBA games gba-ds knows",
+          "[frame_cores]") {
+    FakeCore core;
+    Script script;
+    Capabilities caps = Capabilities::ForGBA();
+    DriverRunner runner;
+    runner.TurnPage(); // no driver yet
+    DriverRunner::Known known;
+    runner.Start(DriverKind::Plain, known, core.Services(), {}, With(script), {}, caps);
+    CHECK_FALSE(caps.has_pages);
+    runner.TurnPage();
+    CHECK(script.pages == 1);
+    known.gbads = true;
+    runner.Start(DriverKind::Plain, known, core.Services(), {}, With(script), {}, caps);
+    CHECK(caps.has_pages);
+    runner.Stop();
+
+    // A driver without pages takes it and does nothing.
+    auto plain = MakePlainDriver(core.Services(), {});
+    plain->TurnPage();
+}
+
+TEST_CASE("The overlay covers the screen it is drawn over", "[frame_cores]") {
+    using namespace Vulkan;
+    STATIC_REQUIRE(kAltOverlaySlot != 0); // the Primary Screen's
+    STATIC_REQUIRE(kAltOverlaySlot != 2); // the Secondary Screen's
+    // Corner by corner: the whole texture, whatever its size, over the whole rectangle.
+    const auto flat = AltScreenQuad(10, 20, 30, 40, true);
+    for (const AltScreenVertex& v : flat) {
+        CHECK(v.u == (v.x == 10 ? 0.0f : 1.0f));
+        CHECK(v.v == (v.y == 20 ? 0.0f : 1.0f));
+    }
+    // Upright: left to right runs up the window.
+    const auto upright = AltScreenQuad(10, 20, 30, 40, false);
+    for (const AltScreenVertex& v : upright) {
+        CHECK(v.u == (v.y == 20 ? 1.0f : 0.0f));
+        CHECK(v.v == (v.x == 10 ? 0.0f : 1.0f));
+    }
 }
 
 TEST_CASE("DriverRunner: the Secondary Screen's size and touch", "[frame_cores]") {

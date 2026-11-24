@@ -138,12 +138,14 @@ struct AltCoreHost::Impl {
 
     Common::AltCore::InputState latest_input{};
     FrameOutput last_frame{};
+    bool page_before = false; ///< BtnTurnPage in the last frame. core_mutex held.
     HostStats stats{};
 
     std::atomic<bool> running{false};
     std::atomic<bool> stop_requested{false};
     std::atomic<bool> paused{false};
     std::atomic<bool> redraw{false};
+    std::atomic<bool> holding{false}; ///< the last frame was held (FrameOutput::held)
     std::atomic<bool> fast_forward{false};
     std::atomic<uint32_t> ff_speed_pct{200};
     bool headless = false;
@@ -597,7 +599,8 @@ struct AltCoreHost::Impl {
 
     void Present(bool skippable) {
         if (renderer && renderer->IsReady() && last_frame.primary.pixels) {
-            renderer->Present(last_frame.primary, last_frame.secondary, skippable);
+            renderer->Present(last_frame.primary, last_frame.secondary, last_frame.overlay,
+                              skippable);
         }
     }
 
@@ -606,8 +609,15 @@ struct AltCoreHost::Impl {
 
         const auto t0 = std::chrono::steady_clock::now();
 
+        const bool page = (in.buttons & Common::AltCore::BtnTurnPage) != 0;
+        if (page && !page_before) {
+            core->TurnPage();
+        }
+        page_before = page;
+
         core->SetInput(in);
         core->RunFrame(last_frame);
+        holding.store(last_frame.held, std::memory_order_relaxed);
 
         if (last_frame.metrics_changed) {
             caps.screens = last_frame.updated_metrics;
@@ -677,18 +687,23 @@ struct AltCoreHost::Impl {
                 ExecuteSingleFrameLocked(frame_ms);
             }
 
-            ++window_frames;
-            window_frame_ms_sum += frame_ms;
-            window_peak_ms = std::max(window_peak_ms, frame_ms);
-            if (frame_ms > (nominal_frame_us / 1000.0) * 1.25) {
-                ++window_slow;
+            // A held game's menu is read and drawn at the game's own pace, whatever speed is set.
+            const bool held = holding.load(std::memory_order_relaxed);
+            if (!held) {
+                ++window_frames;
+                window_frame_ms_sum += frame_ms;
+                window_peak_ms = std::max(window_peak_ms, frame_ms);
+                if (frame_ms > (nominal_frame_us / 1000.0) * 1.25) {
+                    ++window_slow;
+                }
             }
 
-            const bool is_ff = fast_forward.load(std::memory_order_relaxed);
+            const bool is_ff = !held && fast_forward.load(std::memory_order_relaxed);
             // Percent; 0 is no limit. Emulation Speed applies as to a 3DS game.
             const double limit =
-                is_ff ? static_cast<double>(ff_speed_pct.load(std::memory_order_relaxed))
-                      : Settings::values.frame_limit.GetValue();
+                held    ? 100.0
+                : is_ff ? static_cast<double>(ff_speed_pct.load(std::memory_order_relaxed))
+                        : Settings::values.frame_limit.GetValue();
 
             // Pacing & XR LimiterLock
             const int64_t now_ns = SteadyNowNs();
@@ -817,10 +832,12 @@ bool AltCoreHost::Boot(const std::string& rom_path, const std::string& data_dir,
 
     impl->caps = impl->core->GetCapabilities();
     impl->last_frame = FrameOutput{};
+    impl->page_before = false;
     impl->last_rumble = 0.0f;
     impl->screens = {};
     impl->paused.store(false, std::memory_order_relaxed);
     impl->redraw.store(false, std::memory_order_relaxed);
+    impl->holding.store(false, std::memory_order_relaxed);
     impl->fast_forward.store(false, std::memory_order_relaxed);
     impl->stop_requested.store(false, std::memory_order_relaxed);
     {
@@ -964,6 +981,10 @@ void AltCoreHost::Pause(bool paused) {
 
 bool AltCoreHost::IsPaused() const {
     return impl->paused.load(std::memory_order_acquire);
+}
+
+bool AltCoreHost::IsHeld() const {
+    return impl->holding.load(std::memory_order_relaxed);
 }
 
 void AltCoreHost::Redraw() {
@@ -1177,6 +1198,13 @@ void AltCoreHost::SetEditing(bool on) {
     std::lock_guard lock(impl->core_mutex);
     if (impl->core) {
         impl->core->SetEditing(on);
+    }
+}
+
+void AltCoreHost::TurnPage() {
+    std::lock_guard lock(impl->core_mutex);
+    if (impl->core) {
+        impl->core->TurnPage();
     }
 }
 

@@ -368,6 +368,8 @@ struct Job {
     int made = 0;
     int resets = 0;
     int loads = 0;
+    int pages = 0;
+    bool held = false;
     FrameCores::DriverPicture picture;
 };
 
@@ -378,7 +380,10 @@ public:
         ++job.made;
     }
     void RunFrame(const FrameCores::DriverInput& in, FrameCores::DriverFrame& out) override {
-        services.step(in.keys);
+        out.held = job.held;
+        if (!job.held) {
+            services.step(in.keys);
+        }
         job.picture = services.picture();
         pixels.resize(static_cast<size_t>(job.picture.width) * job.picture.height);
         for (uint32_t y = 0; y < job.picture.height; ++y) {
@@ -400,6 +405,9 @@ public:
     }
     void AfterStateLoad() override {
         ++job.loads;
+    }
+    void TurnPage() override {
+        ++job.pages;
     }
     std::pair<uint32_t, uint32_t> SecondarySize() const override {
         return {};
@@ -488,6 +496,52 @@ TEST_CASE("AltCore RomInfo detection and reserved 64-bit keys", "[frame_cores]")
     const auto dsi = FrameCores::ProbeRom(dsi_path.string());
     REQUIRE(dsi.has_value());
     CHECK(dsi->dsi_enhanced);
+}
+
+TEST_CASE("AltCoreHost: Turn Secondary Screen Page goes by its presses", "[frame_cores]") {
+    using namespace Common::AltCore;
+    TempDir tmp("pages");
+    const fs::path rom_path = tmp.path / "hb.gba";
+    WriteFile(rom_path, MakeHomebrewGbaRom());
+    Job job;
+    FrameCores::AltCoreHost host;
+    host.TurnPage(); // no game
+    REQUIRE(host.Boot(rom_path.string(), (tmp.path / "data").string(),
+                      /*headless_for_test=*/true, WithJob(job)));
+    InputState in{};
+    in.buttons = BtnTurnPage;
+    host.PushInput(in);
+    REQUIRE(host.StepFrames(3)); // held down: once
+    CHECK(job.pages == 1);
+    in.buttons = 0;
+    host.PushInput(in);
+    REQUIRE(host.StepFrames(1));
+    in.buttons = BtnTurnPage | BtnA;
+    host.PushInput(in);
+    REQUIRE(host.StepFrames(2));
+    CHECK(job.pages == 2);
+    host.TurnPage();
+    CHECK(job.pages == 3);
+}
+
+TEST_CASE("AltCoreHost: a held game is as a paused one", "[frame_cores]") {
+    TempDir tmp("held");
+    const fs::path rom_path = tmp.path / "hb.gba";
+    WriteFile(rom_path, MakeHomebrewGbaRom());
+    Job job;
+    FrameCores::AltCoreHost host;
+    REQUIRE(host.Boot(rom_path.string(), (tmp.path / "data").string(),
+                      /*headless_for_test=*/true, WithJob(job)));
+    REQUIRE(host.StepFrames(2));
+    CHECK_FALSE(host.IsHeld());
+    job.held = true;
+    REQUIRE(host.StepFrames(1));
+    CHECK(host.IsHeld());
+    CHECK(host.LastFrame().held);
+    CHECK(host.LastFrame().audio_pcm.empty());
+    job.held = false;
+    REQUIRE(host.StepFrames(1));
+    CHECK_FALSE(host.IsHeld());
 }
 
 TEST_CASE("GBA adapter boots homebrew ROM, renders, saves/loads state",

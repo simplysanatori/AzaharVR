@@ -61,6 +61,8 @@ private:
     std::array<std::atomic<bool>, ::FrameXr::Input::kNumControls> buttons_{};
     std::array<std::atomic<std::uint64_t>, ::FrameXr::Input::kNumAnalogControls> sticks_{};
     std::atomic<bool> mic_blow_{false}; ///< AzaharVR: ControlState::mic_blow
+    std::atomic<bool> quick_menu_{false}; ///< AzaharVR: ControlState::quick_menu
+    std::atomic<bool> turn_page_{false};  ///< AzaharVR: ControlState::turn_page
 };
 
 /// The motion sensors shared between the XR thread (writer) and the emulation thread (the HID

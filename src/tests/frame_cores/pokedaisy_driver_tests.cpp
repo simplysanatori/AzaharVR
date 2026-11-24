@@ -4,6 +4,7 @@
 
 #ifdef HAVE_POKEDAISY
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -166,7 +167,7 @@ TEST_CASE("PokeDaisy settings the host owns", "[frame_cores]") {
     CHECK(s.game_speed == 0);
     CHECK(s.scene_speeds == 0);
     CHECK(s.fly_classic);
-    CHECK_FALSE(s.hud);
+    CHECK(s.hud); // the player's: PokeDaisy's default, on
     CHECK_FALSE(s.cheats);
     CHECK_FALSE(s.rewind);
     CHECK(s.toggles == Toggles{});
@@ -180,6 +181,66 @@ TEST_CASE("PokeDaisy states wait for everything under way", "[frame_cores]") {
         p.*field = true;
         CHECK_FALSE(StateSafe(p));
     }
+}
+
+TEST_CASE("PokeDaisy overlay: as wide as the game's picture at 240 lines", "[frame_cores]") {
+    CHECK(OverlayWidth(240, 160) == 360); // the 3DS's columns 20 to 380
+    CHECK(OverlayWidth(160, 144) == 266); // 67 to 333
+    CHECK(OverlayWidth(256, 144) == 400); // never wider than PokeDaisy's
+    CHECK(OverlayWidth(240, 0) == 400);
+}
+
+TEST_CASE("PokeDaisy overlay: colours are premultiplied, the menu's dark under them",
+          "[frame_cores]") {
+    CHECK(OverlayPixel(0, false) == 0);
+    CHECK(OverlayPixel(0x00FFFFFF, false) == 0); // nothing drawn adds nothing
+    CHECK(OverlayPixel(0xFF112233, false) == 0xFF332211);
+    CHECK(OverlayPixel(0x80FF8000, false) == 0x80004080);
+    // Over black at 0x55: where nothing is drawn, behind glass, behind a letter.
+    CHECK(OverlayPixel(0, true) == 0x55000000);
+    CHECK(OverlayPixel(0x80FF8000, true) == 0xAA004080);
+    CHECK(OverlayPixel(0xFF112233, true) == 0xFF332211);
+}
+
+TEST_CASE("PokeDaisy quick menu: its items go by the gate", "[frame_cores]") {
+    std::vector<Quick> all;
+    for (int i = 0; i < static_cast<int>(Quick::Count); ++i) {
+        all.push_back(static_cast<Quick>(i));
+    }
+    CHECK(MenuItems(all, false).empty()); // all of it edits
+    const std::vector<int> shown = MenuItems(all, true);
+    for (const Quick item : all) {
+        INFO(static_cast<int>(item));
+        const bool ours = item == Quick::SaveState || item == Quick::LoadState ||
+                          item == Quick::Ff || item == Quick::Companion || item == Quick::Hud;
+        CHECK((NeedOf(AskOfItem(item)) == Need::Never) == ours);
+        CHECK((std::find(shown.begin(), shown.end(), static_cast<int>(item)) == shown.end()) ==
+              ours);
+        Backup backup;
+        EditGate gate = backup.Gate();
+        CHECK_FALSE(gate.Allows(AskOfItem(item)));
+        gate.SetEditing(true, false);
+        CHECK(gate.Allows(AskOfItem(item)) == !ours);
+        CHECK(backup.calls == (ours ? 0 : 1));
+    }
+    // The session's order is kept, with its indices.
+    CHECK(MenuItems({Quick::Fly, Quick::SaveState, Quick::Bike, Quick::Ff}, true) ==
+          std::vector<int>{0, 2});
+}
+
+TEST_CASE("PokeDaisy quick menu: the game stands unless something waits for it", "[frame_cores]") {
+    CHECK(HoldsFrame(true, {}));
+    CHECK_FALSE(HoldsFrame(false, {}));
+    for (bool Pending::* field : {&Pending::asked, &Pending::step, &Pending::job, &Pending::keys,
+                                  &Pending::closing}) {
+        Pending p;
+        p.*field = true;
+        CHECK_FALSE(HoldsFrame(true, p));
+        CHECK_FALSE(HoldsFrame(false, p));
+    }
+    Pending flying;
+    flying.flight = true;
+    CHECK(HoldsFrame(true, flying)); // LAND is in the menu
 }
 
 TEST_CASE("PokeDaisy touch: held every frame, let go once", "[frame_cores]") {

@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <functional>
 #include <utility>
+#include <vector>
 
 namespace FrameCores {
 class FrameDriver;
@@ -141,6 +142,77 @@ private:
     Backup backup = Backup::NotYet;
 };
 
+/// The quick menu's items, as PokeDaisy numbers them (quick_action).
+enum class Quick : uint8_t {
+    Pc,
+    Fly,
+    Repel,
+    Bike,
+    Wild,
+    SaveState,
+    LoadState,
+    Ff,
+    Companion,
+    Hud,
+    Flash,
+    Flight,
+    Land,
+    Count,
+};
+
+constexpr Ask AskOfItem(Quick item) {
+    switch (item) {
+    case Quick::Pc:
+        return Ask::Pc;
+    case Quick::Fly:
+        return Ask::FlyList; // and FlyTo, once a place is picked
+    case Quick::Repel:
+        return Ask::Repel;
+    case Quick::Bike:
+        return Ask::Bike;
+    case Quick::Wild:
+        return Ask::Toggle;
+    case Quick::Flash:
+        return Ask::Flash;
+    case Quick::Flight:
+    case Quick::Land:
+        return Ask::Flight;
+    case Quick::SaveState:
+    case Quick::LoadState:
+        return Ask::State;
+    case Quick::Ff:
+        return Ask::FastMode;
+    case Quick::Companion:
+    case Quick::Hud:
+    case Quick::Count:
+        break;
+    }
+    return Ask::Count;
+}
+
+/// Which of the session's items the menu has, by index: those that can be taken.
+std::vector<int> MenuItems(const std::vector<Quick>& all, bool editing);
+
+/// How much of PokeDaisy's 400x240 the game's picture has across, over the full height: 360 for a
+/// GBA game, 266 for a Game Boy one. The overlay is that much, so it covers the Primary Screen.
+constexpr int OverlayWidth(uint32_t game_width, uint32_t game_height) {
+    if (game_height == 0) {
+        return 400;
+    }
+    const uint32_t width = game_width * 240u / game_height;
+    return width < 400u ? static_cast<int>(width) : 400;
+}
+
+/// One pixel of PokeDaisy's overlay (ARGB, straight alpha) as DriverFrame::overlay has them (RGBA,
+/// premultiplied). `dim`: over the dark the open menu lays on the game.
+constexpr uint32_t OverlayPixel(uint32_t px, bool dim) {
+    const uint32_t a = px >> 24;
+    const uint32_t behind = dim ? 0x55u : 0u;
+    const auto part = [a](uint32_t c) { return ((c & 0xFFu) * a + 127u) / 255u; };
+    const uint32_t alpha = a + (behind * (255u - a) + 127u) / 255u;
+    return (alpha << 24) | (part(px) << 16) | (part(px >> 8) << 8) | part(px >> 16);
+}
+
 /// What keeps a save state from being made or loaded.
 struct Pending {
     bool asked = false;    ///< an ask not taken yet
@@ -151,6 +223,10 @@ struct Pending {
     bool closing = false;  ///< EditGate's Closing
 };
 bool StateSafe(const Pending& pending);
+
+/// Whether the game stands still this frame: the quick menu is open, and nothing PokeDaisy has
+/// under way counts frames or waits for the game. In the air it may.
+bool HoldsFrame(bool menu_open, const Pending& pending);
 
 /// pd_ui_touch's calls from a touch that is only a level.
 class TouchEdges {
@@ -188,7 +264,7 @@ struct HeldSettings {
     int game_speed;
     int scene_speeds; ///< the sum
     bool fly_classic;
-    bool hud;
+    bool hud; ///< the player's
     bool cheats;
     bool rewind;
     Toggles toggles;
@@ -196,7 +272,7 @@ struct HeldSettings {
 /// For tests: PokeDaisy's defaults, as the driver holds them.
 HeldSettings DefaultSettings();
 
-/// The overlay's way in (quick menu, HUD: a later lane). Only between RunFrame calls.
+/// A way in beside the quick menu, through the same gate. Only between RunFrame calls.
 class Actions {
 public:
     virtual ~Actions() = default;
@@ -208,7 +284,6 @@ public:
     /// The player's, whether or not it acts now.
     virtual Toggles GetToggles() const = 0;
     virtual bool SetToggles(const Toggles& toggles) = 0;
-    /// PokeDaisy's 400x240 overlay canvas goes to DriverFrame::overlay here once it is wanted.
 };
 /// Null if `driver` is not PokeDaisy's.
 Actions* ActionsOf(FrameDriver& driver);

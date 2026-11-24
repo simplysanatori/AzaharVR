@@ -132,6 +132,8 @@ void DriverRunner::Start(DriverKind kind, const Known& known, DriverServices ser
     caps.has_touch = driver->HasTouch();
     caps.second_screen_choices = known.Choices();
     caps.can_edit_game = driver->CanEdit();
+    caps.has_quick_menu = driver->HasQuickMenu();
+    caps.has_pages = known.gbads;
     UpdateSecondary(caps);
 }
 
@@ -151,6 +153,8 @@ void DriverRunner::RunFrame(const Common::AltCore::InputState& input, FrameOutpu
                             Common::AltCore::Capabilities& caps) {
     out.primary = {};
     out.secondary = {};
+    out.overlay = {};
+    out.held = false;
     out.audio_pcm.clear();
     out.rumble = 0.0f;
     out.metrics_changed = false;
@@ -174,13 +178,18 @@ void DriverRunner::RunFrame(const Common::AltCore::InputState& input, FrameOutpu
     frame.overlay = {};
     frame.audio_pcm.clear();
     frame.rumble = 0.0f;
+    frame.held = false;
+    in.quick_menu = (input.buttons & Common::AltCore::BtnQuickMenu) != 0;
     driver->RunFrame(in, frame);
-    if (const uint32_t stepped = steps.exchange(0, std::memory_order_relaxed); stepped != 1) {
+    if (const uint32_t stepped = steps.exchange(0, std::memory_order_relaxed);
+        stepped != (frame.held ? 0u : 1u)) {
         NoteMisstep(stepped, "in a frame");
     }
 
     out.primary = ToImage(frame.primary);
     out.secondary = ToImage(frame.secondary);
+    out.overlay = ToImage(frame.overlay);
+    out.held = frame.held;
     out.audio_pcm.swap(frame.audio_pcm);
     out.rumble = frame.rumble;
     if (UpdateSecondary(caps)) {
@@ -209,6 +218,12 @@ void DriverRunner::SetEditing(bool on) {
     editing = on;
     if (driver) {
         driver->SetEditing(on);
+    }
+}
+
+void DriverRunner::TurnPage() {
+    if (driver) {
+        driver->TurnPage();
     }
 }
 

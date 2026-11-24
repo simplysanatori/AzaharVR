@@ -2329,6 +2329,13 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
         if (t == DsButton::MicBlow) { // not in the columns either
             return "Microphone Blow: " + (name.empty() ? std::string("None") : name);
         }
+        if (t == DsButton::QuickMenu) {
+            return std::string(Common::AltCore::kUnapprovedQuickMenuLabel) + ": " +
+                   (name.empty() ? std::string("None") : name);
+        }
+        if (t == DsButton::TurnPage) {
+            return "Turn Secondary Screen Page: " + (name.empty() ? std::string("None") : name);
+        }
         return name;
     };
     const auto chip_w = [&](int t, float max_w) {
@@ -2444,10 +2451,13 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
             const float sel_w = chip_w(DsButton::Select, c.W());
             const float start_w = chip_w(DsButton::Start, c.W());
             const float home_w = chip_w(DsButton::Home, c.W());
-            // AzaharVR: the running DS game's Microphone Blow: first in the row, in what the three
-            // leave.
-            if (RowApplies(Id::DsMicBlow, model.core)) {
-                const int t = DsButton::MicBlow;
+            // AzaharVR: the running DS game's Microphone Blow, PokeDaisy's quick menu or a GBA
+            // game's Turn Secondary Screen Page: first in the row, in what the three leave.
+            const int t = RowApplies(Id::DsMicBlow, model.core) ? int{DsButton::MicBlow}
+                          : model.core.has_quick_menu           ? int{DsButton::QuickMenu}
+                          : model.core.has_pages                ? int{DsButton::TurnPage}
+                                                                : -1;
+            if (t >= 0) {
                 const float room = c.x1 - row_x - home_w - sel_w - start_w - 3.0f * kChipGap;
                 const Rect r{row_x, under.y0, row_x + chip_w(t, room), under.y1};
                 chips.push_back({t, r, {r.Cx(), r.y0}});
@@ -2476,7 +2486,8 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
         const Rect bs = ds.BottomScreen();
         const DsPoint touch_at{bs.x0 + 6.0f, bs.y0 + bs.H() * 0.8f};
         const auto off_the_drawing = [](int t) {
-            return t == DsButton::OpenMenu || t == DsButton::Modifier || t == DsButton::MicBlow;
+            return t == DsButton::OpenMenu || t == DsButton::Modifier || t == DsButton::MicBlow ||
+                   t == DsButton::QuickMenu || t == DsButton::TurnPage;
         };
         for (const Chip& ch : chips) {
             if (off_the_drawing(ch.target)) {

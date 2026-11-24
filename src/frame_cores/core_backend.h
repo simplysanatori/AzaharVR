@@ -55,8 +55,10 @@ struct CheatEntry {
 struct FrameOutput {
     Vulkan::AltScreenImage primary{};
     Vulkan::AltScreenImage secondary{};
+    Vulkan::AltScreenImage overlay{}; ///< over the whole Primary Screen, alpha premultiplied
     std::vector<int16_t> audio_pcm; ///< Interleaved stereo PCM16 (L, R, L, R, ...)
     float rumble = 0.0f;            ///< Haptic motor intensity [0.0, 1.0]
+    bool held = false;              ///< No frame ran: the driver holds the game (DriverFrame)
     bool metrics_changed = false;
     Common::AltCore::ScreenMetrics updated_metrics{};
 };
@@ -108,6 +110,8 @@ public:
     virtual void SetSolarLevel(int /*level*/) {}
     /// Allow Game Editing (GBA and Game Boy games).
     virtual void SetEditing(bool /*on*/) {}
+    /// The Secondary Screen's next page (GBA games), from the next frame.
+    virtual void TurnPage() {}
     virtual void SetMicBlow(bool /*on*/) {}
     /// DS/DSi: the microphone's input, before Load.
     virtual void SetMicrophone(MicrophoneFactory /*factory*/) {}

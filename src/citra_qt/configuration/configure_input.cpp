@@ -16,6 +16,7 @@
 #include "citra_qt/configuration/configure_input.h"
 #include "citra_qt/configuration/configure_motion_touch.h"
 #include "citra_qt/uisettings.h"
+#include "common/alt_core_types.h"
 #include "common/param_package.h"
 #include "core/core.h"
 #include "ui_configure_input.h"
@@ -97,7 +98,8 @@ ConfigureInput::ConfigureInput(Core::System& _system, QWidget* parent)
         ui->buttonDpadUp, ui->buttonDpadDown, ui->buttonDpadLeft, ui->buttonDpadRight,
         ui->buttonL,      ui->buttonR,        ui->buttonStart,    ui->buttonSelect,
         ui->buttonDebug,  ui->buttonGpio14,   ui->buttonZL,       ui->buttonZR,
-        ui->buttonHome,   ui->buttonPower,    ui->buttonMicBlow,
+        ui->buttonHome,   ui->buttonPower,    ui->buttonMicBlow,  ui->buttonQuickMenu,
+        ui->buttonTurnPage,
     };
 
     button_names = {
@@ -105,13 +107,23 @@ ConfigureInput::ConfigureInput(Core::System& _system, QWidget* parent)
         tr("D-Pad Up"),     tr("D-Pad Down"),    tr("D-Pad Left"),   tr("D-Pad Right"),
         tr("L Button"),     tr("R Button"),      tr("Start Button"), tr("Select Button"),
         tr("Debug"),        tr("GPIO4"),         tr("ZL Button"),    tr("ZR Button"),
-        tr("Home Button"),  tr("Power Button"),  tr("Microphone Blow")
+        tr("Home Button"),  tr("Power Button"),  tr("Microphone Blow"),
+        QString::fromUtf8(Common::AltCore::kUnapprovedQuickMenuLabel),
+        tr("Turn Secondary Screen Page")
     };
     // clang-format on
 
-#ifndef ENABLE_ALT_CORES // only DS games have it
+    ui->labelQuickMenu->setText(QStringLiteral("%1:").arg(
+        QString::fromUtf8(Common::AltCore::kUnapprovedQuickMenuLabel)));
+    ui->buttonQuickMenu->setToolTip(
+        QString::fromUtf8(Common::AltCore::kUnapprovedQuickMenuTooltip));
+#ifndef ENABLE_ALT_CORES // only DS, GBA and Game Boy games have them
     for (QWidget* widget : {static_cast<QWidget*>(ui->labelMicBlow),
-                            static_cast<QWidget*>(ui->buttonMicBlow)}) {
+                            static_cast<QWidget*>(ui->buttonMicBlow),
+                            static_cast<QWidget*>(ui->labelQuickMenu),
+                            static_cast<QWidget*>(ui->buttonQuickMenu),
+                            static_cast<QWidget*>(ui->labelTurnPage),
+                            static_cast<QWidget*>(ui->buttonTurnPage)}) {
         widget->hide();
     }
 #endif

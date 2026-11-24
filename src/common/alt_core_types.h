@@ -54,6 +54,8 @@ struct Capabilities {
     /// (1 << FrameCores::SecondScreen); none for every other game.
     uint32_t second_screen_choices = 0;
     bool can_edit_game = false; ///< Allow Game Editing means something for this game
+    bool has_quick_menu = false; ///< BtnQuickMenu opens PokeDaisy's quick menu
+    bool has_pages = false;      ///< a GBA game whose Secondary Screen BtnTurnPage may turn
     ScreenMetrics screens{};
     bool operator==(const Capabilities&) const = default;
 
@@ -180,7 +182,14 @@ enum ButtonBit : uint32_t {
     BtnX      = 1u << 10,
     BtnY      = 1u << 11,
     BtnMic    = 1u << 12,
+    BtnQuickMenu = 1u << 13, ///< PokeDaisy's quick menu
+    BtnTurnPage = 1u << 14,  ///< Turn Secondary Screen Page
 };
+
+// UNAPPROVED strings: the only place they are in.
+inline constexpr const char* kUnapprovedQuickMenuLabel = "PokeDaisy Quick Menu";
+inline constexpr const char* kUnapprovedQuickMenuTooltip =
+    "Opens PokeDaisy's quick menu over the game. Needs Allow Game Editing.";
 
 struct InputState {
     uint32_t buttons = 0;   ///< Bitmask of ButtonBit

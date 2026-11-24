@@ -309,6 +309,10 @@ void GbaCore::SetEditing(bool on) {
     impl->driver.SetEditing(on);
 }
 
+void GbaCore::TurnPage() {
+    impl->driver.TurnPage();
+}
+
 bool GbaCore::ImportBatterySave(const std::string& sav_path) {
     if (!impl->loaded || sav_path.empty() || impl->save_path.empty()) {
         return false;

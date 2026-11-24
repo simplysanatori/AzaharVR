@@ -100,6 +100,8 @@ bool GMainWindow::AltWindowOpen(const FrameCores::RomInfo& info) {
         // A gamepad's or the keyboard's own, in VR and Flat (Edit Controls).
         const auto controls = InputCommon::FrameXr::GetPad().Snapshot();
         state.buttons |= controls.mic_blow ? Common::AltCore::BtnMic : 0;
+        state.buttons |= controls.quick_menu ? Common::AltCore::BtnQuickMenu : 0;
+        state.buttons |= controls.turn_page ? Common::AltCore::BtnTurnPage : 0;
 #endif
         return state;
     };
@@ -348,14 +350,16 @@ void GMainWindow::AltCaptureScreenshot() {
         painter.setRenderHint(QPainter::SmoothPixmapTransform,
                               Settings::values.filter_mode.GetValue());
         const auto draw = [&](const auto& screen, const Common::Rectangle<u32>& rect,
-                              float opacity) {
+                              float opacity, bool see_through = false) {
             if (!screen.pixels) {
                 return;
             }
             QImage picture(reinterpret_cast<const uchar*>(screen.pixels),
                            static_cast<int>(screen.width), static_cast<int>(screen.height),
                            static_cast<qsizetype>(screen.stride_pixels) * 4,
-                           screen.bgra ? QImage::Format_RGB32 : QImage::Format_RGBX8888);
+                           see_through   ? QImage::Format_RGBA8888_Premultiplied
+                           : screen.bgra ? QImage::Format_RGB32
+                                         : QImage::Format_RGBX8888);
             if (!layout.is_rotated) {
                 picture = picture.transformed(QTransform().rotate(-90));
             }
@@ -365,6 +369,8 @@ void GMainWindow::AltCaptureScreenshot() {
         const auto top = [&](const Common::Rectangle<u32>& rect) {
             if (layout.top_screen_enabled) {
                 draw(frame.primary, rect, layout.top_opacity);
+                // As a 3DS game's screenshot: what the window shows.
+                draw(frame.overlay, rect, layout.top_opacity, true);
             }
         };
         const auto bottom = [&](const Common::Rectangle<u32>& rect) {
