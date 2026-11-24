@@ -163,6 +163,9 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     vis/hand_import.cpp # AzaharFrame kiuhand
     vis/hand_import.h
     vis/pit_hand_data.inc
+    vis/pit_arm.cpp # AzaharFrame kiuhand: the drawn arm (tools/kiu_hand/make_arm.py)
+    vis/pit_arm.h
+    vis/pit_arm_data.inc
     vis/muzzle_flash.cpp # AzaharFrame kiuflash
     vis/muzzle_flash.h
     vis/projectile.cpp # AzaharFrame kiuflash
@@ -211,6 +214,12 @@ target_link_libraries(frame_xr PUBLIC citra_common citra_core video_core input_c
 target_link_libraries(frame_xr PRIVATE frame_xr_picker ${CMAKE_DL_LIBS} Threads::Threads)
 target_link_libraries(frame_xr PUBLIC frame_xr_menu) # AzaharFrame tabmenu
 target_link_libraries(frame_xr PRIVATE lodepng) # AzaharFrame kiuhand: hand_import.cpp unpacks and decodes with it
+
+# AzaharFrame kiuhand: the drawn arm's images
+include(${PROJECT_SOURCE_DIR}/CMakeModules/EmbedBytes.cmake)
+embed_bytes(frame_xr pit_arm_images.inc
+    kPitArmColourPng ${PROJECT_SOURCE_DIR}/src/frame_xr/vis/pit_arm_colour.png
+    kPitArmSurfacePng ${PROJECT_SOURCE_DIR}/src/frame_xr/vis/pit_arm_surface.png)
 # AzaharFrame menuux: Edit Controls' click plays through SDL's audio (ui_sound.cpp).
 if (ENABLE_SDL2)
     target_link_libraries(frame_xr PRIVATE SDL2::SDL2)

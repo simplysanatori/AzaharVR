@@ -28,6 +28,7 @@
 #include "frame_xr/session.h"
 #include "frame_xr/vis/controller_models.h"
 #include "frame_xr/vis/hand_import.h"
+#include "frame_xr/vis/pit_arm.h"
 #include "frame_xr/vis/pit_hand_shader.h" // AzaharFrame kiu140
 #include "frame_xr/vis/see_through.h" // AzaharFrame kiuopacity
 #include "frame_xr/vis/model_shaders.h"
@@ -224,13 +225,21 @@ void ReadPitModel() {
     auto model = std::make_shared<PitModel>();
     std::string error;
     const std::string path = FileUtil::GetUserPath(FileUtil::UserPath::UserDir) + kPitModelFile;
-    const bool ok = LoadPitModel(path, *model, error);
-    if (!ok && !error.empty()) {
-        LOG_ERROR(Frontend, "xr: Pit's arm: {} was refused: {}", path, error);
-    } else if (ok) {
-        LOG_INFO(Frontend, "xr: Pit's arm: the hand file has {} + {} triangles, textures {}x{}",
-                 model->body_index_count / 3, model->plate_index_count / 3, model->texture_width,
-                 model->texture_height);
+    bool ok = LoadPitModel(path, *model, error);
+    const bool own = ok;
+    if (!ok) {
+        if (!error.empty()) {
+            LOG_ERROR(Frontend, "xr: Pit's arm: {} was refused: {}", path, error);
+        }
+        ok = BuiltInPitModel(*model, error); // the drawn arm
+        if (!ok) {
+            LOG_ERROR(Frontend, "xr: Pit's arm: the built-in arm was refused: {}", error);
+        }
+    }
+    if (ok) {
+        LOG_INFO(Frontend, "xr: Pit's arm: {}, {} + {} triangles, textures {}x{}",
+                 own ? "the player's hand file" : "the built-in arm", model->body_index_count / 3,
+                 model->plate_index_count / 3, model->texture_width, model->texture_height);
     }
     auto& source = PitSource();
     const std::lock_guard lock{source.m};
