@@ -75,7 +75,15 @@ TEST_CASE("picker: extension filter matches Azahar's game list", "[frame_xr][pic
     CHECK_FALSE(HasSupportedExtension("/games/save.sav"));
     CHECK_FALSE(HasSupportedExtension("/games/noextension"));
     CHECK_FALSE(HasSupportedExtension("/games.3ds/noextension"));
+#ifdef ENABLE_ALT_CORES
+    CHECK(HasSupportedExtension("/games/archive.3ds.zip")); // looked into: only a ROM inside shows
+    for (const char* ext : {"nds", "dsi", "gba", "gb", "gbc"}) {
+        INFO(ext);
+        CHECK(HasSupportedExtension(std::string("/games/Some Game.") + ext));
+    }
+#else
     CHECK_FALSE(HasSupportedExtension("/games/archive.3ds.zip"));
+#endif
     CHECK_FALSE(HasSupportedExtension(""));
 }
 
