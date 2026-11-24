@@ -188,7 +188,8 @@ endif()
 
 target_link_libraries(tests PRIVATE citra_common citra_core video_core audio_core)
 if (TARGET frame_cores)
-    target_sources(tests PRIVATE frame_cores/alt_cores_tests.cpp frame_cores/microphone_tests.cpp)
+    target_sources(tests PRIVATE frame_cores/alt_cores_tests.cpp frame_cores/microphone_tests.cpp
+        frame_cores/second_screen_tests.cpp)
     target_link_libraries(tests PRIVATE frame_cores)
 endif()
 target_link_libraries(tests PRIVATE input_common) # AzaharFrame

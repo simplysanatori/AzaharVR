@@ -3784,6 +3784,7 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     PreventOSSleep();
     play_time_manager->SetProgramId(info.title_id);
     play_time_manager->Start();
+    game_list->SetAltGameRunning(true);
     AltWindowShow();
     LOG_INFO(Frontend, "Alt core booted: {} ({:016X})", info.title, info.title_id);
     return true;
@@ -3803,12 +3804,14 @@ void GMainWindow::ShutdownAltGame() {
     }
     g_frame_game_config_name.clear();
 #endif
+    const u64 alt_title_id = alt_core_host->GetRomInfo().title_id;
     play_time_manager->Stop();
     AllowOSSleep();
     if (ui->action_Fullscreen->isChecked()) {
         HideFullscreen();
     }
     alt_core_host->Stop();
+    game_list->AltGameStopped(alt_title_id);
     emulation_running = false;
     game_path.clear();
     game_title.clear();
@@ -4990,6 +4993,18 @@ void GMainWindow::OnGameListShowList(bool show) {
 };
 
 void GMainWindow::OnGameListOpenPerGameProperties(const QString& file) {
+#ifdef ENABLE_ALT_CORES
+    // a DS, GBA or Game Boy game has no 3DS loader: its key comes from the header
+    if (FrameCores::DetectCoreKind(file.toStdString()) != Common::AltCore::CoreKind::N3DS) {
+        if (const auto info = FrameCores::ProbeRom(file.toStdString())) {
+            OpenPerGameConfiguration(info->title_id, file);
+        } else {
+            QMessageBox::information(this, tr("Properties"),
+                                     tr("The application properties could not be loaded."));
+        }
+        return;
+    }
+#endif
     const auto loader = Loader::GetLoader(file.toStdString());
 
     u64 title_id{};

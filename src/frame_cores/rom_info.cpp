@@ -600,6 +600,7 @@ std::optional<RomInfo> ProbeRom(const std::string& path) {
         }
         const uint8_t cgb_flag = head[0x143];
         const bool is_gbc = (cgb_flag == 0x80 || cgb_flag == 0xC0);
+        info.is_gbc = is_gbc;
         const size_t title_len = is_gbc ? 15 : 16;
         const std::string hdr_title = CleanAsciiField(head.data() + 0x134, title_len);
         info.title = !hdr_title.empty() ? hdr_title : fallback_stem;
@@ -612,6 +613,36 @@ std::optional<RomInfo> ProbeRom(const std::string& path) {
     }
 
     return std::nullopt;
+}
+
+GameSystem SystemOf(const RomInfo& info) {
+    switch (info.kind) {
+    case Common::AltCore::CoreKind::GBA:
+        return GameSystem::GBA;
+    case Common::AltCore::CoreKind::GB:
+        return info.is_gbc ? GameSystem::GBC : GameSystem::GB;
+    case Common::AltCore::CoreKind::NDS:
+    case Common::AltCore::CoreKind::DSi:
+        return GameSystem::DS;
+    default:
+        return GameSystem::N3DS;
+    }
+}
+
+bool FilterMatches(SystemFilter filter, GameSystem system) {
+    switch (filter) {
+    case SystemFilter::All:
+        return true;
+    case SystemFilter::N3DS:
+        return system == GameSystem::N3DS;
+    case SystemFilter::DS:
+        return system == GameSystem::DS;
+    case SystemFilter::GBA:
+        return system == GameSystem::GBA;
+    case SystemFilter::GB:
+        return system == GameSystem::GB || system == GameSystem::GBC;
+    }
+    return true;
 }
 
 const char* CoreFolder(Common::AltCore::CoreKind kind) {

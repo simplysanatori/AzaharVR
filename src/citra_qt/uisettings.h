@@ -122,6 +122,11 @@ struct Values {
     Settings::Setting<bool> show_type_column{true, Settings::Keys::show_type_column};
     Settings::Setting<bool> show_size_column{true, Settings::Keys::show_size_column};
     Settings::Setting<bool> show_play_time_column{true, Settings::Keys::show_play_time_column};
+#ifdef ENABLE_ALT_CORES
+    Settings::Setting<bool> show_system_column{true, Settings::Keys::show_system_column};
+    /// FrameCores::SystemFilter of the list's chips
+    Settings::Setting<int> game_list_system_filter{0, Settings::Keys::game_list_system_filter};
+#endif
 
     Settings::Setting<u16> screenshot_resolution_factor{
         0, Settings::Keys::screenshot_resolution_factor};

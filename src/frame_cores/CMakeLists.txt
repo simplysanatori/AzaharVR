@@ -17,6 +17,8 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     profile_input.h
     rom_info.cpp
     rom_info.h
+    second_screen.cpp
+    second_screen.h
 )
 
 create_target_directory_groups(frame_cores)

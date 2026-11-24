@@ -13,6 +13,9 @@
 #include "common/common_types.h"
 #include "common/play_time_manager.h"
 #include "uisettings.h"
+#ifdef ENABLE_ALT_CORES
+#include "frame_cores/rom_info.h"
+#endif
 
 namespace Service::FS {
 enum class MediaType : u32;
@@ -64,6 +67,9 @@ public:
         COLUMN_FILE_TYPE,
         COLUMN_SIZE,
         COLUMN_PLAY_TIME,
+#ifdef ENABLE_ALT_CORES
+        COLUMN_SYSTEM, // last, so a saved column layout still fits
+#endif
         COLUMN_COUNT, // Number of columns
     };
 
@@ -91,6 +97,13 @@ public:
     /// AzaharFrame ctgp7b: the scan a folder change asked for while a game ran (or a row's .app
     /// was found gone), once the game has stopped; `force` scans anyway. Returns whether it scans.
     bool RefreshIfPending(bool force = false);
+
+#ifdef ENABLE_ALT_CORES
+    /// A DS, GBA or Game Boy game runs: folder changes wait for it, as they do for a 3DS game.
+    void SetAltGameRunning(bool running);
+    /// That game stopped: its play time in the rows again, and the scan a folder change asked for.
+    void AltGameStopped(u64 program_id);
+#endif
 
     void ToggleFavorite(u64 program_id);
     void AddFavorite(u64 program_id);
@@ -136,6 +149,19 @@ private:
     void AddPermDirPopup(QMenu& context_menu, QModelIndex selected);
     void AddFavoritesPopup(QMenu& context_menu);
     void UpdateColumnVisibility();
+    bool AltGameRunning() const {
+#ifdef ENABLE_ALT_CORES
+        return alt_game_running;
+#else
+        return false;
+#endif
+    }
+#ifdef ENABLE_ALT_CORES
+    void BuildSystemChips();
+    void UpdateSystemChips();
+    void ApplySystemFilter();
+    bool PassesSystemFilter(const QStandardItem* item) const;
+#endif
 
     QString FindGameByProgramID(QStandardItem* current_item, u64 program_id, int role);
 
@@ -157,6 +183,13 @@ private:
 
     std::chrono::time_point<std::chrono::steady_clock> time_last_refresh;
     bool refresh_pending = false; ///< AzaharFrame ctgp7b: RefreshIfPending
+#ifdef ENABLE_ALT_CORES
+    QWidget* chip_bar = nullptr;
+    QVector<QToolButton*> chips; ///< by FrameCores::SystemFilter
+    FrameCores::SystemFilter system_filter = FrameCores::SystemFilter::All; ///< in effect
+    bool has_alt_games = false;
+    bool alt_game_running = false;
+#endif
 };
 
 class GameListPlaceholder : public QWidget {

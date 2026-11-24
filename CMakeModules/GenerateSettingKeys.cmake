@@ -255,6 +255,8 @@ if (ENABLE_QT)
         "show_type_column"
         "show_size_column"
         "show_play_time_column"
+        "show_system_column"
+        "game_list_system_filter"
         "screenshot_resolution_factor"
         "screenshotPath"
         "calloutFlags"
