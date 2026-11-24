@@ -55,6 +55,12 @@ inline WorldViewTap g_world_view_tap;
 /// first person (frame_xr/kiu_hooks.cpp; AZAHARFRAME_KIU_FP_2D=0 keeps it off); off elsewhere.
 inline std::atomic<bool> g_soft_draw_turn{false};
 
+/// AzaharFrame kiu140: the bottom screen is on view while immersive mode is engaged (Kid Icarus:
+/// Uprising's Persistent or Wrist bottom screen): its draws keep the game's own size and camera
+/// (no periphery factor, no head), so it looks the same in and out of battles. Set by the XR
+/// thread each frame (frame_xr/immersive.cpp).
+inline std::atomic<bool> g_bottom_as_drawn{false};
+
 /// AzaharFrame kiu131: Reticle Size. The draws with this texture (the game's reticle; 0: none)
 /// are shaded on the CPU and scaled by g_reticle_scale about their middle on the screen, before
 /// any kiu2d turn. Set each VBlank by Kid Icarus: Uprising's first person; 0 and 1 elsewhere.

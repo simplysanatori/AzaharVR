@@ -38,6 +38,7 @@
 #include "frame_xr/presets.h" // AzaharFrame immersive: preset screen sizes
 #include "frame_xr/render_margin.h" // AzaharFrame fovaxis
 #include "frame_xr/test_switches.h" // AzaharFrame integ9
+#include "video_core/kiu_view_tap.h" // AzaharFrame kiu140
 #include "video_core/vr_immersive.h"
 
 namespace FrameXr::Immersive {
@@ -2196,6 +2197,7 @@ float AnchorFollowNow(bool follow_eye) {
 
 ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacement& placement) {
     ScreenLayers out;
+    bool bottom_as_drawn = false; // AzaharFrame kiu140
     out.top_space = local_space;
     out.top_pose[0] = out.top_pose[1] = placement.top_pose;
     out.top_size[0] = out.top_size[1] = placement.top_size;
@@ -2296,6 +2298,7 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
             out.bottom_persistent = true;
             out.bottom_alpha = bottom.alpha;
         }
+        bottom_as_drawn = bottom.mode != Kiu::FirstPerson::BottomScreen::Off; // kiu140
         out.head_driven = true; // AzaharFrame flash
         // AzaharFrame kiuwrist: Angel's Aim's Secondary Screen on the off hand's wrist, set for
         // this display frame (the controls ask for this frame's screens after setting it).
@@ -2313,6 +2316,7 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
                                    ? g.solved.distance
                                    : DistanceTo(out.top_pose[0]);
     out.bottom_first = DistanceTo(out.bottom_pose) > top_distance;
+    VideoCore::Immersive::g_bottom_as_drawn.store(bottom_as_drawn, std::memory_order_relaxed);
     return out;
 }
 

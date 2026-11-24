@@ -178,6 +178,23 @@ void RasterizerAccelerated::SyncHudSpacing() {
         vs_data.vr_hud_far_plane = far_plane;
         vs_data_dirty = true;
     }
+    // AzaharFrame kiu140: the bottom screen on view in immersive mode keeps its own size.
+    const bool bottom = VideoCore::Immersive::g_bottom_as_drawn.load(std::memory_order_relaxed) &&
+                        HudSpacing::IsBottomViewport(width, height);
+    if (bottom != vr_bottom_draw) {
+        vr_bottom_draw = bottom;
+        if (vr_immersive_mode > 1) {
+            pica.vs_setup.uniforms_dirty = true; // the camera in them is patched or not
+        }
+    }
+    const float factor = bottom ? 1.0f : vr_factor;
+    const float factor_y = bottom ? 1.0f : vr_factor_y;
+    if (vs_data.vr_immersive_mode_factor != factor ||
+        vs_data.vr_immersive_mode_factor_y != factor_y) {
+        vs_data.vr_immersive_mode_factor = factor;
+        vs_data.vr_immersive_mode_factor_y = factor_y;
+        vs_data_dirty = true;
+    }
 }
 
 void RasterizerAccelerated::SyncDrawUniforms() {
@@ -312,11 +329,7 @@ void RasterizerAccelerated::SyncDrawUniforms() {
 
 void RasterizerAccelerated::SetVRData(const int32_t &vrImmersiveMode, const float& immersiveModeFactor, int uoffset, const float& gamePosScaler, const float inv_view[16])
 {
-    if (vs_data.vr_immersive_mode_factor != immersiveModeFactor)
-    {
-        vs_data.vr_immersive_mode_factor = immersiveModeFactor;
-        vs_data_dirty = true;
-    }
+    vr_factor = immersiveModeFactor; // AzaharFrame kiu140: each draw takes it (SyncHudSpacing)
 
     // AzaharFrame: the view matrix register is patched while the PICA uniforms are uploaded,
     // so upload them again with the new pose (and once more after leaving a view mode).
@@ -352,10 +365,7 @@ void RasterizerAccelerated::SetVRIpd(float ipd_m) {
 
 // AzaharFrame immersive: see shader_uniforms.h.
 void RasterizerAccelerated::SetVRFactorY(float factor_y) {
-    if (vs_data.vr_immersive_mode_factor_y != factor_y) {
-        vs_data.vr_immersive_mode_factor_y = factor_y;
-        vs_data_dirty = true;
-    }
+    vr_factor_y = factor_y; // AzaharFrame kiu140: each draw takes it (SyncHudSpacing)
 }
 
 bool RasterizerAccelerated::ReticleDraw() const {
@@ -429,6 +439,9 @@ void RasterizerAccelerated::ApplyVRDataToPicaVSUniforms(Pica::Shader::Generator:
 {
     // AzaharFrame oot: whether the draws with these uniforms go through the patched world camera.
     vr_world_uniforms = false;
+    if (vr_bottom_draw) {
+        return; // AzaharFrame kiu140: the bottom screen's own camera
+    }
     // AzaharFrame fixes7: Screen Shape: Automatic samples the game camera's projection here, in
     // any view, before immersive mode patches anything (vr_auto_shape.h).
     if (VideoCore::Immersive::g_measure_shape.load(std::memory_order_relaxed)) {
