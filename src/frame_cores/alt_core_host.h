@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "common/alt_core_types.h"
+#include "core/autosave.h"
 #include "core/frontend/alt_screens.h"
 #include "frame_cores/audio_resampler.h"
 #include "frame_cores/core_backend.h"
@@ -23,10 +24,23 @@ class EmuWindow;
 
 namespace FrameCores {
 
-struct SaveSlotInfo {
-    int slot = 0;         ///< 0 = Quick Save, 1..10 = numbered slots
-    std::string time;     ///< Formatted modification time (YYYY-MM-DD HH:MM)
-    std::string path;     ///< Full path on disk
+/// What a load of a save state came to. Nothing but Ok changes the game.
+enum class LoadResult {
+    Ok,
+    Gone,       ///< no such file, or another state in it since the list showed it
+    OtherGame,  ///< its key is another game's
+    OtherBuild, ///< made by another build of Azahar, and not asked for `anyway`
+    Failed,     ///< damaged, or the core refused it
+};
+
+struct LoadDone {
+    enum class What { Slot, Autosave, Undo, Import };
+    What what = What::Slot;
+    LoadResult result = LoadResult::Failed;
+    int slot = 0;
+    std::string path;    ///< Autosave: its file
+    uint64_t time = 0;   ///< when the loaded state was made (Unix seconds)
+    std::string version; ///< OtherBuild: Core::FrameVersionOf
 };
 
 struct HostStats {
@@ -59,6 +73,11 @@ struct HostFrontend {
     MicrophoneFactory microphone;
     /// The size of a screen changed, or a Secondary Screen came (emulation thread).
     std::function<void(const Layout::AltScreens&)> on_screens;
+    /// A slot or an autosave was written, or not (the writer's thread; the emulation thread when
+    /// the core could not make the state).
+    std::function<void(const Core::Autosave::Writer::Done&)> on_written;
+    /// A load, Undo Load or Import Save was done, or not (emulation thread).
+    std::function<void(const LoadDone&)> on_loaded;
 };
 
 enum class AltMenuSetting : int {
@@ -151,13 +170,31 @@ public:
     /// Exposes the AudioResampler for inspection in tests.
     AudioResampler& GetAudioResampler();
 
-    // Save state & battery save management
+    // Save states: the 3DS's files (core/savestate.h, core/autosave.h) in the game's own folder,
+    // with its key as the program ID. Any thread may ask; nothing here waits for the state.
+    //   Emulation thread: makes and loads states between two frames, also while paused.
+    //   Writer's thread (Core::Autosave::Writer): compresses, writes atomically, prunes.
+    // True: asked for; HostFrontend::on_written and on_loaded tell how it went. Headless there is
+    // no emulation thread: done here, true when it went well.
     bool QuickSave();
     bool QuickLoad();
     bool SaveSlot(int slot);
-    bool LoadSlot(int slot);
-    std::vector<SaveSlotInfo> ListSaveSlots() const;
+    /// `anyway`: a state from another build too.
+    bool LoadSlot(int slot, bool anyway = false);
+    bool MakeAutosave(Core::Autosave::Reason reason, uint32_t keep);
+    /// `time`, when not 0: the header time the list showed.
+    bool LoadAutosave(const std::string& path, uint64_t time, bool anyway = false);
+    /// Back to the moment before the last load (a slot, an autosave or Import Save), once.
+    bool UndoLoad();
     bool ImportSave(const std::string& sav_path);
+    /// Keep was lowered: the oldest autosaves go.
+    void PruneAutosaves(uint32_t keep);
+    /// A state is asked for and not made or loaded yet.
+    bool StatesBusy() const;
+    /// The game's folder, with a trailing separator; its autosaves are in Core::Autosave::Dir of it.
+    std::string StatesDir() const;
+    /// A frame ran in the last second.
+    bool FramesRecent() const;
 
     // Runtime inspection & controls
     const RomInfo& GetRomInfo() const;

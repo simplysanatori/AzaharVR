@@ -7,16 +7,15 @@
 // of a 3DS game's menu actions branch to it while such a game runs.
 
 #include <algorithm>
-#include <limits>
 #include <string>
 #include <utility>
 #include <QDateTime>
-#include <QFileInfo>
 #include <QImage>
 #include <QLabel>
 #include <QPainter>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QTimer>
 
 #include "audio_core/input.h"
 #include "audio_core/input_details.h"
@@ -56,6 +55,8 @@ std::pair<AudioCore::InputType, std::string> MicrophoneSetting() {
     return {Settings::values.input_type.GetValue(), Settings::values.input_device.GetValue()};
 }
 std::pair<AudioCore::InputType, std::string> g_microphone;
+
+constexpr const char* kSaveImported = "Save Imported";
 
 QRect ToQRect(const Common::Rectangle<u32>& r) {
     return {static_cast<int>(r.left), static_cast<int>(r.top), static_cast<int>(r.GetWidth()),
@@ -112,6 +113,14 @@ bool GMainWindow::AltWindowOpen(const FrameCores::RomInfo& info) {
                 OnAltSettingsChanged();
             }
         });
+    };
+    frontend.on_written = [this](const Core::Autosave::Writer::Done& done) {
+        QMetaObject::invokeMethod(
+            this, [this, done] { FrameAutosaveWritten(done); }, Qt::QueuedConnection);
+    };
+    frontend.on_loaded = [this](const FrameCores::LoadDone& done) {
+        QMetaObject::invokeMethod(
+            this, [this, done] { AltStateLoaded(done); }, Qt::QueuedConnection);
     };
     alt_core_host->SetFrontend(std::move(frontend));
     return true;
@@ -222,60 +231,69 @@ void GMainWindow::UpdateAltStatusBar() {
     emu_frametime_label->setVisible(true);
 }
 
-void GMainWindow::UpdateAltSaveStates() {
-    ui->menu_Load_State->setEnabled(true);
-    ui->menu_Save_State->setEnabled(true);
-    newest_slot = 0;
-    newest_slot_time = 0;
-    oldest_slot = 1;
-    oldest_slot_time = std::numeric_limits<u64>::max();
-
-    std::array<QDateTime, Core::SaveStateSlotCount> times;
-    for (const auto& state : alt_core_host->ListSaveSlots()) {
-        if (state.slot >= 0 && state.slot < static_cast<int>(times.size())) {
-            times[state.slot] = QFileInfo(QString::fromStdString(state.path)).lastModified();
-        }
+// A load, Undo Load or Import Save was done, or not. The emulation thread made it; here its toast
+// and Undo Load's offer, as a 3DS game's (FrameUndoOffered).
+void GMainWindow::AltStateLoaded(const FrameCores::LoadDone& done) {
+    using FrameCores::LoadResult;
+    using What = FrameCores::LoadDone::What;
+    const auto quick_loaded = std::exchange(alt_quick_loaded, {});
+    if (!AltGameRunning()) {
+        return;
     }
-    for (u32 i = 0; i < Core::SaveStateSlotCount; i++) {
-        const bool used = times[i].isValid();
-        const QString when =
-            used ? QStringLiteral(" - ") +
-                       times[i].toString(QStringLiteral("yyyy-MM-dd hh:mm:ss"))
-                 : QString{};
-        QAction* const load = i == 0 ? ui->action_Quick_Load : actions_load_state[i];
-        QAction* const save = i == 0 ? ui->action_Quick_Save : actions_save_state[i];
-        for (QAction* action : {load, save, actions_load_state[i], actions_save_state[i]}) {
-            QFont font = action->font();
-            font.setItalic(false); // a 3DS state from another build was
-            action->setFont(font);
+    if (done.result == LoadResult::Ok) {
+        switch (done.what) {
+        case What::Slot:
+            FrameUndoOffered(done.slot);
+            if (done.slot == 0 && quick_loaded) {
+                quick_loaded();
+            }
+            break;
+        case What::Autosave:
+            frame_loaded_autosave_time = done.time;
+            FrameUndoOffered(-1);
+            break;
+        case What::Undo:
+            break;
+        case What::Import:
+            frame_undo_available = true;
+            frame_undo_time = static_cast<u64>(QDateTime::currentSecsSinceEpoch());
+            frame_undo_text = kSaveImported;
+            FrameUpdateAutosaveActions();
+            FramePushAutosaves();
+            AltNotify(kSaveImported);
+            break;
         }
-        load->setText((i == 0 ? tr("Quick Load") : tr("Slot %1").arg(i)) + when);
-        save->setText((i == 0 ? tr("Quick Save") : tr("Slot %1").arg(i)) + when);
-        load->setEnabled(used);
-        actions_load_state[i]->setEnabled(used);
-        const u64 time = used ? static_cast<u64>(times[i].toSecsSinceEpoch()) : 0;
-        if (used && time > newest_slot_time) {
-            newest_slot = i;
-            newest_slot_time = time;
-        }
-        if (i > 0 && time < oldest_slot_time) {
-            oldest_slot = i;
-            oldest_slot_time = time;
-        }
+        return;
     }
-    ui->action_Load_from_Newest_Slot->setEnabled(newest_slot_time != 0);
+    if (done.result == LoadResult::OtherBuild) { // the file changed after it was tapped
+        if (done.what == What::Autosave) {
+            FrameAskLoadAutosaveAnyway(done.path, done.version);
+        } else {
+            FrameAskLoadAnyway(static_cast<u32>(done.slot), done.version);
+        }
+        return;
+    }
+    // The game goes on as it was; an earlier load can still be undone.
+    AltNotify(done.what == What::Import ? "Save Import Failed" : Core::kSaveStateNotLoaded);
 }
 
-void GMainWindow::AltSaveState(u32 slot) {
-    if (!alt_core_host->SaveSlot(static_cast<int>(slot))) {
-        LOG_ERROR(Frontend, "Alt core: state {} could not be saved", slot);
+// A toast in VR, the status bar in Flat.
+void GMainWindow::AltNotify(const std::string& text) {
+    LOG_INFO(Frontend, "Alt core: \"{}\"", text);
+#ifdef ENABLE_FRAME_XR
+    if (FrameXr::VrShowing()) {
+        FrameXr::ShowToastText(text, FrameXr::ToastTime::Long);
+        return;
     }
-    UpdateSaveStates();
-}
-
-void GMainWindow::AltLoadState(u32 slot) {
-    if (!alt_core_host->LoadSlot(static_cast<int>(slot))) {
-        LOG_ERROR(Frontend, "Alt core: state {} could not be loaded", slot);
+#endif
+    if (!message_label_used_for_movie) {
+        const QString q = QString::fromStdString(text);
+        message_label->setText(q);
+        QTimer::singleShot(6000, this, [this, q] {
+            if (!message_label_used_for_movie && message_label->text() == q) {
+                message_label->clear();
+            }
+        });
     }
 }
 

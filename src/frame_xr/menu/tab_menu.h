@@ -566,6 +566,8 @@ constexpr int OpeningScope(bool per_game_ok) {
 SettingsSection SectionOf(Id id);
 /// Whether the section has any row for the running game's console.
 bool SectionShown(SettingsSection section, const MenuModel& model);
+/// How many of the section's rows come before this one, for the running game's console.
+int RowsBefore(Id id, SettingsSection section, const MenuModel& model);
 /// Per-game settings (Azahar's Properties have most of them too): a change in Per-Game is the
 /// game's own value; in Global they are locked while the game has one. AzaharFrame reticle: the
 /// Controls tab's rows too (ControlsScopeRows).

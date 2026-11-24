@@ -490,6 +490,13 @@ bool SectionShown(SettingsSection section, const MenuModel& model) {
     return Is3ds(model.core) || !RowsFor(Tab::Settings, model, section).empty();
 }
 
+int RowsBefore(Id id, SettingsSection section, const MenuModel& model) {
+    const std::vector<Row> rows = RowsFor(Tab::Settings, model, section);
+    const auto it =
+        std::find_if(rows.begin(), rows.end(), [id](const Row& r) { return r.id == id; });
+    return static_cast<int>(it - rows.begin());
+}
+
 // AzaharFrame autosave
 SettingsSection SectionOf(Id id) {
     switch (id) {

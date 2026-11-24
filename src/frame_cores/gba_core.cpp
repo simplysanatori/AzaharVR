@@ -23,6 +23,9 @@ extern "C" {
 #include "mapcap.h"
 #include "patch.h"
 #include "profiles.h"
+#include <mgba-util/vfs.h>
+#include <mgba/core/core.h>
+#include <mgba/core/serialize.h>
 }
 
 namespace FrameCores {
@@ -419,16 +422,21 @@ bool GbaCore::SaveStateToMemory(std::vector<uint8_t>& out) {
     if (!impl->loaded) {
         return false;
     }
-    const size_t sz = emu_state_size(&impl->emu);
-    if (sz == 0) {
+    // With the save data and the clock, as emu_state_save_file: emu_state_save leaves them out.
+    VFile* vf = VFileMemChunk(nullptr, 0);
+    if (!vf) {
         return false;
     }
-    out.resize(sz);
-    if (!emu_state_save(&impl->emu, out.data())) {
+    bool ok = mCoreSaveStateNamed(impl->emu.core, vf,
+                                  SAVESTATE_SAVEDATA | SAVESTATE_RTC | SAVESTATE_METADATA);
+    const ssize_t size = ok ? vf->size(vf) : 0;
+    out.resize(size > 0 ? static_cast<std::size_t>(size) : 0);
+    ok = size > 0 && vf->seek(vf, 0, SEEK_SET) == 0 && vf->read(vf, out.data(), out.size()) == size;
+    vf->close(vf);
+    if (!ok) {
         out.clear();
-        return false;
     }
-    return true;
+    return ok;
 }
 
 bool GbaCore::LoadStateFromMemory(const uint8_t* data, std::size_t size) {
@@ -442,7 +450,13 @@ bool GbaCore::LoadStateFromMemory(const uint8_t* data, std::size_t size) {
     if (impl->mapcap) {
         mapcap_cancel(impl->mapcap);
     }
-    const bool ok = emu_state_load(&impl->emu, data);
+    VFile* vf = VFileFromConstMemory(data, size);
+    if (!vf) {
+        return false;
+    }
+    // As emu_state_load_file: the save file changes only when the game saves.
+    const bool ok = mCoreLoadStateNamed(impl->emu.core, vf, SAVESTATE_RTC);
+    vf->close(vf);
     if (ok) {
         impl->last_room_key = 0;
         impl->last_map_req_frame = 0;

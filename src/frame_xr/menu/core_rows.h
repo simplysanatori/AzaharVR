@@ -19,7 +19,7 @@ enum class Tab : int;
 using CoreCaps = Common::AltCore::Capabilities;
 
 // What no DS, GBA or Game Boy core does yet.
-inline constexpr bool kAltAutosave = false;           ///< true shows Autosave for these cores
+inline constexpr bool kAltAutosave = true;            ///< true shows Autosave for these cores
 inline constexpr bool kAltInternalResolution = false; ///< they draw at the console's own size
 inline constexpr bool kAltTextureFilter = false;      ///< their renderer does not read it
 

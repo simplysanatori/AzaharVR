@@ -8,6 +8,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <set>
 #include <vector>
 #ifdef __unix__
@@ -39,6 +40,7 @@ struct MenuRequest; // AzaharFrame tabmenu
 namespace FrameCores {
 class AltCoreHost;
 class ProfileInput;
+struct LoadDone;
 struct RomInfo;
 } // namespace FrameCores
 #endif
@@ -230,9 +232,8 @@ private:
     void OnAltSettingsChanged();
     void PauseAltGame(bool pause);
     void UpdateAltStatusBar();
-    void UpdateAltSaveStates();
-    void AltSaveState(u32 slot);
-    void AltLoadState(u32 slot);
+    void AltStateLoaded(const FrameCores::LoadDone& done);
+    void AltNotify(const std::string& text);
     void AltCaptureScreenshot();
     void FramePushAltCheats();
     void ApplyAltSettings();
@@ -268,6 +269,15 @@ private:
     // AzaharFrame savestate (citra_qt.cpp): "About Save States" once, the Load Anyway question
     // for a state from another build, its backup of the save data, and Restore Save Data.
     bool FrameSaveStateAsk(bool save, u32 slot);
+    /// Whose the running game's states are and where: a 3DS game's by its program ID in the states
+    /// folder, a DS, GBA or Game Boy game's by its key in its own folder.
+    struct FrameStates {
+        u64 id = 0;
+        u64 movie = 0;
+        std::string dir; ///< with a trailing separator
+    };
+    std::optional<FrameStates> FrameRunningStates() const;
+    bool FrameStatesOn() const; ///< a game of either kind is on
     void FrameDoSave(u32 slot);
     void FrameDoLoad(u32 slot);
     void FrameAskLoadAnyway(u32 slot, const std::string& version);
@@ -583,6 +593,7 @@ private:
 #ifdef ENABLE_ALT_CORES
     std::unique_ptr<FrameCores::ProfileInput> alt_input; ///< outlives the host, which reads it
     std::unique_ptr<FrameCores::AltCoreHost> alt_core_host;
+    std::function<void()> alt_quick_loaded; ///< Quick Loaded's toast, until the load is done
 #endif
     bool frame_memwarn_asking = false;       ///< its dialog shows (VR menu or Qt)
     bool frame_memwarn_textures = false; ///< AzaharFrame savemem: it offers Turn Off Custom Textures
