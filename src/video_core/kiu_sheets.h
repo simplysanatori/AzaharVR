@@ -12,9 +12,10 @@
 //
 // Such a draw is shaded on the CPU and drawn as it is, and a strip is added outside each edge that
 // only one triangle has and that is not already faded out: from the edge to kOut times its
-// distance from the sheet's middle, going to alpha 0. Places, colours and texture coordinates are
-// linear in clip space before the division, so the strip continues the sheet's own plane and
-// picture whatever the camera, behind the eye (w <= 0) too.
+// distance from the sheet's middle, going to alpha 0. Places and texture coordinates are linear in
+// clip space before the division, so the strip is the same whatever the camera, behind the eye
+// (w <= 0) too. These sheets are tents (the middle is raised round the path): the strip goes on
+// down as its corners lie from the middle, less steeply than the sheet's own side.
 //
 // Only the draws of a list, known by their vertices and indices byte for byte: a rule would widen
 // water, light beams and grass cards as well. Only in first person, not in its cutscenes
