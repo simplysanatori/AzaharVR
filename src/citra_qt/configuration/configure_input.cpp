@@ -170,8 +170,7 @@ ConfigureInput::ConfigureInput(Core::System& _system, QWidget* parent)
                     });
                     context_menu.addAction(tr("Restore Default"), this, [&] {
                         Common::ParamPackage default_mapping =
-                            Common::ParamPackage{InputCommon::GenerateKeyboardParam(
-                                QtConfig::default_buttons[button_id])};
+                            Common::ParamPackage{QtConfig::DefaultButtonParam(button_id)};
                         SetBinding({InputBindingType::NativeButton, QString(), button_id},
                                    default_mapping);
                     });
