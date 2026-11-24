@@ -39,6 +39,7 @@
 #include "frame_xr/qt_mirror/mirror_panel.h"
 #include "frame_xr/startup_escape.h" // AzaharFrame memguard
 #include "frame_xr/vis/visuals.h" // AzaharFrame vrvis
+#include "frame_xr/vis/panel_hold.h" // AzaharFrame kiu140
 #include "frame_xr/vis/wrist_screen.h" // AzaharFrame kiuwrist
 
 namespace frame_xr::picker {
@@ -301,10 +302,11 @@ private:
     bool wrist_wanted = false;
     Vis::WristAimHold wrist_aim_hold;
     Kiu::FirstPerson::Hand wrist_held_hand;
-    /// AzaharFrame kiu131: Bottom Screen: Persistent held by a grip (the hand, or -1), the grab's
-    /// offsets, the grips' hysteresis and the place while held (saved when let go).
+    /// AzaharFrame kiu131: Bottom Screen: Persistent held by a grip (the hand, or -1), the hold
+    /// (AzaharFrame kiu140: place and size), the grips' hysteresis and the place while held (saved
+    /// when let go).
     int bottom_grab_hand = -1;
-    Vis::StatsGrab bottom_grab;
+    Vis::PanelHold bottom_hold;
     bool bottom_grip_down[2]{};
     float bottom_grab_right = 0.0f, bottom_grab_down = 0.0f;
     Input::Recoil recoil;          ///< AzaharFrame kiugyro: Light Gun's recoil

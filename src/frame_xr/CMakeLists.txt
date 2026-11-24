@@ -164,6 +164,7 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     vis/panel_art.h
     vis/panels.cpp
     vis/panels.h
+    vis/panel_hold.h # AzaharFrame kiu140
     vis/stats_place.cpp # AzaharFrame statspos
     vis/stats_place.h
     vis/wrist_screen.cpp # AzaharFrame kiuwrist

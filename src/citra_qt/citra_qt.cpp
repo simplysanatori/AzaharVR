@@ -5228,6 +5228,7 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         r.command == C::SetSetting &&
         (r.setting == S::MeasuredGameFov || r.setting == S::WorldScaleSaved ||
          r.setting == S::KiuBottomX || r.setting == S::KiuBottomY ||
+         r.setting == S::KiuBottomSize || // AzaharFrame kiu140: sized by a grip's stick
          (r.setting == S::Depth3d && r.text == kFrameDepthShortcut));
     if (!emulation_running ||
         (!measured_fov && (!g_frame_mirror || !g_frame_mirror->MenuOpen()))) {
