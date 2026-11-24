@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "common/alt_core_types.h"
+#include "frame_cores/microphone.h"
 #include "video_core/renderer_vulkan/alt_xr_renderer.h"
 
 namespace FrameCores {
@@ -96,6 +97,12 @@ public:
     // Core-specific controls
     virtual void SetSolarLevel(int /*level*/) {}
     virtual void SetMicBlow(bool /*on*/) {}
+    /// DS/DSi: the microphone's input, before Load.
+    virtual void SetMicrophone(MicrophoneFactory /*factory*/) {}
+    /// Its settings changed (any thread).
+    virtual void ReloadMicrophone() {}
+    /// The game is paused: nothing listens until it goes on.
+    virtual void CloseMicrophone() {}
     virtual void SetLidClosed(bool /*closed*/) {}
     virtual void SetTouchEnabled(bool /*on*/) {}
     virtual void SetScreenRotation(int /*deg*/) {}

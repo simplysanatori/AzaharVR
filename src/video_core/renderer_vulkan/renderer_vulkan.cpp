@@ -63,8 +63,7 @@ constexpr static std::array<vk::DescriptorSetLayoutBinding, 1> PRESENT_BINDINGS 
     {0, vk::DescriptorType::eCombinedImageSampler, 3, vk::ShaderStageFlagBits::eFragment},
 }};
 
-namespace {
-static bool IsLowRefreshRate() {
+bool IsLowRefreshRate() {
 #if (defined(__APPLE__) || defined(ENABLE_SDL2)) && !defined(HAVE_LIBRETRO)
     if (!Settings::values.use_display_refresh_rate_detection) {
         LOG_INFO(Render_Vulkan, "Refresh rate detection is currently disabled via settings");
@@ -108,7 +107,6 @@ static bool IsLowRefreshRate() {
     // We have no available method of checking refresh rate. Just assume that everything is fine :)
     return false;
 }
-} // Anonymous namespace
 
 RendererVulkan::RendererVulkan(Core::System& system, Pica::PicaCore& pica_,
                                Frontend::EmuWindow& window, Frontend::EmuWindow* secondary_window)

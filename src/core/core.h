@@ -224,6 +224,12 @@ public:
         autosave_callback = std::move(callback);
     }
 
+    /// AzaharVR: called by ApplySettings and ReloadInputDevices: a DS, GBA or Game Boy game
+    /// (frame_cores) runs beside the emulated 3DS and follows them too.
+    void SetSettingsCallback(std::function<void()> callback) {
+        settings_callback = std::move(callback);
+    }
+
     /// Request reset of the system
     void RequestReset(const std::string& chainload = "", std::optional<u8> mem_mode = {}) {
         m_chainloadpath = chainload;
@@ -649,6 +655,7 @@ private:
     /// (made, reason, path, held_ms); AzaharFrame advfix: held_ms -1 when not made because the
     /// system could not be serialized (0: the system was busy for 5 s).
     std::function<void(bool, Autosave::Reason, const std::string&, s64)> autosave_callback;
+    std::function<void()> settings_callback; ///< AzaharVR
     std::atomic<bool> savestate_error_on_load{false}; ///< AzaharFrame advfix: see accessor
     std::atomic<u8> savestate_save_failure{0};        ///< AzaharFrame advfix: a SaveFailure
     std::chrono::steady_clock::time_point save_state_request_time{};

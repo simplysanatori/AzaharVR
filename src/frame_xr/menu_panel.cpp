@@ -107,6 +107,8 @@ static_assert(Menu::DsButton::A == Settings::NativeButton::A &&
               Menu::DsButton::ZL == Settings::NativeButton::ZL &&
               Menu::DsButton::ZR == Settings::NativeButton::ZR &&
               Menu::DsButton::Home == Settings::NativeButton::Home &&
+              Menu::DsButton::MicBlow == Settings::NativeButton::MicBlow &&
+              Menu::DsButton::Rewind == Settings::NativeButton::Rewind &&
               Menu::kRemapButtons == Settings::NativeButton::NumButtons);
 
 // AzaharFrame remap: the controls profile's 3DS buttons as a table (the Frame control driving

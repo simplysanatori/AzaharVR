@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstring>
 #include <exception>
 #include <memory>
@@ -12,10 +13,12 @@
 #include "common/logging/log.h"
 #include "common/math_util.h"
 #include "common/settings.h"
-#include "common/vector_math.h"
 #include "common/xr_pacer.h"
+#include "core/frontend/alt_screens.h"
 #include "core/frontend/emu_window.h"
 #include "video_core/host_shaders/vulkan_present_vert.h"
+#include "video_core/renderer_vulkan/alt_present.h"
+#include "video_core/renderer_vulkan/alt_window_target.h"
 #include "video_core/renderer_vulkan/alt_xr_renderer.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 #include "video_core/renderer_vulkan/vk_descriptor_update_queue.h"
@@ -41,27 +44,6 @@ public:
     void PollEvents() override {}
 };
 
-struct AltScreenVertex {
-    float x = 0.0f;
-    float y = 0.0f;
-    float u = 0.0f;
-    float v = 0.0f;
-};
-static_assert(sizeof(AltScreenVertex) == sizeof(float) * 4,
-              "AltScreenVertex must match XrPresentTarget vertex layout");
-
-struct AltPresentUniformData {
-    std::array<f32, 4 * 4> modelview{};
-    Common::Vec4f i_resolution{};
-    Common::Vec4f o_resolution{};
-    int screen_id_l = 0;
-    int screen_id_r = 0;
-    int layer = 0;
-    int reverse_interlaced = 0;
-};
-static_assert(sizeof(AltPresentUniformData) == 112,
-              "AltPresentUniformData must match present shader push constants");
-
 constexpr std::array<vk::DescriptorSetLayoutBinding, 1> kPresentBindings = {{
     {0, vk::DescriptorType::eCombinedImageSampler, 3, vk::ShaderStageFlagBits::eFragment},
 }};
@@ -69,15 +51,9 @@ constexpr std::array<vk::DescriptorSetLayoutBinding, 1> kPresentBindings = {{
 constexpr u32 kVertexBufferSize = sizeof(AltScreenVertex) * 1024;
 constexpr u64 kUploadBufferSize = 16ULL * 1024 * 1024;
 constexpr u32 kDummySwapchainExtent = 16;
-
-std::array<f32, 4 * 4> Orthographic(u32 width, u32 height) {
-    // clang-format off
-    return {2.f / width, 0.f,          0.f, -1.f,
-            0.f,         2.f / height, 0.f, -1.f,
-            0.f,         0.f,          1.f,  0.f,
-            0.f,         0.f,          0.f,  1.f};
-    // clang-format on
-}
+/// Fast forward: the window gets at most about 80 pictures a second (with vsync each one waits
+/// for the display, which would hold the game back).
+constexpr auto kSkippableInterval = std::chrono::milliseconds{12};
 
 vk::Extent2D TargetSwapchainExtent(u32 width, u32 height) {
     constexpr u32 kMaxW = 1600;
@@ -115,7 +91,74 @@ struct AltXrRenderer::Impl {
     ScreenTexture dummy_tex{};
     std::unique_ptr<XrPresentTarget> xr_target;
     u64 xr_target_generation = 0;
+    Frontend::EmuWindow* window = nullptr;
+    Frontend::EmuWindow* secondary_window = nullptr;
+    std::unique_ptr<AltWindowTarget> window_target;
+    std::unique_ptr<AltWindowTarget> secondary_target; ///< Separate Windows, made when first used
+    std::chrono::steady_clock::time_point window_presented{};
+    u64 previous_frame_tick = 0;
+    bool presented_vr = false; ///< the last Present's output
     bool ready = false;
+
+    bool XrShowsScreens() const {
+        return sink && sink->IsActive() && UsesXrDevice(*instance);
+    }
+
+    /// Both screens' newest pictures, for the present shader. A screen that has none is black; one
+    /// that stops being sent keeps its last.
+    vk::DescriptorSet CommitScreens(vk::ImageView secondary_view) {
+        const vk::Sampler sampler = samplers[!Settings::values.filter_mode.GetValue()];
+        const vk::DescriptorSet set = present_heap->Commit();
+        const std::array views = {primary_tex.view, primary_tex.view, secondary_view};
+        for (u32 i = 0; i < views.size(); i++) {
+            update_queue->AddImageSampler(set, 0, static_cast<u8>(i),
+                                          views[i] ? views[i] : dummy_tex.view, sampler,
+                                          vk::ImageLayout::eShaderReadOnlyOptimal);
+        }
+        update_queue->Flush();
+        return set;
+    }
+
+    void PresentToWindow() {
+        const auto start = std::chrono::steady_clock::now();
+        const vk::DescriptorSet screens = CommitScreens(secondary_tex.view);
+        window_target->Draw(*vertex_buffer, screens);
+        const auto game = Layout::GetAltScreens();
+        if (secondary_window && !sink && game && game->HasBottom() &&
+            Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows) {
+            if (!secondary_target) {
+                secondary_target = std::make_unique<AltWindowTarget>(
+                    *secondary_window, *instance, *scheduler, present_vertex_shader,
+                    *present_pipeline_layout);
+            }
+            secondary_target->Draw(*vertex_buffer, screens);
+        }
+        window_presented = std::chrono::steady_clock::now();
+        if (sink) {
+            sink->NoteWindowPresent(static_cast<u32>(
+                std::chrono::duration_cast<std::chrono::microseconds>(window_presented - start)
+                    .count()));
+        }
+        LimitFramesAheadOfGpu();
+    }
+
+    /// The window while the headset shows the screens: an empty picture about once a second, a
+    /// sign of life for the window system.
+    void KeepWindowAlive() {
+        const auto now = std::chrono::steady_clock::now();
+        if (!window_target || now - window_presented < std::chrono::seconds{1}) {
+            return;
+        }
+        window_presented = now;
+        window_target->Clear(*vertex_buffer, CommitScreens(secondary_tex.view));
+    }
+
+    void LimitFramesAheadOfGpu() {
+        if (previous_frame_tick != 0) {
+            scheduler->Wait(previous_frame_tick);
+        }
+        previous_frame_tick = scheduler->CurrentTick() - 1;
+    }
 
     void DestroyTexture(ScreenTexture& tex) {
         if (!instance) {
@@ -362,6 +405,9 @@ struct AltXrRenderer::Impl {
     void Shutdown() {
         ready = false;
         xr_target.reset();
+        window_target.reset();
+        secondary_target.reset();
+        previous_frame_tick = 0;
         if (scheduler) {
             scheduler->Finish();
         }
@@ -397,6 +443,8 @@ struct AltXrRenderer::Impl {
         scheduler.reset();
         instance.reset();
         sink = nullptr;
+        window = nullptr;
+        secondary_window = nullptr;
         xr_target_generation = 0;
     }
 };
@@ -407,25 +455,29 @@ AltXrRenderer::~AltXrRenderer() {
     Shutdown();
 }
 
-bool AltXrRenderer::Init() {
+bool AltXrRenderer::Init(Frontend::EmuWindow* window, Frontend::EmuWindow* secondary_window) {
     Shutdown();
 
     VideoCore::VulkanHooks* hooks = VideoCore::GetVulkanHooks();
-    VideoCore::XrScreenSink* sink = VideoCore::GetXrScreenSink();
-    if (!hooks || !sink) {
-        LOG_ERROR(Render_Vulkan, "alt_xr: no XR");
+    VideoCore::XrScreenSink* sink = hooks ? VideoCore::GetXrScreenSink() : nullptr;
+    if (!window && !sink) { // the session itself may start later
+        LOG_ERROR(Render_Vulkan, "alt_xr: no XR and no window");
         return false;
     }
 
     try {
         impl->sink = sink;
+        impl->window = window;
+        impl->secondary_window = secondary_window;
         DummyWindow dummy_window;
-        impl->instance =
-            std::make_unique<Instance>(dummy_window, Settings::values.physical_device.GetValue());
-        if (!UsesXrDevice(*impl->instance)) {
+        impl->instance = std::make_unique<Instance>(
+            window ? *window : dummy_window, Settings::values.physical_device.GetValue());
+        if (sink && !UsesXrDevice(*impl->instance)) {
             LOG_ERROR(Render_Vulkan, "alt_xr: adopted Vulkan device is not the XR device");
-            Shutdown();
-            return false;
+            if (!window) {
+                Shutdown();
+                return false;
+            }
         }
         impl->scheduler = std::make_unique<Scheduler>(*impl->instance);
         // The scheduler calls both on every submission, and an empty std::function throws. The 3DS
@@ -437,7 +489,9 @@ bool AltXrRenderer::Init() {
             }
         });
         impl->queue_reg = std::make_unique<XrQueueRegistration>(*impl->instance, *impl->scheduler);
-        sink->SetTopStereo(false);
+        if (sink) {
+            sink->SetTopStereo(false);
+        }
 
         impl->vertex_buffer = std::make_unique<StreamBuffer>(
             *impl->instance, *impl->scheduler, vk::BufferUsageFlagBits::eVertexBuffer,
@@ -497,8 +551,14 @@ bool AltXrRenderer::Init() {
         impl->scheduler->Finish();
         // Present makes the XrPresentTarget: the session may not run yet (a game started with the
         // app), and its swapchains come and go.
+        if (window) {
+            impl->window_target = std::make_unique<AltWindowTarget>(
+                *window, *impl->instance, *impl->scheduler, impl->present_vertex_shader,
+                *impl->present_pipeline_layout);
+        }
         impl->ready = true;
-        LOG_INFO(Render_Vulkan, "alt_xr: presenter initialized on XR device");
+        LOG_INFO(Render_Vulkan, "alt_xr: presenter initialized ({})",
+                 impl->XrShowsScreens() ? "VR" : "window");
         return true;
     } catch (const std::exception& e) {
         LOG_ERROR(Render_Vulkan, "alt_xr: initialization failed: {}", e.what());
@@ -513,14 +573,36 @@ void AltXrRenderer::Shutdown() {
     }
 }
 
-bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage& secondary) {
+bool AltXrRenderer::NeedsPresent() const {
+    if (!impl || !impl->ready) {
+        return false;
+    }
+    const bool vr = impl->XrShowsScreens();
+    return vr != impl->presented_vr || (!vr && impl->window_target && impl->window_target->Resized());
+}
+
+bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage& secondary,
+                            bool skippable) {
     if (!impl || !impl->ready || !primary.pixels || primary.width == 0 || primary.height == 0) {
         return false;
     }
-    VideoCore::XrScreenSink* sink = VideoCore::GetXrScreenSink();
-    if (!sink || !sink->IsActive()) {
-        return false;
+    impl->presented_vr = impl->XrShowsScreens();
+    if (!impl->presented_vr) {
+        if (!impl->window_target) {
+            return false;
+        }
+        if (skippable &&
+            std::chrono::steady_clock::now() - impl->window_presented < kSkippableInterval) {
+            return true;
+        }
+        if (!impl->UploadImage(impl->primary_tex, primary) ||
+            (secondary.pixels && !impl->UploadImage(impl->secondary_tex, secondary))) {
+            return false;
+        }
+        impl->PresentToWindow();
+        return true;
     }
+    VideoCore::XrScreenSink* const sink = impl->sink;
     if (impl->xr_target && impl->xr_target_generation != sink->SwapchainGeneration()) {
         impl->xr_target.reset();
     }
@@ -551,16 +633,8 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
         return false;
     }
 
-    const vk::Sampler sampler = impl->samplers[!Settings::values.filter_mode.GetValue()];
-    const vk::DescriptorSet present_set = impl->present_heap->Commit();
-    impl->update_queue->AddImageSampler(present_set, 0, 0, impl->primary_tex.view, sampler,
-                                        vk::ImageLayout::eShaderReadOnlyOptimal);
-    impl->update_queue->AddImageSampler(present_set, 0, 1, impl->primary_tex.view, sampler,
-                                        vk::ImageLayout::eShaderReadOnlyOptimal);
-    impl->update_queue->AddImageSampler(
-        present_set, 0, 2, has_secondary ? impl->secondary_tex.view : impl->dummy_tex.view, sampler,
-        vk::ImageLayout::eShaderReadOnlyOptimal);
-    impl->update_queue->Flush();
+    const vk::DescriptorSet present_set =
+        impl->CommitScreens(has_secondary ? impl->secondary_tex.view : vk::ImageView{});
 
     Common::XrPacer::Get().game_swaps.fetch_add(1, std::memory_order_relaxed);
 
@@ -588,6 +662,7 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
     const u64 tick = impl->scheduler->CurrentTick();
     impl->scheduler->Flush();
     impl->xr_target->EndFrame(tick);
+    impl->KeepWindowAlive();
     return true;
 }
 

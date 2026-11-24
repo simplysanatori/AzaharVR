@@ -23,13 +23,14 @@
 
 namespace FrameXr::Menu {
 
-constexpr int kRemapButtons = 18; ///< Settings::NativeButton::NumButtons
+constexpr int kRemapButtons = 20; ///< Settings::NativeButton::NumButtons
 using RemapTable = std::array<int8_t, kRemapButtons>;
 
 /// AzaharFrame padsui: the 3DS buttons by Settings::NativeButton index (the menu has no settings
 /// dependency; menu_panel.cpp checks they match).
 namespace DsButton {
-enum : int { A, B, X, Y, Up, Down, Left, Right, L, R, Start, Select, ZL = 14, ZR = 15, Home = 16 };
+enum : int { A, B, X, Y, Up, Down, Left, Right, L, R, Start, Select, ZL = 14, ZR = 15, Home = 16,
+             MicBlow = 18, Rewind = 19 };
 /// The two sticks, as Edit Controls' targets (after the buttons).
 enum : int { CirclePad = 32, CStick = 33 };
 /// The mouse's own targets: the input that touches the bottom screen, the one that opens the

@@ -746,7 +746,7 @@ void GRenderWindow::resizeEvent(QResizeEvent* event) {
     OnFramebufferSizeChanged();
 }
 
-bool GRenderWindow::InitRenderTarget() {
+bool GRenderWindow::InitRenderTarget(bool force_vulkan) {
     {
         // Create a dummy render widget so that Qt
         // places the render window at the correct position.
@@ -755,7 +755,8 @@ bool GRenderWindow::InitRenderTarget() {
 
     first_frame = false;
 
-    const auto graphics_api = Settings::GetWorkingGraphicsAPI();
+    const auto graphics_api =
+        force_vulkan ? Settings::GraphicsAPI::Vulkan : Settings::GetWorkingGraphicsAPI();
     switch (graphics_api) {
 #ifdef ENABLE_SOFTWARE_RENDERER
     case Settings::GraphicsAPI::Software:

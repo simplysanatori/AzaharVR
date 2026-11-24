@@ -240,62 +240,6 @@ const MapperOutput& InputBridge::Process(const InputFrame& frame, const PanelGeo
     if (alt_active) {
         using namespace Common::AltCore;
         InputState state{};
-        const auto& c = last_.controls;
-        if (c.Get(Control::A)) {
-            state.buttons |= BtnA;
-        }
-        if (c.Get(Control::B)) {
-            state.buttons |= BtnB;
-        }
-        if (c.Get(Control::X)) {
-            state.buttons |= BtnX;
-        }
-        if (c.Get(Control::Y)) {
-            state.buttons |= BtnY;
-        }
-        if (c.Get(Control::BumperL)) {
-            state.buttons |= BtnL;
-        }
-        if (c.Get(Control::BumperR)) {
-            state.buttons |= BtnR;
-        }
-        if (c.Get(Control::Menu)) {
-            state.buttons |= BtnStart;
-        }
-        if (c.Get(Control::View)) {
-            state.buttons |= BtnSelect;
-        }
-        if (c.Get(Control::DpadUp)) {
-            state.buttons |= BtnUp;
-        }
-        if (c.Get(Control::DpadDown)) {
-            state.buttons |= BtnDown;
-        }
-        if (c.Get(Control::DpadLeft)) {
-            state.buttons |= BtnLeft;
-        }
-        if (c.Get(Control::DpadRight)) {
-            state.buttons |= BtnRight;
-        }
-        // Left stick -> D-pad fallback for retro cores.
-        constexpr float kStickDpadThreshold = 0.35f;
-        const Vec2f stick = c.GetStick(AnalogControl::StickL);
-        if (stick.x > kStickDpadThreshold) {
-            state.buttons |= BtnRight;
-        } else if (stick.x < -kStickDpadThreshold) {
-            state.buttons |= BtnLeft;
-        }
-        if (stick.y > kStickDpadThreshold) {
-            state.buttons |= BtnUp;
-        } else if (stick.y < -kStickDpadThreshold) {
-            state.buttons |= BtnDown;
-        }
-        if (caps.has_rewind && c.Get(Control::TriggerL)) {
-            state.buttons |= BtnRewind;
-        }
-        if (caps.has_mic_blow && (c.Get(Control::TriggerL) || alt_menu.ds_mic_active)) {
-            state.buttons |= BtnMic;
-        }
         if (caps.has_touch && alt_menu.ds_touch_enabled && alt_touching_) {
             state.touching = true;
             state.touch_x = alt_touch_x_;

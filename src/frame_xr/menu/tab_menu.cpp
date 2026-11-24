@@ -2338,7 +2338,13 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
         if (IsStick(t)) {
             return StickSourceName(dev, t == kDsCirclePad ? 0 : 1);
         }
-        return SourceName(dev.names, dev.mapping[static_cast<std::size_t>(t)], by_position);
+        const std::string name =
+            SourceName(dev.names, dev.mapping[static_cast<std::size_t>(t)], by_position);
+        if (t == DsButton::MicBlow || t == DsButton::Rewind) { // not in the columns either
+            return std::string(t == DsButton::MicBlow ? "Microphone Blow: " : "Rewind: ") +
+                   (name.empty() ? std::string("None") : name);
+        }
+        return name;
     };
     const auto chip_w = [&](int t, float max_w) {
         std::string text = text_of(t);
@@ -2453,6 +2459,15 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
             const float sel_w = chip_w(DsButton::Select, c.W());
             const float start_w = chip_w(DsButton::Start, c.W());
             const float home_w = chip_w(DsButton::Home, c.W());
+            // AzaharVR: the running DS game's Microphone Blow, a GBA or Game Boy game's Rewind:
+            // first in the row, in what the three leave.
+            if (model.core.has_mic_blow || model.core.has_rewind) {
+                const int t = model.core.has_mic_blow ? DsButton::MicBlow : DsButton::Rewind;
+                const float room = c.x1 - row_x - home_w - sel_w - start_w - 3.0f * kChipGap;
+                const Rect r{row_x, under.y0, row_x + chip_w(t, room), under.y1};
+                chips.push_back({t, r, {r.Cx(), r.y0}});
+                row_x = r.x1 + kChipGap;
+            }
             float mid = ds.Anchor(DsButton::Start).x;
             mid = std::min(mid, c.x1 - start_w - kChipGap * 0.5f);
             Rect start{mid + kChipGap * 0.5f, under.y0, mid + kChipGap * 0.5f + start_w, under.y1};
@@ -2475,8 +2490,12 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
         // Open Menu has no leader.
         const Rect bs = ds.BottomScreen();
         const DsPoint touch_at{bs.x0 + 6.0f, bs.y0 + bs.H() * 0.8f};
+        const auto off_the_drawing = [](int t) {
+            return t == DsButton::OpenMenu || t == DsButton::Modifier || t == DsButton::MicBlow ||
+                   t == DsButton::Rewind;
+        };
         for (const Chip& ch : chips) {
-            if (ch.target == DsButton::OpenMenu || ch.target == DsButton::Modifier) {
+            if (off_the_drawing(ch.target)) {
                 continue;
             }
             const DsPoint to = ch.target == DsButton::Touch ? touch_at : ds.Anchor(ch.target);
@@ -2489,7 +2508,7 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
                     kit.Dot(touch_at.x, touch_at.y, 7.0f, Tok::kPrimary, 0.3f);
                 }
                 kit.Dot(touch_at.x, touch_at.y, on ? 4.5f : 3.5f, Tok::kPrimary);
-            } else if (ch.target != DsButton::OpenMenu && ch.target != DsButton::Modifier) {
+            } else if (!off_the_drawing(ch.target)) {
                 DrawDsDot(kit, ds, ch.target, ch.target == lit);
             }
         }

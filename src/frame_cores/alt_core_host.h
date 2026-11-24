@@ -12,9 +12,14 @@
 #include <vector>
 
 #include "common/alt_core_types.h"
+#include "core/frontend/alt_screens.h"
 #include "frame_cores/audio_resampler.h"
 #include "frame_cores/core_backend.h"
 #include "frame_cores/rom_info.h"
+
+namespace Frontend {
+class EmuWindow;
+}
 
 namespace FrameCores {
 
@@ -43,6 +48,17 @@ struct HostCallbacks {
     std::function<void(float)> on_rumble;
     std::function<void(bool)> on_game_running;
     std::function<void(const HostStats&)> on_stats;
+};
+
+/// What the window gives a game: where it is drawn while no headset shows it, and its controls.
+struct HostFrontend {
+    Frontend::EmuWindow* window = nullptr; ///< both outlive the game
+    Frontend::EmuWindow* secondary_window = nullptr;
+    /// The controls profile's state, once a frame (emulation thread).
+    std::function<Common::AltCore::InputState()> input;
+    MicrophoneFactory microphone;
+    /// The size of a screen changed, or a Secondary Screen came (emulation thread).
+    std::function<void(const Layout::AltScreens&)> on_screens;
 };
 
 enum class AltMenuSetting : int {
@@ -93,6 +109,9 @@ public:
     /// Sets callbacks for this host instance (must be called before Boot).
     void SetCallbacks(HostCallbacks callbacks);
 
+    /// Sets the window and the controls (must be called before Boot).
+    void SetFrontend(HostFrontend frontend);
+
     /// Boots a GBA, GB/GBC, DS, or DSi ROM (plain or inside .zip).
     /// When `headless_for_test` is true, skips Vulkan XR renderer creation, uses the
     /// null audio sink, and does not spawn the emulation thread (drive with StepFrames).
@@ -109,12 +128,19 @@ public:
     void Pause(bool paused);
     bool IsPaused() const;
 
+    /// Draws the last frame again, for a paused game whose window or layout changed.
+    void Redraw();
+
+    /// Calls `use` with the screens of the last frame, whose pixels are valid during the call.
+    void WithScreens(const std::function<void(const FrameOutput&)>& use) const;
+
     void Reset();
 
     void SetFastForward(bool on, uint32_t speed_pct = 200);
     bool IsFastForward() const;
 
-    /// Delivers the latest controller + touch snapshot (thread-safe; called from XR thread).
+    /// Delivers the latest touch snapshot in VR (thread-safe; called from XR thread). Its buttons
+    /// are added to HostFrontend::input's.
     void PushInput(const Common::AltCore::InputState& input);
 
     /// Synchronously advances `n` frames (intended for headless unit tests).
@@ -142,6 +168,9 @@ public:
     std::vector<CheatEntry> ListCheats() const;
     bool SetCheatEnabled(std::size_t idx, bool on);
     bool AddCheat(const std::string& name, const std::string& code);
+
+    /// The microphone's settings changed.
+    void ReloadMicrophone();
 
     void SetSolarLevel(int level);
     void SetMicBlow(bool on);

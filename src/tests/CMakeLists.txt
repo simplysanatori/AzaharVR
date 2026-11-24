@@ -1,4 +1,5 @@
 add_executable(tests
+    core/alt_screens.cpp # AzaharVR
     frame_xr/input_engine.cpp # AzaharFrame
     frame_xr/input_geometry.cpp # AzaharFrame
     frame_xr/input_mapper.cpp # AzaharFrame
@@ -187,7 +188,7 @@ endif()
 
 target_link_libraries(tests PRIVATE citra_common citra_core video_core audio_core)
 if (TARGET frame_cores)
-    target_sources(tests PRIVATE frame_cores/alt_cores_tests.cpp)
+    target_sources(tests PRIVATE frame_cores/alt_cores_tests.cpp frame_cores/microphone_tests.cpp)
     target_link_libraries(tests PRIVATE frame_cores)
 endif()
 target_link_libraries(tests PRIVATE input_common) # AzaharFrame

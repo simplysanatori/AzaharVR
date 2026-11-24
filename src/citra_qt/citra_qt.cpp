@@ -65,6 +65,7 @@
 #include "citra_qt/camera/still_image_camera.h"
 #ifdef ENABLE_ALT_CORES
 #include "frame_cores/alt_core_host.h"
+#include "frame_cores/profile_input.h"
 #include "frame_cores/rom_info.h"
 #endif
 #ifdef ENABLE_FRAME_XR
@@ -139,6 +140,7 @@
 #include "core/dumping/backend.h"
 #include "core/file_sys/archive_extsavedata.h"
 #include "core/file_sys/archive_source_sd_savedata.h"
+#include "core/frontend/alt_screens.h"
 #include "core/frontend/applets/default_applets.h"
 #include "core/hle/service/am/am.h"
 #include "core/hle/service/fs/archive.h"
@@ -1486,13 +1488,6 @@ GMainWindow::GMainWindow(Core::System& system_)
 #endif
             // Both bumpers + View + Menu, in VR or flat: the other mode, kept for the next start.
             g_frame_xr_switch = [this](bool vr) {
-#ifdef ENABLE_ALT_CORES
-                if (!vr && alt_core_host && alt_core_host->IsRunning()) {
-                    FrameXr::ShowToastText("Flat Mode Is Not Available for This Core",
-                                           FrameXr::ToastTime::Long);
-                    return;
-                }
-#endif
                 const auto apply = [vr] {
                     if (!FrameXr::SetVr(vr)) {
                         LOG_WARNING(Frontend, "xr: cannot switch to {} (no XR any more)",
@@ -1590,7 +1585,16 @@ GMainWindow::GMainWindow(Core::System& system_)
                 system.ApplySettings();
                 UpdateSecondaryWindowVisibility();
             };
-            g_frame_xr_mode_changed = [this](bool vr) {
+            // Emulation > Pause, whichever kind of game runs.
+            const auto game_paused = [this] {
+#ifdef ENABLE_ALT_CORES
+                if (AltGameRunning()) {
+                    return AltGamePaused();
+                }
+#endif
+                return system.frame_limiter.IsFrameAdvancing();
+            };
+            g_frame_xr_mode_changed = [this, game_paused](bool vr) {
                 LOG_INFO(Frontend, "xr: now {}", vr ? "in VR" : "flat");
                 FrameMode::MarkFlatRunning(!vr); // AzaharFrame flat: the crash safety net
                 UpdateFrameVrButton(); // AzaharFrame flat
@@ -1612,7 +1616,7 @@ GMainWindow::GMainWindow(Core::System& system_)
                         g_frame_flat_menu_fullscreen = false;
                     }
                     g_frame_xr_set_menu(false);
-                } else if (emulation_running && system.frame_limiter.IsFrameAdvancing()) {
+                } else if (emulation_running && game_paused()) {
                     if (g_frame_mirror && g_frame_xr_set_menu) {
                         // Paused with no menu open: it stays paused, and the menu of the new
                         // mode opens below, so that something shows and Continue is at hand.
@@ -1638,6 +1642,9 @@ GMainWindow::GMainWindow(Core::System& system_)
                 if (emulation_running && system.IsPoweredOn()) {
                     system.GPU().Renderer().UpdateCurrentFramebufferLayout();
                 }
+#ifdef ENABLE_ALT_CORES
+                OnAltSettingsChanged();
+#endif
                 if (!vr) {
                     LogFlatLayout("flat");
                 }
@@ -1801,16 +1808,21 @@ GMainWindow::GMainWindow(Core::System& system_)
                 // AzaharFrame flat4: in flat the same is the Flat menu: the window leaves
                 // Fullscreen (its menu bar shows) at flat's 16:9 size, and goes back to Fullscreen
                 // when the menu closes.
-                g_frame_xr_set_menu = [this](bool open) {
+                g_frame_xr_set_menu = [this, game_paused](bool open) {
                     if (!g_frame_mirror || g_frame_mirror->MenuOpen() == open) {
                         return;
                     }
+                    // Which one is open: the Flat menu (flat) or the in-game menu (VR).
+                    static bool flat = false;
+                    if (open) {
+                        flat = !FrameXr::VrShowing();
+                    }
 #ifdef ENABLE_ALT_CORES
-                    if (alt_core_host && alt_core_host->IsRunning()) {
+                    if (AltGameRunning() && !flat) {
                         if (open && g_frame_xr_fast_forward) {
                             g_frame_xr_fast_forward(false, "the in-game menu opened");
                         }
-                        alt_core_host->Pause(open);
+                        PauseAltGame(open);
                         if (open) {
                             FramePushMenuInfo();
                             FramePushAltCheats();
@@ -1832,13 +1844,8 @@ GMainWindow::GMainWindow(Core::System& system_)
                             return;
                         }
                     }
-                    if (open && (!emulation_running || !emu_thread)) {
+                    if (open && (!emulation_running || (!emu_thread && !AltGameRunning()))) {
                         return;
-                    }
-                    // Which one is open: the Flat menu (flat) or the in-game menu (VR).
-                    static bool flat = false;
-                    if (open) {
-                        flat = !FrameXr::VrShowing();
                     }
                     if (open && g_frame_xr_fast_forward) {
                         g_frame_xr_fast_forward(false, flat ? "the Flat menu opened"
@@ -1848,8 +1855,7 @@ GMainWindow::GMainWindow(Core::System& system_)
                     // (asked before the pause; the emulation thread makes it at its next pass)
                     const bool autosave =
                         open && !flat && FrameRequestAutosave(Core::Autosave::Reason::MenuOpen);
-                    if (open && emu_thread->IsRunning() &&
-                        !system.frame_limiter.IsFrameAdvancing()) {
+                    if (open && (AltGameRunning() || emu_thread->IsRunning()) && !game_paused()) {
                         OnPauseGame();
                     }
                     if (autosave) {
@@ -1976,7 +1982,7 @@ GMainWindow::GMainWindow(Core::System& system_)
                         LOG_INFO(Frontend, "xr: in-game menu {}",
                                  open ? "open, game paused" : "closed");
                     }
-                    if (!open && emulation_running && system.frame_limiter.IsFrameAdvancing()) {
+                    if (!open && emulation_running && game_paused()) {
                         OnResumeGame(false);
                     }
                     if (!open) {
@@ -3461,8 +3467,13 @@ void GMainWindow::ConnectMenuEvents() {
 }
 
 void GMainWindow::UpdateMenuState() {
-    const bool is_paused =
+    bool is_paused =
         !emu_thread || !emu_thread->IsRunning() || system.frame_limiter.IsFrameAdvancing();
+#ifdef ENABLE_ALT_CORES
+    if (AltGameRunning()) {
+        is_paused = AltGamePaused();
+    }
+#endif
 
     const std::array running_actions{
         ui->action_Stop,
@@ -3481,6 +3492,12 @@ void GMainWindow::UpdateMenuState() {
 
     ui->action_Capture_Screenshot->setEnabled(emulation_running);
     ui->action_Advance_Frame->setEnabled(emulation_running && is_paused);
+    if (AltGameRunning()) { // the 3DS's
+        for (QAction* action : {ui->action_Report_Compatibility, ui->action_Load_Amiibo,
+                                ui->action_Remove_Amiibo, ui->action_Advance_Frame}) {
+            action->setEnabled(false);
+        }
+    }
 
     if (emulation_running && is_paused) {
         ui->action_Pause->setText(tr("Continue"));
@@ -3719,14 +3736,6 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     if (alt_core_host && alt_core_host->IsRunning()) {
         ShutdownAltGame();
     }
-#ifdef ENABLE_FRAME_XR
-    if (!FrameXr::IsStarted() || !FrameXr::VrShowing()) {
-        QMessageBox::information(
-            this, tr("VR Required"),
-            tr("DS, DSi, GBA, and GB/GBC games currently run in VR mode only."));
-        return false;
-    }
-#endif
     const std::string path = filename.toStdString();
     const auto info_opt = FrameCores::ProbeRom(path);
     if (!info_opt) {
@@ -3748,7 +3757,9 @@ bool GMainWindow::BootAltGame(const QString& filename) {
         alt_core_host = std::make_unique<FrameCores::AltCoreHost>();
     }
     const std::string data_dir = FileUtil::GetUserPath(FileUtil::UserPath::UserDir);
-    if (!alt_core_host->Boot(path, data_dir, /*headless_for_test=*/false)) {
+    if (!AltWindowOpen(info) ||
+        !alt_core_host->Boot(path, data_dir, /*headless_for_test=*/false)) {
+        AltWindowClose();
         QMessageBox::critical(this, tr("Unable to Start Game"),
                               tr("Failed to start %1.").arg(QString::fromStdString(info.title)));
 #ifdef ENABLE_FRAME_XR
@@ -3761,11 +3772,10 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     game_path = filename;
     game_title = QString::fromStdString(info.title);
     emulation_running = true;
-    game_list->hide();
+#ifdef ENABLE_FRAME_XR
     if (g_frame_mirror) {
         g_frame_mirror->SetGameRunning(true);
     }
-#ifdef ENABLE_FRAME_XR
     FramePushMenuInfo();
     FramePushAltCheats();
     FrameSyncAltMenuState();
@@ -3774,6 +3784,7 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     PreventOSSleep();
     play_time_manager->SetProgramId(info.title_id);
     play_time_manager->Start();
+    AltWindowShow();
     LOG_INFO(Frontend, "Alt core booted: {} ({:016X})", info.title, info.title_id);
     return true;
 }
@@ -3794,14 +3805,20 @@ void GMainWindow::ShutdownAltGame() {
 #endif
     play_time_manager->Stop();
     AllowOSSleep();
+    if (ui->action_Fullscreen->isChecked()) {
+        HideFullscreen();
+    }
     alt_core_host->Stop();
     emulation_running = false;
     game_path.clear();
     game_title.clear();
+#ifdef ENABLE_FRAME_XR
+    g_frame_flat_menu_fullscreen = false;
     if (g_frame_mirror) {
         g_frame_mirror->SetGameRunning(false);
     }
-    game_list->show();
+#endif
+    AltWindowClose();
     Settings::RestoreGlobalState(false);
     UpdateWindowTitle();
     LOG_INFO(Frontend, "Alt core stopped");
@@ -4422,6 +4439,12 @@ void GMainWindow::UpdateRecentFiles() {
 void GMainWindow::UpdateSaveStates() {
     FrameAutosaveList(); // AzaharFrame autosave: the Load State menu's autosaves too
     FrameUpdateAutosaveActions();
+#ifdef ENABLE_ALT_CORES
+    if (AltGameRunning()) {
+        UpdateAltSaveStates();
+        return;
+    }
+#endif
     if (!system.IsPoweredOn()) {
         ui->menu_Load_State->setEnabled(false);
         ui->menu_Save_State->setEnabled(false);
@@ -5313,9 +5336,13 @@ void GMainWindow::OnMenuRecentFile() {
 
 void GMainWindow::OnResumeGame(bool first_start) {
 #ifdef ENABLE_ALT_CORES
-    if (alt_core_host && alt_core_host->IsRunning()) {
-        // The in-game menu keeps it paused
-        alt_core_host->Pause(g_frame_mirror && g_frame_mirror->MenuOpen());
+    if (AltGameRunning()) {
+        PauseAltGame(false);
+#ifdef ENABLE_FRAME_XR // as below
+        if (g_frame_mirror && g_frame_mirror->MenuOpen() && g_frame_xr_set_menu) {
+            g_frame_xr_set_menu(false);
+        }
+#endif
         return;
     }
 #endif
@@ -5371,7 +5398,7 @@ void GMainWindow::OnRestartGame() {
 void GMainWindow::OnPauseGame() {
 #ifdef ENABLE_ALT_CORES
     if (alt_core_host && alt_core_host->IsRunning()) {
-        alt_core_host->Pause(true);
+        PauseAltGame(true);
         return;
     }
 #endif
@@ -5391,7 +5418,11 @@ void GMainWindow::OnPauseGame() {
 void GMainWindow::OnPauseContinueGame() {
 #ifdef ENABLE_ALT_CORES
     if (alt_core_host && alt_core_host->IsRunning()) {
-        alt_core_host->Pause(!alt_core_host->IsPaused());
+        if (AltGamePaused()) {
+            OnResumeGame(false); // closes the in-game menu too
+        } else {
+            OnPauseGame();
+        }
         return;
     }
 #endif
@@ -6361,7 +6392,9 @@ void GMainWindow::UpdateSecondaryWindowVisibility() {
     if (!emulation_running) {
         return;
     }
-    if (Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows) {
+    const auto alt_screens = Layout::GetAltScreens(); // a game with one screen has one window
+    if (Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows &&
+        (!alt_screens || alt_screens->HasBottom())) {
         secondary_window->restoreGeometry(UISettings::values.secondarywindow_geometry);
         secondary_window->show();
     } else {
@@ -6461,6 +6494,11 @@ void GMainWindow::ReloadTurbo() {
     } else {
         Settings::is_temporary_frame_limit = false;
     }
+#ifdef ENABLE_ALT_CORES
+    if (AltGameRunning()) {
+        alt_core_host->SetFastForward(IsTurboEnabled(), Settings::values.turbo_limit.GetValue());
+    }
+#endif
 
     UpdateStatusBar();
 }
@@ -6559,6 +6597,12 @@ void GMainWindow::TriggerRotateScreens() {
 }
 
 void GMainWindow::OnSaveState() {
+#ifdef ENABLE_ALT_CORES
+    if (AltGameRunning()) {
+        AltSaveState(qobject_cast<QAction*>(sender())->data().toUInt());
+        return;
+    }
+#endif
     if (!system.IsPoweredOn()) {
         return;
     }
@@ -6574,6 +6618,12 @@ void GMainWindow::OnSaveState() {
 }
 
 void GMainWindow::OnLoadState() {
+#ifdef ENABLE_ALT_CORES
+    if (AltGameRunning()) {
+        AltLoadState(qobject_cast<QAction*>(sender())->data().toUInt());
+        return;
+    }
+#endif
     if (!system.IsPoweredOn()) {
         return;
     }
@@ -7335,6 +7385,12 @@ void GMainWindow::OnSaveMovie() {
 }
 
 void GMainWindow::OnCaptureScreenshot() {
+#ifdef ENABLE_ALT_CORES
+    if (AltGameRunning()) {
+        AltCaptureScreenshot();
+        return;
+    }
+#endif
     if (!emu_thread) [[unlikely]] {
         return;
     }
@@ -7783,6 +7839,12 @@ void GMainWindow::OnStopVideoDumping() {
 #endif
 
 void GMainWindow::UpdateStatusBar() {
+#ifdef ENABLE_ALT_CORES
+    if (AltGameRunning()) {
+        UpdateAltStatusBar();
+        return;
+    }
+#endif
     if (!emu_thread) [[unlikely]] {
         status_bar_update_timer.stop();
         return;
@@ -7915,7 +7977,7 @@ void GMainWindow::UpdateBootHomeMenuState() {
 }
 
 void GMainWindow::HideMouseCursor() {
-    if (!emu_thread || !UISettings::values.hide_mouse.GetValue()) {
+    if ((!emu_thread && !AltGameRunning()) || !UISettings::values.hide_mouse.GetValue()) {
         mouse_hide_timer.stop();
         ShowMouseCursor();
         return;
@@ -7931,7 +7993,7 @@ void GMainWindow::ShowMouseCursor() {
     unsetCursor();
     render_window->unsetCursor();
     secondary_window->unsetCursor();
-    if (emu_thread && UISettings::values.hide_mouse) {
+    if ((emu_thread || AltGameRunning()) && UISettings::values.hide_mouse) {
         mouse_hide_timer.start();
     }
 }
@@ -8300,7 +8362,7 @@ void GMainWindow::OnMenuAboutCitra() {
 }
 
 bool GMainWindow::ConfirmClose() {
-    if (!emu_thread || !UISettings::values.confirm_before_closing) {
+    if ((!emu_thread && !AltGameRunning()) || !UISettings::values.confirm_before_closing) {
         return true;
     }
 
@@ -8401,7 +8463,7 @@ void GMainWindow::dragMoveEvent(QDragMoveEvent* event) {
 }
 
 bool GMainWindow::ConfirmChangeGame() {
-    if (!emu_thread) [[unlikely]] {
+    if (!emu_thread && !AltGameRunning()) [[unlikely]] {
         return true;
     }
 
@@ -8562,9 +8624,12 @@ void GMainWindow::OnLanguageChanged(const QString& locale) {
 }
 
 void GMainWindow::OnConfigurePerGame() {
+#ifdef ENABLE_ALT_CORES
     if (AltGameRunning()) {
-        return; // that window is for 3DS games
+        OpenPerGameConfiguration(alt_core_host->GetRomInfo().title_id, game_path);
+        return;
     }
+#endif
     u64 title_id{};
     system.GetAppLoader().ReadProgramId(title_id);
     OpenPerGameConfiguration(title_id, game_path);
@@ -8580,15 +8645,15 @@ void GMainWindow::OpenPerGameConfiguration(u64 title_id, const QString& file_nam
     const auto result = dialog.exec();
 
     if (result != QDialog::Accepted) {
-        Settings::RestoreGlobalState(system.IsPoweredOn());
+        Settings::RestoreGlobalState(system.IsPoweredOn() || AltGameRunning());
         return;
     } else if (result == QDialog::Accepted) {
         dialog.ApplyConfiguration();
     }
 
     // Do not cause the global config to write local settings into the config file
-    const bool is_powered_on = system.IsPoweredOn();
-    Settings::RestoreGlobalState(system.IsPoweredOn());
+    const bool is_powered_on = system.IsPoweredOn() || AltGameRunning();
+    Settings::RestoreGlobalState(is_powered_on);
 
     if (!is_powered_on) {
         config->Save();
@@ -8837,7 +8902,7 @@ void GMainWindow::SyncMenuUISettings() {
 }
 
 void GMainWindow::RetranslateStatusBar() {
-    if (emu_thread)
+    if (emu_thread || AltGameRunning())
         UpdateStatusBar();
 
     emu_speed_label->setToolTip(tr("Current emulation speed. Values higher or lower than 100% "

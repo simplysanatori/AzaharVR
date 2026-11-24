@@ -165,11 +165,11 @@ void ConfigurePerGame::LoadConfiguration() {
     }
 
     std::string title;
-    if (loader->ReadTitle(title, false) == Loader::ResultStatus::Success)
+    if (loader && loader->ReadTitle(title, false) == Loader::ResultStatus::Success)
         ui->display_name->setText(QString::fromStdString(title));
 
     std::vector<u8> bytes;
-    if (loader->ReadIcon(bytes, false) == Loader::ResultStatus::Success) {
+    if (loader && loader->ReadIcon(bytes, false) == Loader::ResultStatus::Success) {
         scene->clear();
 
         QPixmap map = GetQPixmapFromSMDH(bytes);
@@ -179,8 +179,10 @@ void ConfigurePerGame::LoadConfiguration() {
 
     ui->display_filepath->setText(QString::fromStdString(filename));
 
-    ui->display_format->setText(QString::fromStdString(Loader::GetFileTypeString(
-        loader->GetFileType(), loader->IsFileCompressed(), loader->IsFileBundle())));
+    if (loader) { // none reads a DS, GBA or Game Boy game
+        ui->display_format->setText(QString::fromStdString(Loader::GetFileTypeString(
+            loader->GetFileType(), loader->IsFileCompressed(), loader->IsFileBundle())));
+    }
 
     const auto valueText = ReadableByteSize(FileUtil::GetSize(filename));
     ui->display_size->setText(valueText);

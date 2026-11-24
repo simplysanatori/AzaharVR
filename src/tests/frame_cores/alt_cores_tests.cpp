@@ -549,8 +549,8 @@ TEST_CASE("Microphone Blow and Close Lid take the value they get", "[frame_cores
         FrameCores::NdsCore core;
         const auto blows = [&core] {
             std::vector<int16_t> pcm(256, 1);
-            core.OnMicReadInput(pcm.data(), static_cast<int>(pcm.size()));
-            return std::any_of(pcm.begin(), pcm.end(), [](int16_t s) { return s != 0; });
+            const int n = core.OnMicReadInput(pcm.data(), static_cast<int>(pcm.size()));
+            return std::any_of(pcm.begin(), pcm.begin() + n, [](int16_t s) { return s != 0; });
         };
         CHECK(!blows());
         for (const bool on : {true, true, false, false}) {
