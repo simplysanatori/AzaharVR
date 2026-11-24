@@ -3734,6 +3734,7 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     const u32 console = Settings::values.ds_console_mode.GetValue();
     options.force_nds = console == Common::AltCore::DsConsoleDS;
     options.force_dsi = console == Common::AltCore::DsConsoleDSi;
+    options.second_screen = Settings::values.gba_second_screen.GetValue();
     if (!AltWindowOpen(info) ||
         !alt_core_host->Boot(path, data_dir, /*headless_for_test=*/false, options)) {
         LOG_CRITICAL(Frontend, "Failed to load application!");
@@ -3837,7 +3838,7 @@ void GMainWindow::ApplyAltSettings() {
     }
     const auto& v = Settings::values;
     const auto caps = alt_core_host->GetCapabilities();
-    if (caps.has_touch) {
+    if (caps.has_touch && Common::AltCore::IsDs(caps.kind)) {
         alt_core_host->SetTouchEnabled(v.ds_touch_enabled.GetValue());
     }
     if (caps.has_screen_rotation) {
@@ -3848,6 +3849,9 @@ void GMainWindow::ApplyAltSettings() {
     }
     if (caps.has_solar_sensor) {
         alt_core_host->SetSolarLevel(static_cast<int>(v.gba_solar_level.GetValue()));
+    }
+    if (caps.can_edit_game) {
+        alt_core_host->SetEditing(v.gba_allow_editing.GetValue());
     }
 }
 #endif

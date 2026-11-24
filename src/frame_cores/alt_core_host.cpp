@@ -13,10 +13,12 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <mutex>
 #include <span>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include "common/logging/log.h"
 #include "common/scm_rev.h"
@@ -96,6 +98,12 @@ struct StateRequest {
     std::string path;
     uint64_t time = 0;
     bool anyway = false;
+    uint32_t restarts = 0; ///< the game's when this was asked for
+    bool put_off = false;  ///< it waits for CoreBackend::StateSafeNow
+
+    bool IsSave() const {
+        return kind == Kind::Save || kind == Kind::Autosave;
+    }
 };
 
 /// The moment before a load. Guarded by core_mutex.
@@ -146,6 +154,7 @@ struct AltCoreHost::Impl {
     std::mutex request_mutex;
     std::deque<StateRequest> requests;    ///< guarded by request_mutex
     std::atomic<int> requests_open{0};    ///< waiting or under way
+    std::atomic<uint32_t> restarts{0};    ///< Reset's count
     std::atomic<int64_t> last_frame_ns{0}; ///< when a frame ended (steady clock)
     UndoState undo;
 
@@ -169,37 +178,92 @@ struct AltCoreHost::Impl {
         if (!running.load(std::memory_order_acquire)) {
             return false;
         }
+        request.restarts = restarts.load(std::memory_order_acquire);
         requests_open.fetch_add(1, std::memory_order_acq_rel);
         if (headless) {
+            bool behind = false;
+            {
+                std::lock_guard lock(request_mutex);
+                behind = !requests.empty();
+            }
             write_ok.store(true);
-            const bool ok = RunRequest(request);
+            const Turn turn = TakeTurn(request, false, behind);
+            if (turn == Turn::Waits) {
+                std::lock_guard lock(request_mutex);
+                requests.push_back(std::move(request));
+                return true;
+            }
             requests_open.fetch_sub(1, std::memory_order_acq_rel);
             writer.WaitIdle();
-            return ok && write_ok.load();
+            return turn == Turn::Ok && write_ok.load();
         }
         std::lock_guard lock(request_mutex);
         requests.push_back(std::move(request));
         return true;
     }
 
-    /// Emulation thread, between two frames. `stopping`: only what saves.
+    /// Emulation thread, between two frames. `stopping`: only what saves, and nothing waits.
     void RunRequests(bool stopping) {
-        while (requests_open.load(std::memory_order_acquire) > 0) {
+        std::vector<StateRequest> waiting;
+        while (requests_open.load(std::memory_order_acquire) > static_cast<int>(waiting.size())) {
             StateRequest request;
             {
                 std::lock_guard lock(request_mutex);
                 if (requests.empty()) {
-                    return;
+                    break;
                 }
                 request = std::move(requests.front());
                 requests.pop_front();
             }
-            using Kind = StateRequest::Kind;
-            if (!stopping || request.kind == Kind::Save || request.kind == Kind::Autosave) {
-                RunRequest(request);
+            if (TakeTurn(request, stopping, !waiting.empty()) == Turn::Waits) {
+                waiting.push_back(std::move(request));
+            } else {
+                requests_open.fetch_sub(1, std::memory_order_acq_rel);
             }
-            requests_open.fetch_sub(1, std::memory_order_acq_rel);
         }
+        if (!waiting.empty()) {
+            std::lock_guard lock(request_mutex);
+            requests.insert(requests.begin(), std::make_move_iterator(waiting.begin()),
+                            std::make_move_iterator(waiting.end()));
+        }
+    }
+
+    enum class Turn { Ok, Failed, Waits };
+
+    /// Runs a request, or not while a state would catch the game half changed: an autosave is
+    /// dropped then, anything else waits. `behind`: an earlier one waits (they keep their order).
+    Turn TakeTurn(StateRequest& request, bool stopping, bool behind) {
+        using Kind = StateRequest::Kind;
+        if (stopping && !request.IsSave()) {
+            return Turn::Failed;
+        }
+        if (request.put_off && request.kind == Kind::Save &&
+            request.restarts != restarts.load(std::memory_order_acquire)) {
+            NotMade(request, SlotPath(request.slot)); // the moment it was for is gone
+            return Turn::Failed;
+        }
+        if (request.kind == Kind::Prune || (!behind && StateSafe())) {
+            return RunRequest(request) ? Turn::Ok : Turn::Failed;
+        }
+        if (request.kind == Kind::Autosave) {
+            LOG_INFO(Core, "AltCoreHost: {} autosave dropped: the game is being changed",
+                     Core::Autosave::ReasonName(request.reason));
+            return Turn::Failed;
+        }
+        if (stopping) { // no frame comes
+            NotMade(request, SlotPath(request.slot));
+            return Turn::Failed;
+        }
+        if (!std::exchange(request.put_off, true)) {
+            LOG_INFO(Core, "AltCoreHost: a state request ({}) waits: the game is being changed",
+                     static_cast<int>(request.kind));
+        }
+        return Turn::Waits;
+    }
+
+    bool StateSafe() const {
+        std::lock_guard lock(core_mutex);
+        return !core || core->StateSafeNow();
     }
 
     bool RunRequest(const StateRequest& request) {
@@ -245,6 +309,22 @@ struct AltCoreHost::Impl {
         return out;
     }
 
+    /// Tells that a slot's state or an autosave could not be made.
+    void NotMade(const StateRequest& request, const std::string& path) {
+        LOG_ERROR(Core, "AltCoreHost: no state for {}", path);
+        const bool autosave = request.kind == StateRequest::Kind::Autosave;
+        Core::Autosave::Writer::Done done;
+        done.path = path;
+        done.reason = request.reason;
+        done.autosave = autosave;
+        done.slot_save = !autosave;
+        done.slot = autosave ? 0 : static_cast<u32>(request.slot);
+        done.failure = Core::Autosave::Failure::Serialize;
+        if (frontend.on_written) {
+            frontend.on_written(done);
+        }
+    }
+
     /// Makes a slot's state or an autosave and hands it to the writer.
     bool MakeState(const StateRequest& request) {
         namespace Autosave = Core::Autosave;
@@ -281,17 +361,7 @@ struct AltCoreHost::Impl {
             }
         }
         if (!ok) {
-            LOG_ERROR(Core, "AltCoreHost: no state for {}", job.path);
-            Autosave::Writer::Done done;
-            done.path = job.path;
-            done.reason = job.reason;
-            done.autosave = autosave;
-            done.slot_save = job.slot_save;
-            done.slot = job.slot;
-            done.failure = Autosave::Failure::Serialize;
-            if (frontend.on_written) {
-                frontend.on_written(done);
-            }
+            NotMade(request, job.path);
             return false;
         }
         job.header = Core::CurrentStateHeader(job.program_id, now);
@@ -359,13 +429,20 @@ struct AltCoreHost::Impl {
         return !ec;
     }
 
+    /// Puts a state in place; the core is told, also of one it read only part of.
+    bool PutLocked(const std::vector<uint8_t>& state) {
+        const bool ok = core->LoadStateFromMemory(state.data(), state.size());
+        core->AfterStateLoad();
+        return ok;
+    }
+
     /// Loads `state`; on failure the game is as it was.
     bool LoadLocked(const std::vector<uint8_t>& state, const UndoState& before) {
-        if (core->LoadStateFromMemory(state.data(), state.size())) {
+        if (PutLocked(state)) {
             return true;
         }
         // Part of it may have been read.
-        if (!core->LoadStateFromMemory(before.state.data(), before.state.size())) {
+        if (!PutLocked(before.state)) {
             LOG_ERROR(Core, "AltCoreHost: the moment before the load could not be restored");
         }
         return false;
@@ -467,11 +544,12 @@ struct AltCoreHost::Impl {
             if (core && MomentLocked(before)) {
                 last_frame = FrameOutput{}; // the core starts again
                 if (core->ImportBatterySave(path)) {
+                    core->AfterStateLoad();
                     done.result = LoadResult::Ok;
                     undo = std::move(before);
                 } else {
                     // The core may have started again: back to where the game was.
-                    core->LoadStateFromMemory(before.state.data(), before.state.size());
+                    PutLocked(before.state);
                 }
                 ShowLoadedLocked();
             }
@@ -903,6 +981,7 @@ void AltCoreHost::Reset() {
         impl->last_frame = FrameOutput{}; // its pixels are the core's
         impl->undo = {};
         impl->core->Reset();
+        impl->restarts.fetch_add(1, std::memory_order_acq_rel);
         impl->audio.Flush();
     }
 }
@@ -927,13 +1006,17 @@ bool AltCoreHost::StepFrames(int n) {
     if (n <= 0) {
         return true;
     }
-    std::lock_guard lock(impl->core_mutex);
-    if (!impl->core || !impl->running.load(std::memory_order_acquire)) {
-        return false;
-    }
     double ms_sum = 0.0;
     double peak = 0.0;
     for (int i = 0; i < n; ++i) {
+        if (impl->headless && impl->requests_open.load(std::memory_order_acquire) > 0) {
+            impl->RunRequests(false); // as the emulation thread, between two frames
+            impl->writer.WaitIdle();
+        }
+        std::lock_guard lock(impl->core_mutex);
+        if (!impl->core || !impl->running.load(std::memory_order_acquire)) {
+            return false;
+        }
         double ms = 0.0;
         impl->ExecuteSingleFrameLocked(ms);
         ms_sum += ms;
@@ -1087,6 +1170,13 @@ void AltCoreHost::SetSolarLevel(int level) {
     std::lock_guard lock(impl->core_mutex);
     if (impl->core) {
         impl->core->SetSolarLevel(level);
+    }
+}
+
+void AltCoreHost::SetEditing(bool on) {
+    std::lock_guard lock(impl->core_mutex);
+    if (impl->core) {
+        impl->core->SetEditing(on);
     }
 }
 

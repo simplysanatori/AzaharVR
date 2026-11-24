@@ -108,8 +108,9 @@ bool Has(Need need, const CoreCaps& core) {
     case Need::Bottom:
         return core.screens.has_bottom;
     case Need::Touch:
-    case Need::DsTouch:
         return core.has_touch;
+    case Need::DsTouch:
+        return core.has_touch && Common::AltCore::IsDs(core.kind);
     case Need::Gyro:
         return core.has_gyro;
     case Need::Stereo:
@@ -127,9 +128,9 @@ bool Has(Need need, const CoreCaps& core) {
     case Need::Autosave:
         return kAltAutosave;
     case Need::ConsoleGroup:
-        return core.has_solar_sensor || core.has_dsi_mode || core.has_touch || core.has_mic_blow ||
-               core.has_lid_close || core.has_save_import || Has(Need::SecondScreen, core) ||
-               core.can_edit_game;
+        return core.has_solar_sensor || core.has_dsi_mode || Has(Need::DsTouch, core) ||
+               core.has_mic_blow || core.has_lid_close || core.has_save_import ||
+               Has(Need::SecondScreen, core) || core.can_edit_game;
     case Need::SolarSensor:
         return core.has_solar_sensor;
     case Need::ConsoleMode:

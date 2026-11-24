@@ -131,9 +131,13 @@ struct Capabilities {
     }
 };
 
-/// Whether the Secondary Screen takes touches. The DS's Touch Screen Input is not the 3DS's.
+constexpr bool IsDs(CoreKind kind) {
+    return kind == CoreKind::NDS || kind == CoreKind::DSi;
+}
+
+/// Whether the Secondary Screen takes touches. Touch Screen Input is the DS's alone.
 constexpr bool TouchEnabled(const Capabilities& caps, bool ds_touch_enabled) {
-    return caps.has_touch && (caps.kind == CoreKind::N3DS || ds_touch_enabled);
+    return caps.has_touch && (!IsDs(caps.kind) || ds_touch_enabled);
 }
 
 /// Capabilities::second_screen_choices: the bit of Settings::values.gba_second_screen's value.
