@@ -257,7 +257,8 @@ void GMainWindow::AltStateLoaded(const FrameCores::LoadDone& done) {
         case What::Import:
             frame_undo_available = true;
             frame_undo_time = static_cast<u64>(QDateTime::currentSecsSinceEpoch());
-            frame_undo_text = kSaveImported;
+            frame_undo_text = std::string(kSaveImported) + ": " +
+                              Core::Autosave::LocalTime(frame_undo_time); // as UndoText's
             FrameUpdateAutosaveActions();
             FramePushAutosaves();
             AltNotify(kSaveImported);
