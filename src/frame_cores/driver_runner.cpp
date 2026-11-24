@@ -38,10 +38,17 @@ std::unique_ptr<FrameDriver> MakeDriver(DriverKind kind, const DriverServices& s
         }
         LOG_ERROR(Core, "DriverRunner: PokeDaisy did not start for {}", services.rom_path);
     }
-#else
-    (void)kind;
 #endif
-    // gba-ds's game.c has no driver yet; its maps are the Plain driver's.
+#ifdef HAVE_GBADS_GAME
+    if (kind == DriverKind::GbaDs) {
+        if (auto driver = MakeGbaDsDriver(services)) {
+            return driver;
+        }
+        LOG_ERROR(Core, "DriverRunner: gba-ds did not start for {}, its maps alone",
+                  services.rom_path);
+    }
+#endif
+    (void)kind;
     return MakePlainDriver(services, info);
 }
 

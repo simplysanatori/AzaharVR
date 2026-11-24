@@ -52,3 +52,13 @@ if (USE_SYSTEM_FAAD)
 else()
     target_link_libraries(frame_cores PRIVATE faad2)
 endif()
+
+# gba-ds's game.c: Linux only, see externals/gbads_cmake
+if (TARGET gbads_game)
+    target_sources(frame_cores PRIVATE
+        gbads_driver.cpp
+        gbads_driver.h
+    )
+    target_link_libraries(frame_cores PRIVATE gbads_game)
+    target_compile_definitions(frame_cores PUBLIC HAVE_GBADS_GAME)
+endif()
