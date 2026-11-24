@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "common/alt_core_types.h"
 #include "common/logging/log.h"
 #include "frame_cores/frame_driver.h"
 #include "frame_cores/rom_info.h"
