@@ -71,10 +71,32 @@ void AudioResampler::SetCoreSampleRate(uint32_t rate) {
     }
 }
 
-void AudioResampler::SetFastForward(bool on, Settings::FastForwardAudio mode) {
+double AudioResampler::ReadSpeedNow() const {
+    return ReadSpeed(fast_forward.load(std::memory_order_relaxed),
+                     ff_mode.load(std::memory_order_relaxed),
+                     ff_speed.load(std::memory_order_relaxed));
+}
+
+double AudioResampler::ReadSpeed(bool fast_forward, Settings::FastForwardAudio mode, double speed) {
+    if (!fast_forward || mode != Settings::FastForwardAudio::SpedUp || !(speed > 1.0)) {
+        return 1.0;
+    }
+    return std::min(speed, 8.0);
+}
+
+uint32_t AudioResampler::LatencyCapMs(bool fast_forward, Settings::FastForwardAudio mode) {
+    if (!fast_forward) {
+        return 90;
+    }
+    // Normal Pitch drops often in small pieces; Normal Speed plays longer pieces, then skips.
+    return mode == Settings::FastForwardAudio::NormalSpeed ? 90 : 45;
+}
+
+void AudioResampler::SetFastForward(bool on, Settings::FastForwardAudio mode, double speed) {
     const bool prev = fast_forward.exchange(on, std::memory_order_relaxed);
-    ff_mode.store(mode, std::memory_order_relaxed);
-    if (prev != on) {
+    const auto prev_mode = ff_mode.exchange(mode, std::memory_order_relaxed);
+    ff_speed.store(speed, std::memory_order_relaxed);
+    if (prev != on || (on && prev_mode != mode)) {
         // Flush on fast-forward transitions so latency never lingers afterward.
         Flush();
     }
@@ -110,11 +132,11 @@ void AudioResampler::Push(const int16_t* stereo_pcm, std::size_t frame_count) {
     }
 
     const uint32_t in_rate = core_rate.load(std::memory_order_relaxed);
-    // Keep buffered latency bounded so audio lag never accumulates (normal: <= 90 ms,
-    // fast-forward: <= 45 ms).
-    const std::size_t max_watermark =
-        std::min<std::size_t>(kRingCapacityFrames - 64u,
-                              static_cast<std::size_t>(in_rate) * (is_ff ? 45u : 90u) / 1000u);
+    // Keep buffered latency bounded so audio lag never accumulates (LatencyCapMs).
+    const auto mode = ff_mode.load(std::memory_order_relaxed);
+    const std::size_t max_watermark = std::min<std::size_t>(
+        kRingCapacityFrames - 64u,
+        static_cast<std::size_t>(in_rate) * LatencyCapMs(is_ff, mode) / 1000u);
     const std::size_t trim_target = max_watermark / 2u;
 
     std::size_t immediate_out_frames = 0;
@@ -148,8 +170,8 @@ void AudioResampler::Push(const int16_t* stereo_pcm, std::size_t frame_count) {
             const uint32_t out_rate = output_rate.load(std::memory_order_relaxed);
             const double pacer_ratio = std::clamp(
                 Common::XrPacer::Get().audio_ratio.load(std::memory_order_relaxed), 0.95, 1.05);
-            const double step =
-                (static_cast<double>(in_rate) * pacer_ratio) / static_cast<double>(out_rate);
+            const double step = (static_cast<double>(in_rate) * pacer_ratio * ReadSpeedNow()) /
+                                static_cast<double>(out_rate);
             if (queued_frames >= 2 && step > 0.0) {
                 immediate_out_frames = static_cast<std::size_t>(
                     std::floor((static_cast<double>(queued_frames - 1) - frac_pos) / step));
@@ -185,8 +207,8 @@ void AudioResampler::ResampleLocked(int16_t* out, std::size_t out_frames) {
     const uint32_t out_rate = output_rate.load(std::memory_order_relaxed);
     const double pacer_ratio = std::clamp(
         Common::XrPacer::Get().audio_ratio.load(std::memory_order_relaxed), 0.95, 1.05);
-    const double step =
-        (static_cast<double>(in_rate) * pacer_ratio) / static_cast<double>(std::max(1u, out_rate));
+    const double step = (static_cast<double>(in_rate) * pacer_ratio * ReadSpeedNow()) /
+                        static_cast<double>(std::max(1u, out_rate));
     const float vol = Settings::values.audio_muted
                           ? 0.0f
                           : std::clamp(Settings::values.volume.GetValue(), 0.0f, 1.0f);

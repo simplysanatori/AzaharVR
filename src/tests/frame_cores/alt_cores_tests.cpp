@@ -20,6 +20,7 @@
 #include "common/xr_pacer.h"
 #include "frame_cores/alt_core_host.h"
 #include "frame_cores/audio_resampler.h"
+#include "frame_cores/cheat_store.h"
 #include "frame_cores/nds_core.h"
 #include "frame_cores/rom_info.h"
 
@@ -760,3 +761,249 @@ TEST_CASE("S1 melonDS fault handler chains non-DS faults during and after DS run
     sigaction(SIGSEGV, &g_saved_prev_segv, nullptr);
 }
 #endif
+
+namespace {
+
+// A one-file zip with the file stored, not compressed.
+std::vector<uint8_t> MakeStoredZip(const std::string& name, const std::vector<uint8_t>& data) {
+    std::vector<uint8_t> z;
+    const auto put16 = [&](uint16_t v) {
+        z.push_back(static_cast<uint8_t>(v));
+        z.push_back(static_cast<uint8_t>(v >> 8));
+    };
+    const auto put32 = [&](uint32_t v) {
+        put16(static_cast<uint16_t>(v));
+        put16(static_cast<uint16_t>(v >> 16));
+    };
+    const uint32_t crc = FrameCores::ComputeCrc32(data.data(), data.size());
+    const auto size = static_cast<uint32_t>(data.size());
+    put32(0x04034B50u);
+    put16(20);
+    put16(0);
+    put16(0);
+    put32(0);
+    put32(crc);
+    put32(size);
+    put32(size);
+    put16(static_cast<uint16_t>(name.size()));
+    put16(0);
+    z.insert(z.end(), name.begin(), name.end());
+    z.insert(z.end(), data.begin(), data.end());
+    const auto cd_start = static_cast<uint32_t>(z.size());
+    put32(0x02014B50u);
+    put16(20);
+    put16(20);
+    put16(0);
+    put16(0);
+    put32(0);
+    put32(crc);
+    put32(size);
+    put32(size);
+    put16(static_cast<uint16_t>(name.size()));
+    put16(0);
+    put16(0);
+    put16(0);
+    put16(0);
+    put32(0);
+    put32(0);
+    z.insert(z.end(), name.begin(), name.end());
+    const auto cd_size = static_cast<uint32_t>(z.size()) - cd_start;
+    put32(0x06054B50u);
+    put16(0);
+    put16(0);
+    put16(1);
+    put16(1);
+    put32(cd_size);
+    put32(cd_start);
+    put16(0);
+    return z;
+}
+
+} // namespace
+
+
+TEST_CASE("Custom cheats are kept in a file and read back", "[frame_cores]") {
+    TempDir tmp("cheatstore");
+    const std::string path = (tmp.path / "g" / "x.custom.cheats").string();
+    std::vector<FrameCores::CheatEntry> list = {
+        {"Lives\tinfinite", "0123ABCD\n4567EF01", true},
+        {"Off one", "ZZ", false},
+    };
+    REQUIRE(FrameCores::SaveCustomCheats(path, list));
+    const auto back = FrameCores::LoadCustomCheats(path);
+    REQUIRE(back.size() == 2);
+    CHECK(back[0].name == "Lives\tinfinite");
+    CHECK(back[0].code == "0123ABCD\n4567EF01");
+    CHECK(back[0].enabled);
+    CHECK(!back[1].enabled);
+
+    // An empty list removes the file; a missing file is an empty list
+    REQUIRE(FrameCores::SaveCustomCheats(path, {}));
+    CHECK(!fs::exists(path));
+    CHECK(FrameCores::LoadCustomCheats(path).empty());
+
+    const auto lines = FrameCores::SplitCheatCode("AAA-BBB-CCC, 01FF5CD1\n\n02AA0000+x");
+    REQUIRE(lines.size() == 4);
+    CHECK(lines[0] == "AAA-BBB-CCC");
+    CHECK(lines[3] == "x");
+}
+
+TEST_CASE("GBA custom cheats and DS cheat switches are kept when a game closes",
+          "[frame_cores]") {
+    TempDir tmp("cheatkeep");
+    const auto data = (tmp.path / "data").string();
+
+    const fs::path gba = tmp.path / "hb.gba";
+    WriteFile(gba, MakeHomebrewGbaRom());
+    {
+        FrameCores::AltCoreHost host;
+        REQUIRE(host.Boot(gba.string(), data, true));
+        REQUIRE(host.AddCheat("Mine", "82003254 0014"));
+        REQUIRE(host.SetCheatEnabled(host.ListCheats().size() - 1, false));
+        host.Stop();
+    }
+    {
+        FrameCores::AltCoreHost host;
+        REQUIRE(host.Boot(gba.string(), data, true));
+        const auto list = host.ListCheats();
+        REQUIRE(!list.empty());
+        CHECK(list.back().name == "Mine");
+        CHECK(!list.back().enabled);
+        host.Stop();
+    }
+
+    const fs::path nds = tmp.path / "hb.nds";
+    WriteFile(nds, MakeHomebrewNdsRom(false));
+    {
+        FrameCores::AltCoreHost host;
+        REQUIRE(host.Boot(nds.string(), data, true));
+        REQUIRE(host.AddCheat("Ds one", "02000000 00000001"));
+        REQUIRE(host.SetCheatEnabled(0, false));
+        host.Stop();
+    }
+    {
+        FrameCores::AltCoreHost host;
+        REQUIRE(host.Boot(nds.string(), data, true));
+        const auto list = host.ListCheats();
+        REQUIRE(list.size() == 1);
+        CHECK(!list[0].enabled);
+        host.Stop();
+    }
+}
+
+TEST_CASE("Game Boy cheats come from mGBA's cheat device and are kept", "[frame_cores]") {
+    TempDir tmp("gbcheat");
+    const auto data = (tmp.path / "data").string();
+    const fs::path rom = tmp.path / "hb.gb";
+    WriteFile(rom, MakeHomebrewGbRom());
+    {
+        FrameCores::AltCoreHost host;
+        REQUIRE(host.Boot(rom.string(), data, true));
+        CHECK(host.GetCapabilities().has_alt_cheats);
+        CHECK(!host.AddCheat("Bad", "not a code"));
+        REQUIRE(host.AddCheat("Lives", "01FF5CD1"));
+        REQUIRE(host.StepFrames(3));
+        REQUIRE(host.SetCheatEnabled(0, false));
+        host.Stop();
+    }
+    {
+        FrameCores::AltCoreHost host;
+        REQUIRE(host.Boot(rom.string(), data, true));
+        const auto list = host.ListCheats();
+        REQUIRE(list.size() == 1);
+        CHECK(list[0].name == "Lives");
+        CHECK(!list[0].enabled);
+        REQUIRE(host.StepFrames(3));
+        host.Stop();
+    }
+}
+
+TEST_CASE("Fast forward audio modes each do their own thing", "[frame_cores]") {
+    using FrameCores::AudioResampler;
+    using Mode = Settings::FastForwardAudio;
+    CHECK(AudioResampler::ReadSpeed(true, Mode::SpedUp, 3.0) == 3.0);
+    CHECK(AudioResampler::ReadSpeed(true, Mode::SpedUp, 100.0) == 8.0);
+    CHECK(AudioResampler::ReadSpeed(true, Mode::SpedUp, 0.0) == 1.0);
+    CHECK(AudioResampler::ReadSpeed(true, Mode::NormalPitch, 3.0) == 1.0);
+    CHECK(AudioResampler::ReadSpeed(false, Mode::SpedUp, 3.0) == 1.0);
+    CHECK(AudioResampler::LatencyCapMs(true, Mode::NormalPitch) == 45);
+    CHECK(AudioResampler::LatencyCapMs(true, Mode::NormalSpeed) == 90);
+    CHECK(AudioResampler::LatencyCapMs(false, Mode::Muted) == 90);
+
+    std::vector<int16_t> burst(32768 * 2, 1000);
+    const auto queued = [&](Mode mode) {
+        AudioResampler r;
+        REQUIRE(r.Init(32768, true));
+        r.SetFastForward(true, mode, 4.0);
+        r.Push(burst.data(), 32768);
+        const double ms = r.BufferedMs();
+        r.Shutdown();
+        return ms;
+    };
+    CHECK(queued(Mode::Muted) == 0.0);
+    CHECK(queued(Mode::NormalPitch) <= 55.0);
+    CHECK(queued(Mode::SpedUp) <= 55.0);
+    CHECK(queued(Mode::NormalSpeed) > queued(Mode::NormalPitch));
+    CHECK(queued(Mode::NormalSpeed) <= 105.0);
+
+    // Sped Up plays the queue faster: the same pull leaves less behind
+    const auto left = [&](double speed) {
+        AudioResampler r;
+        REQUIRE(r.Init(32768, true));
+        r.SetFastForward(true, Mode::SpedUp, speed);
+        r.Push(burst.data(), 1400);
+        std::vector<int16_t> out(400 * 2);
+        r.Pull(out.data(), 400);
+        const double ms = r.BufferedMs();
+        r.Shutdown();
+        return ms;
+    };
+    CHECK(left(4.0) < left(1.0));
+}
+
+TEST_CASE("A zipped ROM is probed once per file version and leaves nothing behind",
+          "[frame_cores]") {
+    TempDir tmp("zip");
+    auto rom = MakeHomebrewGbaRom();
+    const fs::path zip = tmp.path / "game.zip";
+    WriteFile(zip, MakeStoredZip("inner.gba", rom));
+    WriteFile(tmp.path / "mods.zip", MakeStoredZip("readme.txt", {'h', 'i'}));
+
+    const auto first = FrameCores::ProbeRom(zip.string());
+    REQUIRE(first.has_value());
+    CHECK(first->kind == Common::AltCore::CoreKind::GBA);
+    const auto second = FrameCores::ProbeRom(zip.string());
+    REQUIRE(second.has_value());
+    CHECK(second->title_id == first->title_id);
+    CHECK(!FrameCores::ProbeRom((tmp.path / "mods.zip").string()).has_value());
+
+    // A changed file is read again
+    rom[0x10] ^= 0x55;
+    WriteFile(zip, MakeStoredZip("inner.gba", rom));
+    const auto third = FrameCores::ProbeRom(zip.string());
+    REQUIRE(third.has_value());
+    CHECK(third->title_id != first->title_id);
+
+    // Only the files made here are in the folder
+    size_t n = 0;
+    for (const auto& e : fs::directory_iterator(tmp.path)) {
+        (void)e;
+        ++n;
+    }
+    CHECK(n == 2);
+}
+
+TEST_CASE("Stopping a game clears the running title id", "[frame_cores]") {
+    TempDir tmp("titleid");
+    const fs::path rom_path = tmp.path / "hb.gba";
+    WriteFile(rom_path, MakeHomebrewGbaRom());
+    uint64_t last = 0;
+    FrameCores::HostCallbacks cb{};
+    cb.on_title_id = [&](uint64_t tid) { last = tid; };
+    FrameCores::AltCoreHost host;
+    host.SetCallbacks(cb);
+    REQUIRE(host.Boot(rom_path.string(), (tmp.path / "data").string(), true));
+    CHECK(last != 0);
+    host.Stop();
+    CHECK(last == 0);
+}

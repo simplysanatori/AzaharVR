@@ -16,17 +16,20 @@
 #include <vector>
 
 #include "common/logging/log.h"
+#include "frame_cores/cheat_store.h"
 #include "frame_cores/rom_info.h"
 
 extern "C" {
 #include <mgba-util/audio-buffer.h>
 #include <mgba-util/vfs.h>
+#include <mgba/core/cheats.h>
 #include <mgba/core/config.h>
 #include <mgba/core/core.h>
 #include <mgba/core/log.h>
 #include <mgba/core/serialize.h>
 #include <mgba/gb/core.h>
 #include <mgba/gb/interface.h>
+#include <mgba/internal/gb/cheats.h>
 #include <mgba/internal/gb/gb.h>
 }
 
@@ -121,6 +124,50 @@ struct GbCore::Impl {
     std::vector<uint32_t> rgba_fb;
     std::vector<int16_t> audio_scratch;
     GbRumbleWrapper rumble{};
+
+    std::vector<CheatEntry> custom_cheats; ///< the cheats the player added (kept beside the save)
+    std::string custom_cheats_path;
+
+    // Puts the switched-on cheats into mGBA's cheat device (all rebuilt).
+    void ApplyCheats() {
+        mCheatDevice* dev = core ? core->cheatDevice(core) : nullptr;
+        if (!dev) {
+            return;
+        }
+        // Clearing alone would leave a Game Genie code's change in the game's ROM.
+        for (std::size_t i = 0; i < mCheatSetsSize(&dev->cheats); ++i) {
+            mCheatSet* set = *mCheatSetsGetPointer(&dev->cheats, i);
+            set->enabled = false;
+            mCheatRefresh(dev, set);
+        }
+        mCheatDeviceClear(dev);
+        for (const auto& entry : custom_cheats) {
+            if (!entry.enabled) {
+                continue;
+            }
+            mCheatSet* set = dev->createSet(dev, entry.name.c_str());
+            for (const auto& line : SplitCheatCode(entry.code)) {
+                mCheatAddLine(set, line.c_str(), GB_CHEAT_AUTODETECT);
+            }
+            mCheatAddSet(dev, set);
+        }
+    }
+
+    // True when every line of the code is one mGBA reads.
+    bool CodeIsValid(const std::string& code) const {
+        mCheatDevice* dev = core ? core->cheatDevice(core) : nullptr;
+        const auto lines = SplitCheatCode(code);
+        if (!dev || lines.empty()) {
+            return false;
+        }
+        mCheatSet* set = dev->createSet(dev, "check");
+        bool ok = true;
+        for (const auto& line : lines) {
+            ok = ok && mCheatAddLine(set, line.c_str(), GB_CHEAT_AUTODETECT);
+        }
+        mCheatSetDeinit(set);
+        return ok;
+    }
 
     Common::AltCore::Capabilities caps = Common::AltCore::Capabilities::ForGB();
 };
@@ -249,6 +296,11 @@ bool GbCore::Load(const std::string& rom_path, const CorePaths& paths,
 
     impl->core = core;
     impl->keys = 0;
+    impl->caps.has_alt_cheats = true;
+    impl->custom_cheats_path =
+        (std::filesystem::path(paths.game_dir) / (stem + ".custom.cheats")).string();
+    impl->custom_cheats = LoadCustomCheats(impl->custom_cheats_path);
+    impl->ApplyCheats();
     const unsigned rate = core->audioSampleRate(core);
     impl->audio_rate = rate > 0 ? rate : 32768u;
 
@@ -272,6 +324,7 @@ void GbCore::Unload() {
         impl->core->deinit(impl->core);
         impl->core = nullptr;
     }
+    impl->custom_cheats.clear();
     impl->fb.clear();
     impl->rgba_fb.clear();
     impl->rumble.level.store(0.0f, std::memory_order_relaxed);
@@ -283,6 +336,7 @@ void GbCore::Reset() {
     }
     impl->core->reset(impl->core);
     impl->rumble.level.store(0.0f, std::memory_order_relaxed);
+    impl->ApplyCheats();
 }
 
 void GbCore::SetInput(const Common::AltCore::InputState& input) {
@@ -416,6 +470,30 @@ bool GbCore::LoadStateFromFile(const std::string& path) {
         return false;
     }
     return LoadStateFromMemory(buf.data(), buf.size());
+}
+
+std::vector<CheatEntry> GbCore::ListCheats() const {
+    return impl->custom_cheats;
+}
+
+bool GbCore::SetCheatEnabled(std::size_t idx, bool on) {
+    if (!impl->core || idx >= impl->custom_cheats.size()) {
+        return false;
+    }
+    impl->custom_cheats[idx].enabled = on;
+    SaveCustomCheats(impl->custom_cheats_path, impl->custom_cheats);
+    impl->ApplyCheats();
+    return true;
+}
+
+bool GbCore::AddCheat(const std::string& name, const std::string& code) {
+    if (!impl->core || !impl->CodeIsValid(code)) {
+        return false;
+    }
+    impl->custom_cheats.push_back(CheatEntry{name.empty() ? "Custom Cheat" : name, code, true});
+    SaveCustomCheats(impl->custom_cheats_path, impl->custom_cheats);
+    impl->ApplyCheats();
+    return true;
 }
 
 bool GbCore::ImportBatterySave(const std::string& sav_path) {

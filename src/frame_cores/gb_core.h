@@ -47,6 +47,10 @@ public:
 
     bool ImportBatterySave(const std::string& sav_path) override;
 
+    std::vector<CheatEntry> ListCheats() const override;
+    bool SetCheatEnabled(std::size_t idx, bool on) override;
+    bool AddCheat(const std::string& name, const std::string& code) override;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl;

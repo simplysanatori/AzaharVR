@@ -469,6 +469,9 @@ void AltCoreHost::Stop() {
         if (impl->callbacks.on_game_running) {
             impl->callbacks.on_game_running(false);
         }
+        if (impl->callbacks.on_title_id) {
+            impl->callbacks.on_title_id(0); // no running title: its placement key is not kept
+        }
     }
 
     impl->audio.Shutdown();
@@ -539,7 +542,8 @@ void AltCoreHost::Reset() {
 void AltCoreHost::SetFastForward(bool on, uint32_t speed_pct) {
     impl->ff_speed_pct.store(speed_pct, std::memory_order_relaxed);
     impl->fast_forward.store(on, std::memory_order_relaxed);
-    impl->audio.SetFastForward(on, Settings::values.fast_forward_audio.GetValue());
+    impl->audio.SetFastForward(on, Settings::values.fast_forward_audio.GetValue(),
+                               static_cast<double>(speed_pct) / 100.0);
 }
 
 bool AltCoreHost::IsFastForward() const {

@@ -11,6 +11,9 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
+#include <mutex>
+#include <optional>
 #include <string_view>
 
 #include <fmt/format.h>
@@ -468,7 +471,50 @@ bool ExtractRomFromZip(const std::string& zip_path, std::vector<uint8_t>& out_da
     return true;
 }
 
+namespace {
+std::optional<RomInfo> ProbeRomUncached(const std::string& path);
+}
+
 std::optional<RomInfo> ProbeRom(const std::string& path) {
+    if (!IsZipExtension(path)) {
+        return ProbeRomUncached(path);
+    }
+    // A zip is read once per file version: scans and starts share the result.
+    struct Key {
+        std::uintmax_t size;
+        std::filesystem::file_time_type mtime;
+        bool operator==(const Key& o) const {
+            return size == o.size && mtime == o.mtime;
+        }
+    };
+    static std::mutex mutex;
+    static std::map<std::string, std::pair<Key, std::optional<RomInfo>>> cache;
+
+    std::error_code ec;
+    const Key key{std::filesystem::file_size(path, ec), std::filesystem::last_write_time(path, ec)};
+    if (ec) {
+        return std::nullopt;
+    }
+    {
+        std::lock_guard lock(mutex);
+        const auto it = cache.find(path);
+        if (it != cache.end() && it->second.first == key) {
+            return it->second.second;
+        }
+    }
+    auto info = ProbeRomUncached(path);
+    {
+        std::lock_guard lock(mutex);
+        if (cache.size() >= 256) {
+            cache.clear();
+        }
+        cache[path] = {key, info};
+    }
+    return info;
+}
+
+namespace {
+std::optional<RomInfo> ProbeRomUncached(const std::string& path) {
     const auto detected = DetectCoreKind(path);
     if (detected == Common::AltCore::CoreKind::N3DS) {
         return std::nullopt;
@@ -482,12 +528,20 @@ std::optional<RomInfo> ProbeRom(const std::string& path) {
     constexpr size_t kProbePrefixBytes = 64u * 1024u;
     if (is_zip) {
         std::string inner;
-        // For DS ROMs inside a zip, banner can sit past 64 KB; probe header first, then read
-        // full ROM only if needed for banner or small files.
         const bool is_ds = (detected == Common::AltCore::CoreKind::NDS ||
                             detected == Common::AltCore::CoreKind::DSi);
-        if (!ExtractRomFromZip(path, head, &inner, is_ds ? 0 : kProbePrefixBytes)) {
+        if (!ExtractRomFromZip(path, head, &inner, kProbePrefixBytes)) {
             return std::nullopt;
+        }
+        // A DS banner can sit past the first 64 KB: read on only as far as it goes.
+        if (is_ds && head.size() >= kProbePrefixBytes) {
+            const std::uint64_t banner_end = std::uint64_t{ReadLE32(head.data() + 0x68)} + 0x840;
+            if (banner_end > head.size() && banner_end <= 512ull * 1024 * 1024) {
+                std::vector<uint8_t> more;
+                if (ExtractRomFromZip(path, more, nullptr, static_cast<size_t>(banner_end))) {
+                    head = std::move(more);
+                }
+            }
         }
         if (!inner.empty()) {
             fallback_stem = std::filesystem::path(inner).stem().string();
@@ -613,6 +667,7 @@ std::optional<RomInfo> ProbeRom(const std::string& path) {
 
     return std::nullopt;
 }
+} // namespace
 
 const char* CoreFolder(Common::AltCore::CoreKind kind) {
     switch (kind) {

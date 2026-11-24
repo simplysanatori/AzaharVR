@@ -88,7 +88,7 @@ const std::vector<std::string>& SupportedExtensions() {
     static const std::vector<std::string> extensions = {
         "3dsx", "elf", "axf", "cci", "cxi", "app", "z3dsx", "zcci", "zcxi", "bcci", "3ds",
 #ifdef ENABLE_ALT_CORES
-        "nds", "dsi", "gba", "gb", "gbc",
+        "nds", "dsi", "gba", "gb", "gbc", "zip", // zips: only a ROM inside shows
 #endif
     };
     return extensions;
