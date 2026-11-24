@@ -161,7 +161,7 @@ constexpr uint64_t kTagGBA = 0xBAULL << 56;
 constexpr uint64_t kTagGB  = 0x6BULL << 56;
 
 constexpr uint64_t MakeKey(uint64_t tag, uint32_t game_code_be, uint32_t crc32) {
-    // Pack tag (8 bits) | upper 24 bits of game_code_be (or hashed) | 32-bit CRC
+    // Tag (8 bits) | the code's last three letters (24 bits) | CRC (32 bits; it covers the whole code)
     return tag | (static_cast<uint64_t>(game_code_be & 0x00FFFFFFU) << 32) |
            static_cast<uint64_t>(crc32);
 }

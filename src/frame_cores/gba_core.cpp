@@ -158,12 +158,11 @@ bool GbaCore::Load(const std::string& rom_path, const CorePaths& paths,
     impl->opts = opts;
     impl->caps = Common::AltCore::Capabilities::ForGBA();
 
-    EnsureDir(paths.save_dir);
-    EnsureDir(paths.state_dir);
+    EnsureDir(paths.game_dir);
     EnsureDir(paths.cheat_dir);
 
     const std::string stem = std::filesystem::path(rom_path).stem().string();
-    impl->save_path = (std::filesystem::path(paths.save_dir) / (stem + ".sav")).string();
+    impl->save_path = (std::filesystem::path(paths.game_dir) / (stem + ".sav")).string();
 
     // Optional GBA BIOS discovery in <bios_dir>/gba_bios.bin (else mGBA HLE BIOS).
     emu_bios_path[0] = '\0';
@@ -236,7 +235,7 @@ bool GbaCore::Load(const std::string& rom_path, const CorePaths& paths,
     std::snprintf(cheat_cfg.cheatDir, sizeof(cheat_cfg.cheatDir), "%s", dirs.c_str());
     std::snprintf(cheat_cfg.assetDir, sizeof(cheat_cfg.assetDir), "%s", paths.bios_dir.c_str());
     const std::string prefs_path =
-        (std::filesystem::path(paths.state_dir) / (stem + ".cheats")).string();
+        (std::filesystem::path(paths.game_dir) / (stem + ".cheats")).string();
     cheats_load(&impl->cheats, &cheat_cfg, rom_path.c_str(), impl->emu.gameCode,
                 prefs_path.c_str());
     impl->ApplyAllCheats();

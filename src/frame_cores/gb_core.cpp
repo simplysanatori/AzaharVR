@@ -142,8 +142,7 @@ bool GbCore::Load(const std::string& rom_path, const CorePaths& paths,
     impl->opts = opts;
     impl->caps = Common::AltCore::Capabilities::ForGB();
 
-    EnsureDir(paths.save_dir);
-    EnsureDir(paths.state_dir);
+    EnsureDir(paths.game_dir);
 
     VFile* rom_vf = nullptr;
     if (IsZipPath(rom_path)) {
@@ -232,7 +231,7 @@ bool GbCore::Load(const std::string& rom_path, const CorePaths& paths,
     }
 
     const std::string stem = std::filesystem::path(rom_path).stem().string();
-    impl->save_path = (std::filesystem::path(paths.save_dir) / (stem + ".sav")).string();
+    impl->save_path = (std::filesystem::path(paths.game_dir) / (stem + ".sav")).string();
     if (VFile* save_vf = VFileOpen(impl->save_path.c_str(), O_CREAT | O_RDWR)) {
         if (!core->loadSave(core, save_vf)) {
             save_vf->close(save_vf);

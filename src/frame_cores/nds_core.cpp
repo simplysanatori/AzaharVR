@@ -283,10 +283,12 @@ struct NdsCore::Impl {
         std::filesystem::path sav_candidate =
             std::filesystem::path(gba_path).replace_extension(".sav");
         if (!std::filesystem::exists(sav_candidate) && !paths.data_dir.empty()) {
-            const auto alt =
-                std::filesystem::path(paths.data_dir) / "gba" / "saves" / (gba_stem + ".sav");
-            if (std::filesystem::exists(alt)) {
-                sav_candidate = alt;
+            if (const auto gba = ProbeRom(gba_path)) { // the save this GBA game has on its own
+                const auto alt =
+                    std::filesystem::path(GameFolder(paths.data_dir, *gba)) / (gba_stem + ".sav");
+                if (std::filesystem::exists(alt)) {
+                    sav_candidate = alt;
+                }
             }
         }
         gba_save_path = sav_candidate.string();
@@ -319,6 +321,52 @@ struct NdsCore::Impl {
     }
 };
 
+std::string PrepareWorkingNand(const std::filesystem::path& bios_dir) {
+    std::error_code ec;
+    const auto original = bios_dir / "dsi_nand.bin";
+    const auto size = std::filesystem::file_size(original, ec);
+    if (ec) {
+        return {};
+    }
+    const auto mtime = static_cast<long long>(
+        std::filesystem::last_write_time(original, ec).time_since_epoch().count());
+    const std::string stamp = fmt::format("{} {}", size, mtime);
+    const auto copy = bios_dir / "dsi_nand_working.bin";
+    const auto stamp_file = bios_dir / "dsi_nand_working.txt";
+    std::string have;
+    {
+        std::ifstream in(stamp_file);
+        std::getline(in, have);
+    }
+    if (have == stamp && std::filesystem::exists(copy, ec)) {
+        return copy.string();
+    }
+    if (std::filesystem::exists(copy, ec)) {
+        std::filesystem::rename(copy, copy.string() + ".bak", ec);
+        if (ec) {
+            LOG_ERROR(Core, "NdsCore: cannot keep the old DSi NAND copy: {}", ec.message());
+            return {};
+        }
+    }
+    const std::string tmp = copy.string() + ".tmp";
+    std::filesystem::copy_file(original, tmp, std::filesystem::copy_options::overwrite_existing,
+                               ec);
+    if (!ec) {
+        std::filesystem::permissions(tmp, std::filesystem::perms::owner_write,
+                                     std::filesystem::perm_options::add, ec);
+    }
+    if (!ec) {
+        std::filesystem::rename(tmp, copy, ec);
+    }
+    if (ec) {
+        LOG_ERROR(Core, "NdsCore: cannot copy the DSi NAND: {}", ec.message());
+        std::filesystem::remove(tmp, ec);
+        return {};
+    }
+    std::ofstream(stamp_file, std::ios::trunc) << stamp;
+    return copy.string();
+}
+
 NdsCore::NdsCore() : impl(std::make_unique<Impl>()) {}
 
 NdsCore::~NdsCore() {
@@ -338,8 +386,7 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
     impl->rotation_deg = 0;
     impl->metrics_dirty = false;
 
-    EnsureDir(paths.save_dir);
-    EnsureDir(paths.state_dir);
+    EnsureDir(paths.game_dir);
     EnsureDir(paths.cheat_dir);
     EnsureDir(paths.bios_dir);
     SetMelonDSLocalDir(paths.bios_dir);
@@ -361,8 +408,17 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
     }
 
     const std::string stem = std::filesystem::path(rom_path).stem().string();
-    impl->save_path = (std::filesystem::path(paths.save_dir) / (stem + ".sav")).string();
-    impl->cheat_file_path = (std::filesystem::path(paths.cheat_dir) / (stem + ".mch")).string();
+    impl->save_path = (std::filesystem::path(paths.game_dir) / (stem + ".sav")).string();
+    impl->cheat_file_path = (std::filesystem::path(paths.game_dir) / (stem + ".mch")).string();
+    {
+        // The game's own cheats; a file the player put in the shared folder is the start of them.
+        std::error_code ec;
+        const auto shared = std::filesystem::path(paths.cheat_dir) / (stem + ".mch");
+        if (!std::filesystem::exists(impl->cheat_file_path, ec) &&
+            std::filesystem::exists(shared, ec)) {
+            std::filesystem::copy_file(shared, impl->cheat_file_path, ec);
+        }
+    }
 
     // Detect DSi-enhanced / DSiWare header unit code (offset 0x12, bit 1)
     const uint8_t unit_code = rom_bytes[0x12];
@@ -446,8 +502,8 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
             if (auto fw = TryLoadFirmware(bios_dir / "dsi_firmware.bin")) {
                 dsi_args.Firmware = std::move(*fw);
             }
-            const auto nand_path = (bios_dir / "dsi_nand.bin").string();
-            if (has_user_arm7i && std::filesystem::exists(nand_path)) {
+            const auto nand_path = has_user_arm7i ? PrepareWorkingNand(bios_dir) : std::string();
+            if (!nand_path.empty()) {
                 if (auto* nf = melonDS::Platform::OpenFile(
                         nand_path, melonDS::Platform::FileMode::ReadWriteExisting)) {
                     melonDS::DSi_NAND::NANDImage img(nf, &(*dsi_args.ARM7iBIOS)[0x8308]);

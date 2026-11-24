@@ -17,10 +17,9 @@ namespace FrameCores {
 
 struct CorePaths {
     std::string data_dir;  ///< Root user data folder
-    std::string save_dir;  ///< Battery saves directory (e.g. <data_dir>/gba/saves)
-    std::string state_dir; ///< Save states directory (e.g. <data_dir>/gba/states)
+    std::string game_dir;  ///< The running game's own folder (GameFolder): save, states, cheats
     std::string bios_dir;  ///< BIOS / firmware / DSi NAND directory
-    std::string cheat_dir; ///< Cheats directory
+    std::string cheat_dir; ///< Shared cheat files the player adds (.cht, .mch)
 };
 
 struct CoreBootOptions {

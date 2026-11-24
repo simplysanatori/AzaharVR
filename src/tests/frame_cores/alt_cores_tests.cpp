@@ -435,11 +435,64 @@ TEST_CASE("GB adapter boots homebrew ROM, renders 160x144, and saves/loads state
     CHECK(!host.IsRunning());
 }
 
+TEST_CASE("Each game has its own folder, whatever its file is called", "[frame_cores]") {
+    TempDir tmp("gamefolder");
+    const std::string data = (tmp.path / "data").string();
+    std::vector<uint8_t> one = MakeBatteryGbRom();
+    std::vector<uint8_t> two = one;
+    two[0x134] ^= 0x01; // another title
+    fs::create_directories(tmp.path / "a");
+    fs::create_directories(tmp.path / "b");
+    WriteFile(tmp.path / "a" / "game.gb", one);
+    WriteFile(tmp.path / "b" / "game.gb", two);
+    const auto first = FrameCores::ProbeRom((tmp.path / "a" / "game.gb").string());
+    const auto second = FrameCores::ProbeRom((tmp.path / "b" / "game.gb").string());
+    REQUIRE(first.has_value());
+    REQUIRE(second.has_value());
+    CHECK(FrameCores::GameFolder(data, *first) != FrameCores::GameFolder(data, *second));
+
+    for (const auto& [folder, info] : {std::pair{"a", *first}, std::pair{"b", *second}}) {
+        FrameCores::AltCoreHost host;
+        REQUIRE(host.Boot((tmp.path / folder / "game.gb").string(), data,
+                          /*headless_for_test=*/true));
+        REQUIRE(host.SaveSlot(1));
+        host.Stop();
+        CHECK(fs::exists(fs::path(FrameCores::GameFolder(data, info)) / "game.slot1.state"));
+    }
+}
+
+TEST_CASE("The DSi storage games write to is a copy", "[frame_cores]") {
+    TempDir tmp("nand");
+    const auto read = [](const fs::path& p) {
+        std::ifstream in(p, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(in), {});
+    };
+    const auto original = tmp.path / "dsi_nand.bin";
+    CHECK(FrameCores::PrepareWorkingNand(tmp.path).empty()); // no original
+    WriteFile(original, {1, 2, 3});
+    const std::string copy = FrameCores::PrepareWorkingNand(tmp.path);
+    REQUIRE(!copy.empty());
+    CHECK(copy != original.string());
+    CHECK(read(copy) == read(original));
+
+    WriteFile(copy, {9, 9, 9}); // a game saved
+    CHECK(FrameCores::PrepareWorkingNand(tmp.path) == copy);
+    CHECK(read(copy) == std::string(3, '\x09'));
+    CHECK(read(original) == std::string("\x01\x02\x03"));
+
+    WriteFile(original, {4, 5, 6, 7}); // the player's file changed
+    CHECK(FrameCores::PrepareWorkingNand(tmp.path) == copy);
+    CHECK(read(copy) == read(original));
+    CHECK(read(copy + ".bak") == std::string(3, '\x09'));
+}
+
 TEST_CASE("Loading a GB state leaves the battery save alone until the game saves", "[frame_cores]") {
     TempDir tmp("gbsave");
     const fs::path rom_path = tmp.path / "hb.gb";
     WriteFile(rom_path, MakeBatteryGbRom());
-    const fs::path save = tmp.path / "data" / "gb" / "saves" / "hb.sav";
+    const fs::path save = fs::path(FrameCores::GameFolder((tmp.path / "data").string(),
+                                                          *FrameCores::ProbeRom(rom_path.string()))) /
+                           "hb.sav";
 
     FrameCores::AltCoreHost host;
     REQUIRE(host.Boot(rom_path.string(), (tmp.path / "data").string(), /*headless_for_test=*/true));

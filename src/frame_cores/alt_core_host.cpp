@@ -68,27 +68,12 @@ std::string FormatFileTime(const std::filesystem::path& p) {
     return std::string(buf);
 }
 
-CorePaths BuildCorePaths(Common::AltCore::CoreKind kind, const std::string& data_dir) {
-    const std::filesystem::path root(data_dir);
-    std::string sub = "ds";
-    switch (kind) {
-    case Common::AltCore::CoreKind::GBA:
-        sub = "gba";
-        break;
-    case Common::AltCore::CoreKind::GB:
-        sub = "gb";
-        break;
-    case Common::AltCore::CoreKind::NDS:
-    case Common::AltCore::CoreKind::DSi:
-    default:
-        sub = "ds";
-        break;
-    }
-    const std::filesystem::path base = root / sub;
+CorePaths BuildCorePaths(const RomInfo& info, const std::string& data_dir) {
+    const std::filesystem::path base =
+        std::filesystem::path(data_dir) / CoreFolder(info.kind);
     CorePaths paths{};
     paths.data_dir = data_dir;
-    paths.save_dir = (base / "saves").string();
-    paths.state_dir = (base / "states").string();
+    paths.game_dir = GameFolder(data_dir, info);
     paths.bios_dir = base.string();
     paths.cheat_dir = (base / "cheats").string();
     return paths;
@@ -147,7 +132,7 @@ struct AltCoreHost::Impl {
     float last_rumble = 0.0f;
 
     std::string SlotPath(int slot) const {
-        return (std::filesystem::path(paths.state_dir) /
+        return (std::filesystem::path(paths.game_dir) /
                 (rom_stem + ".slot" + std::to_string(slot) + ".state"))
             .string();
     }
@@ -379,7 +364,7 @@ bool AltCoreHost::Boot(const std::string& rom_path, const std::string& data_dir,
     impl->rom_info = *probed;
     impl->rom_path = rom_path;
     impl->rom_stem = std::filesystem::path(rom_path).stem().string();
-    impl->paths = BuildCorePaths(impl->rom_info.kind, data_dir);
+    impl->paths = BuildCorePaths(impl->rom_info, data_dir);
     impl->boot_opts = opts;
     impl->headless = headless_for_test;
 
@@ -516,6 +501,13 @@ bool AltCoreHost::IsHeadless() const {
 void AltCoreHost::Pause(bool paused) {
     impl->paused.store(paused, std::memory_order_release);
     impl->audio.SetPaused(paused);
+    if (paused) {
+        // A save made just before pausing would otherwise wait in memory for the next frame.
+        std::lock_guard lock(impl->core_mutex);
+        if (impl->core) {
+            impl->core->FlushBatterySave();
+        }
+    }
     if (paused && impl->callbacks.on_rumble && impl->last_rumble > 0.0f) {
         impl->callbacks.on_rumble(0.0f);
         impl->last_rumble = 0.0f;

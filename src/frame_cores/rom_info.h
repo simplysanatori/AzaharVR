@@ -37,6 +37,13 @@ Common::AltCore::CoreKind DetectCoreKind(const std::string& path);
 /// Returns std::nullopt if the file is not a supported non-3DS ROM or cannot be read.
 std::optional<RomInfo> ProbeRom(const std::string& path);
 
+/// The folder of a system's files under the user data folder: "ds" (DSi too), "gba" or "gb".
+const char* CoreFolder(Common::AltCore::CoreKind kind);
+
+/// One game's own folder, by its key: its battery save, save states and cheat choices. Two games
+/// with the same file name never share one.
+std::string GameFolder(const std::string& data_dir, const RomInfo& info);
+
 /// Extracts the first supported ROM (.nds, .dsi, .gba, .gb, .gbc) from a .zip archive.
 /// If `max_bytes > 0`, reads at most `max_bytes` from the decompressed ROM stream.
 bool ExtractRomFromZip(const std::string& zip_path, std::vector<uint8_t>& out_data,

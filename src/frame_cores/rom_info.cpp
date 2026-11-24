@@ -13,6 +13,8 @@
 #include <fstream>
 #include <string_view>
 
+#include <fmt/format.h>
+
 extern "C" {
 #include <mgba-util/vfs.h>
 }
@@ -610,6 +612,23 @@ std::optional<RomInfo> ProbeRom(const std::string& path) {
     }
 
     return std::nullopt;
+}
+
+const char* CoreFolder(Common::AltCore::CoreKind kind) {
+    switch (kind) {
+    case Common::AltCore::CoreKind::GBA:
+        return "gba";
+    case Common::AltCore::CoreKind::GB:
+        return "gb";
+    default:
+        return "ds";
+    }
+}
+
+std::string GameFolder(const std::string& data_dir, const RomInfo& info) {
+    return (std::filesystem::path(data_dir) / CoreFolder(info.kind) / "games" /
+            fmt::format("{:016X}", info.title_id))
+        .string();
 }
 
 } // namespace FrameCores

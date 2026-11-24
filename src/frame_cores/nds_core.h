@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <filesystem>
 #include <string>
 
 #include "frame_cores/core_backend.h"
@@ -17,6 +18,11 @@ namespace FrameCores {
 /// Configures the directory used by melonDS::Platform::GetLocalFilePath / OpenLocalFile
 /// for relative asset paths (e.g. <data_dir>/ds/). Thread-safe.
 void SetMelonDSLocalDir(const std::string& dir);
+
+/// The DSi storage games write to: a copy of the player's dsi_nand.bin, which stays as it is. A
+/// changed original replaces the copy; the old copy is kept as .bak. Empty: no original, or the copy
+/// failed.
+std::string PrepareWorkingNand(const std::filesystem::path& bios_dir);
 
 /**
  * Nintendo DS / DSi emulation backend wrapping melonDS master.
