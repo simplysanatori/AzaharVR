@@ -3039,12 +3039,12 @@ void ControllerModels::FitArms(const ViewPose& views, const std::array<Hand, 2>&
             }
         }
     }
-    // AzaharFrame kiu140: Pit's hand of our own on the hand without the weapon.
+    // AzaharFrame kiu140: Pit's hand of our own on the hand without the weapon (drawn or not: an
+    // idle weapon hand fades).
     for (int h = 0; h < 2; h++) {
         const Hand& hand = hands[static_cast<std::size_t>(h)];
         ArmDraw& d = draws[static_cast<std::size_t>(h)];
-        if (!d.on && hand.shown && hand.pit_arm && hand.weapon < 0 && weapon_hand >= 0 &&
-            h != weapon_hand && gpu && gpu->pit.state != 2) {
+        if (!d.on && hand.shown && hand.pit_arm && hand.weapon < 0 && gpu && gpu->pit.state != 2) {
             const bool left = h == Input::HandIndex(Input::Hand::Left);
             d.on = d.pit = true;
             d.fit.transform = PitHandControllerFit(left, arm_tune.scale);
