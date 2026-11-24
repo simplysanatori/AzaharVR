@@ -36,7 +36,17 @@ Game Boy Advance core modules and second-screen map capture are provided by gba-
 
 ## mGBA
 
-Game Boy Advance, Game Boy, and Game Boy Color emulation is powered by libmgba from mGBA (https://github.com/mgba-emu/mgba) by endrift and contributors, licensed under the Mozilla Public License, version 2.0. Full licence text: [steam-frame/portable/licenses/mGBA-LICENSE.txt](steam-frame/portable/licenses/mGBA-LICENSE.txt).
+Game Boy Advance, Game Boy, and Game Boy Color emulation is powered by libmgba from mGBA (https://github.com/mgba-emu/mgba) by Vicki Pfau (endrift) and contributors, licensed under the Mozilla Public License, version 2.0. Full licence text: [steam-frame/portable/licenses/mGBA-LICENSE.txt](steam-frame/portable/licenses/mGBA-LICENSE.txt).
+
+## PokeDaisy
+
+Based on PokeDaisy by Lidor Itzhari - https://github.com/lidor30/pokedaisy
+
+The companion second screen and game editing for Pokémon games on Game Boy, Game Boy Color and Game Boy Advance are PokeDaisy, Copyright (C) 2026 Lidor Itzhari, under the GNU General Public License, version 3, with an additional term under section 7(b): the line above must be kept in the NOTICE file, the README and the credits. The files of its shared C code that the program builds are in `externals/pokedaisy`, unmodified, with its LICENSE and NOTICE; the build and our stubs are in `externals/pokedaisy_cmake`.
+
+## Parts of melonDS, gba-ds and mGBA
+
+melonDS is built with its own copies of Teakra (MIT), FatFs (its own licence), tiny-AES-c (the Unlicense), blip_buf (LGPL-2.1), Dolphin's emitters (GPL-2.0 or later), SHA-1 by Steve Reid (public domain) and FreeBIOS by Gilead Kutnick (BSD-2-Clause), an open replacement for the DS BIOS. gba-ds is built with rzstd from libretro-common (MIT), mGBA with zlib (zlib licence), inih (BSD-3-Clause) and the LZMA SDK (public domain). Their licence texts are in `steam-frame/portable/licenses` and ship in `licenses/`.
 
 ## 3ds-game-fixes
 

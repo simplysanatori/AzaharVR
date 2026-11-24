@@ -1,0 +1,4 @@
+Files of PokeDaisy (https://github.com/lidor30/pokedaisy) at commit
+60b0c887dba2dc97890aa9fc5ea39db17e7cc7e0, unmodified: the sources that
+externals/pokedaisy_cmake builds and the headers they include, with its LICENSE
+and NOTICE. The rest of its tree (apps, other cores, art) is not here.

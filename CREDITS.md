@@ -22,6 +22,13 @@ AzaharVR builds on Azahar and Citra and bundles the following additional emulati
   - License: Mozilla Public License 2.0 (`MPL-2.0`)
   - License text: [steam-frame/portable/licenses/mGBA-LICENSE.txt](steam-frame/portable/licenses/mGBA-LICENSE.txt)
 
+- **PokeDaisy** — companion second screen and game editing for Pokémon games on Game Boy, Game Boy Color and Game Boy Advance
+  - Author: Lidor Itzhari
+  - Upstream: https://github.com/lidor30/pokedaisy
+  - License: GNU General Public License v3.0 with an additional term under section 7(b)
+  - Based on PokeDaisy by Lidor Itzhari - https://github.com/lidor30/pokedaisy
+  - License text: [externals/pokedaisy/LICENSE](externals/pokedaisy/LICENSE), [externals/pokedaisy/NOTICE](externals/pokedaisy/NOTICE)
+
 ## Additional Third-Party Notices
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [steam-frame/art/CREDITS.md](steam-frame/art/CREDITS.md) for all other bundled libraries, fonts, and artwork credits.

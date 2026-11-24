@@ -17,6 +17,13 @@ AboutDialog::AboutDialog(QWidget* parent)
         QString::fromUtf8(Common::g_build_fullname), QString::fromUtf8(Common::g_scm_branch),
         QString::fromUtf8(Common::g_scm_desc), QString::fromUtf8(Common::g_build_date).left(10),
         QString::fromUtf8(Common::g_build_variant)));
+#ifdef HAVE_POKEDAISY // its licence's 7(b) term: kept word for word
+    ui->labelLinks->setText(
+        ui->labelLinks->text() +
+        QStringLiteral("<p>Based on PokeDaisy by Lidor Itzhari - "
+                       "<a href=\"https://github.com/lidor30/pokedaisy\">"
+                       "https://github.com/lidor30/pokedaisy</a></p>"));
+#endif
 #ifdef ENABLE_FRAME_XR // AzaharFrame: the Azahar for Frame icon instead of Azahar's
     const QString icon_path = FrameBranding::ArtFile(QStringLiteral("icon.png"));
     if (!icon_path.isEmpty()) {

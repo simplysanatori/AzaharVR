@@ -140,8 +140,6 @@ Use **Report a Problem**: **Settings** > **General** > **Help** in the in-game m
 ## Roadmap (planned)
 
 - **Full immersion mode**: full 6DoF, with game-specific features.
-- **Nintendo DS and DSi support**: through [melonDS](https://github.com/melonDS-emu/melonDS), with the Vulkan renderer from SapphireRhodonite's [WatermelonDS](https://github.com/SapphireRhodonite/WatermelonDS) and melonDS-android-lib.
-- **Dual-screen GBA**: through kyannon's [gba-ds](https://github.com/kyannon/gba-ds), for Game Boy Advance play, with a map or status screen on the secondary screen in supported games.
 
 ## More
 
@@ -159,6 +157,10 @@ If you want to support this app or my other Steam Frame ports, such as PrimedFra
 
 - [Azahar](https://github.com/azahar-emu/azahar), which continues [Citra](https://github.com/citra-emu/citra): the emulator
 - [CitraVR](https://github.com/amwatson/CitraVR) by amwatson: the VR modes
+- [melonDS](https://github.com/melonDS-emu/melonDS) by the melonDS team: DS and DSi
+- [mGBA](https://github.com/mgba-emu/mgba) by Vicki Pfau (endrift) and contributors: Game Boy Advance, Game Boy and Game Boy Color
+- [gba-ds](https://github.com/kyannon/gba-ds) by kyannon: the second screen of Game Boy Advance games
+- The second screen of Pokémon games: Based on PokeDaisy by Lidor Itzhari - https://github.com/lidor30/pokedaisy
 - [Qt](https://www.qt.io), [SDL](https://www.libsdl.org), [OpenXR](https://www.khronos.org/openxr/): window, gamepad, VR
 - [astcenc](https://github.com/ARM-software/astc-encoder) by Arm: the texture pack encoder
 - [Frametop](https://github.com/Frametop/frametop) by DeeJanuz: the 3D mouse pointer is adapted from it
@@ -172,7 +174,7 @@ Full list: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Not affiliated with
 
 ## Licence
 
-GPLv3 or any later version. See [LICENSE.txt](LICENSE.txt).
+GPLv3. See [LICENSE.txt](LICENSE.txt).
 
 ## How this was made
 
