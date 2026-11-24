@@ -43,7 +43,6 @@ struct HostCallbacks {
     std::function<void(float)> on_rumble;
     std::function<void(bool)> on_game_running;
     std::function<void(const HostStats&)> on_stats;
-    std::function<void(const std::string&)> on_toast;
 };
 
 enum class AltMenuSetting : int {

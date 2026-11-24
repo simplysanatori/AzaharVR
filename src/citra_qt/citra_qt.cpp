@@ -1481,9 +1481,6 @@ GMainWindow::GMainWindow(Core::System& system_)
                     es.slow_frames = st.slow_frames;
                     FrameXr::SetEmuStats(es);
                 };
-                cb.on_toast = [](const std::string& msg) {
-                    FrameXr::ShowToastText(msg, FrameXr::ToastTime::Short);
-                };
                 FrameCores::AltCoreHost::SetDefaultCallbacks(std::move(cb));
             }
 #endif

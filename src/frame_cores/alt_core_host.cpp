@@ -153,12 +153,6 @@ struct AltCoreHost::Impl {
         return (std::filesystem::path(paths.state_dir) / (rom_stem + ".autosave.state")).string();
     }
 
-    void NotifyToast(const std::string& msg) {
-        if (callbacks.on_toast) {
-            callbacks.on_toast(msg);
-        }
-    }
-
     void ExecuteSingleFrameLocked(double& frame_time_ms_out) {
         Common::AltCore::InputState in{};
         {
@@ -543,17 +537,11 @@ AudioResampler& AltCoreHost::GetAudioResampler() {
 }
 
 bool AltCoreHost::QuickSave() {
-    const bool ok = SaveSlot(0);
-    if (ok) {
-        impl->NotifyToast("Quick Saved");
-    }
-    return ok;
+    return SaveSlot(0);
 }
 
 bool AltCoreHost::QuickLoad() {
-    const bool ok = LoadSlot(0);
-    impl->NotifyToast(ok ? "Quick Loaded" : "No Quick Save");
-    return ok;
+    return LoadSlot(0);
 }
 
 bool AltCoreHost::SaveSlot(int slot) {
@@ -622,7 +610,6 @@ bool AltCoreHost::ImportSave(const std::string& sav_path) {
     const bool ok = impl->core->ImportBatterySave(sav_path);
     if (ok) {
         impl->audio.Flush();
-        impl->NotifyToast("Save Imported");
     }
     return ok;
 }
