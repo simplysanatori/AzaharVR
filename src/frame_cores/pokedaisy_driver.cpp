@@ -869,7 +869,8 @@ private:
         if (pressed) {
             if (!s.quickOpen) {
                 if (!gate.Admit()) { // all of it edits
-                    pd_session_show(&s, item_reason(ITEM_FAILED));
+                    pd_session_show(&s, editing_wanted ? item_reason(ITEM_FAILED)
+                                                       : Common::AltCore::kQuickMenuNeedsEditing);
                     return;
                 }
                 ApplyGate();

@@ -186,10 +186,11 @@ enum ButtonBit : uint32_t {
     BtnTurnPage = 1u << 14,  ///< Turn Secondary Screen Page
 };
 
-// UNAPPROVED strings: the only place they are in.
-inline constexpr const char* kUnapprovedQuickMenuLabel = "PokeDaisy Quick Menu";
-inline constexpr const char* kUnapprovedQuickMenuTooltip =
+// BtnQuickMenu's strings: in the Qt settings, the VR menu and the driver.
+inline constexpr const char* kQuickMenuLabel = "PokeDaisy Quick Menu";
+inline constexpr const char* kQuickMenuTooltip =
     "Opens PokeDaisy's quick menu over the game. Needs Allow Game Editing.";
+inline constexpr const char* kQuickMenuNeedsEditing = "Turn on Allow Game Editing first.";
 
 struct InputState {
     uint32_t buttons = 0;   ///< Bitmask of ButtonBit

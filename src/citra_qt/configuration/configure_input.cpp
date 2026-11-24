@@ -108,15 +108,15 @@ ConfigureInput::ConfigureInput(Core::System& _system, QWidget* parent)
         tr("L Button"),     tr("R Button"),      tr("Start Button"), tr("Select Button"),
         tr("Debug"),        tr("GPIO4"),         tr("ZL Button"),    tr("ZR Button"),
         tr("Home Button"),  tr("Power Button"),  tr("Microphone Blow"),
-        QString::fromUtf8(Common::AltCore::kUnapprovedQuickMenuLabel),
+        QString::fromUtf8(Common::AltCore::kQuickMenuLabel),
         tr("Turn Secondary Screen Page")
     };
     // clang-format on
 
     ui->labelQuickMenu->setText(QStringLiteral("%1:").arg(
-        QString::fromUtf8(Common::AltCore::kUnapprovedQuickMenuLabel)));
+        QString::fromUtf8(Common::AltCore::kQuickMenuLabel)));
     ui->buttonQuickMenu->setToolTip(
-        QString::fromUtf8(Common::AltCore::kUnapprovedQuickMenuTooltip));
+        QString::fromUtf8(Common::AltCore::kQuickMenuTooltip));
 #ifndef ENABLE_ALT_CORES // only DS, GBA and Game Boy games have them
     for (QWidget* widget : {static_cast<QWidget*>(ui->labelMicBlow),
                             static_cast<QWidget*>(ui->buttonMicBlow),

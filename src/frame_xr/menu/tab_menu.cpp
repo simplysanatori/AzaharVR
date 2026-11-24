@@ -2330,7 +2330,7 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
             return "Microphone Blow: " + (name.empty() ? std::string("None") : name);
         }
         if (t == DsButton::QuickMenu) {
-            return std::string(Common::AltCore::kUnapprovedQuickMenuLabel) + ": " +
+            return std::string(Common::AltCore::kQuickMenuLabel) + ": " +
                    (name.empty() ? std::string("None") : name);
         }
         if (t == DsButton::TurnPage) {

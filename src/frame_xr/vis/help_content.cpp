@@ -62,7 +62,7 @@ const char* ButtonName(int button) {
     case NB::MicBlow:
         return "Microphone Blow";
     case NB::QuickMenu:
-        return Common::AltCore::kUnapprovedQuickMenuLabel;
+        return Common::AltCore::kQuickMenuLabel;
     case NB::TurnPage:
         return "Turn Secondary Screen Page";
     default:
