@@ -401,9 +401,10 @@ bool GbCore::LoadStateFromMemory(const uint8_t* data, std::size_t size) {
     if (!impl->core || !data || size == 0) {
         return false;
     }
-    constexpr int kStateFlags = SAVESTATE_SAVEDATA | SAVESTATE_RTC | SAVESTATE_METADATA;
     if (VFile* vf = VFileFromConstMemory(data, size)) {
-        const bool ok = mCoreLoadStateNamed(impl->core, vf, kStateFlags);
+        // Without SAVESTATE_SAVEDATA, as GBA states: the game sees the state's save data, and the
+        // save file changes only when the game saves.
+        const bool ok = mCoreLoadStateNamed(impl->core, vf, SAVESTATE_RTC);
         vf->close(vf);
         if (ok) {
             return true;

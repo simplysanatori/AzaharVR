@@ -140,6 +140,40 @@ std::vector<uint8_t> MakeHomebrewGbRom() {
     return rom;
 }
 
+/// A Game Boy ROM with 8 KiB of battery-backed save data: A writes 0x11 to its first byte, B 0x22.
+/// The byte is also the background palette, so the picture shows which one the game sees.
+std::vector<uint8_t> MakeBatteryGbRom() {
+    std::vector<uint8_t> rom = MakeHomebrewGbRom();
+    rom[0x147] = 0x03; // MBC1 + RAM + battery
+    rom[0x149] = 0x02; // 8 KiB
+    uint8_t chk = 0;
+    for (size_t i = 0x134; i <= 0x14C; ++i) {
+        chk = static_cast<uint8_t>(chk - rom[i] - 1);
+    }
+    rom[0x14D] = chk;
+    static const uint8_t kCode[] = {
+        0x3E, 0x0A, 0xEA, 0x00, 0x00, // ld a, 0x0A; ld (0x0000), a     save data on
+        0x3E, 0x91, 0xE0, 0x40,       // ld a, 0x91; ldh (0x40), a      screen on
+        // loop (0x159):
+        0x3E, 0x10, 0xE0, 0x00,       // ld a, 0x10; ldh (0x00), a      the buttons, not the D-pad
+        0xF0, 0x00, 0xF0, 0x00,       // ldh a, (0x00), twice
+        0xCB, 0x47, 0x20, 0x05,       // bit 0, a; jr nz, +5            A
+        0x3E, 0x11, 0xEA, 0x00, 0xA0, // ld a, 0x11; ld (0xA000), a
+        0xF0, 0x00,                   // ldh a, (0x00)
+        0xCB, 0x4F, 0x20, 0x05,       // bit 1, a; jr nz, +5            B
+        0x3E, 0x22, 0xEA, 0x00, 0xA0, // ld a, 0x22; ld (0xA000), a
+        0xFA, 0x00, 0xA0, 0xE0, 0x47, // ld a, (0xA000); ldh (0x47), a  the palette
+        0xC3, 0x59, 0x01,             // jp loop
+    };
+    std::memcpy(&rom[0x150], kCode, sizeof(kCode));
+    return rom;
+}
+
+uint8_t FirstByte(const fs::path& p) {
+    std::ifstream f(p, std::ios::binary);
+    return static_cast<uint8_t>(f.get());
+}
+
 uint16_t NdsCrc16(const uint8_t* data, size_t len) {
     uint16_t crc = 0xFFFF;
     for (size_t i = 0; i < len; ++i) {
@@ -355,6 +389,50 @@ TEST_CASE("GB adapter boots homebrew ROM, renders 160x144, and saves/loads state
 
     host.Stop();
     CHECK(!host.IsRunning());
+}
+
+TEST_CASE("Loading a GB state leaves the battery save alone until the game saves", "[frame_cores]") {
+    TempDir tmp("gbsave");
+    const fs::path rom_path = tmp.path / "hb.gb";
+    WriteFile(rom_path, MakeBatteryGbRom());
+    const fs::path save = tmp.path / "data" / "gb" / "saves" / "hb.sav";
+
+    FrameCores::AltCoreHost host;
+    REQUIRE(host.Boot(rom_path.string(), (tmp.path / "data").string(), /*headless_for_test=*/true));
+    // Each press is followed by enough frames for the save file to be written
+    const auto press = [&host](uint32_t button) {
+        Common::AltCore::InputState in{};
+        in.buttons = button;
+        host.PushInput(in);
+        REQUIRE(host.StepFrames(10));
+        host.PushInput({});
+        REQUIRE(host.StepFrames(120));
+    };
+    const auto pixel = [&host] { return host.LastFrame().primary.pixels[0]; };
+
+    press(Common::AltCore::BtnA);
+    CHECK(FirstByte(save) == 0x11);
+    const uint32_t pixel_a = pixel();
+    REQUIRE(host.SaveSlot(1));
+    press(Common::AltCore::BtnB);
+    CHECK(FirstByte(save) == 0x22);
+    CHECK(pixel() != pixel_a);
+
+    // The game sees the state's save data, the file keeps the newer one
+    REQUIRE(host.LoadSlot(1));
+    REQUIRE(host.StepFrames(120));
+    CHECK(pixel() == pixel_a);
+    CHECK(FirstByte(save) == 0x22);
+
+    // What the game saves after the load is written
+    press(Common::AltCore::BtnB);
+    press(Common::AltCore::BtnA);
+    CHECK(FirstByte(save) == 0x11);
+    press(Common::AltCore::BtnB);
+    REQUIRE(host.LoadSlot(1));
+    REQUIRE(host.StepFrames(120));
+    host.Stop();
+    CHECK(FirstByte(save) == 0x22);
 }
 
 TEST_CASE("A game does not start without its renderer", "[frame_cores]") {
