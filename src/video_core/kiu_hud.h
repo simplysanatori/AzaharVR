@@ -32,66 +32,74 @@
 
 namespace VideoCore::KiuHud {
 
-/// Where a piece from the frame's top left (the health bar) or top right (the score) goes.
-enum class Side : uint32_t { Left = 0, Middle = 1, Right = 2 };
-constexpr Side SideFrom(uint32_t v) {
-    return v == 1u ? Side::Middle : v == 2u ? Side::Right : Side::Left;
-}
-
-/// The HUD's frame on the screen: its middle and half sizes in the screen's own coordinates (-1 to
-/// 1 over the picture shown), and how far (in half frames) the two top groups are moved.
-struct Place {
-    bool on = false;
-    float middle_across = 0.0f, middle_up = 0.0f;
-    float half_across = 1.0f, half_up = 1.0f;
-    float left_shift = 0.0f, left_up = 0.0f;
-    float right_shift = 0.0f, right_up = 0.0f;
+/// What the settings ask for: degrees to the right and up from straight ahead.
+struct Wanted {
+    int size = 100;
+    bool linked = true;
+    float across = 0.0f, height = 22.0f; ///< linked
+    float bar_across = -20.0f, bar_height = 22.0f;
+    float score_across = 20.0f, score_height = 22.0f;
 };
 
-/// Degrees across at HUD Size 100 %.
-inline constexpr float kWidthDeg = 52.0f;
+/// How the HUD's frame is drawn, in the screen's own coordinates (-1 to 1 over the picture shown):
+/// half sizes, its middle's height, and each top group's offset (where the frame's middle would
+/// be if it were all that group).
+struct Place {
+    bool on = false;
+    float half_across = 1.0f, half_up = 1.0f;
+    float middle_up = 0.0f;
+    float bar_across = 0.0f, bar_up = 0.0f;
+    float score_across = 0.0f, score_up = 0.0f;
+};
+
+/// Degrees across at HUD Size 100 %, and the height of the frame's middle.
+inline constexpr float kWidthDeg = 60.0f, kMiddleDeg = 6.0f;
 inline constexpr float kFrameAspect = 400.0f / 240.0f;
 /// The two top groups in the frame (a desktop picture: the bar from -1 to -0.33, the score from
-/// 0.58 to 1) and where one under the other goes.
-inline constexpr float kTopUp = 0.35f, kTopAside = 0.2f;
+/// 0.58 to 1, both about 0.86 up), and what a draw is told from them by.
+inline constexpr float kTopUp = 0.6f, kBarAside = -0.2f, kScoreAside = 0.4f;
 inline constexpr float kBarLeft = -1.0f, kBarRight = -0.33f;
 inline constexpr float kScoreLeft = 0.58f, kScoreRight = 1.0f;
-inline constexpr float kUnder = 0.32f;
+inline constexpr float kGroupUp = 0.86f, kLinkGap = 0.08f;
+/// Pieces in the frame's lower part go this much (half frames) further down: clear of the reticle.
+inline constexpr float kLow = -0.35f, kLowDown = 0.7f;
 
-/// The place for the settings: `size` percent, `height_deg` its middle above straight ahead,
-/// `spread` percent (how far apart the two top groups are; 100 the game's), and the screen
-/// first person shows (half angles' tangents, and its own pitch, up positive).
-inline Place PlaceFor(int size, int height_deg, int spread, Side bar, Side score, float tan_half_x,
-                      float tan_half_y, float pitch_rad) {
+/// The place for the settings and the screen first person shows (half angles' tangents, and its
+/// own pitch, up positive).
+inline Place PlaceFor(const Wanted& w, float tan_half_x, float tan_half_y, float pitch_rad) {
     Place p;
     if (!(tan_half_x > 0.05f) || !(tan_half_y > 0.05f) || !std::isfinite(pitch_rad)) {
         return p;
     }
     constexpr float kDeg = 3.14159265f / 180.0f;
-    const float s = static_cast<float>(std::clamp(size, 40, 200)) / 100.0f;
+    const float s = static_cast<float>(std::clamp(w.size, 40, 200)) / 100.0f;
     const float t = std::tan(0.5f * kWidthDeg * kDeg) * s;
+    const auto across_at = [&](float deg) {
+        return std::tan(std::clamp(deg, -50.0f, 50.0f) * kDeg) / tan_half_x;
+    };
+    const auto up_at = [&](float deg) {
+        return std::tan(std::clamp(std::clamp(deg, -50.0f, 50.0f) * kDeg - pitch_rad, -1.2f, 1.2f)) /
+               tan_half_y;
+    };
     p.on = true;
     p.half_across = t / tan_half_x;
     p.half_up = t / kFrameAspect / tan_half_y;
-    const float up = std::clamp(static_cast<float>(height_deg), -40.0f, 40.0f) * kDeg - pitch_rad;
-    p.middle_up = std::tan(std::clamp(up, -1.2f, 1.2f)) / tan_half_y;
-    const float k = static_cast<float>(std::clamp(spread, 0, 200)) / 100.0f;
-    // A group's left edge for each side: the left and right ends of the frame, spread about its
-    // middle, or centred.
-    const auto left_edge = [k](Side side, float width) {
-        switch (side) {
-        case Side::Middle:
-            return -0.5f * width;
-        case Side::Right:
-            return (1.0f - 0.5f * width) * k - 0.5f * width;
-        default:
-            return -(1.0f - 0.5f * width) * k - 0.5f * width;
-        }
-    };
-    p.left_shift = left_edge(bar, kBarRight - kBarLeft) - kBarLeft;
-    p.right_shift = left_edge(score, kScoreRight - kScoreLeft) - kScoreLeft;
-    if (bar == score) {
-        p.right_up = -kUnder; // the score under the bar
+    p.middle_up = up_at(kMiddleDeg);
+    constexpr float kBarMiddle = 0.5f * (kBarLeft + kBarRight);
+    constexpr float kScoreMiddle = 0.5f * (kScoreLeft + kScoreRight);
+    if (w.linked) {
+        // One unit, its middle where it is asked for: the bar, the gap, the score.
+        constexpr float kBarWide = kBarRight - kBarLeft, kScoreWide = kScoreRight - kScoreLeft;
+        constexpr float kLeft = -0.5f * (kBarWide + kLinkGap + kScoreWide);
+        p.bar_across = across_at(w.across) + p.half_across * (kLeft - kBarLeft);
+        p.score_across =
+            across_at(w.across) + p.half_across * (kLeft + kBarWide + kLinkGap - kScoreLeft);
+        p.bar_up = p.score_up = up_at(w.height) - p.half_up * kGroupUp;
+    } else {
+        p.bar_across = across_at(w.bar_across) - p.half_across * kBarMiddle;
+        p.bar_up = up_at(w.bar_height) - p.half_up * kGroupUp;
+        p.score_across = across_at(w.score_across) - p.half_across * kScoreMiddle;
+        p.score_up = up_at(w.score_height) - p.half_up * kGroupUp;
     }
     return p;
 }
@@ -130,22 +138,29 @@ inline bool Movable(const Vertex* v, std::size_t n) {
     }
     return n >= 3 && !(x1 - x0 > 1.9f && y1 - y0 > 1.9f);
 }
-/// One triangle moved. `factor`s: what the vertex shader divides by (the game drawing past its
-/// frame). The result has w = 2, so the shader's rule for flat vertices leaves it alone.
-inline void Move(Vertex (&t)[3], const Place& p, float factor_across, float factor_up) {
-    const float up = (t[0].x + t[1].x + t[2].x) / 3.0f;
-    const float across = (t[0].y + t[1].y + t[2].y) / 3.0f;
-    float shift = 0.0f, rise = 0.0f;
-    if (up > kTopUp && across < -kTopAside) {
-        shift = p.left_shift;
-        rise = p.left_up;
-    } else if (up > kTopUp && across > kTopAside) {
-        shift = p.right_shift;
-        rise = p.right_up;
+/// One piece moved: a quad (two triangles in a row) or a triangle, by its middle. `factor`s: what
+/// the vertex shader divides by (the game drawing past its frame). The result has w = 2, so the
+/// shader's rule for flat vertices leaves it alone.
+inline void Move(Vertex* t, std::size_t n, const Place& p, float factor_across, float factor_up) {
+    float up = 0.0f, across = 0.0f;
+    for (std::size_t i = 0; i < n; ++i) {
+        up += t[i].x / static_cast<float>(n);
+        across += t[i].y / static_cast<float>(n);
     }
-    for (Vertex& v : t) {
-        const float u = p.middle_up + p.half_up * (v.x + rise);
-        const float a = p.middle_across + p.half_across * (v.y + shift);
+    float at_across = 0.0f, at_up = p.middle_up, rise = 0.0f;
+    if (up > kTopUp && across < kBarAside) {
+        at_across = p.bar_across;
+        at_up = p.bar_up;
+    } else if (up > kTopUp && across > kScoreAside) {
+        at_across = p.score_across;
+        at_up = p.score_up;
+    } else if (up < kLow) {
+        rise = -kLowDown;
+    }
+    for (std::size_t i = 0; i < n; ++i) {
+        Vertex& v = t[i];
+        const float u = at_up + p.half_up * (v.x + rise);
+        const float a = at_across + p.half_across * v.y;
         v = {2.0f * u * factor_up, 2.0f * a * factor_across, 2.0f * v.z, 2.0f};
     }
 }
@@ -153,13 +168,13 @@ inline void Move(Vertex (&t)[3], const Place& p, float factor_across, float fact
 /// The place in force. One writer (the XR thread, once a frame), read by the emulation thread a
 /// draw; a read across a write mixes two frames' numbers, which are the same or next to it.
 struct Live {
-    std::array<std::atomic<float>, 8> f{};
+    std::array<std::atomic<float>, 7> f{};
     std::atomic<bool> on{false};
 
     void Set(const Place& p) {
-        const float v[8] = {p.middle_across, p.middle_up, p.half_across, p.half_up,
-                            p.left_shift,    p.left_up,   p.right_shift, p.right_up};
-        for (int i = 0; i < 8; ++i) {
+        const float v[7] = {p.half_across, p.half_up,      p.middle_up, p.bar_across,
+                            p.bar_up,      p.score_across, p.score_up};
+        for (int i = 0; i < 7; ++i) {
             f[i].store(v[i], std::memory_order_relaxed);
         }
         on.store(p.on, std::memory_order_release);
@@ -167,9 +182,9 @@ struct Live {
     Place Get() const {
         Place p;
         p.on = on.load(std::memory_order_acquire);
-        float* const v[8] = {&p.middle_across, &p.middle_up, &p.half_across, &p.half_up,
-                             &p.left_shift,    &p.left_up,   &p.right_shift, &p.right_up};
-        for (int i = 0; i < 8; ++i) {
+        float* const v[7] = {&p.half_across, &p.half_up,      &p.middle_up, &p.bar_across,
+                             &p.bar_up,      &p.score_across, &p.score_up};
+        for (int i = 0; i < 7; ++i) {
             *v[i] = f[i].load(std::memory_order_relaxed);
         }
         return p;

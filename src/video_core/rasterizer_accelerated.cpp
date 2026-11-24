@@ -385,7 +385,11 @@ bool RasterizerAccelerated::HudDraw() const {
     d.top_viewport = f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f == 240.0f &&
                      f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f == 400.0f;
     d.depth_test = om.depth_test_enable != 0;
-    d.blended = om.alphablend_enable != 0 && om.alpha_blending.factor_source_rgb != F::One;
+    // The HUD's own two blends (over, and its bars masked by the picture's alpha); added light isn't.
+    const F from = om.alpha_blending.factor_source_rgb, to = om.alpha_blending.factor_dest_rgb;
+    d.blended = om.alphablend_enable != 0 &&
+                ((from == F::SourceAlpha && to == F::OneMinusSourceAlpha) ||
+                 (from == F::DestAlpha && to == F::OneMinusDestAlpha));
     d.textured = regs.texturing.main_config.texture0_enable != 0;
     d.texture = regs.texturing.texture0.GetPhysicalAddress();
     d.vertices = regs.pipeline.num_vertices;
@@ -404,12 +408,12 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
         }
         if (VideoCore::KiuHud::Movable(flat.data(), flat.size())) {
             const VideoCore::KiuHud::Place place = VideoCore::KiuHud::g_live.Get();
-            for (std::size_t i = 0; i + 2 < flat.size(); i += 3) {
-                VideoCore::KiuHud::Vertex t[3] = {flat[i], flat[i + 1], flat[i + 2]};
-                VideoCore::KiuHud::Move(t, place, vr_factor, vr_factor_y);
-                for (std::size_t k = 0; k < 3; ++k) {
-                    vertex_batch[i + k].position = {t[k].x, t[k].y, t[k].z, t[k].w};
-                }
+            const std::size_t step = flat.size() % 6 == 0 ? 6 : 3; // quads
+            for (std::size_t i = 0; i + step <= flat.size(); i += step) {
+                VideoCore::KiuHud::Move(flat.data() + i, step, place, vr_factor, vr_factor_y);
+            }
+            for (std::size_t i = 0; i < flat.size(); ++i) {
+                vertex_batch[i].position = {flat[i].x, flat[i].y, flat[i].z, flat[i].w};
             }
             return;
         }
@@ -481,7 +485,7 @@ void RasterizerAccelerated::ApplyVRDataToPicaVSUniforms(Pica::Shader::Generator:
     vr_world_uniforms = false;
     // AzaharFrame kiu140: the angle the world is drawn with (kiu_view_tap.h DrawnAngle).
     if (const u32 r = VideoCore::Immersive::g_drawn_angle.reg.load(std::memory_order_relaxed);
-        r >= 4 && r + 2 < vs_uniforms.f.size() &&
+        r >= 4 && !VideoCore::Immersive::g_drawn_angle.Enough() && r + 2 < vs_uniforms.f.size() &&
         f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f == 240.0f &&
         f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f == 400.0f) {
         float m[3][3], rows[4][4];

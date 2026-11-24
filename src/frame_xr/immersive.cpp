@@ -1673,19 +1673,25 @@ void OnFrame(const FrameInfo& info) {
     VideoCore::KiuHud::Place hud_place;
     if (g.engaged && IsViewMode(mode) && KiuFirstPerson() && Kiu::FirstPerson::HudInView()) {
         auto& v = Settings::values;
-        hud_place = VideoCore::KiuHud::PlaceFor(
-            static_cast<int>(v.vr_kiu_hud_size.GetValue()), v.vr_kiu_hud_height.GetValue(),
-            static_cast<int>(v.vr_kiu_hud_spread.GetValue()),
-            VideoCore::KiuHud::SideFrom(v.vr_kiu_hud_bar.GetValue()),
-            VideoCore::KiuHud::SideFrom(v.vr_kiu_hud_score.GetValue()),
-            g.solved.tan_half_y * g.solved.aspect, g.solved.tan_half_y, g.solved.pitch_rad);
+        VideoCore::KiuHud::Wanted wanted;
+        wanted.size = static_cast<int>(v.vr_kiu_hud_size.GetValue());
+        wanted.linked = v.vr_kiu_hud_linked.GetValue() != 0;
+        wanted.across = static_cast<float>(v.vr_kiu_hud_across.GetValue());
+        wanted.height = static_cast<float>(v.vr_kiu_hud_height.GetValue());
+        wanted.bar_across = static_cast<float>(v.vr_kiu_bar_across.GetValue());
+        wanted.bar_height = static_cast<float>(v.vr_kiu_bar_height.GetValue());
+        wanted.score_across = static_cast<float>(v.vr_kiu_score_across.GetValue());
+        wanted.score_height = static_cast<float>(v.vr_kiu_score_height.GetValue());
+        hud_place = VideoCore::KiuHud::PlaceFor(wanted, g.solved.tan_half_y * g.solved.aspect,
+                                                g.solved.tan_half_y, g.solved.pitch_rad);
         static bool logged = false;
         if (!logged) {
             logged = true;
             LOG_INFO(Frontend,
-                     "xr: Kid Icarus first person: the HUD in view: {:.2f} x {:.2f} of the screen "
-                     "at {:.2f} up",
-                     hud_place.half_across, hud_place.half_up, hud_place.middle_up);
+                     "xr: Kid Icarus first person: the HUD in view: {:.2f} x {:.2f} of the screen, "
+                     "the health bar and score {}",
+                     hud_place.half_across, hud_place.half_up,
+                     wanted.linked ? "linked" : "separate");
         }
     }
     VideoCore::KiuHud::g_live.Set(hud_place);

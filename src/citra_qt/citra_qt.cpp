@@ -5799,23 +5799,32 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::KiuHudSize: // AzaharFrame kiu140
         set(v.vr_kiu_hud_size, std::clamp<u32>(u, 40, 200));
         break;
-    case S::KiuHudHeight: // AzaharFrame kiu140
-        set(v.vr_kiu_hud_height, std::clamp(r.value, -30, 30));
-        break;
-    case S::KiuHudSpread: // AzaharFrame kiu140
-        set(v.vr_kiu_hud_spread, std::clamp<u32>(u, 0, 200));
-        break;
-    case S::KiuHudBar: // AzaharFrame kiu140
-        set(v.vr_kiu_hud_bar, std::clamp<u32>(u, 0, 2));
-        break;
-    case S::KiuHudScore: // AzaharFrame kiu140
-        set(v.vr_kiu_hud_score, std::clamp<u32>(u, 0, 2));
-        break;
     case S::KiuArm: // AzaharFrame kiu140
         set(v.vr_kiu_arm, std::clamp<u32>(u, 0, 1));
         break;
     case S::KiuLaurel: // AzaharFrame kiu140
         set(v.vr_kiu_laurel, std::clamp<u32>(u, 0, 1));
+        break;
+    case S::KiuHudLinked: // AzaharFrame kiu140
+        set(v.vr_kiu_hud_linked, std::clamp<u32>(u, 0, 1));
+        break;
+    case S::KiuHudAcross: // AzaharFrame kiu140
+        set(v.vr_kiu_hud_across, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuHudHeight: // AzaharFrame kiu140
+        set(v.vr_kiu_hud_height, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuBarAcross: // AzaharFrame kiu140
+        set(v.vr_kiu_bar_across, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuBarHeight: // AzaharFrame kiu140
+        set(v.vr_kiu_bar_height, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuScoreAcross: // AzaharFrame kiu140
+        set(v.vr_kiu_score_across, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuScoreHeight: // AzaharFrame kiu140
+        set(v.vr_kiu_score_height, std::clamp(r.value, -40, 40));
         break;
     case S::KiuReticleSize:
         set(v.vr_kiu_reticle_size, std::clamp<u32>(u, 30, 150));

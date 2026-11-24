@@ -683,12 +683,15 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.vr_kiu_cutscenes); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_hud); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_hud_size); // AzaharFrame kiu140
-    ReadGlobalSetting(Settings::values.vr_kiu_hud_height); // AzaharFrame kiu140
-    ReadGlobalSetting(Settings::values.vr_kiu_hud_spread); // AzaharFrame kiu140
-    ReadGlobalSetting(Settings::values.vr_kiu_hud_bar); // AzaharFrame kiu140
-    ReadGlobalSetting(Settings::values.vr_kiu_hud_score); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_arm); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_laurel); // AzaharFrame kiu140
+    ReadGlobalSetting(Settings::values.vr_kiu_hud_linked); // AzaharFrame kiu140
+    ReadGlobalSetting(Settings::values.vr_kiu_hud_across); // AzaharFrame kiu140
+    ReadGlobalSetting(Settings::values.vr_kiu_hud_height); // AzaharFrame kiu140
+    ReadGlobalSetting(Settings::values.vr_kiu_bar_across); // AzaharFrame kiu140
+    ReadGlobalSetting(Settings::values.vr_kiu_bar_height); // AzaharFrame kiu140
+    ReadGlobalSetting(Settings::values.vr_kiu_score_across); // AzaharFrame kiu140
+    ReadGlobalSetting(Settings::values.vr_kiu_score_height); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_reticle_size);
     ReadGlobalSetting(Settings::values.vr_kiu_game_camera); // AzaharFrame kiu133
     ReadGlobalSetting(Settings::values.vr_kiu_pit_opacity);
@@ -1445,12 +1448,15 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.vr_kiu_cutscenes); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_hud); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_hud_size); // AzaharFrame kiu140
-    WriteGlobalSetting(Settings::values.vr_kiu_hud_height); // AzaharFrame kiu140
-    WriteGlobalSetting(Settings::values.vr_kiu_hud_spread); // AzaharFrame kiu140
-    WriteGlobalSetting(Settings::values.vr_kiu_hud_bar); // AzaharFrame kiu140
-    WriteGlobalSetting(Settings::values.vr_kiu_hud_score); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_arm); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_laurel); // AzaharFrame kiu140
+    WriteGlobalSetting(Settings::values.vr_kiu_hud_linked); // AzaharFrame kiu140
+    WriteGlobalSetting(Settings::values.vr_kiu_hud_across); // AzaharFrame kiu140
+    WriteGlobalSetting(Settings::values.vr_kiu_hud_height); // AzaharFrame kiu140
+    WriteGlobalSetting(Settings::values.vr_kiu_bar_across); // AzaharFrame kiu140
+    WriteGlobalSetting(Settings::values.vr_kiu_bar_height); // AzaharFrame kiu140
+    WriteGlobalSetting(Settings::values.vr_kiu_score_across); // AzaharFrame kiu140
+    WriteGlobalSetting(Settings::values.vr_kiu_score_height); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_reticle_size);
     WriteGlobalSetting(Settings::values.vr_kiu_game_camera); // AzaharFrame kiu133
     WriteGlobalSetting(Settings::values.vr_kiu_pit_opacity);

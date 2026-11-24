@@ -224,23 +224,32 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::KiuHudSize: // AzaharFrame kiu140
         f(v.vr_kiu_hud_size);
         return true;
-    case Id::KiuHudHeight: // AzaharFrame kiu140
-        f(v.vr_kiu_hud_height);
-        return true;
-    case Id::KiuHudSpread: // AzaharFrame kiu140
-        f(v.vr_kiu_hud_spread);
-        return true;
-    case Id::KiuHudBar: // AzaharFrame kiu140
-        f(v.vr_kiu_hud_bar);
-        return true;
-    case Id::KiuHudScore: // AzaharFrame kiu140
-        f(v.vr_kiu_hud_score);
-        return true;
     case Id::KiuArm: // AzaharFrame kiu140
         f(v.vr_kiu_arm);
         return true;
     case Id::KiuLaurel: // AzaharFrame kiu140
         f(v.vr_kiu_laurel);
+        return true;
+    case Id::KiuHudLinked: // AzaharFrame kiu140
+        f(v.vr_kiu_hud_linked);
+        return true;
+    case Id::KiuHudAcross: // AzaharFrame kiu140
+        f(v.vr_kiu_hud_across);
+        return true;
+    case Id::KiuHudHeight: // AzaharFrame kiu140
+        f(v.vr_kiu_hud_height);
+        return true;
+    case Id::KiuBarAcross: // AzaharFrame kiu140
+        f(v.vr_kiu_bar_across);
+        return true;
+    case Id::KiuBarHeight: // AzaharFrame kiu140
+        f(v.vr_kiu_bar_height);
+        return true;
+    case Id::KiuScoreAcross: // AzaharFrame kiu140
+        f(v.vr_kiu_score_across);
+        return true;
+    case Id::KiuScoreHeight: // AzaharFrame kiu140
+        f(v.vr_kiu_score_height);
         return true;
     case Id::KiuReticleSize:
         f(v.vr_kiu_reticle_size);

@@ -14,9 +14,8 @@ namespace {
 constexpr float kRad = 3.14159265f / 180.0f;
 /// First person's screen on the Frame: 126 x 112 degrees, 5 degrees down.
 const float kTanX = std::tan(63.0f * kRad), kTanY = std::tan(56.0f * kRad);
-Place Default(Side bar = Side::Left, Side score = Side::Right, int size = 100, int height = 6,
-              int spread = 100) {
-    return PlaceFor(size, height, spread, bar, score, kTanX, kTanY, -5.0f * kRad);
+Place At(const Wanted& w = {}) {
+    return PlaceFor(w, kTanX, kTanY, -5.0f * kRad);
 }
 /// Where a vertex of the game's frame is seen (degrees across and up from straight ahead), after
 /// the shader's division by the factors.
@@ -28,7 +27,7 @@ Seen See(float across, float up, const Place& p, float f = 1.0f, float fy = 1.0f
     Vertex t[3] = {{up, across, 0.2f, 1.0f},
                    {up + 1e-4f, across, 0.2f, 1.0f},
                    {up, across + 1e-4f, 0.2f, 1.0f}};
-    Move(t, p, f, fy);
+    Move(t, 3, p, f, fy);
     REQUIRE(t[0].w == 2.0f);
     REQUIRE(t[0].z / t[0].w == Approx(0.2f));
     return {std::atan(t[0].y / t[0].w / f * kTanX) / kRad,
@@ -64,49 +63,67 @@ TEST_CASE("Kid Icarus HUD: which draws", "[frame_xr][kiu140]") {
 }
 
 TEST_CASE("Kid Icarus HUD: in view, in its own shape", "[frame_xr][kiu140]") {
-    const Place p = Default();
+    const Place p = At();
     REQUIRE(p.on);
-    // All of the game's frame within 27 degrees aside and 26 up.
+    // All of the game's frame within 31 degrees aside and 33 up and down.
     for (const float a : {-1.0f, -0.33f, 0.0f, 0.58f, 1.0f}) {
         for (const float u : {-1.0f, 0.0f, 0.95f}) {
             const Seen s = See(a, u, p);
             INFO(a << ", " << u << ": " << s.across << ", " << s.up);
-            REQUIRE(std::abs(s.across) < 27.0f);
-            REQUIRE(std::abs(s.up) < 26.0f);
+            REQUIRE(std::abs(s.across) < 31.0f);
+            REQUIRE(std::abs(s.up) < 33.0f);
         }
     }
-    // The bar at the top left, the score at the top right.
-    REQUIRE(See(-0.67f, 0.85f, p).across < -12.0f);
-    REQUIRE(See(-0.67f, 0.85f, p).up > 14.0f);
-    REQUIRE(See(0.79f, 0.86f, p).across > 15.0f);
+    REQUIRE(See(-0.7f, -0.85f, p).up < -18.0f); // the practice counters: well under the reticle
     // Square stays square: 0.1 of the frame's height is 24 px, across 24 px is 0.12.
     const float tall = p.half_up * 0.2f * kTanY, wide = p.half_across * 0.12f * kTanX;
     REQUIRE(tall == Approx(wide).epsilon(0.01));
-    // The size scales it and the height moves it.
-    REQUIRE(Default(Side::Left, Side::Right, 50).half_across == Approx(0.5f * p.half_across));
-    REQUIRE(See(0, 0, Default(Side::Left, Side::Right, 100, 20)).up == Approx(20.0f).margin(0.2));
-    REQUIRE(See(0, 0, p).up == Approx(6.0f).margin(0.2));
+    Wanted w;
+    w.size = 50;
+    REQUIRE(At(w).half_across < 0.6f * p.half_across);
     // The game drawing past its frame (outside battles): the same place.
     const Seen a = See(-0.67f, 0.85f, p), b = See(-0.67f, 0.85f, p, 3.96f, 5.0f);
     REQUIRE(a.across == Approx(b.across).margin(0.01));
     REQUIRE(a.up == Approx(b.up).margin(0.01));
+    REQUIRE_FALSE(PlaceFor({}, 0.0f, 1.0f, 0.0f).on);
 }
 
-TEST_CASE("Kid Icarus HUD: where the bar and the score go", "[frame_xr][kiu140]") {
-    const auto bar = [](const Place& p) { return See(-0.665f, 0.85f, p); };
-    const auto score = [](const Place& p) { return See(0.79f, 0.85f, p); };
-    REQUIRE(bar(Default(Side::Middle)).across == Approx(0.0f).margin(0.2));
-    REQUIRE(bar(Default(Side::Right, Side::Left)).across > 12.0f);
-    REQUIRE(score(Default(Side::Right, Side::Left)).across < -15.0f);
-    // Both in one place: the score under the bar.
-    const Place both = Default(Side::Middle, Side::Middle);
-    REQUIRE(score(both).across == Approx(0.0f).margin(0.2));
-    REQUIRE(score(both).up < bar(both).up - 3.0f);
-    // The spread brings the sides in and out; the middle of the frame stays.
-    const Place in = Default(Side::Left, Side::Right, 100, 6, 50);
-    const Place out = Default(Side::Left, Side::Right, 100, 6, 150);
-    REQUIRE(std::abs(bar(in).across) < std::abs(bar(Default()).across));
-    REQUIRE(std::abs(bar(out).across) > std::abs(bar(Default()).across));
-    REQUIRE(See(0, 0, in).across == Approx(See(0, 0, out).across));
-    REQUIRE_FALSE(PlaceFor(100, 6, 100, Side::Left, Side::Right, 0.0f, 1.0f, 0.0f).on);
+TEST_CASE("Kid Icarus HUD: the bar and the score, linked and apart", "[frame_xr][kiu140]") {
+    const auto bar_l = [](const Place& p) { return See(-0.99f, 0.86f, p).across; };
+    const auto bar_r = [](const Place& p) { return See(-0.34f, 0.86f, p).across; };
+    const auto score_l = [](const Place& p) { return See(0.585f, 0.86f, p).across; };
+    const auto score_r = [](const Place& p) { return See(0.99f, 0.86f, p).across; };
+    for (const int size : {40, 100, 200}) {
+        for (const float at : {-20.0f, 0.0f, 15.0f}) {
+            Wanted w;
+            w.size = size;
+            w.across = at;
+            w.height = 10.0f;
+            const Place p = At(w);
+            INFO(size << " at " << at);
+            // Side by side, never on each other, and one unit about where it is asked for.
+            REQUIRE(bar_r(p) < score_l(p));
+            REQUIRE(score_l(p) - bar_r(p) < 0.1f * (score_r(p) - bar_l(p)));
+            REQUIRE(bar_l(p) < at);
+            REQUIRE(score_r(p) > at);
+            REQUIRE(See(-0.665f, 0.86f, p).up == Approx(10.0f).margin(0.2));
+            REQUIRE(See(0.79f, 0.86f, p).up == Approx(10.0f).margin(0.2));
+        }
+    }
+    REQUIRE(bar_l(At()) == Approx(-score_r(At())).margin(0.7)); // in the middle
+    // Apart: each where it is asked for, the other not moved.
+    Wanted w;
+    w.linked = false;
+    w.bar_across = -25.0f;
+    w.bar_height = -12.0f;
+    w.score_across = 30.0f;
+    w.score_height = 25.0f;
+    const Place p = At(w);
+    REQUIRE(See(-0.665f, 0.86f, p).across == Approx(-25.0f).margin(0.2));
+    REQUIRE(See(-0.665f, 0.86f, p).up == Approx(-12.0f).margin(0.2));
+    REQUIRE(See(0.79f, 0.86f, p).across == Approx(30.0f).margin(0.2));
+    REQUIRE(See(0.79f, 0.86f, p).up == Approx(25.0f).margin(0.2));
+    // The rest of the HUD does not move with them.
+    REQUIRE(See(0.0f, 0.0f, p).up == Approx(6.0f).margin(0.2));
+    REQUIRE(See(0.0f, 0.0f, At()).up == Approx(6.0f).margin(0.2));
 }

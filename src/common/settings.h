@@ -1149,14 +1149,17 @@ struct Values {
     SwitchableSetting<u32, true> vr_kiu_bottom_size{100, 50, 200, "vr_kiu_bottom_size"};
     SwitchableSetting<u32, true> vr_kiu_bottom_opacity{100, 20, 100, "vr_kiu_bottom_opacity"};
     // AzaharFrame kiu140: HUD in Angel's Aim: 0 where the game puts it, 1 in the view, its size in
-    // percent, its middle's height in degrees, how far apart its sides are in percent, and where
-    // the health bar and the score go (0 left, 1 middle, 2 right).
+    // percent; the health bar and the score side by side as one (linked), where that is (degrees
+    // to the right and up from straight ahead), or each with a place of its own.
     SwitchableSetting<u32, true> vr_kiu_hud{1, 0, 1, "vr_kiu_hud"};
     SwitchableSetting<u32, true> vr_kiu_hud_size{100, 40, 200, "vr_kiu_hud_size"};
-    SwitchableSetting<s32, true> vr_kiu_hud_height{6, -30, 30, "vr_kiu_hud_height"};
-    SwitchableSetting<u32, true> vr_kiu_hud_spread{100, 0, 200, "vr_kiu_hud_spread"};
-    SwitchableSetting<u32, true> vr_kiu_hud_bar{0, 0, 2, "vr_kiu_hud_bar"};
-    SwitchableSetting<u32, true> vr_kiu_hud_score{2, 0, 2, "vr_kiu_hud_score"};
+    SwitchableSetting<u32, true> vr_kiu_hud_linked{1, 0, 1, "vr_kiu_hud_linked"};
+    SwitchableSetting<s32, true> vr_kiu_hud_across{0, -40, 40, "vr_kiu_hud_across"};
+    SwitchableSetting<s32, true> vr_kiu_hud_height{22, -40, 40, "vr_kiu_hud_height"};
+    SwitchableSetting<s32, true> vr_kiu_bar_across{-20, -40, 40, "vr_kiu_bar_across"};
+    SwitchableSetting<s32, true> vr_kiu_bar_height{22, -40, 40, "vr_kiu_bar_height"};
+    SwitchableSetting<s32, true> vr_kiu_score_across{20, -40, 40, "vr_kiu_score_across"};
+    SwitchableSetting<s32, true> vr_kiu_score_height{22, -40, 40, "vr_kiu_score_height"};
     // AzaharFrame kiu140: Pit's Arm on the free hand, and the laurel round the Wrist screen.
     SwitchableSetting<u32, true> vr_kiu_arm{1, 0, 1, "vr_kiu_arm"};
     SwitchableSetting<u32, true> vr_kiu_laurel{1, 0, 1, "vr_kiu_laurel"};

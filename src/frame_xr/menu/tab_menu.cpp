@@ -118,11 +118,23 @@ std::string SliderText(Id id, float value) {
     if (id == Id::KiuHudSize) { // AzaharFrame kiu140
         return Format("%.0f%%", value);
     }
+    if (id == Id::KiuHudAcross) { // AzaharFrame kiu140
+        return Format("%.0f\u00B0", value);
+    }
     if (id == Id::KiuHudHeight) { // AzaharFrame kiu140
         return Format("%.0f\u00B0", value);
     }
-    if (id == Id::KiuHudSpread) { // AzaharFrame kiu140
-        return Format("%.0f%%", value);
+    if (id == Id::KiuBarAcross) { // AzaharFrame kiu140
+        return Format("%.0f\u00B0", value);
+    }
+    if (id == Id::KiuBarHeight) { // AzaharFrame kiu140
+        return Format("%.0f\u00B0", value);
+    }
+    if (id == Id::KiuScoreAcross) { // AzaharFrame kiu140
+        return Format("%.0f\u00B0", value);
+    }
+    if (id == Id::KiuScoreHeight) { // AzaharFrame kiu140
+        return Format("%.0f\u00B0", value);
     }
     if (id == Id::AutosaveEvery) { // AzaharFrame autosave: the stop's minutes
         const int i = std::clamp(static_cast<int>(std::lround(value)), 0,
@@ -266,23 +278,32 @@ Row RowFor(Id id, const MenuModel& m) {
     case Id::KiuHudSize: // AzaharFrame kiu140
         slider(m.kiu_hud_size);
         break;
-    case Id::KiuHudHeight: // AzaharFrame kiu140
-        slider(m.kiu_hud_height);
-        break;
-    case Id::KiuHudSpread: // AzaharFrame kiu140
-        slider(m.kiu_hud_spread);
-        break;
-    case Id::KiuHudBar: // AzaharFrame kiu140
-        segmented(std::clamp(m.kiu_hud_bar, 0, 2));
-        break;
-    case Id::KiuHudScore: // AzaharFrame kiu140
-        segmented(std::clamp(m.kiu_hud_score, 0, 2));
-        break;
     case Id::KiuArm: // AzaharFrame kiu140
         segmented(std::clamp(m.kiu_arm, 0, 1));
         break;
     case Id::KiuLaurel: // AzaharFrame kiu140
         segmented(std::clamp(m.kiu_laurel, 0, 1));
+        break;
+    case Id::KiuHudLinked: // AzaharFrame kiu140
+        segmented(std::clamp(m.kiu_hud_linked, 0, 1));
+        break;
+    case Id::KiuHudAcross: // AzaharFrame kiu140
+        slider(m.kiu_hud_across);
+        break;
+    case Id::KiuHudHeight: // AzaharFrame kiu140
+        slider(m.kiu_hud_height);
+        break;
+    case Id::KiuBarAcross: // AzaharFrame kiu140
+        slider(m.kiu_bar_across);
+        break;
+    case Id::KiuBarHeight: // AzaharFrame kiu140
+        slider(m.kiu_bar_height);
+        break;
+    case Id::KiuScoreAcross: // AzaharFrame kiu140
+        slider(m.kiu_score_across);
+        break;
+    case Id::KiuScoreHeight: // AzaharFrame kiu140
+        slider(m.kiu_score_height);
         break;
     case Id::KiuReticleSize:
         slider(m.kiu_reticle_size);
@@ -547,12 +568,15 @@ SettingsSection SectionOf(Id id) {
     case Id::KiuCutscenes: // AzaharFrame kiu140
     case Id::KiuHud: // AzaharFrame kiu140
     case Id::KiuHudSize: // AzaharFrame kiu140
-    case Id::KiuHudHeight: // AzaharFrame kiu140
-    case Id::KiuHudSpread: // AzaharFrame kiu140
-    case Id::KiuHudBar: // AzaharFrame kiu140
-    case Id::KiuHudScore: // AzaharFrame kiu140
     case Id::KiuArm: // AzaharFrame kiu140
     case Id::KiuLaurel: // AzaharFrame kiu140
+    case Id::KiuHudLinked: // AzaharFrame kiu140
+    case Id::KiuHudAcross: // AzaharFrame kiu140
+    case Id::KiuHudHeight: // AzaharFrame kiu140
+    case Id::KiuBarAcross: // AzaharFrame kiu140
+    case Id::KiuBarHeight: // AzaharFrame kiu140
+    case Id::KiuScoreAcross: // AzaharFrame kiu140
+    case Id::KiuScoreHeight: // AzaharFrame kiu140
     case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
@@ -634,12 +658,15 @@ bool PerGameSetting(Id id) {
     case Id::KiuCutscenes: // AzaharFrame kiu140
     case Id::KiuHud: // AzaharFrame kiu140
     case Id::KiuHudSize: // AzaharFrame kiu140
-    case Id::KiuHudHeight: // AzaharFrame kiu140
-    case Id::KiuHudSpread: // AzaharFrame kiu140
-    case Id::KiuHudBar: // AzaharFrame kiu140
-    case Id::KiuHudScore: // AzaharFrame kiu140
     case Id::KiuArm: // AzaharFrame kiu140
     case Id::KiuLaurel: // AzaharFrame kiu140
+    case Id::KiuHudLinked: // AzaharFrame kiu140
+    case Id::KiuHudAcross: // AzaharFrame kiu140
+    case Id::KiuHudHeight: // AzaharFrame kiu140
+    case Id::KiuBarAcross: // AzaharFrame kiu140
+    case Id::KiuBarHeight: // AzaharFrame kiu140
+    case Id::KiuScoreAcross: // AzaharFrame kiu140
+    case Id::KiuScoreHeight: // AzaharFrame kiu140
     case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
@@ -799,21 +826,30 @@ std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& m) {
     if (m.kiu_hud != 0) { // AzaharFrame kiu140
         rows.push_back(Id::KiuHudSize);
     }
-    if (m.kiu_hud != 0) { // AzaharFrame kiu140
-        rows.push_back(Id::KiuHudHeight);
-    }
-    if (m.kiu_hud != 0) { // AzaharFrame kiu140
-        rows.push_back(Id::KiuHudSpread);
-    }
-    if (m.kiu_hud != 0) { // AzaharFrame kiu140
-        rows.push_back(Id::KiuHudBar);
-    }
-    if (m.kiu_hud != 0) { // AzaharFrame kiu140
-        rows.push_back(Id::KiuHudScore);
-    }
     rows.push_back(Id::KiuArm);
     if (m.kiu_bottom_screen == 2) { // AzaharFrame kiu140
         rows.push_back(Id::KiuLaurel);
+    }
+    if (m.kiu_hud != 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuHudLinked);
+    }
+    if (m.kiu_hud != 0 && m.kiu_hud_linked != 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuHudAcross);
+    }
+    if (m.kiu_hud != 0 && m.kiu_hud_linked != 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuHudHeight);
+    }
+    if (m.kiu_hud != 0 && m.kiu_hud_linked == 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuBarAcross);
+    }
+    if (m.kiu_hud != 0 && m.kiu_hud_linked == 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuBarHeight);
+    }
+    if (m.kiu_hud != 0 && m.kiu_hud_linked == 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuScoreAcross);
+    }
+    if (m.kiu_hud != 0 && m.kiu_hud_linked == 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuScoreHeight);
     }
     rows.push_back(Id::KiuReticleSize);
     return rows;
@@ -847,7 +883,7 @@ std::vector<AngelsAimRowGroup> AngelsAimGroups(const MenuModel& model) {
     }
     aiming.rows.push_back(Id::AngelsAimSettings); // the Controls tab at Aiming, as before
     AngelsAimRowGroup view{AngelsAimGroupKind::View, {Id::ImmersiveMode}};
-    for (const Id id : {Id::KiuOverShoulder, Id::KiuPitOpacity, Id::KiuSnapTurn, Id::KiuCutscenes, Id::KiuHud, Id::KiuHudSize, Id::KiuHudHeight, Id::KiuHudSpread, Id::KiuHudBar, Id::KiuHudScore}) {
+    for (const Id id : {Id::KiuOverShoulder, Id::KiuPitOpacity, Id::KiuSnapTurn, Id::KiuCutscenes, Id::KiuHud, Id::KiuHudSize, Id::KiuHudLinked, Id::KiuHudAcross, Id::KiuHudHeight, Id::KiuBarAcross, Id::KiuBarHeight, Id::KiuScoreAcross, Id::KiuScoreHeight}) {
         if (has(fp, id)) {
             view.rows.push_back(id);
         }
@@ -1063,20 +1099,16 @@ const std::vector<std::string>& OptionsFor(Id id) {
         static const std::vector<std::string> kChoices{"Game's Own", "In View"};
         return kChoices;
     }
-    case Id::KiuHudBar: { // AzaharFrame kiu140: the stored order
-        static const std::vector<std::string> kChoices{"Left", "Middle", "Right"};
-        return kChoices;
-    }
-    case Id::KiuHudScore: { // AzaharFrame kiu140: the stored order
-        static const std::vector<std::string> kChoices{"Left", "Middle", "Right"};
-        return kChoices;
-    }
     case Id::KiuArm: { // AzaharFrame kiu140: the stored order
         static const std::vector<std::string> kChoices{"Off", "On"};
         return kChoices;
     }
     case Id::KiuLaurel: { // AzaharFrame kiu140: the stored order
         static const std::vector<std::string> kChoices{"Off", "On"};
+        return kChoices;
+    }
+    case Id::KiuHudLinked: { // AzaharFrame kiu140: the stored order
+        static const std::vector<std::string> kChoices{"Separate", "Linked"};
         return kChoices;
     }
     case Id::WristSide: { // AzaharFrame kiu131: the stored order
@@ -1251,18 +1283,24 @@ std::string LabelFor(Id id) {
         return kKiuHudRow;
     case Id::KiuHudSize: // AzaharFrame kiu140
         return kKiuHudSizeRow;
-    case Id::KiuHudHeight: // AzaharFrame kiu140
-        return kKiuHudHeightRow;
-    case Id::KiuHudSpread: // AzaharFrame kiu140
-        return kKiuHudSpreadRow;
-    case Id::KiuHudBar: // AzaharFrame kiu140
-        return kKiuHudBarRow;
-    case Id::KiuHudScore: // AzaharFrame kiu140
-        return kKiuHudScoreRow;
     case Id::KiuArm: // AzaharFrame kiu140
         return kKiuArmRow;
     case Id::KiuLaurel: // AzaharFrame kiu140
         return kKiuLaurelRow;
+    case Id::KiuHudLinked: // AzaharFrame kiu140
+        return kKiuHudLinkedRow;
+    case Id::KiuHudAcross: // AzaharFrame kiu140
+        return kKiuHudAcrossRow;
+    case Id::KiuHudHeight: // AzaharFrame kiu140
+        return kKiuHudHeightRow;
+    case Id::KiuBarAcross: // AzaharFrame kiu140
+        return kKiuBarAcrossRow;
+    case Id::KiuBarHeight: // AzaharFrame kiu140
+        return kKiuBarHeightRow;
+    case Id::KiuScoreAcross: // AzaharFrame kiu140
+        return kKiuScoreAcrossRow;
+    case Id::KiuScoreHeight: // AzaharFrame kiu140
+        return kKiuScoreHeightRow;
     case Id::KiuReticleSize:
         return kReticleSizeRow;
     case Id::KiuOverShoulder: // AzaharFrame kiu133
@@ -1656,18 +1694,24 @@ std::string ExplainFor(Id id) {
         return kKiuHudTip;
     case Id::KiuHudSize: // AzaharFrame kiu140
         return kKiuHudSizeTip;
-    case Id::KiuHudHeight: // AzaharFrame kiu140
-        return kKiuHudHeightTip;
-    case Id::KiuHudSpread: // AzaharFrame kiu140
-        return kKiuHudSpreadTip;
-    case Id::KiuHudBar: // AzaharFrame kiu140
-        return kKiuHudBarTip;
-    case Id::KiuHudScore: // AzaharFrame kiu140
-        return kKiuHudScoreTip;
     case Id::KiuArm: // AzaharFrame kiu140
         return kKiuArmTip;
     case Id::KiuLaurel: // AzaharFrame kiu140
         return kKiuLaurelTip;
+    case Id::KiuHudLinked: // AzaharFrame kiu140
+        return kKiuHudLinkedTip;
+    case Id::KiuHudAcross: // AzaharFrame kiu140
+        return kKiuHudAcrossTip;
+    case Id::KiuHudHeight: // AzaharFrame kiu140
+        return kKiuHudHeightTip;
+    case Id::KiuBarAcross: // AzaharFrame kiu140
+        return kKiuBarAcrossTip;
+    case Id::KiuBarHeight: // AzaharFrame kiu140
+        return kKiuBarHeightTip;
+    case Id::KiuScoreAcross: // AzaharFrame kiu140
+        return kKiuScoreAcrossTip;
+    case Id::KiuScoreHeight: // AzaharFrame kiu140
+        return kKiuScoreHeightTip;
     case Id::KiuReticleSize:
         return kReticleSizeTip;
     case Id::KiuOverShoulder: // AzaharFrame kiu133
@@ -1800,11 +1844,23 @@ SliderRange SliderFor(Id id) {
     if (id == Id::KiuHudSize) { // AzaharFrame kiu140
         return {40.0f, 200.0f, 10.0f};
     }
-    if (id == Id::KiuHudHeight) { // AzaharFrame kiu140
-        return {-30.0f, 30.0f, 1.0f};
+    if (id == Id::KiuHudAcross) { // AzaharFrame kiu140
+        return {-40.0f, 40.0f, 1.0f};
     }
-    if (id == Id::KiuHudSpread) { // AzaharFrame kiu140
-        return {0.0f, 200.0f, 10.0f};
+    if (id == Id::KiuHudHeight) { // AzaharFrame kiu140
+        return {-40.0f, 40.0f, 1.0f};
+    }
+    if (id == Id::KiuBarAcross) { // AzaharFrame kiu140
+        return {-40.0f, 40.0f, 1.0f};
+    }
+    if (id == Id::KiuBarHeight) { // AzaharFrame kiu140
+        return {-40.0f, 40.0f, 1.0f};
+    }
+    if (id == Id::KiuScoreAcross) { // AzaharFrame kiu140
+        return {-40.0f, 40.0f, 1.0f};
+    }
+    if (id == Id::KiuScoreHeight) { // AzaharFrame kiu140
+        return {-40.0f, 40.0f, 1.0f};
     }
     if (id == Id::KiuReticleSize) { // 30 to 150 %
         return {30.0f, 150.0f, 10.0f};

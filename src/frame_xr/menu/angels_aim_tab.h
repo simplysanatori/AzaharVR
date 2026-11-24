@@ -158,24 +158,33 @@ inline constexpr const char* kKiuHudTip =
 inline constexpr const char* kKiuHudSizeRow = "HUD Size"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuHudSizeTip =
     "How big the HUD is.";
-inline constexpr const char* kKiuHudHeightRow = "HUD Height"; // AzaharFrame kiu140 PROPOSED
-inline constexpr const char* kKiuHudHeightTip =
-    "How high in your view the HUD sits. 0\u00B0 is straight ahead.";
-inline constexpr const char* kKiuHudSpreadRow = "HUD Spread"; // AzaharFrame kiu140 PROPOSED
-inline constexpr const char* kKiuHudSpreadTip =
-    "How far apart the left and right of the HUD are.";
-inline constexpr const char* kKiuHudBarRow = "Health Bar"; // AzaharFrame kiu140 PROPOSED
-inline constexpr const char* kKiuHudBarTip =
-    "Which side of the HUD the health bar is on.";
-inline constexpr const char* kKiuHudScoreRow = "Score"; // AzaharFrame kiu140 PROPOSED
-inline constexpr const char* kKiuHudScoreTip =
-    "Which side of the HUD the score is on.";
 inline constexpr const char* kKiuArmRow = "Pit's Arm"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuArmTip =
     "Your free hand is Pit's arm instead of the controller.";
 inline constexpr const char* kKiuLaurelRow = "Laurel Frame"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuLaurelTip =
     "A laurel round the Bottom Screen on your wrist.";
+inline constexpr const char* kKiuHudLinkedRow = "Health and Score"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuHudLinkedTip =
+    "Linked: side by side, moved as one. Separate: each has its own place.";
+inline constexpr const char* kKiuHudAcrossRow = "HUD Sideways"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuHudAcrossTip =
+    "How far left or right the health bar and score are. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuHudHeightRow = "HUD Height"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuHudHeightTip =
+    "How high the health bar and score are. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuBarAcrossRow = "Health Bar Sideways"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuBarAcrossTip =
+    "How far left or right the health bar is. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuBarHeightRow = "Health Bar Height"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuBarHeightTip =
+    "How high the health bar is. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuScoreAcrossRow = "Score Sideways"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuScoreAcrossTip =
+    "How far left or right the score is. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuScoreHeightRow = "Score Height"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuScoreHeightTip =
+    "How high the score is. 0\u00B0 is straight ahead.";
 inline constexpr const char* kOverShoulderRow = "Over the Shoulder";
 inline constexpr const char* kOverShoulderTip =
     "Moves your view behind and above Pit, so you can see him.";

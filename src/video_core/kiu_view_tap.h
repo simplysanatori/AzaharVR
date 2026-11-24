@@ -74,6 +74,10 @@ struct DrawnAngle {
     std::atomic<u32> match{0}, other{0};
     std::atomic<float> last_other{0.0f}; ///< the last other one's tangent (for the log)
 
+    /// Enough of them this VBlank: the rest of its uploads need not be looked at.
+    bool Enough() const {
+        return match.load(std::memory_order_relaxed) + other.load(std::memory_order_relaxed) >= 64;
+    }
     void Count(float tan_half_y) {
         const float w = want.load(std::memory_order_relaxed);
         const float off = w > 0.0f ? tan_half_y / w - 1.0f : 1.0f;
