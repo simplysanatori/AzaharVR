@@ -62,6 +62,9 @@ public:
     bool AddCheat(const std::string& name, const std::string& code) override;
 
     void SetMicBlow(bool on) override;
+    void SetMicrophone(MicrophoneFactory factory) override;
+    void ReloadMicrophone() override;
+    void CloseMicrophone() override;
     void SetLidClosed(bool closed) override;
     void SetTouchEnabled(bool on) override;
     void SetScreenRotation(int deg) override;
@@ -73,6 +76,8 @@ public:
     void OnWriteNDSSave(const uint8_t* data, uint32_t len, uint32_t offset, uint32_t write_len);
     void OnWriteGBASave(const uint8_t* data, uint32_t len, uint32_t offset, uint32_t write_len);
     void OnWriteFirmware(const uint8_t* data, uint32_t len, uint32_t offset, uint32_t write_len);
+    void OnMicStart();
+    void OnMicStop();
     int OnMicReadInput(int16_t* data, int max_length);
     void OnRumbleStart(uint32_t duration_ms);
     void OnRumbleStop();

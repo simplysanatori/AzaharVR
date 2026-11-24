@@ -202,6 +202,7 @@ struct NdsCore::Impl {
     bool metrics_dirty = false;
     std::atomic<bool> mic_blow_toggle{false};
     std::atomic<bool> mic_blow_button{false};
+    Microphone microphone;
     uint32_t mic_rng_state = 0x12345678u;
     int32_t mic_filter = 0;
 
@@ -510,6 +511,8 @@ void NdsCore::Unload() {
         impl->nds->Stop(melonDS::Platform::StopReason::External);
         impl->nds.reset();
     }
+    impl->microphone.Stop();
+    impl->microphone.Close();
     impl->ar_file.reset();
     impl->loaded = false;
     impl->audio_scratch.clear();
@@ -598,6 +601,7 @@ void NdsCore::RunFrame(FrameOutput& out) {
         out.updated_metrics = impl->caps.screens;
     }
 
+    impl->microphone.EndFrame();
     impl->FlushPendingSaves(false);
 }
 
@@ -714,6 +718,18 @@ bool NdsCore::AddCheat(const std::string& name, const std::string& code) {
     return true;
 }
 
+void NdsCore::SetMicrophone(MicrophoneFactory factory) {
+    impl->microphone.SetFactory(std::move(factory));
+}
+
+void NdsCore::ReloadMicrophone() {
+    impl->microphone.Reload();
+}
+
+void NdsCore::CloseMicrophone() {
+    impl->microphone.Close();
+}
+
 void NdsCore::SetMicBlow(bool on) {
     impl->mic_blow_toggle.store(on, std::memory_order_relaxed);
 }
@@ -796,6 +812,14 @@ void NdsCore::OnWriteFirmware(const uint8_t* /*data*/, uint32_t /*len*/, uint32_
     // Generated/user firmware writes are kept in memory for the session.
 }
 
+void NdsCore::OnMicStart() {
+    impl->microphone.Start();
+}
+
+void NdsCore::OnMicStop() {
+    impl->microphone.Stop();
+}
+
 int NdsCore::OnMicReadInput(int16_t* data, int max_length) {
     if (!data || max_length <= 0) {
         return 0;
@@ -803,8 +827,7 @@ int NdsCore::OnMicReadInput(int16_t* data, int max_length) {
     const bool blowing = impl->mic_blow_toggle.load(std::memory_order_relaxed) ||
                          impl->mic_blow_button.load(std::memory_order_relaxed);
     if (!blowing) {
-        std::memset(data, 0, static_cast<std::size_t>(max_length) * sizeof(int16_t));
-        return max_length;
+        return impl->microphone.Read(data, max_length);
     }
 
     // Synthesize smooth band-limited blow noise via xorshift32 + 1-pole low-pass filter

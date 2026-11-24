@@ -11,6 +11,8 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     melonds_platform.cpp
     nds_core.cpp
     nds_core.h
+    microphone.cpp
+    microphone.h
     rom_info.cpp
     rom_info.h
 )

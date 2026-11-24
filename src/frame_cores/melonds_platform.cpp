@@ -509,8 +509,17 @@ void Camera_CaptureFrame(int /*num*/, u32* frame, int width, int height, bool yu
 }
 
 // Microphone callbacks
-void Mic_Start(void* /*userdata*/) {}
-void Mic_Stop(void* /*userdata*/) {}
+void Mic_Start(void* userdata) {
+    if (auto* core = static_cast<FrameCores::NdsCore*>(userdata)) {
+        core->OnMicStart();
+    }
+}
+
+void Mic_Stop(void* userdata) {
+    if (auto* core = static_cast<FrameCores::NdsCore*>(userdata)) {
+        core->OnMicStop();
+    }
+}
 
 int Mic_ReadInput(s16* data, int maxlength, void* userdata) {
     if (auto* core = static_cast<FrameCores::NdsCore*>(userdata)) {
