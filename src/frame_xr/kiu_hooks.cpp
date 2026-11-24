@@ -29,6 +29,7 @@
 #include "frame_xr/kiu_scan.h"
 #include "frame_xr/test_switches.h"
 #include "frame_xr/kiu_cutscene.h" // AzaharFrame kiu140
+#include "video_core/kiu_sheets.h" // AzaharFrame kiu140
 #include "video_core/kiu_view_tap.h" // AzaharFrame kiuvr: the view register's tap
 
 // AzaharFrame kiuhook (kiu_hooks.h)
@@ -58,6 +59,7 @@ constexpr const char* kSwitchNoPlayerShadow = "AZAHARFRAME_KIU_NO_PLAYER_SHADOW"
 constexpr const char* kSwitchFp2d = "AZAHARFRAME_KIU_FP_2D"; // AzaharFrame kiu2d
 constexpr const char* kSwitchReticleSize = "AZAHARFRAME_KIU_RETICLE_SIZE"; // AzaharFrame kiu131
 constexpr const char* kSwitchReticleTexture = "AZAHARFRAME_KIU_RETICLE_TEX";
+constexpr const char* kSwitchSheets = "AZAHARFRAME_KIU_SHEETS"; // AzaharFrame kiu140
 constexpr const char* kSwitchTrace = "AZAHARFRAME_KIU_HOOK_TRACE";
 // AzaharFrame kiuvr (kiu_first_person.h)
 constexpr const char* kSwitchFpTrace = "AZAHARFRAME_KIU_FP_TRACE";
@@ -466,6 +468,8 @@ void Hook(int64_t ticks) {
         CutsceneOff(s); // AzaharFrame kiu140
         VideoCore::Immersive::g_soft_draw_turn.store(false, std::memory_order_relaxed); // kiu2d
         VideoCore::Immersive::g_reticle_texture.store(0, std::memory_order_relaxed); // kiu131
+        VideoCore::KiuSheets::g_mode.store(VideoCore::KiuSheets::Mode::Off,
+                                           std::memory_order_relaxed); // kiu140
         return;
     }
     std::shared_ptr<Kernel::Process> process;
@@ -482,6 +486,8 @@ void Hook(int64_t ticks) {
         Kiu::FirstPerson::SupplyRegisters(false);
         VideoCore::Immersive::g_soft_draw_turn.store(false, std::memory_order_relaxed); // kiu2d
         VideoCore::Immersive::g_reticle_texture.store(0, std::memory_order_relaxed); // kiu131
+        VideoCore::KiuSheets::g_mode.store(VideoCore::KiuSheets::Mode::Off,
+                                           std::memory_order_relaxed); // kiu140
         return;
     }
     const uint64_t title = process->codeset->program_id;
@@ -577,6 +583,14 @@ void Hook(int64_t ticks) {
     VideoCore::Immersive::g_soft_draw_turn.store(
         KH::GroupWanted(first_person, fp2d_text ? fp2d_text->c_str() : nullptr),
         std::memory_order_relaxed);
+    // AzaharFrame kiu140: the cloud sheets' soft rim (video_core/kiu_sheets.h).
+    {
+        const auto sheets_text = Switch(kSwitchSheets);
+        VideoCore::KiuSheets::g_mode.store(
+            VideoCore::KiuSheets::ModeFor(first_person && mapped && s.code_ok, s.cutscene,
+                                          sheets_text ? sheets_text->c_str() : nullptr),
+            std::memory_order_relaxed);
+    }
     // AzaharFrame kiu131: Reticle Size: the game's reticle's draws (its texture) scaled about
     // their middle, in first person (video_core/kiu_view_tap.h).
     {

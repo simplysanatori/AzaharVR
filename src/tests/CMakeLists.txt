@@ -79,6 +79,7 @@ add_executable(tests
     frame_xr/kiu_panel_hold.cpp # AzaharFrame kiu140
     frame_xr/kiu_cutscene.cpp # AzaharFrame kiu140
     frame_xr/kiu_hud.cpp # AzaharFrame kiu140
+    frame_xr/kiu_sheets.cpp # AzaharFrame kiu140
     frame_xr/kiu_panel.cpp # AzaharFrame kiupanel
     frame_xr/vis.cpp # AzaharFrame vrvis
     frame_xr/xr_handoff.cpp # AzaharFrame handoff

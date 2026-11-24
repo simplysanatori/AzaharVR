@@ -13,6 +13,7 @@
 #include "video_core/rasterizer_accelerated.h"
 #include "video_core/vr_auto_shape.h" // AzaharFrame fixes7
 #include "video_core/kiu_hud.h" // AzaharFrame kiu140
+#include "video_core/kiu_sheets.h" // AzaharFrame kiu140
 #include "video_core/kiu_view_tap.h" // AzaharFrame kiu2d
 #include "video_core/vr_immersive.h" // AzaharFrame depth
 #include "video_core/vr_content_repeat.h" // AzaharFrame bfikit
@@ -398,7 +399,86 @@ bool RasterizerAccelerated::HudDraw() const {
     return VideoCore::KiuHud::MayBeHud(d) && !(reticle != 0 && d.texture == reticle);
 }
 
+bool RasterizerAccelerated::SheetDraw() const {
+    if (VideoCore::KiuSheets::g_mode.load(std::memory_order_relaxed) ==
+            VideoCore::KiuSheets::Mode::Off ||
+        regs.pipeline.use_gs != Pica::PipelineRegs::UseGS::No) {
+        return false;
+    }
+    using F = Pica::FramebufferRegs::BlendFactor;
+    const auto& om = regs.framebuffer.output_merger;
+    const auto& va = regs.pipeline.vertex_attributes;
+    const auto& loader = va.attribute_loaders[0];
+    const auto& index = regs.pipeline.index_array;
+    VideoCore::KiuSheets::Draw d;
+    d.indices = regs.pipeline.num_vertices;
+    d.stride = loader.byte_count;
+    d.depth_test = om.depth_test_enable != 0;
+    d.added = om.alphablend_enable != 0 && om.alpha_blending.factor_source_rgb == F::SourceAlpha &&
+              om.alpha_blending.factor_dest_rgb == F::One;
+    d.textured = regs.texturing.main_config.texture0_enable != 0;
+    d.indexed_u8 = index.format == 0;
+    d.top_viewport = f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f == 240.0f &&
+                     f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f == 400.0f;
+    const VideoCore::KiuSheets::Sheet* const sheet = VideoCore::KiuSheets::MayBeSheet(d);
+    if (!sheet) {
+        return false;
+    }
+    // Without the turn its vertices would stay where the game's camera puts them: the GPU's then.
+    if (!VideoCore::Immersive::g_soft_draw_turn.load(std::memory_order_relaxed)) {
+        return false;
+    }
+    const u32 buffer = regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress();
+    if (std::none_of(vr_soft_clip.begin(), vr_soft_clip.end(),
+                     [&](const SoftClip& c) { return c.valid && c.buffer == buffer; })) {
+        return false;
+    }
+    const PAddr base = va.GetPhysicalBaseAddress();
+    const auto bytes = [&](PAddr at, u32 size) -> const u8* {
+        const u8* const first = memory.GetPhysicalPointer(at);
+        return first && memory.GetPhysicalPointer(at + size - 1) == first + size - 1 ? first : nullptr;
+    };
+    return VideoCore::KiuSheets::IsSheet(
+        *sheet, bytes(base + loader.data_offset, sheet->vertices * sheet->stride),
+        bytes(base + index.offset, sheet->indices));
+}
+
+void RasterizerAccelerated::AddSheetRim() {
+    std::vector<VideoCore::KiuSheets::Vertex> in(vertex_batch.size());
+    for (std::size_t i = 0; i < in.size(); ++i) {
+        const HardwareVertex& v = vertex_batch[i];
+        in[i].pos = {v.position.x, v.position.y, v.position.z, v.position.w};
+        in[i].color = {v.color.x, v.color.y, v.color.z, v.color.w};
+        in[i].more = {v.tex_coord0.x, v.tex_coord0.y, v.tex_coord1.x, v.tex_coord1.y,
+                      v.tex_coord2.x, v.tex_coord2.y, v.tex_coord0_w, v.view.x,
+                      v.view.y,       v.view.z};
+    }
+    const auto rim = VideoCore::KiuSheets::Rim(in, VideoCore::KiuSheets::kOut);
+    vertex_batch.reserve(vertex_batch.size() + rim.size());
+    for (const VideoCore::KiuSheets::Added& a : rim) {
+        HardwareVertex v = vertex_batch[a.from];
+        const auto& p = a.v.pos;
+        const auto& c = a.v.color;
+        const auto& m = a.v.more;
+        v.position = {p[0], p[1], p[2], p[3]};
+        v.color = {c[0], c[1], c[2], c[3]};
+        v.tex_coord0 = {m[0], m[1]};
+        v.tex_coord1 = {m[2], m[3]};
+        v.tex_coord2 = {m[4], m[5]};
+        v.tex_coord0_w = m[6];
+        v.view = {m[7], m[8], m[9]};
+        vertex_batch.push_back(v);
+    }
+}
+
 void RasterizerAccelerated::TurnSoftwareVertices() {
+    // AzaharFrame kiu140: a cloud sheet's soft rim; the turn below takes it with the sheet.
+    if (!vertex_batch.empty() &&
+        VideoCore::KiuSheets::g_mode.load(std::memory_order_relaxed) ==
+            VideoCore::KiuSheets::Mode::Rim &&
+        SheetDraw()) {
+        AddSheetRim();
+    }
     // AzaharFrame kiu140: a piece of the HUD, moved into the view (kiu_hud.h); never with the world.
     if (vertex_batch.size() >= 3 && HudDraw()) {
         std::vector<VideoCore::KiuHud::Vertex> flat(vertex_batch.size());

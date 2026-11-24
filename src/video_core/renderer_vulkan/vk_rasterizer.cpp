@@ -450,7 +450,8 @@ bool RasterizerVulkan::SetupGeometryShader() {
 }
 
 bool RasterizerVulkan::AccelerateDrawBatch(bool is_indexed) {
-    if (ReticleDraw() || HudDraw()) { // AzaharFrame kiu131: Reticle Size scales it on the CPU; kiu140
+    // AzaharFrame kiu131: Reticle Size scales it on the CPU; kiu140: the HUD, the cloud sheets
+    if (ReticleDraw() || HudDraw() || (is_indexed && SheetDraw())) {
         return false;
     }
     if (regs.pipeline.use_gs != Pica::PipelineRegs::UseGS::No) {
