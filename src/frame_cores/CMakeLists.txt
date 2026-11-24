@@ -43,6 +43,13 @@ target_link_libraries(frame_cores
         Threads::Threads
 )
 
+# PokeDaisy's driver, where its sources are there (externals/pokedaisy_cmake)
+if (TARGET pokedaisy)
+    target_sources(frame_cores PRIVATE pokedaisy_driver.cpp pokedaisy_driver.h)
+    target_link_libraries(frame_cores PRIVATE pokedaisy)
+    target_compile_definitions(frame_cores PUBLIC HAVE_POKEDAISY) # frame_driver.h's declarations
+endif()
+
 if (USE_SYSTEM_FAAD)
     target_link_libraries(frame_cores PRIVATE faad)
 else()
