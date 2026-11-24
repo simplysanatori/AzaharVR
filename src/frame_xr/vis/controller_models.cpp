@@ -27,6 +27,7 @@
 #include "frame_xr/retired_swapchains.h" // AzaharFrame projdef
 #include "frame_xr/session.h"
 #include "frame_xr/vis/controller_models.h"
+#include "frame_xr/vis/hand_import.h"
 #include "frame_xr/vis/pit_hand_shader.h" // AzaharFrame kiu140
 #include "frame_xr/vis/see_through.h" // AzaharFrame kiuopacity
 #include "frame_xr/vis/model_shaders.h"

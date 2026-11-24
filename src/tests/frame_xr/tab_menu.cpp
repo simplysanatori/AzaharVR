@@ -1608,6 +1608,43 @@ TEST_CASE("Tab menu: Cheats add and install from a file", "[frame_xr][tabmenu]")
     CHECK(!HasHit(d, Id::ZipBack, -1));
 }
 
+// AzaharFrame kiu140: a hand model's zip, on the Angel's Aim page.
+TEST_CASE("Tab menu: a hand model from a zip", "[frame_xr][tabmenu][kiu140]") {
+    Drawn d;
+    MenuModel m = Sample();
+    MenuView v;
+    v.tab = kModsTab;
+    v.mods_segment = ModsSegment::AngelsAim;
+    m.mods.angels_aim.shown = true;
+    m.mods.angels_aim.mapped = true;
+    const Id id = Id::InstallFromZip;
+    const int hand = static_cast<int>(ZipTarget::Hand);
+    d.Draw(m, v);
+    v.scroll[static_cast<std::size_t>(v.tab)] = d.menu.layout.max_scroll; // the page's end
+    for (const bool installed : {false, true}) {
+        m.mods.angels_aim.hand_installed = installed;
+        d.Draw(m, v);
+        REQUIRE(FindHit(d, id, hand));
+        CHECK(FindHit(d, id, hand)->r.H() >= 48.0f);
+        CheckTargets(d);
+    }
+    m.mods.angels_aim.mapped = false; // not mapped: no arm, no row
+    d.Draw(m, v);
+    CHECK(!HasHit(d, id, hand));
+    m.mods.angels_aim.mapped = true;
+    m.mods.zip.open = true;
+    m.mods.zip.target = ZipTarget::Hand;
+    m.mods.zip.browse = true;
+    m.mods.zip.entries = {{"hand.zip", false, "1 MB"}};
+    d.Draw(m, v);
+    CHECK(HasHit(d, Id::ZipBack, -1));
+    CHECK(HasHit(d, Id::ZipEntry, 0));
+    CHECK(!HasHit(d, id, hand));
+    v.mods_segment = ModsSegment::Mods; // not over the others
+    d.Draw(m, v);
+    CHECK(!HasHit(d, Id::ZipBack, -1));
+}
+
 // AzaharFrame zipinstall: Install from Zip on Download Packs and Install Mods, and its page.
 TEST_CASE("Tab menu: Install from Zip", "[frame_xr][tabmenu]") {
     Drawn d;

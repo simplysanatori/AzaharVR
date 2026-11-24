@@ -84,7 +84,10 @@ std::string ImportHand(std::span<const uint8_t> zip, std::vector<uint8_t>& out,
 std::string ImportHandFile(const std::string& zip_path, const std::string& user_directory,
                            const HandImportProgress& progress = {});
 
-/// The zips waiting in `<user_directory>/kiu_hand/` (full paths, by name), for a menu to list.
-std::vector<std::string> ListHandZips(const std::string& user_directory);
+/// Whether the player has a hand file.
+bool HandFileExists(const std::string& user_directory);
+
+/// The hand file read again (after an import; any thread): the next frame's arm is that one.
+void ReloadPitModel(); // controller_models.cpp
 
 } // namespace FrameXr::Vis

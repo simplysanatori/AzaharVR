@@ -47,6 +47,7 @@ struct AngelsAimModel {
     bool mapped = false;
     bool mod_installed = false; ///< a C-Stick & Gyro mod (FrameXr::CStickModInstalled)
     bool textures_pack = false; ///< the catalog's weapons and effects pack is on (kAngelsAimPackIds)
+    bool hand_installed = false; ///< AzaharFrame kiu140: a hand model for Pit's arm is there
     std::string report_url;     ///< Report an Issue's page ("" none)
     bool operator==(const AngelsAimModel&) const = default;
 };
@@ -83,6 +84,9 @@ inline constexpr const char* kAngelsAimModName = "Darkshade's C-Stick & Gyro Mod
 inline constexpr const char* kAngelsAimSuggested = "Suggested";
 /// One row for the weapons and effects textures, named as the catalog names the pack.
 inline constexpr const char* kAngelsAimTexturesPack = "Kid Icarus Uprising Weapons HD";
+/// AzaharFrame kiu140 PROPOSED: the row that takes a hand model from a zip, and its toast.
+inline constexpr const char* kAngelsAimHandModel = "Pit's Hand Model";
+inline constexpr const char* kAngelsAimHandToast = "Hand Model Installed";
 inline constexpr const char* kAngelsAimSettings = "Settings";
 inline constexpr const char* kAngelsAimInstalled = "Installed";
 inline constexpr const char* kAngelsAimNotInstalled = "Not Installed";

@@ -205,6 +205,7 @@ private:
     void ZipDone(bool texture, u64 tid, const std::string& mod_id = {});
     void TurnBackOn(); ///< AzaharFrame compat: the "Turned Off" snackbar's action
     void ZipFail(const std::string& error);
+    void ZipHand(const std::string& path);   ///< AzaharFrame kiu140: a hand model's zip
     void ZipCheats(const std::string& path); ///< AzaharFrame ui2: a cheat file, or a zip of one
     void ZipCloseJob();
     void PublishZip();

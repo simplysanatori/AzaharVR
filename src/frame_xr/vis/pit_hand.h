@@ -310,7 +310,7 @@ inline constexpr float kPitVambraceElbowX = -0.140f / kPitHandUnit;
 /// between them, on the back of the forearm (+y) or its inside (-y): the place, the outward
 /// normal there, the forearm's line toward the hand, the bands' section there (half thickness
 /// along the normal, half width across) and how far along the forearm each band's middle is
-/// from the place (where the frame's straps go: laurel_frame.h).
+/// from the place.
 struct PitHandSeat {
     PitVec3 centre{};
     PitVec3 normal{};

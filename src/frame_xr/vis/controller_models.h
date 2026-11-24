@@ -63,9 +63,6 @@ std::string ControllerModelDir();
 /// Reads both hands' files from it (any thread). False with the file and the reason in `error`.
 bool ReadControllerModels(std::array<ModelFile, 2>& files, std::string& error);
 
-/// AzaharFrame kiu140: the player's hand file, read again (off the main thread) after an import.
-void ReloadPitModel();
-
 class ControllerModels {
 public:
     ControllerModels();

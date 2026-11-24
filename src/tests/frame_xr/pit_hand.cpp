@@ -2,8 +2,7 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
-// AzaharFrame kiuhand: Pit's hand (frame_xr/vis/pit_hand.h) and the laurel frame
-// (frame_xr/vis/laurel_frame.h): the mesh is sound (weights, closed parts, normals), every pose
+// AzaharFrame kiuhand: Pit's hand (frame_xr/vis/pit_hand.h): the mesh is sound (weights, closed parts, normals), every pose
 // is finite, the right hand is the left one's mirror, the grip closes round the handle without
 // passing through it or the palm, hand tracking's joints give back the pose they came from, and
 // the wreath stays off the panel.
@@ -19,7 +18,6 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include "frame_xr/vis/laurel_frame.h"
 #include "frame_xr/vis/pit_hand.h"
 #include "frame_xr/vis/weapon_fit.h"
 
@@ -753,113 +751,4 @@ TEST_CASE("Pit's hand: the palette and the colours from the player's game", "[ki
     CHECK(game.of[static_cast<std::size_t>(PitHandMaterial::Skin)].shadow.r < left.r);
     CHECK(game.of[static_cast<std::size_t>(PitHandMaterial::Gold)].lit.r ==
           Approx(def.of[static_cast<std::size_t>(PitHandMaterial::Gold)].lit.r));
-}
-
-TEST_CASE("The laurel frame stays off the panel and every leaf is closed", "[kiuhand]") {
-    const LaurelMesh& m = LaurelFrame();
-    REQUIRE(m.vertices.size() % kPitVertexFloats == 0);
-    const std::vector<V3> pos = Positions(m.vertices, kPitVertexFloats);
-    for (const uint32_t i : m.indices) {
-        REQUIRE(i < pos.size());
-    }
-    bool laurel = false, plate = false;
-    for (const LaurelPart& part : m.parts) {
-        INFO(part.name);
-        const auto indices = std::span<const uint32_t>(m.indices).subspan(part.first_index, part.index_count);
-        const Topology topo = TopologyOf(pos, indices);
-        CHECK(topo.closed);
-        CHECK(topo.euler == 2 * topo.components);
-        if (part.name == "laurel") {
-            laurel = true;
-            CHECK(part.material == PitHandMaterial::Gold);
-            CHECK(part.index_count / 3 >= 1000);
-            CHECK(part.index_count / 3 <= 1500);
-            CHECK(topo.components > 60); // two stems, their leaves, the knot
-            bool left = false, right = false, top = false, bottom = false;
-            for (std::size_t t = 0; t + 2 < indices.size(); t += 3) {
-                std::array<std::array<float, 2>, 3> tri;
-                for (std::size_t k = 0; k < 3; k++) {
-                    const V3& p = pos[indices[t + k]];
-                    tri[k] = {p[0], p[1]};
-                    // a few mm of relief on a 10 cm panel, none of it behind the plate's face
-                    REQUIRE(p[2] <= kLaurelRelief);
-                    REQUIRE(p[2] > -0.006f);
-                    left |= p[0] < -0.55f;
-                    right |= p[0] > 0.55f;
-                    top |= p[1] > 0.42f;
-                    bottom |= p[1] < -0.42f;
-                }
-                // Not a corner of any triangle, nor an edge crossing a corner of the panel.
-                REQUIRE_FALSE(TouchesRect(tri, 0.5f * kLaurelPanelWidth + kLaurelClear,
-                                          0.5f * kLaurelPanelHeight + kLaurelClear));
-            }
-            CHECK((left && right && top && bottom)); // it goes all the way round
-        } else if (part.name == "plate") {
-            plate = true;
-            CHECK(part.material == PitHandMaterial::Strap);
-            for (const uint32_t i : indices) {
-                REQUIRE(pos[i][2] < 0.0f); // behind the panel's plane
-                REQUIRE(pos[i][2] >= kLaurelBack - 1e-4f);
-            }
-        }
-    }
-    CHECK(laurel);
-    CHECK(plate);
-    // The wreath is the same on both sides.
-    float lo = 1e9f, hi = -1e9f;
-    for (const V3& p : pos) {
-        lo = std::min(lo, p[0]);
-        hi = std::max(hi, p[0]);
-    }
-    CHECK(lo == Approx(-hi).margin(1e-3));
-    // Normals agree with the faces.
-    uint32_t agree = 0, total = 0;
-    for (std::size_t t = 0; t + 2 < m.indices.size(); t += 3) {
-        const V3 n = Cross(Sub(pos[m.indices[t + 1]], pos[m.indices[t]]), Sub(pos[m.indices[t + 2]], pos[m.indices[t]]));
-        REQUIRE(Len(n) > 1e-9f);
-        const float* vn = &m.vertices[static_cast<std::size_t>(m.indices[t]) * kPitVertexFloats + 3];
-        agree += Dot(n, {vn[0], vn[1], vn[2]}) > 0.0f ? 1u : 0u;
-        total++;
-    }
-    CHECK(agree > total * 97 / 100);
-}
-
-TEST_CASE("The laurel frame worn: two straps round the vambrace, under the plate", "[kiuhand]") {
-    const float width_m = 0.10f; // wrist_screen.h kWristScreenWidth
-    const PitHandSeat seat = PitHandPanelSeat(false);
-    const float rz = seat.arm_radius * kPitHandUnit / width_m;
-    const float ry = seat.arm_half_width * kPitHandUnit / width_m;
-    const float off = seat.band_offset * kPitHandUnit / width_m;
-    CHECK(rz == Approx(0.41f).margin(0.03));
-    CHECK(ry > rz);
-    CHECK(off == Approx(0.54f).margin(0.03));
-    const LaurelMesh worn = LaurelFrameWorn(rz, ry, off);
-    const LaurelMesh& plain = LaurelFrame();
-    REQUIRE(worn.parts.size() == plain.parts.size() + 1);
-    const LaurelPart& strap = worn.parts.back();
-    CHECK(strap.name == "strap");
-    CHECK(strap.first_index == plain.indices.size());
-    const std::vector<V3> pos = Positions(worn.vertices, kPitVertexFloats);
-    const auto indices = std::span<const uint32_t>(worn.indices).subspan(strap.first_index, strap.index_count);
-    const Topology topo = TopologyOf(pos, indices);
-    CHECK(topo.closed);
-    CHECK(topo.components == 2);
-    CHECK(topo.euler == 0); // two rings
-    uint32_t agree = 0, total = 0;
-    for (std::size_t t = 0; t + 2 < indices.size(); t += 3) {
-        const V3 n = Cross(Sub(pos[indices[t + 1]], pos[indices[t]]), Sub(pos[indices[t + 2]], pos[indices[t]]));
-        const float* vn = &worn.vertices[static_cast<std::size_t>(indices[t]) * kPitVertexFloats + 3];
-        agree += Dot(n, {vn[0], vn[1], vn[2]}) > 0.0f ? 1u : 0u;
-        total++;
-        for (std::size_t k = 0; k < 3; k++) {
-            const V3& p = pos[indices[t + k]];
-            // round the arm: outside its section, never in front of the panel's plane
-            const float dy = p[1] / ry, dz = (p[2] - (kLaurelBack - rz)) / rz;
-            REQUIRE(dy * dy + dz * dz >= 1.0f);
-            REQUIRE(p[2] < 0.0f);
-            REQUIRE(std::abs(p[0]) < 0.70f); // under the plate
-            REQUIRE(std::abs(p[0]) > off - 0.08f); // over a band
-        }
-    }
-    CHECK(agree == total);
 }

@@ -1921,22 +1921,9 @@ std::string ImportHandFile(const std::string& zip_path, const std::string& user_
     return {};
 }
 
-std::vector<std::string> ListHandZips(const std::string& user_directory) {
-    std::vector<std::string> out;
+bool HandFileExists(const std::string& user_directory) {
     std::error_code ec;
-    const std::filesystem::path folder = std::filesystem::path(user_directory) / "kiu_hand";
-    for (std::filesystem::directory_iterator it(folder, ec), end; !ec && it != end; it.increment(ec)) {
-        std::string ext = it->path().extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        if (ext == ".zip" && it->is_regular_file(ec)) {
-            out.push_back(it->path().string());
-        }
-        if (out.size() >= 256) {
-            break;
-        }
-    }
-    std::sort(out.begin(), out.end());
-    return out;
+    return std::filesystem::is_regular_file(std::filesystem::path(user_directory) / kPitModelFile, ec);
 }
 
 } // namespace FrameXr::Vis

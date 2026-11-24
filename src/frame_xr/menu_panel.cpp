@@ -415,6 +415,9 @@ bool ZipShown(const Menu::MenuModel& model, const Menu::MenuView& view) {
     if (zip.target == Menu::ZipTarget::Cheats) { // AzaharFrame ui2
         return view.mods_segment == Menu::ModsSegment::Cheats;
     }
+    if (zip.target == Menu::ZipTarget::Hand) { // AzaharFrame kiu140
+        return view.mods_segment == Menu::ModsSegment::AngelsAim;
+    }
     if (zip.target == Menu::ZipTarget::Textures) {
         return view.mods_segment == Menu::ModsSegment::Textures && // AzaharFrame ui2
                view.textures_page == Menu::TexturesPage::Download;
@@ -2314,7 +2317,8 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::InstallFromZip:
         if (t.index == static_cast<int>(Menu::ZipTarget::Textures) ||
             t.index == static_cast<int>(Menu::ZipTarget::Mods) ||
-            t.index == static_cast<int>(Menu::ZipTarget::Cheats)) { // AzaharFrame ui2
+            t.index == static_cast<int>(Menu::ZipTarget::Cheats) || // AzaharFrame ui2
+            t.index == static_cast<int>(Menu::ZipTarget::Hand)) {   // AzaharFrame kiu140
             view.scroll[static_cast<std::size_t>(view.tab)] = 0.0f;
             ask(MenuCommand::InstallFromZip, t.index);
         }

@@ -163,9 +163,6 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     vis/hand_import.cpp # AzaharFrame kiuhand
     vis/hand_import.h
     vis/pit_hand_data.inc
-    vis/laurel_frame.cpp # AzaharFrame kiuhand
-    vis/laurel_frame.h
-    vis/laurel_frame_data.inc
     vis/muzzle_flash.cpp # AzaharFrame kiuflash
     vis/muzzle_flash.h
     vis/projectile.cpp # AzaharFrame kiuflash

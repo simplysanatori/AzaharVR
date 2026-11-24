@@ -473,18 +473,15 @@ TEST_CASE("Hand importer: from a path into the user directory, through a file be
     const fs::path user = fs::temp_directory_path() / "azahar-hand-import-test";
     fs::remove_all(user);
     fs::create_directories(user / "kiu_hand");
-    CHECK(ListHandZips(user.string()).empty());
+    CHECK_FALSE(HandFileExists(user.string()));
     CHECK(ImportHandFile((user / "none.zip").string(), user.string()) == "The zip could not be read.");
     const std::vector<uint8_t> zip = Zip(Files(Dae()));
     const fs::path a = user / "kiu_hand" / "b model.ZIP", b = user / "kiu_hand" / "a.zip";
     for (const fs::path& p : {a, b}) {
         std::ofstream(p, std::ios::binary).write(reinterpret_cast<const char*>(zip.data()), static_cast<std::streamsize>(zip.size()));
     }
-    std::ofstream(user / "kiu_hand" / "notes.txt") << "x";
-    const std::vector<std::string> zips = ListHandZips(user.string());
-    REQUIRE(zips.size() == 2);
-    CHECK(fs::path(zips[0]).filename() == "a.zip");
-    CHECK(ImportHandFile(zips[1], user.string()) == "");
+    CHECK(ImportHandFile(a.string(), user.string()) == "");
+    CHECK(HandFileExists(user.string()));
     PitModel m;
     std::string error;
     CHECK(LoadPitModel((user / kPitModelFile).string(), m, error));
