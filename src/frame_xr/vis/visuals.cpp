@@ -1155,6 +1155,10 @@ void Visuals::SetPitArm(int hand) { // AzaharFrame kiu140
     impl->pit_hand = hand;
 }
 
+bool Visuals::PitForearm(int hand, Input::Vec3f* wrist, Input::Vec3f* elbow) const {
+    return impl->models.PitForearm(hand, wrist, elbow);
+}
+
 void Visuals::SetLaurel(int hand, const Input::Posef& pose, float width) { // AzaharFrame kiu140
     impl->laurel_hand = hand;
     impl->laurel_pose = pose;

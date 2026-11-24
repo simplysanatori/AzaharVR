@@ -40,6 +40,37 @@ Posef WristScreenLocalPose(Input::Hand hand, bool beside_stats, WristSide side, 
         const Vec3f toward_hand = Input::Rotate(p.orientation, {1.0f, 0.0f, 0.0f});
         p.position = p.position - toward_hand * WristScreenBesideStats(width);
     }
+    // AzaharFrame kiu140: a drawn arm's own line, which the controller's handle does not lie
+    // along. The panel turns with it (the shortest way), and stays upright beside it.
+    Vec3f middle{kWristMiddleX, p.position.y, p.position.z};
+    {
+        // A right hand's in the left's space: the mirror at the end is of the whole place.
+        Vec3f wrist = at.wrist, elbow = at.elbow;
+        if (hand == Input::Hand::Right) {
+            wrist.x = -wrist.x;
+            elbow.x = -elbow.x;
+        }
+        const Vec3f span = elbow - wrist;
+        const float length = Input::Length(span);
+        if (at.arm && length > 1e-3f) {
+            const Vec3f to_hand = span * (-1.0f / length);
+            const Vec3f old_axis = Input::Rotate(p.orientation, {1.0f, 0.0f, 0.0f});
+            const Vec3f cross = Input::Cross(old_axis, to_hand);
+            const float s = Input::Length(cross), c = Input::Dot(old_axis, to_hand);
+            const Vec3f old_middle = middle;
+            if (s > 1e-5f && c > -0.99f) {
+                const Vec3f n = cross * (1.0f / s);
+                const float half = 0.5f * std::atan2(s, c);
+                const Quatf q{n.x * std::sin(half), n.y * std::sin(half), n.z * std::sin(half),
+                              std::cos(half)};
+                p.position = old_middle + Input::Rotate(q, p.position - old_middle);
+                p.orientation = Input::Normalized(Input::Multiply(q, p.orientation));
+            }
+            const float t = Input::Dot(old_middle - wrist, span) / (length * length);
+            middle = wrist + span * std::clamp(t, 0.0f, 1.0f);
+            p.position = p.position + (middle - old_middle);
+        }
+    }
     // AzaharFrame kiu140: round the wrist's line (through the handle's middle, along the picture's
     // own +X) and along it. The picture keeps reading along the forearm and facing out.
     if (at.angle_deg != 0.0f || at.up_arm_m != 0.0f || at.out_m != 0.0f) {
@@ -47,7 +78,6 @@ Posef WristScreenLocalPose(Input::Hand hand, bool beside_stats, WristSide side, 
         const float half = 0.5f * at.angle_deg * 3.14159265f / 180.0f;
         const float s = std::sin(half);
         const Quatf turn{axis.x * s, axis.y * s, axis.z * s, std::cos(half)};
-        const Vec3f middle{kWristMiddleX, p.position.y, p.position.z};
         p.position = middle + Input::Rotate(turn, p.position - middle) - axis * at.up_arm_m;
         if (at.out_m != 0.0f) {
             const Vec3f off = p.position - middle;

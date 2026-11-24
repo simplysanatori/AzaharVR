@@ -67,6 +67,10 @@ struct WristAt {
                             ///< side (Back) or under the hand (Inside), the mirror image on the right
     float up_arm_m = 0.0f;  ///< along the forearm: toward the elbow, or the hand below 0
     float out_m = 0.0f;     ///< away from the wrist's line: what an arm drawn there needs
+    /// An arm drawn on that hand: its wrist and elbow in the controller's aim space. Round its
+    /// line in place of the controller's, the place along it the nearest to the plain one.
+    bool arm = false;
+    Input::Vec3f wrist{}, elbow{};
 };
 /// The wrist's line to the panel, with nothing drawn there (stats_place.h's side places).
 constexpr float kWristScreenOut = 0.0355f;

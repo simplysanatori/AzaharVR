@@ -371,6 +371,38 @@ TEST_CASE("FrameXr kiu140: the wrist screen's place round the wrist and up the a
     REQUIRE(Input::Dot(at(0, -5).position - at(0, 0).position, toward_hand) == Approx(0.05f));
     REQUIRE(Vis::WristAtFor(999, 99).angle_deg == 360.0f);
     REQUIRE(Vis::WristAtFor(-3, -99).up_arm_m == Approx(-0.12f));
+    // Round a drawn arm's own line: clear of it at every angle and tilt, reading along it, upright
+    // the way it was, and the mirror image on the right.
+    for (const Vec3f& dir : {Vec3f{0.0f, -0.6f, 0.8f}, Vec3f{0.3f, -0.7f, 0.6f}, Vec3f{-0.3f, -0.4f, 0.9f},
+                             Vec3f{0.0f, -0.9f, 0.4f}}) {
+        const Vec3f wrist{-0.01f, -0.05f, 0.08f};
+        const Vec3f elbow = wrist + Input::Normalized(dir) * 0.26f;
+        for (int deg = 0; deg < 360; deg += 15) {
+            auto a = Vis::WristAtFor(deg, 2);
+            a.arm = true;
+            a.wrist = wrist;
+            a.elbow = elbow;
+            a.out_m = Vis::WristOutFor(0.06f);
+            for (const Hand hand : {Hand::Left, Hand::Right}) {
+                auto here = a;
+                if (hand == Hand::Right) {
+                    here.wrist.x = -wrist.x;
+                    here.elbow.x = -elbow.x;
+                }
+                const Posef p = Vis::WristScreenLocalPose(hand, false, WristSide::Back,
+                                                          Vis::kWristScreenWidth, here);
+                const Vec3f w = here.wrist, along = Input::Normalized(here.elbow - here.wrist);
+                INFO(deg << " " << (hand == Hand::Right));
+                // Its middle is the panel's gap outside a 6 cm arm.
+                const Vec3f rel = p.position - w;
+                const Vec3f across = rel - along * Input::Dot(rel, along);
+                REQUIRE(Input::Length(across) > 0.06f + 0.9f * Vis::kWristScreenGap);
+                // Reading along the arm, facing away from it.
+                REQUIRE(std::abs(Input::Dot(Axis(p, {1, 0, 0}), along)) > 0.999f);
+                REQUIRE(Input::Dot(Axis(p, {0, 0, 1}), Input::Normalized(across)) > 0.9f);
+            }
+        }
+    }
     // Out to clear an arm: straight away from the wrist's line, nothing without one.
     REQUIRE(Vis::WristOutFor(0.0f) == 0.0f);
     REQUIRE(Vis::WristOutFor(0.03f) == 0.0f);

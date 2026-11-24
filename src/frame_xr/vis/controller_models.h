@@ -157,6 +157,10 @@ public:
         pair_no_room = pair_no_room || pair;
     }
 
+    /// AzaharFrame kiu140: Pit's forearm as last drawn on `h`, wrist to elbow, in that hand's aim
+    /// space (none drawn: false).
+    bool PitForearm(int h, Input::Vec3f* wrist, Input::Vec3f* elbow) const;
+
 private:
     void Setup(Runtime& rt);
     void Record(const ViewPose& views, const std::array<Hand, 2>& hands,

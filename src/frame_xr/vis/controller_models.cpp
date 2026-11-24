@@ -2994,6 +2994,22 @@ void ControllerModels::FitWeapon(const ViewPose& views, const std::array<Hand, 2
     }
 }
 
+// AzaharFrame kiu140
+bool ControllerModels::PitForearm(int h, Input::Vec3f* wrist, Input::Vec3f* elbow) const {
+    const ArmDraw& d = arm_draws[static_cast<std::size_t>(h)];
+    if (!d.on || !d.pit) {
+        return false;
+    }
+    Mat fit_m{};
+    std::copy(d.fit.transform.begin(), d.fit.transform.end(), fit_m.begin());
+    const PitVec3 e = d.pit_elbow ? d.elbow : kPitElbowAt;
+    const auto w = Apply(fit_m, 0.0f, 0.0f, 0.0f, 1.0f);
+    const auto o = Apply(fit_m, e[0], e[1], e[2], 1.0f);
+    *wrist = {w[0], w[1], w[2]};
+    *elbow = {o[0], o[1], o[2]};
+    return true;
+}
+
 // AzaharFrame kiuarm: Pit's arm on the hands this frame (weapon_fit.h): the off hand's while
 // AZAHARFRAME_KIU_ARM=1, the weapon hand's while AZAHARFRAME_KIU_ARM_WEAPON=1, both once the
 // weapon in hand is drawn with its arm read; the forearm turned toward the estimated elbow unless

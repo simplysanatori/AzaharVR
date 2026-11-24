@@ -157,6 +157,8 @@ public:
     /// AzaharFrame kiu140: Pit's hand and forearm (pit_hand.h) in place of `hand`'s controller,
     /// while the weapon is drawn in the other. Cleared by TakeInput; GameFrame sets it.
     void SetPitArm(int hand);
+    /// AzaharFrame kiu140: where it was last drawn (controller_models.h PitForearm).
+    bool PitForearm(int hand, Input::Vec3f* wrist, Input::Vec3f* elbow) const;
     /// AzaharFrame kiu140: the laurel (laurel_frame.h) round the wrist screen on `hand`: its pose
     /// (LOCAL) and width in metres. Cleared by TakeInput; GameFrame sets it.
     void SetLaurel(int hand, const Input::Posef& pose, float width);
