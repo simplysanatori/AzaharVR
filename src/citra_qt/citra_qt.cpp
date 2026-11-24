@@ -6206,6 +6206,28 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::GbaSolarLevel:
         set(v.gba_solar_level, std::min<u32>(u, 10));
         break;
+    case S::SecondScreen: // from the next start (BootAltGame)
+        set(v.gba_second_screen, std::min<u32>(u, 2));
+        break;
+    case S::AllowGameEditing:
+        if (r.value != 0 && !use_global && UISettings::values.game_editing_warning) {
+            // Asked once, for the game's own switch or the global one; Cancel leaves it off
+            FrameAsk(QString::fromUtf8(Common::AltCore::kGameEditingTitle),
+                     QString::fromUtf8(Common::AltCore::kGameEditingBody),
+                     QString::fromUtf8(Common::AltCore::kGameEditingConfirm),
+                     QString::fromUtf8(Common::AltCore::kGameEditingCancel),
+                     [this, r](bool yes) {
+                         if (!yes) {
+                             return;
+                         }
+                         UISettings::values.game_editing_warning = false;
+                         config->Save();
+                         FrameMenuRequest(r);
+                     });
+            return;
+        }
+        set(v.gba_allow_editing, r.value != 0);
+        break;
     }
 #ifdef ENABLE_ALT_CORES
     if (AltGameRunning()) {

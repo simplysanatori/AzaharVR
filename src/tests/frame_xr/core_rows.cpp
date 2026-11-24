@@ -18,7 +18,8 @@ namespace {
 
 const std::set<Id> kOthersOnly{Id::CoreHeader,     Id::GbaSolarLevel, Id::DsConsoleMode,
                                Id::DsTouchEnabled, Id::DsMicBlow,     Id::DsLidToggle,
-                               Id::ImportSave,     Id::DsScreenRotation};
+                               Id::ImportSave,     Id::DsScreenRotation, Id::SecondScreen,
+                               Id::AllowGameEditing};
 
 /// Every console's.
 const std::set<Id> kCommon{
@@ -238,4 +239,85 @@ TEST_CASE("DS settings: degrees and consoles", "[frame_xr]") {
     CHECK(!TouchEnabled(CoreCaps::ForNDS(), false));
     CHECK(TouchEnabled(CoreCaps::ForNDS(), true));
     CHECK(!TouchEnabled(CoreCaps::ForGBA(), true));
+}
+
+// GBA and Game Boy games: Second Screen and Allow Game Editing, by what the game has.
+TEST_CASE("Core rows: Second Screen and Allow Game Editing", "[frame_xr][tabmenu]") {
+    using Common::AltCore::SecondScreenBit;
+    const std::set<Id> both{Id::SecondScreen, Id::AllowGameEditing};
+    const auto has = [](const CoreCaps& core, Id id) { return Table(core).contains(id); };
+    // The capabilities default to none: no row, whatever the console
+    for (const CoreCaps& core : {CoreCaps::ForGBA(), CoreCaps::ForGB(), CoreCaps::ForNDS(),
+                                 CoreCaps::ForNDS(true), CoreCaps::ForN3DS()}) {
+        CHECK(core.second_screen_choices == 0u);
+        CHECK(!core.can_edit_game);
+        CHECK(!has(core, Id::SecondScreen));
+        CHECK(!has(core, Id::AllowGameEditing));
+    }
+    const uint32_t kPoke = SecondScreenBit(0), kGbaDs = SecondScreenBit(1), kOff = SecondScreenBit(2);
+    for (CoreCaps core : {CoreCaps::ForGBA(), CoreCaps::ForGB()}) {
+        // A choice alone is no choice: hidden; two or three show the row
+        for (const uint32_t mask : {kPoke, kOff, kPoke | kGbaDs, kPoke | kOff, kGbaDs | kOff,
+                                    kPoke | kGbaDs | kOff}) {
+            core.second_screen_choices = mask;
+            INFO("mask " << mask);
+            CHECK(has(core, Id::SecondScreen) == (mask != kPoke && mask != kOff));
+            CHECK(has(core, Id::CoreHeader));
+        }
+        core.second_screen_choices = 0;
+        core.can_edit_game = true;
+        CHECK(has(core, Id::AllowGameEditing));
+        CHECK(!has(core, Id::SecondScreen));
+    }
+    // Only the Console group's rows follow; a game with neither has just what it had
+    CoreCaps gb = CoreCaps::ForGB();
+    CHECK(Table(gb) == Expected({Id::ImportSave}));
+    gb.second_screen_choices = kPoke | kOff;
+    gb.can_edit_game = true;
+    CHECK(Table(gb) == Expected(With({Id::ImportSave}, both)));
+    // Another console's capabilities never bring them: the 3DS has neither row
+    CoreCaps n3ds = CoreCaps::ForN3DS();
+    n3ds.second_screen_choices = kPoke | kOff;
+    n3ds.can_edit_game = true;
+    CHECK(!has(n3ds, Id::SecondScreen));
+    CHECK(!has(n3ds, Id::AllowGameEditing));
+    // Drawn in the Console group, on the general section
+    CoreCaps gba = CoreCaps::ForGBA();
+    gba.second_screen_choices = kPoke | kGbaDs | kOff;
+    gba.can_edit_game = true;
+    const auto drawn = Drawn(Game(gba), SettingsView(SettingsSection::General));
+    CHECK(drawn.contains(Id::SecondScreen));
+    CHECK(drawn.contains(Id::AllowGameEditing));
+    gba.second_screen_choices = kOff;
+    gba.can_edit_game = false;
+    const auto none = Drawn(Game(gba), SettingsView(SettingsSection::General));
+    CHECK(!none.contains(Id::SecondScreen));
+    CHECK(!none.contains(Id::AllowGameEditing));
+    // The options: the game's own, in order; the row's index counts them
+    CHECK(OptionsFor(Id::SecondScreen) == std::vector<std::string>{"PokeDaisy", "GBA DS", "Off"});
+    gba.second_screen_choices = kPoke | kGbaDs | kOff;
+    CHECK(SecondScreenOptions(gba) == OptionsFor(Id::SecondScreen));
+    gba.second_screen_choices = kPoke | kOff;
+    CHECK(SecondScreenOptions(gba) == std::vector<std::string>{"PokeDaisy", "Off"});
+    CHECK(SecondScreenValue(gba, 1) == 2);
+    CHECK(SecondScreenIndex(gba, 2) == 1);
+    CHECK(SecondScreenIndex(gba, 1) == 1); // GBA DS not there: falls to the next
+    gba.second_screen_choices = kGbaDs | kOff;
+    CHECK(SecondScreenIndex(gba, 0) == 0);
+    CHECK(SecondScreenValue(gba, 0) == 1);
+    CHECK(LabelFor(Id::SecondScreen) == "Second Screen");
+    CHECK(LabelFor(Id::AllowGameEditing) == "Allow Game Editing");
+    CHECK(PerGameSetting(Id::SecondScreen));
+    CHECK(PerGameSetting(Id::AllowGameEditing));
+}
+
+// The notice shown the first time Allow Game Editing is turned on.
+TEST_CASE("Core rows: the game editing notice", "[frame_xr][tabmenu]") {
+    namespace A = Common::AltCore;
+    CHECK(std::string(A::kGameEditingTitle) == "PokeDaisy Edits Your Game");
+    CHECK(std::string(A::kGameEditingBody) ==
+          "Features such as Fly, the PC, items and wild encounters change the game while it runs. "
+          "This can corrupt your save. Azahar VR backs up the save first.");
+    CHECK(std::string(A::kGameEditingConfirm) == "Turn On");
+    CHECK(std::string(A::kGameEditingCancel) == "Cancel");
 }

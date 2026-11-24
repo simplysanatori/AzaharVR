@@ -50,6 +50,10 @@ struct Capabilities {
     bool has_screen_rotation = false;
     bool has_save_import = false;
     bool has_gba_slot = false;
+    /// GBA and Game Boy games: the Second Screen choices the game has, a bit for each
+    /// (1 << FrameCores::SecondScreen); none for every other game.
+    uint32_t second_screen_choices = 0;
+    bool can_edit_game = false; ///< Allow Game Editing means something for this game
     ScreenMetrics screens{};
     bool operator==(const Capabilities&) const = default;
 
@@ -131,6 +135,19 @@ struct Capabilities {
 constexpr bool TouchEnabled(const Capabilities& caps, bool ds_touch_enabled) {
     return caps.has_touch && (caps.kind == CoreKind::N3DS || ds_touch_enabled);
 }
+
+/// Capabilities::second_screen_choices: the bit of Settings::values.gba_second_screen's value.
+constexpr uint32_t SecondScreenBit(uint32_t choice) {
+    return 1u << choice;
+}
+
+/// Shown once, the first time Allow Game Editing is turned on (UISettings game_editing_warning).
+inline constexpr const char* kGameEditingTitle = "PokeDaisy Edits Your Game";
+inline constexpr const char* kGameEditingBody =
+    "Features such as Fly, the PC, items and wild encounters change the game while it runs. This "
+    "can corrupt your save. Azahar VR backs up the save first.";
+inline constexpr const char* kGameEditingConfirm = "Turn On";
+inline constexpr const char* kGameEditingCancel = "Cancel";
 
 /// Settings::values.ds_console_mode
 enum DsConsole : uint32_t {

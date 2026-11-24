@@ -238,6 +238,7 @@ if (ENABLE_QT)
         "show_advanced_frametime_info"
         "confirmClose"
         "saveStateWarning"
+        "gameEditingWarning"
         "firstStart"
         "pauseWhenInBackground"
         "muteWhenInBackground"

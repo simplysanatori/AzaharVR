@@ -383,6 +383,10 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::DsScreenRotation;
     case Id::GbaSolarLevel:
         return MenuSetting::GbaSolarLevel;
+    case Id::SecondScreen:
+        return MenuSetting::SecondScreen;
+    case Id::AllowGameEditing:
+        return MenuSetting::AllowGameEditing;
     case Id::AutosaveKeep:
     default: // UseGlobal checks PerGameSetting first
         return MenuSetting::AutosaveKeep;
@@ -1323,6 +1327,8 @@ void MenuPanel::BuildModel(const Host& host) {
         m.ds_touch_enabled = v.ds_touch_enabled.GetValue();
         m.ds_screen_rotation = static_cast<int>(v.ds_screen_rotation.GetValue());
         m.gba_solar_level = static_cast<int>(v.gba_solar_level.GetValue());
+        m.gba_second_screen = static_cast<int>(v.gba_second_screen.GetValue());
+        m.gba_allow_editing = v.gba_allow_editing.GetValue();
         const DsHeld held = GetDsHeld();
         m.ds_lid_closed = held.lid_closed;
         m.ds_mic_active = held.mic_blow;
@@ -1875,6 +1881,19 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         Apply(v.gba_solar_level, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::GbaSolarLevel;
         break;
+    case Id::SecondScreen: // an index of the game's choices
+        r.value = Menu::SecondScreenValue(model.core, value);
+        Apply(v.gba_second_screen, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::SecondScreen;
+        ShowToastText("Second Screen: From the Next Start", ToastTime::Long);
+        break;
+    case Id::AllowGameEditing:
+        r.value = value != 0 ? 1 : 0;
+        if (value == 0) {
+            Apply(v.gba_allow_editing, false, per_game);
+        } // on: the Qt side asks once, then sets it (the switch follows the setting)
+        r.setting = MenuSetting::AllowGameEditing;
+        break;
     default:
         return;
     }
@@ -1895,6 +1914,7 @@ void MenuPanel::UseGlobal(Id id, Host& host) {
     const bool hide = v.vr_hide_bottom_screen.GetValue();
     const bool async = v.async_shader_compilation.GetValue();
     const u32 console = v.ds_console_mode.GetValue();
+    const u32 second = v.gba_second_screen.GetValue();
     if (!PerGame::UseGlobalValue(id)) {
         return;
     }
@@ -1906,6 +1926,8 @@ void MenuPanel::UseGlobal(Id id, Host& host) {
         ShowToastText("Async Shader Compilation: From the Next Start", ToastTime::Long);
     } else if (id == Id::DsConsoleMode && console != v.ds_console_mode.GetValue()) {
         ShowToastText("Console Mode: From the Next Start", ToastTime::Long);
+    } else if (id == Id::SecondScreen && second != v.gba_second_screen.GetValue()) {
+        ShowToastText("Second Screen: From the Next Start", ToastTime::Long);
     }
     LOG_INFO(Frontend, "xr: in-game menu: {}: Use Global Value", Menu::LabelFor(id));
     MenuRequest r;
@@ -2701,6 +2723,7 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::FastForwardSpeed:
     case Id::DsConsoleMode:
     case Id::DsScreenRotation:
+    case Id::SecondScreen:
         if (t.index >= 0) {
             // AzaharFrame kiuweap2: Aiming turned on in Kid Icarus: "Angel's Aim Is On", once
             // (a plain new key remembers it).
@@ -2723,6 +2746,9 @@ void MenuPanel::Click(Target t, Host& host) {
         break;
     case Id::DsTouchEnabled:
         SetSetting(Id::DsTouchEnabled, model.ds_touch_enabled ? 0 : 1, host);
+        break;
+    case Id::AllowGameEditing:
+        SetSetting(Id::AllowGameEditing, model.gba_allow_editing ? 0 : 1, host);
         break;
     case Id::DsMicBlow: {
         DsHeld held = GetDsHeld();

@@ -382,6 +382,8 @@ void RestoreGlobalState(bool is_powered_on) {
     values.ds_touch_enabled.SetGlobal(true);
     values.ds_screen_rotation.SetGlobal(true);
     values.gba_solar_level.SetGlobal(true);
+    values.gba_second_screen.SetGlobal(true);
+    values.gba_allow_editing.SetGlobal(true);
 }
 
 /// Gets the graphics API that should be used; not necessarily one set in settings

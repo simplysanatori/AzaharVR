@@ -296,6 +296,9 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             rows.push_back(solar);
             rows.push_back(row(Id::DsConsoleMode, RowKind::Segmented,
                                std::clamp(m.ds_console_mode, 0, 2)));
+            rows.push_back(row(Id::SecondScreen, RowKind::Segmented,
+                               SecondScreenIndex(m.core, m.gba_second_screen)));
+            rows.push_back(row(Id::AllowGameEditing, RowKind::Switch, 0, m.gba_allow_editing));
             rows.push_back(row(Id::DsTouchEnabled, RowKind::Switch, 0, m.ds_touch_enabled));
             rows.push_back(row(Id::DsMicBlow, RowKind::Switch, 0, m.ds_mic_active));
             rows.push_back(row(Id::DsLidToggle, RowKind::Switch, 0, m.ds_lid_closed));
@@ -613,6 +616,8 @@ bool PerGameSetting(Id id) {
     case Id::DsTouchEnabled:
     case Id::DsScreenRotation:
     case Id::GbaSolarLevel:
+    case Id::SecondScreen:
+    case Id::AllowGameEditing:
         return true;
     default:
         return false;
@@ -1020,9 +1025,53 @@ const std::vector<std::string>& OptionsFor(Id id) {
         static const std::vector<std::string> kDsRot{"0°", "90°", "270°"};
         return kDsRot;
     }
+    case Id::SecondScreen: {
+        static const std::vector<std::string> kSecondScreen{"PokeDaisy", "GBA DS", "Off"};
+        return kSecondScreen;
+    }
     default:
         return kNone;
     }
+}
+
+namespace {
+/// The values (0, 1, 2) of gba_second_screen the game has, ascending.
+std::vector<int> SecondScreenHas(const CoreCaps& core) {
+    std::vector<int> has;
+    for (int i = 0; i < 3; i++) {
+        const uint32_t bit = Common::AltCore::SecondScreenBit(static_cast<uint32_t>(i));
+        if ((core.second_screen_choices & bit) != 0) {
+            has.push_back(i);
+        }
+    }
+    return has;
+}
+} // namespace
+
+std::vector<std::string> SecondScreenOptions(const CoreCaps& core) {
+    const auto& all = OptionsFor(Id::SecondScreen);
+    std::vector<std::string> out;
+    for (const int i : SecondScreenHas(core)) {
+        out.push_back(all[static_cast<std::size_t>(i)]);
+    }
+    return out;
+}
+
+int SecondScreenValue(const CoreCaps& core, int index) {
+    const auto has = SecondScreenHas(core);
+    if (has.empty()) {
+        return 0;
+    }
+    return has[static_cast<std::size_t>(std::clamp(index, 0, static_cast<int>(has.size()) - 1))];
+}
+
+int SecondScreenIndex(const CoreCaps& core, int value) {
+    const auto has = SecondScreenHas(core);
+    const auto exact = std::find(has.begin(), has.end(), value);
+    if (exact != has.end()) {
+        return static_cast<int>(exact - has.begin());
+    }
+    return 0; // the first the game has: ChooseDriver's fallback is the same
 }
 
 std::string LabelFor(Id id) {
@@ -1343,6 +1392,10 @@ std::string LabelFor(Id id) {
         return "Solar Sensor Level";
     case Id::DsConsoleMode:
         return "Console Mode";
+    case Id::SecondScreen:
+        return "Second Screen";
+    case Id::AllowGameEditing:
+        return "Allow Game Editing";
     case Id::DsTouchEnabled:
         return "Touch Screen Input";
     case Id::DsMicBlow:
@@ -1589,6 +1642,10 @@ std::string ExplainFor(Id id) {
         return "Simulated sunlight level for games with a solar sensor.";
     case Id::DsConsoleMode:
         return "The console the game runs on, from the next start. Automatic picks the game's own.";
+    case Id::SecondScreen: // UNAPPROVED
+        return "What the Secondary Screen shows for this game, from the next start.";
+    case Id::AllowGameEditing: // UNAPPROVED
+        return "Lets PokeDaisy change the game while it runs. The save is backed up first.";
     case Id::DsTouchEnabled:
         return "Lets you touch the Secondary Screen by pointing at it.";
     case Id::DsMicBlow:
@@ -3216,7 +3273,10 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
             }
             break;
         case RowKind::Segmented: {
-            const auto& opts = OptionsFor(r.id);
+            const std::vector<std::string> own_opts =
+                r.id == Id::SecondScreen ? SecondScreenOptions(model.core)
+                                         : std::vector<std::string>();
+            const auto& opts = r.id == Id::SecondScreen ? own_opts : OptionsFor(r.id);
             const float w = kit.SegmentedWidth(opts, ctl.x1 - own_x0);
             const Rect seg{ctl.x1 - w, ctl.y0, ctl.x1, ctl.y1};
             const int hover = view.hover.id == r.id ? view.hover.index : -1;

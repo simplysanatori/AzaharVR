@@ -1186,6 +1186,10 @@ struct Values {
     SwitchableSetting<u32, true> ds_screen_rotation{0, 0, 2, "ds_screen_rotation"};
     // The light a game's solar sensor sees; 6 is the GBA core's own start.
     SwitchableSetting<u32, true> gba_solar_level{6, 0, 10, "gba_solar_level"};
+    // GBA and Game Boy games. The Second Screen is read when the game starts: 0 PokeDaisy, 1 GBA DS,
+    // 2 Off (FrameCores::SecondScreen). Allow Game Editing off: the game is never written to.
+    SwitchableSetting<u32, true> gba_second_screen{0, 0, 2, "gba_second_screen"};
+    SwitchableSetting<bool> gba_allow_editing{false, "gba_allow_editing"};
 };
 
 extern Values values;

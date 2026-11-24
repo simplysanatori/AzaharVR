@@ -4,6 +4,8 @@
 
 #include "frame_xr/menu/core_rows.h"
 
+#include <bit>
+
 #include "frame_xr/menu/tab_menu.h"
 
 namespace FrameXr::Menu {
@@ -31,6 +33,8 @@ enum class Need {
     Lid,
     Rotation,
     SaveImport,
+    SecondScreen, ///< two choices or more
+    EditGame,
 };
 
 struct Rule {
@@ -50,6 +54,8 @@ constexpr Rule kRules[] = {
     {Id::CoreHeader, Need::ConsoleGroup},
     {Id::GbaSolarLevel, Need::SolarSensor},
     {Id::DsConsoleMode, Need::ConsoleMode},
+    {Id::SecondScreen, Need::SecondScreen},
+    {Id::AllowGameEditing, Need::EditGame},
     {Id::DsTouchEnabled, Need::DsTouch},
     {Id::DsMicBlow, Need::MicBlow},
     {Id::DsLidToggle, Need::Lid},
@@ -122,7 +128,8 @@ bool Has(Need need, const CoreCaps& core) {
         return kAltAutosave;
     case Need::ConsoleGroup:
         return core.has_solar_sensor || core.has_dsi_mode || core.has_touch || core.has_mic_blow ||
-               core.has_lid_close || core.has_save_import;
+               core.has_lid_close || core.has_save_import || Has(Need::SecondScreen, core) ||
+               core.can_edit_game;
     case Need::SolarSensor:
         return core.has_solar_sensor;
     case Need::ConsoleMode:
@@ -135,6 +142,10 @@ bool Has(Need need, const CoreCaps& core) {
         return core.has_screen_rotation;
     case Need::SaveImport:
         return core.has_save_import;
+    case Need::SecondScreen:
+        return std::popcount(core.second_screen_choices) >= 2;
+    case Need::EditGame:
+        return core.can_edit_game;
     }
     return false;
 }

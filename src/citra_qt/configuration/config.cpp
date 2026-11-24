@@ -649,6 +649,8 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.ds_touch_enabled);
     ReadGlobalSetting(Settings::values.ds_screen_rotation);
     ReadGlobalSetting(Settings::values.gba_solar_level);
+    ReadGlobalSetting(Settings::values.gba_second_screen);
+    ReadGlobalSetting(Settings::values.gba_allow_editing);
     // AzaharFrame reticle: the Controls tab's rows, a global value and a game's own (Per-Game)
     ReadGlobalSetting(Settings::values.vr_touchpad_touch);
     ReadGlobalSetting(Settings::values.vr_bottom_screen_reticle);
@@ -1124,6 +1126,7 @@ void QtConfig::ReadUIValues() {
         ReadBasicSetting(UISettings::values.show_advanced_frametime_info);
         ReadBasicSetting(UISettings::values.confirm_before_closing);
         ReadBasicSetting(UISettings::values.save_state_warning);
+        ReadBasicSetting(UISettings::values.game_editing_warning);
         ReadBasicSetting(UISettings::values.first_start);
         ReadBasicSetting(UISettings::values.callout_flags);
         ReadBasicSetting(UISettings::values.show_console);
@@ -1409,6 +1412,8 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.ds_touch_enabled);
     WriteGlobalSetting(Settings::values.ds_screen_rotation);
     WriteGlobalSetting(Settings::values.gba_solar_level);
+    WriteGlobalSetting(Settings::values.gba_second_screen);
+    WriteGlobalSetting(Settings::values.gba_allow_editing);
     // AzaharFrame reticle: the Controls tab's rows, a global value and a game's own (Per-Game)
     WriteGlobalSetting(Settings::values.vr_touchpad_touch);
     WriteGlobalSetting(Settings::values.vr_bottom_screen_reticle);
@@ -1814,6 +1819,7 @@ void QtConfig::SaveUIValues() {
         WriteBasicSetting(UISettings::values.show_advanced_frametime_info);
         WriteBasicSetting(UISettings::values.confirm_before_closing);
         WriteBasicSetting(UISettings::values.save_state_warning);
+        WriteBasicSetting(UISettings::values.game_editing_warning);
         WriteBasicSetting(UISettings::values.first_start);
         WriteBasicSetting(UISettings::values.callout_flags);
         WriteBasicSetting(UISettings::values.show_console);
