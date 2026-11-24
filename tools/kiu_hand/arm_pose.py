@@ -17,10 +17,10 @@ import arm_skel as S
 import hand as H
 import poses as PZ
 
-PRESS = 0.80          # pit_model.h kPitModelPress
+PRESS = 0.92          # pit_model.h kPitModelPress: how much of a finger's thickness may sink in
 GRIP_X = 0.0660       # where the handle crosses the hand: under the knuckles
-GRIP_TILT_DEG = 35.0
-HELD_SLIDE = 0.016    # along the handle: the index finger level with the trigger
+GRIP_TILT_DEG = 30.0
+HELD_SLIDE = 0.0      # along the handle: chosen with the tilt so the index pad is nearest the trigger
 HELD_ROLL_DEG = 0.0
 
 
@@ -138,7 +138,7 @@ def sink(cap, handle):
     for t in np.linspace(0, 1, 7):
         q = cap[0] + (cap[1] - cap[0]) * t - c
         d = np.linalg.norm(q - ax * (q @ ax))
-        worst = max(worst, rad + (cap[2] + (cap[3] - cap[2]) * t) * PRESS - d)
+        worst = max(worst, rad + (cap[2] + (cap[3] - cap[2]) * t) * (1.0 - PRESS) - d)
     return worst
 
 

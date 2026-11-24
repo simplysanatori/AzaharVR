@@ -202,22 +202,24 @@ def pit_frag(pos, v_normal, v_tangent, uv, colour_lin, surface, eye, key, up, fa
     cloth = sstep(0.77, 0.83, m)[:, None]
     d = ndl * 0.85 + (sky - 0.5) * 0.3 - (1.0 - ao) * 0.35
     soft = (0.22 * skin + 0.30 * (cloth + leather) + 0.10 * (gold + enamel))[:, 0]
-    lit = sstep(0.08 - soft, 0.08 + soft, d)[:, None]
-    shade = (skin * v3(0.90, 0.63, 0.52) + cloth * v3(0.46, 0.50, 0.62) + leather * v3(0.50, 0.42, 0.42) +
-             gold * v3(0.50, 0.43, 0.16) + enamel * v3(0.48, 0.30, 0.34))
-    gain = (skin * v3(1.10, 1.02, 0.93) + cloth * v3(1.02, 1.02, 1.02) + leather * v3(1.06, 1.0, 0.96) +
-            gold * v3(1.06, 1.0, 0.82) + enamel * v3(1.05, 1.05, 1.05))
+    edge_at = 0.08 + 0.10 * skin[:, 0]
+    lit = sstep(edge_at - soft, edge_at + soft, d)[:, None]
+    shade = (skin * v3(0.90, 0.58, 0.47) + cloth * v3(0.46, 0.50, 0.62) + leather * v3(0.50, 0.42, 0.42) +
+             gold * v3(0.52, 0.47, 0.18) + enamel * v3(0.48, 0.30, 0.34))
+    gain = (skin * v3(1.06, 0.99, 0.92) + cloth * v3(1.02, 1.02, 1.02) + leather * v3(1.06, 1.0, 0.96) +
+            gold * v3(1.06, 1.02, 0.86) + enamel * v3(1.05, 1.05, 1.05))
     colour = albedo * mix(shade, gain, lit)
     edge = lit * (1.0 - lit) * 4.0
-    colour = colour + skin * edge * albedo * v3(0.16, 0.02, -0.03)
+    colour = colour + skin * edge * albedo * v3(0.20, 0.03, -0.04)
     hidden = (1.0 - sstep(0.25, 0.95, ao))[:, None]
     colour = colour * mix(v3(1.0, 1.0, 1.0), skin * v3(0.90, 0.72, 0.64) + (1.0 - skin) * v3(0.62, 0.62, 0.62), hidden * 0.7)
     R = -V - 2.0 * (n * -V).sum(1, keepdims=True) * n
     above = 0.5 + 0.5 * (R * U).sum(1)
     glance = np.maximum((R * L).sum(1), 0.0)[:, None]
-    metal = (albedo * mix(v3(0.42, 0.37, 0.13), v3(1.30, 1.18, 0.78), sstep(0.25, 0.80, above)[:, None]) +
-             albedo * v3(0.55, 0.50, 0.30) * glance ** 6.0 + v3(1.0, 0.95, 0.75) * glance ** 90.0 * 0.9)
-    colour = mix(colour, metal * mix(0.55, 1.0, sstep(0.2, 0.9, ao))[:, None], gold * 0.75)
+    metal = (albedo * mix(v3(0.50, 0.46, 0.18), v3(1.12, 1.08, 0.92), sstep(0.30, 0.70, above)[:, None]) +
+             v3(1.0, 0.96, 0.70) * (0.35 * sstep(0.80, 0.95, above)[:, None] + 0.25 * glance ** 8.0) +
+             v3(1.0, 0.98, 0.88) * glance ** 120.0 * 1.2)
+    colour = mix(colour, metal * mix(0.55, 1.0, sstep(0.2, 0.9, ao))[:, None], gold * 0.8)
     H = norm(L + V)
     ndh = np.maximum((n * H).sum(1), 0.0)[:, None]
     colour = colour + ((enamel * 0.45 * ndh ** 70.0 + leather * 0.07 * ndh ** 14.0 + skin * 0.05 * ndh ** 28.0) *

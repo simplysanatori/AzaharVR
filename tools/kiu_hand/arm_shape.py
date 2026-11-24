@@ -359,7 +359,7 @@ def glove_sd(p):
     ik, im = P[S.INDEX[1]], P[S.INDEX[2]]
     mk, mm = P[S.MIDDLE[1]], P[S.MIDDLE[2]]
     apex = 0.5 * (ik + (im - ik) * WEB_T + mk + (mm - mk) * WEB_T)
-    a2 = np.array([apex[0] + 0.010, apex[2]])
+    a2 = np.array([apex[0] + 0.001, apex[2]])
     b2 = np.array([GLOVE_BACK_X - 0.006, apex[2] - 0.006])
     q = np.stack([x, z], 1)
     t = np.clip(((q - a2) @ (b2 - a2)) / ((b2 - a2) @ (b2 - a2)), 0, 1)

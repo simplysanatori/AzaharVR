@@ -98,7 +98,7 @@ def leather():
 def floor(x, facing):
     """The dark inside of a band: a ring across it, facing out of it (`facing` +1: toward the
     hand)."""
-    prof = [(x, 0.0150), (x - facing * 0.004, BAND_RI + 0.0004)]
+    prof = [(x, 0.0040), (x - facing * 0.004, BAND_RI + 0.0004)]
     if facing > 0:
         prof = prof[::-1]
     v, n, t, uv = lathe(prof, sides=SIDES // 2)
@@ -130,7 +130,7 @@ def stub():
 # ---- the plate ----
 PLATE_X = (-0.0360, 0.0120, 0.0380)   # its root under the wrist band, its shoulders, its point
 PLATE_W = (0.0350, 0.0360)            # half width at the root, at the shoulders
-PLATE_Y = (0.0330, 0.0335)            # its underside's height at the root, at the point
+PLATE_Y = (0.0285, 0.0305)            # its underside's height at the root, at the point
 PLATE_ARCH = 0.0125                   # how far its sides fall
 PLATE_T = 0.0036                      # thickness
 PLATE_BORDER = 0.0078                 # the gold border's width

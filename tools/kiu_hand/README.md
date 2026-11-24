@@ -41,8 +41,8 @@ thicknesses asked for do not close as widths (four bases sum to 1.92 against a p
 so they are kept as ratios and scaled by 0.72; the wrist and the bands follow the reference
 pictures (bands 122 mm across, 26 mm long, standing 16 mm off). See `arm_skel.py`.
 
-Colours were chosen once by eye from the owner's reference pictures and are typed in
-`arm_paint.py`.
+Colours were sampled once (ImageMagick, by hand) from the owner's reference pictures and typed
+into `arm_paint.py`; the tool itself reads no picture.
 
 Pictures: `python3 tools/kiu_hand/arm_sheets.py OUT_DIR` (`--clay` for shape only). A sheet
 beside a reference is made outside this tool, e.g. `magick ref.png OUT_DIR/shot_r1.png +append`.
