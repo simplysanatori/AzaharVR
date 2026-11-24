@@ -7196,6 +7196,9 @@ void GMainWindow::OnLoadAmiibo() {
 }
 
 void GMainWindow::LoadAmiibo(const QString& filename) {
+    if (AltGameRunning()) {
+        return;
+    }
     Service::SM::ServiceManager& sm = system.ServiceManager();
     auto nfc = sm.GetService<Service::NFC::Module::Interface>("nfc:u");
     if (!nfc) [[unlikely]] {
@@ -7719,6 +7722,10 @@ void GMainWindow::OnExtractBundle() {
 
 #ifdef ENABLE_FFMPEG
 void GMainWindow::OnStartVideoDumping() {
+    if (AltGameRunning()) { // the 3DS renderer makes the video
+        ui->action_Dump_Video->setChecked(false);
+        return;
+    }
     DumpingDialog dialog(this, system);
     if (dialog.exec() != QDialog::DialogCode::Accepted) {
         ui->action_Dump_Video->setChecked(false);
