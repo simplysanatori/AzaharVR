@@ -8325,8 +8325,8 @@ void GMainWindow::closeEvent(QCloseEvent* event) {
     game_list->SaveInterfaceLayout();
     hotkey_registry.SaveHotkeys();
 
-    // Shutdown session if the emu thread is active...
-    if (emu_thread) {
+    // Shutdown session if the emu thread is active... (a DS or GBA game has none)
+    if (emu_thread || AltGameRunning()) {
         ShutdownGame();
     }
     // AzaharFrame autosave: the last autosave's write finishes before the window goes
