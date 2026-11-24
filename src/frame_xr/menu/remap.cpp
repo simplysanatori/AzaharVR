@@ -15,7 +15,7 @@ using Input::Control;
 
 bool Remap::Editable(int button) {
     return (button >= DsButton::A && button <= DsButton::Select) || button == DsButton::ZL ||
-           button == DsButton::ZR || button == DsButton::Home;
+           button == DsButton::ZR || button == DsButton::Home || button == DsButton::MicBlow;
 }
 
 bool Remap::Listenable(int control) {

@@ -698,6 +698,13 @@ void AltCoreHost::SetSolarLevel(int level) {
     }
 }
 
+void AltCoreHost::SetMicBlow(bool on) {
+    std::lock_guard lock(impl->core_mutex);
+    if (impl->core) {
+        impl->core->SetMicBlow(on);
+    }
+}
+
 void AltCoreHost::SetLidClosed(bool closed) {
     std::lock_guard lock(impl->core_mutex);
     if (impl->core) {
@@ -751,6 +758,9 @@ bool AltCoreHost::HandleMenuSetting(AltMenuSetting setting, int value) {
     switch (setting) {
     case AltMenuSetting::SolarLevel:
         SetSolarLevel(value);
+        return true;
+    case AltMenuSetting::MicBlow:
+        SetMicBlow(value != 0);
         return true;
     case AltMenuSetting::LidClosed:
         SetLidClosed(value != 0);

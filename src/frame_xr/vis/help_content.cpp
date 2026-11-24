@@ -58,6 +58,8 @@ const char* ButtonName(int button) {
         return "Home";
     case NB::Power:
         return "Power";
+    case NB::MicBlow:
+        return "Microphone Blow";
     default:
         return "?";
     }

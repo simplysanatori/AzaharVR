@@ -63,6 +63,7 @@ struct HostFrontend {
 
 enum class AltMenuSetting : int {
     SolarLevel = 0,       ///< 0..10 (GBA solar sensor)
+    MicBlow = 1,          ///< 0 or 1 (DS/DSi microphone blow toggle)
     LidClosed = 2,        ///< 0 or 1 (DS/DSi sleep lid switch)
     TouchEnabled = 3,     ///< 0 or 1 (DS/DSi touch screen input)
     ScreenRotation = 4,   ///< 0, 90, 270 (DS/DSi Book Mode)
@@ -171,6 +172,7 @@ public:
     void ReloadMicrophone();
 
     void SetSolarLevel(int level);
+    void SetMicBlow(bool on);
     void SetLidClosed(bool closed);
     void SetTouchEnabled(bool on);
     void SetScreenRotation(int deg);

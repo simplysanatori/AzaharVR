@@ -297,8 +297,9 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
         // settings that are the same in every game, and the list's end.
         if (section == SettingsSection::General) {
             if (!m.core.is_3ds) {
-                const bool has_core_rows = m.core.has_solar_sensor || m.core.has_dsi_mode ||
-                                           m.core.has_touch || m.core.has_lid_close ||
+                const bool has_core_rows = m.core.has_solar_sensor ||
+                                           m.core.has_dsi_mode || m.core.has_touch ||
+                                           m.core.has_mic_blow || m.core.has_lid_close ||
                                            m.core.has_save_import;
                 if (has_core_rows) {
                     rows.push_back(row(Id::CoreHeader, RowKind::Header));
@@ -319,6 +320,9 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
                     if (m.core.has_touch) {
                         rows.push_back(row(Id::DsTouchEnabled, RowKind::Switch, 0,
                                            m.ds_touch_enabled));
+                    }
+                    if (m.core.has_mic_blow) {
+                        rows.push_back(row(Id::DsMicBlow, RowKind::Switch, 0, m.ds_mic_active));
                     }
                     if (m.core.has_lid_close) {
                         rows.push_back(row(Id::DsLidToggle, RowKind::Switch, 0, m.ds_lid_closed));
@@ -1395,6 +1399,8 @@ std::string LabelFor(Id id) {
         return "Console Mode";
     case Id::DsTouchEnabled:
         return "Touch Screen Input";
+    case Id::DsMicBlow:
+        return "Microphone Blow";
     case Id::DsLidToggle:
         return "Close Lid";
     case Id::DsScreenRotation:
@@ -1632,6 +1638,8 @@ std::string ExplainFor(Id id) {
         return "Switch between DS and DSi hardware behaviour (applies on restart).";
     case Id::DsTouchEnabled:
         return "Allow pointing and touching the DS bottom screen.";
+    case Id::DsMicBlow:
+        return "Simulate blowing into the DS microphone.";
     case Id::DsLidToggle:
         return "Close or open the DS lid (puts supported games into sleep mode).";
     case Id::DsScreenRotation:
@@ -2323,7 +2331,12 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
         if (IsStick(t)) {
             return StickSourceName(dev, t == kDsCirclePad ? 0 : 1);
         }
-        return SourceName(dev.names, dev.mapping[static_cast<std::size_t>(t)], by_position);
+        const std::string name =
+            SourceName(dev.names, dev.mapping[static_cast<std::size_t>(t)], by_position);
+        if (t == DsButton::MicBlow) { // not in the columns either
+            return "Microphone Blow: " + (name.empty() ? std::string("None") : name);
+        }
+        return name;
     };
     const auto chip_w = [&](int t, float max_w) {
         std::string text = text_of(t);
@@ -2438,6 +2451,15 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
             const float sel_w = chip_w(DsButton::Select, c.W());
             const float start_w = chip_w(DsButton::Start, c.W());
             const float home_w = chip_w(DsButton::Home, c.W());
+            // AzaharVR: the running DS game's Microphone Blow: first in the row, in what the three
+            // leave.
+            if (model.core.has_mic_blow) {
+                const int t = DsButton::MicBlow;
+                const float room = c.x1 - row_x - home_w - sel_w - start_w - 3.0f * kChipGap;
+                const Rect r{row_x, under.y0, row_x + chip_w(t, room), under.y1};
+                chips.push_back({t, r, {r.Cx(), r.y0}});
+                row_x = r.x1 + kChipGap;
+            }
             float mid = ds.Anchor(DsButton::Start).x;
             mid = std::min(mid, c.x1 - start_w - kChipGap * 0.5f);
             Rect start{mid + kChipGap * 0.5f, under.y0, mid + kChipGap * 0.5f + start_w, under.y1};
@@ -2460,8 +2482,11 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
         // Open Menu has no leader.
         const Rect bs = ds.BottomScreen();
         const DsPoint touch_at{bs.x0 + 6.0f, bs.y0 + bs.H() * 0.8f};
+        const auto off_the_drawing = [](int t) {
+            return t == DsButton::OpenMenu || t == DsButton::Modifier || t == DsButton::MicBlow;
+        };
         for (const Chip& ch : chips) {
-            if (ch.target == DsButton::OpenMenu || ch.target == DsButton::Modifier) {
+            if (off_the_drawing(ch.target)) {
                 continue;
             }
             const DsPoint to = ch.target == DsButton::Touch ? touch_at : ds.Anchor(ch.target);
@@ -2474,7 +2499,7 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
                     kit.Dot(touch_at.x, touch_at.y, 7.0f, Tok::kPrimary, 0.3f);
                 }
                 kit.Dot(touch_at.x, touch_at.y, on ? 4.5f : 3.5f, Tok::kPrimary);
-            } else if (ch.target != DsButton::OpenMenu && ch.target != DsButton::Modifier) {
+            } else if (!off_the_drawing(ch.target)) {
                 DrawDsDot(kit, ds, ch.target, ch.target == lit);
             }
         }

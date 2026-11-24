@@ -97,7 +97,7 @@ ConfigureInput::ConfigureInput(Core::System& _system, QWidget* parent)
         ui->buttonDpadUp, ui->buttonDpadDown, ui->buttonDpadLeft, ui->buttonDpadRight,
         ui->buttonL,      ui->buttonR,        ui->buttonStart,    ui->buttonSelect,
         ui->buttonDebug,  ui->buttonGpio14,   ui->buttonZL,       ui->buttonZR,
-        ui->buttonHome,   ui->buttonPower,
+        ui->buttonHome,   ui->buttonPower,    ui->buttonMicBlow,
     };
 
     button_names = {
@@ -105,9 +105,16 @@ ConfigureInput::ConfigureInput(Core::System& _system, QWidget* parent)
         tr("D-Pad Up"),     tr("D-Pad Down"),    tr("D-Pad Left"),   tr("D-Pad Right"),
         tr("L Button"),     tr("R Button"),      tr("Start Button"), tr("Select Button"),
         tr("Debug"),        tr("GPIO4"),         tr("ZL Button"),    tr("ZR Button"),
-        tr("Home Button"),  tr("Power Button")
+        tr("Home Button"),  tr("Power Button"),  tr("Microphone Blow")
     };
     // clang-format on
+
+#ifndef ENABLE_ALT_CORES // only DS games have it
+    for (QWidget* widget : {static_cast<QWidget*>(ui->labelMicBlow),
+                            static_cast<QWidget*>(ui->buttonMicBlow)}) {
+        widget->hide();
+    }
+#endif
 
     /// A group of five QPushButtons represent one analog input. The buttons each represent up,
     /// down, left, right, and modifier, respectively.
@@ -581,8 +588,7 @@ void ConfigureInput::LoadConfiguration() {
 
 void ConfigureInput::RestoreDefaults() {
     for (int button_id = 0; button_id < Settings::NativeButton::NumButtons; button_id++) {
-        buttons_param[button_id] = Common::ParamPackage{
-            InputCommon::GenerateKeyboardParam(QtConfig::default_buttons[button_id])};
+        buttons_param[button_id] = Common::ParamPackage{QtConfig::DefaultButtonParam(button_id)};
     }
 
     for (int analog_id = 0; analog_id < Settings::NativeAnalog::NumAnalogs; analog_id++) {

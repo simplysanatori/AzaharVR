@@ -310,6 +310,7 @@ enum class Id : int {
     GbaSolarLevel,
     DsConsoleMode,
     DsTouchEnabled,
+    DsMicBlow,
     DsLidToggle,
     DsScreenRotation,
     ImportSave,
@@ -553,6 +554,7 @@ struct MenuModel {
         bool has_dynamic_resolution = true;
         bool has_render_margin = true;
         bool has_solar_sensor = false;
+        bool has_mic_blow = false;
         bool has_lid_close = false;
         bool has_dsi_mode = false;
         bool has_screen_rotation = false;
@@ -565,6 +567,7 @@ struct MenuModel {
     bool ds_touch_enabled = true; ///< DS touch input switch
     int ds_screen_rotation = 0;   ///< 0 = 0°, 1 = 90°, 2 = 270°
     bool ds_lid_closed = false;   ///< DS lid closed toggle
+    bool ds_mic_active = false;   ///< DS microphone blow toggle
     bool operator==(const MenuModel&) const = default;
 };
 
