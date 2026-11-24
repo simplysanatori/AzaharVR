@@ -616,11 +616,17 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
 
     const bool has_secondary =
         secondary.pixels != nullptr && secondary.width > 0 && secondary.height > 0;
+    vk::Extent2D bottom_size{kDummySwapchainExtent, kDummySwapchainExtent};
+    if (has_secondary) {
+        bottom_size = TargetSwapchainExtent(secondary.width, secondary.height);
+    } else if (impl->secondary_tex.image) { // hidden (the GBA map in a menu): its size stays
+        bottom_size =
+            TargetSwapchainExtent(impl->secondary_tex.width, impl->secondary_tex.height);
+    }
     const std::array<vk::Extent2D, XrPresentTarget::kScreens> sizes = {
         TargetSwapchainExtent(primary.width, primary.height),
         vk::Extent2D{kDummySwapchainExtent, kDummySwapchainExtent},
-        has_secondary ? TargetSwapchainExtent(secondary.width, secondary.height)
-                      : vk::Extent2D{kDummySwapchainExtent, kDummySwapchainExtent},
+        bottom_size,
     };
     if (!impl->xr_target->Prepare(sizes)) {
         return false;

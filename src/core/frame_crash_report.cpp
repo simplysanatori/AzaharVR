@@ -20,6 +20,7 @@
 
 #include <fmt/format.h>
 
+#include "common/alt_core_types.h"
 #include "common/settings.h"
 #include "frame_xr/immersive_names.h" // AzaharFrame kiu: header only
 
@@ -743,6 +744,28 @@ std::string OsText() {
 
 // ---- The report ---------------------------------------------------------------------------
 
+namespace {
+
+/// The console of a DS, DSi, GBA or Game Boy game's key (the menu's and the game list's names),
+/// null for a 3DS game.
+const char* ConsoleName(u64 title_id) {
+    namespace AC = Common::AltCore;
+    switch (title_id & (0xFFULL << 56)) {
+    case AC::kTagNDS:
+        return "DS";
+    case AC::kTagDSi:
+        return "DSi";
+    case AC::kTagGBA:
+        return "Game Boy Advance";
+    case AC::kTagGB:
+        return "Game Boy / Color";
+    default:
+        return nullptr;
+    }
+}
+
+} // namespace
+
 Report Build(const LastRun& run, bool out_of_memory, const Context& ctx) {
     const Scrubber& sc = ctx.scrub;
     Report r;
@@ -763,6 +786,9 @@ Report Build(const LastRun& run, bool out_of_memory, const Context& ctx) {
     r.settings = run.settings.empty() ? ctx.settings_now : run.settings;
     for (std::string& s : r.settings) {
         s = sc.Apply(s);
+    }
+    if (const char* console = ConsoleName(run.title_id)) {
+        r.settings.insert(r.settings.begin(), fmt::format("Console: {}", console));
     }
     r.clues = ctx.clues;
     for (std::string& s : r.clues) {

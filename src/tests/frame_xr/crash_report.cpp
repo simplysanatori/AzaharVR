@@ -10,10 +10,14 @@
 #include <fstream>
 #include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 
 #include <catch2/catch_test_macros.hpp>
+#include <fmt/format.h>
 #include <httplib.h>
 
+#include "common/alt_core_types.h"
 #include "common/frame_crash.h"
 #include "core/frame_crash_report.h"
 #include "core/frame_crash_send.h"
@@ -190,6 +194,39 @@ TEST_CASE("Crash report: the report from a crash record", "[frame_xr]") {
     REQUIRE(text.find("Title ID: 0004000000054000") != std::string::npos);
     REQUIRE(text.find("SIGSEGV (11)") != std::string::npos);
     std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("Crash report: a DS, GBA or Game Boy game's key, title and console", "[frame_xr]") {
+    namespace AC = Common::AltCore;
+    const auto report = [](u64 title_id) {
+        CR::LastRun run;
+        CR::ParseMarker(Common::FrameCrash::MarkerText(7, 1'760'000'000, "1.2.0",
+                                                       "azaharframe@1.2.0", title_id,
+                                                       "A Game\nIts Maker", "CPU Clock: 100%\n",
+                                                       true, Cause::None, ""),
+                        run);
+        CR::Context ctx;
+        ctx.scrub = Player();
+        return CR::Build(run, false, ctx);
+    };
+    const std::pair<u64, std::string> consoles[] = {
+        {AC::kTagNDS, "DS"},
+        {AC::kTagDSi, "DSi"},
+        {AC::kTagGBA, "Game Boy Advance"},
+        {AC::kTagGB, "Game Boy / Color"},
+    };
+    for (const auto& [tag, name] : consoles) {
+        const u64 key = AC::MakeKey(tag, 0x41424344, 0x89ABCDEF);
+        const CR::Report r = report(key);
+        CHECK(r.title_id == key);
+        CHECK(r.title == "A Game Its Maker");
+        CHECK(r.settings == std::vector<std::string>{"Console: " + name, "CPU Clock: 100%"});
+        CHECK(CR::ReportText(r).find(fmt::format("Title ID: {:016X}\n", key)) !=
+              std::string::npos);
+    }
+    // a 3DS game's and no game's are as they were
+    CHECK(report(0x0004000000054000).settings == std::vector<std::string>{"CPU Clock: 100%"});
+    CHECK(report(0).settings == std::vector<std::string>{"CPU Clock: 100%"});
 }
 
 TEST_CASE("Crash report: the VR keyboard's note reaches the report, scrubbed", "[frame_xr]") {

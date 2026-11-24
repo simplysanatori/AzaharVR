@@ -229,6 +229,7 @@ private:
     bool AltWindowOpen(const FrameCores::RomInfo& info); ///< before the host boots
     void AltWindowShow();                                ///< once it runs
     void AltWindowClose();
+    void AltStartFailed(const QString& title, const QString& body); ///< tells the player
     void OnAltSettingsChanged();
     void PauseAltGame(bool pause);
     void UpdateAltStatusBar();
