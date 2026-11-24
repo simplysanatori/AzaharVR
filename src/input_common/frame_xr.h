@@ -10,6 +10,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -147,6 +148,10 @@ bool UseFrameMotionDevice(Settings::InputProfile& profile);
 /// True when the profile already binds frame_xr to at least one button (a user profile saved
 /// earlier), so VR start-up can leave their bindings alone.
 bool ProfileUsesFrameXr(const Settings::InputProfile& profile);
+
+/// AzaharVR: the index of the first profile that uses the VR controllers (`vr`) or does not;
+/// nothing when there is none. The PC app keeps one of each, for VR and for a normal start.
+std::optional<int> FindProfile(const std::vector<Settings::InputProfile>& profiles, bool vr);
 
 /// AzaharFrame pads: which Frame control (Input::Control, -1 none) drives each 3DS button and
 /// which stick (Input::AnalogControl, -1 none) each 3DS analog, in the controls profile in use:

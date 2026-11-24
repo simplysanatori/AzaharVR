@@ -60,6 +60,18 @@ struct StartOptions {
 /// session made: flat for now (VrShowing() false), SetVr(true) tries again.
 bool Start(const StartOptions& options);
 
+/// AzaharVR: why Start returned false.
+enum class StartProblem {
+    None,
+    NotVulkan, ///< the renderer is not Vulkan, the only one VR draws with
+    NoLoader,  ///< no OpenXR loader (on Windows openxr_loader.dll, from our zip)
+    NoRuntime, ///< no OpenXR runtime, or it gave no usable instance
+    NoHeadset, ///< the runtime has no headset now
+    Vulkan,    ///< no Vulkan instance or device through the runtime
+};
+/// Why the last Start returned false. GUI thread.
+StartProblem LastStartProblem();
+
 /// Ends the session and destroys everything Start made. Call once no renderer
 /// exists any more (after the Qt event loop returned).
 void Shutdown();

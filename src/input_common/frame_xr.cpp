@@ -396,6 +396,15 @@ bool ProfileUsesFrameXr(const Settings::InputProfile& profile) {
     return false;
 }
 
+std::optional<int> FindProfile(const std::vector<Settings::InputProfile>& profiles, bool vr) {
+    for (std::size_t i = 0; i < profiles.size(); ++i) {
+        if (ProfileUsesFrameXr(profiles[i]) == vr) {
+            return static_cast<int>(i);
+        }
+    }
+    return std::nullopt;
+}
+
 namespace {
 std::mutex routes_mutex; // AzaharFrame pads
 std::optional<ProfileRoutes> routes_set;

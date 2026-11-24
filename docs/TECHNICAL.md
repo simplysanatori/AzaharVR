@@ -12,6 +12,8 @@ Everything CitraVR changed in the emulator's core (the vertex shader factor, the
 
 `frame_xr` starts with `azahar --vr` (`GMainWindow` in `citra_qt.cpp`, the `--vr` option). The Qt window opens first. If the Vulkan renderer is not selected, or the OpenXR session cannot be created, the log says `running flat` and the program carries on as a normal emulator.
 
+Azahar VR (PC) has no launcher. Started without arguments it leaves OpenXR alone and shows a **VR** button in the status bar, which closes the app and starts it again with `--vr`. VR and a normal start each have their own controls profile.
+
 When the session is up, three settings are adjusted for VR: the current controls profile gets the Frame bindings (see Controls), the layout options Single Screen and Separate Windows are changed to Default (both would hide a screen), and the 3D depth is set to 50 % if it is 0. The hidden second window's Vulkan surface is not created in VR.
 
 One OpenXR session lives for the whole run, not one per game. SIGTERM and SIGINT stop the game and close the window, so the session ends cleanly when Steam stops the app.

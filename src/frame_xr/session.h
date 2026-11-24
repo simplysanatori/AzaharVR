@@ -152,6 +152,7 @@ public:
     // session.cpp
     /// The instance, the system and the Vulkan device (once per run).
     bool CreateInstance(const StartOptions& options);
+    StartProblem start_problem = StartProblem::None; ///< AzaharVR: why CreateInstance was false
     /// A session with its spaces and the UI's XR parts. False: none (all undone).
     bool CreateSession();
     /// Ends what CreateSession made; the instance and device stay. XR thread (or no thread).

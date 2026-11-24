@@ -145,6 +145,7 @@ bool Runtime::CreateInstance(const StartOptions& options) {
              fdm_off && *fdm_off ? "disabled (DISABLE_VULKAN_FDM_INJECTION_LAYER)"
                                  : "left on (AZAHARFRAME_FDM=1)");
     if (!LoadLoader()) {
+        start_problem = StartProblem::NoLoader; // AzaharVR
         return false;
     }
     start_options = options; // AzaharFrame flat2
@@ -157,6 +158,7 @@ bool Runtime::CreateInstance(const StartOptions& options) {
         return false;
     }
 
+    start_problem = StartProblem::Vulkan; // AzaharVR: until the device is made
     // Vulkan: the hooks must be live before Azahar's Instance runs (bootstrap
     // now, then every game boot adopts the same handles).
     vulkan = std::make_unique<VulkanBridge>(instance, system);
@@ -169,6 +171,7 @@ bool Runtime::CreateInstance(const StartOptions& options) {
         Destroy();
         return false;
     }
+    start_problem = StartProblem::None;
     want_vr = options.vr;
     ui = std::make_unique<VrUi>();
     ui->Init();
@@ -180,6 +183,9 @@ bool Runtime::CreateInstance(const StartOptions& options) {
 // stays as it is (other threads read it through HasExtension).
 bool Runtime::CreateXrInstance(bool renew) {
     auto& xr = Xr();
+    if (!renew) {
+        start_problem = StartProblem::NoRuntime; // AzaharVR: until the runtime gave an instance
+    }
 
     uint32_t count = 0;
     XrResult r = xr.xrEnumerateInstanceExtensionProperties(nullptr, 0, &count, nullptr);
@@ -262,6 +268,7 @@ bool Runtime::CreateXrInstance(bool renew) {
         if (renew) {
             DestroyXrInstance();
         } else {
+            start_problem = StartProblem::NoHeadset; // AzaharVR
             Destroy();
         }
         return false;
