@@ -3710,8 +3710,9 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     const std::string path = filename.toStdString();
     const auto info_opt = FrameCores::ProbeRom(path);
     if (!info_opt) {
-        QMessageBox::critical(this, tr("Unable to Load ROM"),
-                              tr("Could not read ROM header from:\n%1").arg(filename));
+        LOG_CRITICAL(Frontend, "Failed to obtain loader for {}", path);
+        AltStartFailed(tr("Unable to Load ROM"),
+                       tr("Could not read ROM header from:\n%1").arg(filename));
         return false;
     }
     const FrameCores::RomInfo& info = *info_opt;
@@ -3720,6 +3721,7 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     const std::string config_file_name = fmt::format("{:016X}", info.title_id);
     LOG_INFO(Frontend, "Loading per application config file for alt title {}", config_file_name);
     QtConfig per_game_config(config_file_name, QtConfig::ConfigType::PerGameConfig);
+    Settings::LogSettings();
 #ifdef ENABLE_FRAME_XR
     g_frame_game_config_name = config_file_name;
 #endif
@@ -3734,9 +3736,10 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     options.force_dsi = console == Common::AltCore::DsConsoleDSi;
     if (!AltWindowOpen(info) ||
         !alt_core_host->Boot(path, data_dir, /*headless_for_test=*/false, options)) {
+        LOG_CRITICAL(Frontend, "Failed to load application!");
         AltWindowClose();
-        QMessageBox::critical(this, tr("Unable to Start Game"),
-                              tr("Failed to start %1.").arg(QString::fromStdString(info.title)));
+        AltStartFailed(tr("Unable to Start Game"),
+                       tr("Failed to start %1.").arg(QString::fromStdString(info.title)));
 #ifdef ENABLE_FRAME_XR
         g_frame_game_config_name.clear();
 #endif
@@ -3750,6 +3753,8 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     ApplyAltSettings();
     FrameAutosaveBoot();
 #ifdef ENABLE_FRAME_XR
+    Common::FrameCrash::NoteGame(info.title_id, info.title, Core::CrashReport::SettingsSummary(),
+                                 FrameXr::IsStarted() && FrameXr::VrShowing());
     if (g_frame_mirror) {
         g_frame_mirror->SetGameRunning(true);
     }
@@ -3774,6 +3779,7 @@ void GMainWindow::ShutdownAltGame() {
     FrameAutosaveStop();
     alt_quick_loaded = {};
 #ifdef ENABLE_FRAME_XR
+    Common::FrameCrash::NoteGame(0, "", "", FrameXr::IsStarted() && FrameXr::VrShowing());
     if (g_frame_xr_fast_forward) {
         g_frame_xr_fast_forward(false, "the game stopped");
     }
@@ -5764,9 +5770,11 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         if (alt_core_host && alt_core_host->IsRunning()) {
             g_frame_mirror->SetMenuWindow(true);
             QTimer::singleShot(0, this, [this] {
+                // Qt's own dialog: Azahar's window shows it in VR, the system's is out of sight
                 const QString path = QFileDialog::getOpenFileName(
-                    this, tr("Import Battery Save"), QString{},
-                    tr("Save Files (*.sav *.dsv *.srm);;All Files (*)"));
+                    this, tr("Import Battery Save"), QDir::homePath(),
+                    tr("Save Files (*.sav *.dsv *.srm);;All Files (*)"), nullptr,
+                    QFileDialog::DontUseNativeDialog);
                 if (!path.isEmpty() && alt_core_host && alt_core_host->IsRunning()) {
                     alt_core_host->ImportSave(path.toStdString()); // AltStateLoaded tells
                 }
@@ -6808,7 +6816,7 @@ void GMainWindow::FrameAsk(const QString& title, const QString& body, const QStr
 // AzaharFrame memwarn: Level 1's toast and Level 2's pause and dialog (frame_xr/mem_watch.h).
 void GMainWindow::FrameMemoryEvent(int action, u64 used, u64 max) {
     namespace MW = FrameXr::MemWatch;
-    if (!emulation_running || !emu_thread || !system.IsPoweredOn()) {
+    if (!emulation_running || (!AltGameRunning() && (!emu_thread || !system.IsPoweredOn()))) {
         return; // only a game is paused or saved; the watch's log has the numbers
     }
     if (static_cast<MW::Action>(action) == MW::Action::Warn) {
@@ -6851,7 +6859,7 @@ void GMainWindow::FrameMemoryEvent(int action, u64 used, u64 max) {
     // (FrameMemWarn::Critical in FrameAutosaveGates). Saving in the game costs nothing.
     // AzaharFrame savemem: Turn Off Custom Textures, and the advice, only when they hold enough to
     // matter (MW::TexturesMatter); with a few MB of them, or none loaded, it would not help.
-    const u64 texture_bytes = Settings::values.custom_textures.GetValue()
+    const u64 texture_bytes = !AltGameRunning() && Settings::values.custom_textures.GetValue()
                                   ? system.CustomTexManager().HeldBytesHint()
                                   : 0;
     const bool textures = MW::TexturesMatter(texture_bytes, max);
@@ -6916,7 +6924,15 @@ void GMainWindow::FrameMemoryEvent(int action, u64 used, u64 max) {
     }
 #endif
 #ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
-    if (emu_thread->IsRunning() && !system.frame_limiter.IsFrameAdvancing()) {
+    const bool running = [this] {
+#ifdef ENABLE_ALT_CORES
+        if (AltGameRunning()) {
+            return !AltGamePaused();
+        }
+#endif
+        return emu_thread->IsRunning() && !system.frame_limiter.IsFrameAdvancing();
+    }();
+    if (running) {
         OnPauseGame();
         frame_memwarn_resume = true;
     }
@@ -6960,8 +6976,10 @@ void GMainWindow::FrameMemoryAnswer(int choice) {
         LOG_INFO(Frontend, "memwarn: Resume");
     }
     // In VR the menu closes after the answer and the game goes on; in Qt the dialog paused it
-    if (resume && emulation_running && emu_thread &&
-        (!emu_thread->IsRunning() || system.frame_limiter.IsFrameAdvancing())) {
+    if (resume && emulation_running &&
+        (AltGameRunning() ||
+         (emu_thread &&
+          (!emu_thread->IsRunning() || system.frame_limiter.IsFrameAdvancing())))) {
         OnResumeGame(false);
         LOG_INFO(Frontend, "memwarn: the game goes on");
     }

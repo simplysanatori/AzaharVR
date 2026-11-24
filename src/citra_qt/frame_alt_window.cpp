@@ -12,6 +12,7 @@
 #include <QDateTime>
 #include <QImage>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPainter>
 #include <QPushButton>
 #include <QRegularExpression>
@@ -30,6 +31,7 @@
 #include "frame_cores/profile_input.h"
 #include "ui_main.h"
 #ifdef ENABLE_FRAME_XR
+#include "citra_qt/frame_mirror.h"
 #include "frame_xr/frame_xr.h"
 #include "input_common/frame_xr.h"
 #endif
@@ -155,7 +157,24 @@ void GMainWindow::AltWindowShow() {
     UpdateStatusButtons();
 }
 
+// A box, as LoadROM's: the VR home panel shows it too. The VR picker has no window: a toast.
+void GMainWindow::AltStartFailed(const QString& title, const QString& body) {
+#ifdef ENABLE_FRAME_XR
+    if (FrameXr::VrShowing() && !FrameMirror::Wanted()) {
+        AltNotify(tr("Generic load error").toStdString()); // LoadROM's
+        return;
+    }
+#endif
+    QMessageBox::critical(this, title, body);
+}
+
 void GMainWindow::AltWindowClose() {
+    // The memory dialog goes with the game, as a 3DS game's.
+    frame_memwarn_asking = false;
+    frame_memwarn_resume = false;
+    if (QDialog* d = std::exchange(frame_memwarn_dialog, nullptr)) {
+        d->close();
+    }
     system.SetSettingsCallback({});
     Layout::SetAltScreens(std::nullopt);
     disconnect(render_window, &GRenderWindow::Closed, this, &GMainWindow::OnStopGame);
