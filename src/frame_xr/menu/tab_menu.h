@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "frame_xr/menu/core_rows.h"
 #include "frame_xr/menu/edit_devices.h"
 #include "frame_xr/menu/homebrew_tab.h" // AzaharFrame emerald
 #include "frame_xr/menu/list_scroll.h"  // AzaharFrame scroll
@@ -538,32 +539,9 @@ struct MenuModel {
     /// AzaharFrame useglobal: per-game rows the running game has its own value for (the scope
     /// control's Per-Game count and Use Global Values for All; AzaharFrame reticle).
     std::array<bool, kIdCount> game_value{};
-    /// Active core capabilities (defaults to 3DS so default-constructed MenuModel stays identical).
-    struct CoreMenuCaps {
-        bool is_3ds = true;
-        bool has_stereo_3d = true;
-        bool has_immersive_modes = true;
-        bool has_touch = true;
-        bool has_gyro = true;
-        bool has_mods = true;
-        bool has_texture_packs = true;
-        bool has_3ds_cheats = true;
-        bool has_alt_cheats = false;
-        bool has_flat_mode = true;
-        bool has_bfi = true;
-        bool has_dynamic_resolution = true;
-        bool has_render_margin = true;
-        bool has_solar_sensor = false;
-        bool has_mic_blow = false;
-        bool has_lid_close = false;
-        bool has_dsi_mode = false;
-        bool has_screen_rotation = false;
-        bool has_save_import = false;
-        bool has_bottom = true;
-        bool operator==(const CoreMenuCaps&) const = default;
-    } core;
+    CoreCaps core; ///< the running game's console (a 3DS by default)
     int gba_solar_level = 0;      ///< 0..10
-    int ds_console_mode = 0;      ///< 0 DS, 1 DSi
+    int ds_console_mode = 0;      ///< 0 Automatic, 1 DS, 2 DSi
     bool ds_touch_enabled = true; ///< DS touch input switch
     int ds_screen_rotation = 0;   ///< 0 = 0°, 1 = 90°, 2 = 270°
     bool ds_lid_closed = false;   ///< DS lid closed toggle
@@ -586,6 +564,8 @@ constexpr int OpeningScope(bool per_game_ok) {
 }
 /// The section a Settings row is in (General for the rest).
 SettingsSection SectionOf(Id id);
+/// Whether the section has any row for the running game's console.
+bool SectionShown(SettingsSection section, const MenuModel& model);
 /// Per-game settings (Azahar's Properties have most of them too): a change in Per-Game is the
 /// game's own value; in Global they are locked while the game has one. AzaharFrame reticle: the
 /// Controls tab's rows too (ControlsScopeRows).
@@ -702,6 +682,8 @@ const std::vector<std::string>& OptionsFor(Id id);
 std::string LabelFor(Id id);
 /// One short sentence about a setting (the tooltip), or "".
 std::string ExplainFor(Id id);
+/// With the running game's console: not a 3DS game's text where that names the 3DS.
+std::string ExplainFor(Id id, const CoreCaps& core);
 /// AzaharFrame xfergpu: a segmented row's tooltip for one of its choices (the beam resting on
 /// that segment), or "" when the row has none; its label keeps ExplainFor's.
 std::string ExplainOption(Id id, int index);
@@ -858,7 +840,7 @@ private:
     float DrawScope(Kit& kit, const MenuModel& model, const MenuView& view, const Rect& c,
                     const Rect& pane, const Rect* clip = nullptr); // kiu132: hits within `clip`
     void DrawScopeMenu(Kit& kit, const MenuModel& model, const MenuView& view, const Rect& pane);
-    void DrawTooltip(Kit& kit, const MenuView& view, const Rect& pane);
+    void DrawTooltip(Kit& kit, const MenuModel& model, const MenuView& view, const Rect& pane);
     /// AzaharFrame scroll: the scrollbar of the list in `list` (hanging off `right`), only when
     /// it overflows: slim at rest, wider with a beam on it, the primary colour while held. Its
     /// hit strip goes in as Id::Scrollbar and the bar in layout.bar.

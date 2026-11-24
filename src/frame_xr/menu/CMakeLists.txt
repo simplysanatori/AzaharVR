@@ -23,6 +23,8 @@ add_library(frame_xr_menu STATIC
     md3_fonts.h
     cheat_entry.cpp # AzaharFrame ui2
     cheat_entry.h
+    core_rows.cpp # AzaharVR: what each console's menu has
+    core_rows.h
     cheats_tab.cpp
     cheats_tab.h
     mods_segments.cpp # AzaharFrame texui

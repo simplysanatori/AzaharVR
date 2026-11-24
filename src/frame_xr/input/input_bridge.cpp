@@ -188,7 +188,9 @@ const MapperOutput& InputBridge::Process(const InputFrame& frame, const PanelGeo
     const bool alt_active = FrameXr::HasAltInputSink();
     const Common::AltCore::Capabilities caps =
         alt_active ? FrameXr::GetCoreCapabilities() : Common::AltCore::Capabilities::ForN3DS();
-    const AltMenuState alt_menu = alt_active ? FrameXr::GetAltMenuState() : AltMenuState{};
+    const bool alt_touch =
+        alt_active &&
+        Common::AltCore::TouchEnabled(caps, Settings::values.ds_touch_enabled.GetValue());
     for (int i = 0; i < result.event_count; ++i) {
         const TouchEvent& event = result.events[static_cast<std::size_t>(i)];
         switch (event.type) {
@@ -205,7 +207,7 @@ const MapperOutput& InputBridge::Process(const InputFrame& frame, const PanelGeo
         if (alt_active) {
             if (event.type == TouchEventType::Released) {
                 alt_touching_ = false;
-            } else if (caps.has_touch && alt_menu.ds_touch_enabled) {
+            } else if (alt_touch) {
                 float u = std::clamp(event.x / kBottomScreenWidthPx, 0.0f, 1.0f);
                 float v = std::clamp(event.y / kBottomScreenHeightPx, 0.0f, 1.0f);
                 // Beam touches already hit the rotated quad in its local UV frame; viewer-space
@@ -240,7 +242,7 @@ const MapperOutput& InputBridge::Process(const InputFrame& frame, const PanelGeo
     if (alt_active) {
         using namespace Common::AltCore;
         InputState state{};
-        if (caps.has_touch && alt_menu.ds_touch_enabled && alt_touching_) {
+        if (alt_touch && alt_touching_) {
             state.touching = true;
             state.touch_x = alt_touch_x_;
             state.touch_y = alt_touch_y_;

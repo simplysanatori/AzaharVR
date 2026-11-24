@@ -252,8 +252,8 @@ Row RowFor(Id id, const MenuModel& m) {
     return r;
 }
 
-std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
-                         SettingsSection section = SettingsSection::General) {
+/// Every console's rows; RowsFor keeps the running game's.
+std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section) {
     const auto lock = [&m](Id id) { return m.locked[static_cast<std::size_t>(id)]; };
     const auto row = [&](Id id, RowKind kind, int selected = 0, bool on = false) {
         Row r{id, kind, lock(id)};
@@ -263,28 +263,17 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
     };
     std::vector<Row> rows;
     if (tab == Tab::Position) {
-        if (m.core.is_3ds) {
-            rows.push_back(row(Id::HideBottomScreen, RowKind::Switch, 0, m.hide_bottom_screen));
-            rows.push_back(row(Id::ScreenLayout, RowKind::Segmented, m.screen_layout));
-            rows.push_back(row(Id::MoveScreens, RowKind::Segmented, m.move_screens)); // AzaharFrame menu
-            rows.push_back(row(Id::ScreenShape, RowKind::MenuButton, m.screen_shape));
-            rows.push_back(row(Id::ScreenCurve, RowKind::MenuButton, m.screen_curve));
-            Row offset = row(Id::ImmersiveOffset, RowKind::Offset);
-            offset.value = m.immersive_offset;
-            offset.on = m.immersive_offset_set;
-            rows.push_back(offset);
-        } else {
-            if (m.core.has_bottom) {
-                rows.push_back(row(Id::HideBottomScreen, RowKind::Switch, 0, m.hide_bottom_screen));
-                rows.push_back(row(Id::ScreenLayout, RowKind::Segmented, m.screen_layout));
-                rows.push_back(row(Id::MoveScreens, RowKind::Segmented, m.move_screens));
-            }
-            rows.push_back(row(Id::ScreenCurve, RowKind::MenuButton, m.screen_curve));
-            if (m.core.has_screen_rotation) {
-                rows.push_back(row(Id::DsScreenRotation, RowKind::Segmented,
-                                   std::clamp(m.ds_screen_rotation, 0, 2)));
-            }
-        }
+        rows.push_back(row(Id::HideBottomScreen, RowKind::Switch, 0, m.hide_bottom_screen));
+        rows.push_back(row(Id::ScreenLayout, RowKind::Segmented, m.screen_layout));
+        rows.push_back(row(Id::MoveScreens, RowKind::Segmented, m.move_screens)); // AzaharFrame menu
+        rows.push_back(row(Id::ScreenShape, RowKind::MenuButton, m.screen_shape));
+        rows.push_back(row(Id::ScreenCurve, RowKind::MenuButton, m.screen_curve));
+        Row offset = row(Id::ImmersiveOffset, RowKind::Offset);
+        offset.value = m.immersive_offset;
+        offset.on = m.immersive_offset_set;
+        rows.push_back(offset);
+        rows.push_back(row(Id::DsScreenRotation, RowKind::Segmented,
+                           std::clamp(m.ds_screen_rotation, 0, 2)));
     } else if (tab == Tab::Settings) {
         // Render Margin and on: the Full (6DoF) modes only.
         const auto full = [&](Row r) {
@@ -296,48 +285,25 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
         // AzaharFrame autosave: in three sections (owner decision, round 2). General: the
         // settings that are the same in every game, and the list's end.
         if (section == SettingsSection::General) {
-            if (!m.core.is_3ds) {
-                const bool has_core_rows = m.core.has_solar_sensor ||
-                                           m.core.has_dsi_mode || m.core.has_touch ||
-                                           m.core.has_mic_blow || m.core.has_lid_close ||
-                                           m.core.has_save_import;
-                if (has_core_rows) {
-                    rows.push_back(row(Id::CoreHeader, RowKind::Header));
-                    if (m.core.has_solar_sensor) {
-                        Row solar = row(Id::GbaSolarLevel, RowKind::Slider);
-                        const SliderRange sr = SliderFor(Id::GbaSolarLevel);
-                        const float sv =
-                            std::clamp(static_cast<float>(m.gba_solar_level), sr.min, sr.max);
-                        solar.t = (sv - sr.min) / (sr.max - sr.min);
-                        solar.stops = 10;
-                        solar.value = SliderText(Id::GbaSolarLevel, sv);
-                        rows.push_back(solar);
-                    }
-                    if (m.core.has_dsi_mode) {
-                        rows.push_back(row(Id::DsConsoleMode, RowKind::Segmented,
-                                           std::clamp(m.ds_console_mode, 0, 1)));
-                    }
-                    if (m.core.has_touch) {
-                        rows.push_back(row(Id::DsTouchEnabled, RowKind::Switch, 0,
-                                           m.ds_touch_enabled));
-                    }
-                    if (m.core.has_mic_blow) {
-                        rows.push_back(row(Id::DsMicBlow, RowKind::Switch, 0, m.ds_mic_active));
-                    }
-                    if (m.core.has_lid_close) {
-                        rows.push_back(row(Id::DsLidToggle, RowKind::Switch, 0, m.ds_lid_closed));
-                    }
-                    if (m.core.has_save_import) {
-                        rows.push_back(row(Id::ImportSave, RowKind::Button));
-                    }
-                }
-            }
+            // AzaharVR: the Console group (DS, GBA and Game Boy games)
+            rows.push_back(row(Id::CoreHeader, RowKind::Header));
+            Row solar = row(Id::GbaSolarLevel, RowKind::Slider);
+            const SliderRange sr = SliderFor(Id::GbaSolarLevel);
+            const float sv = std::clamp(static_cast<float>(m.gba_solar_level), sr.min, sr.max);
+            solar.t = (sv - sr.min) / (sr.max - sr.min);
+            solar.stops = 10;
+            solar.value = SliderText(Id::GbaSolarLevel, sv);
+            rows.push_back(solar);
+            rows.push_back(row(Id::DsConsoleMode, RowKind::Segmented,
+                               std::clamp(m.ds_console_mode, 0, 2)));
+            rows.push_back(row(Id::DsTouchEnabled, RowKind::Switch, 0, m.ds_touch_enabled));
+            rows.push_back(row(Id::DsMicBlow, RowKind::Switch, 0, m.ds_mic_active));
+            rows.push_back(row(Id::DsLidToggle, RowKind::Switch, 0, m.ds_lid_closed));
+            rows.push_back(row(Id::ImportSave, RowKind::Button));
             rows.push_back(row(Id::Background, RowKind::Segmented, m.background));
             rows.push_back(row(Id::WindowScale, RowKind::Segmented, m.window_scale));
             rows.push_back(row(Id::FaceButtons, RowKind::Segmented, m.face_buttons));
-            if (m.core.has_gyro) {
-                rows.push_back(row(Id::MotionControls, RowKind::Segmented, m.motion_controls));
-            }
+            rows.push_back(row(Id::MotionControls, RowKind::Segmented, m.motion_controls));
             // AzaharFrame kiufix: Aiming and its rows are on the Controls tab now (DrawControls).
             rows.push_back(row(Id::ShowControllers, RowKind::Switch, 0, m.show_controllers));
             if (m.show_controllers) { // AzaharFrame ctrlfront
@@ -367,56 +333,13 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
             saves(Id::AutosaveEvery, static_cast<float>(every) / 4.0f, 4, every);
             saves(Id::AutosaveKeep, static_cast<float>(keep - 1) / 9.0f, 9, keep);
             rows.push_back(row(Id::MoreSettings, RowKind::Link));
-            if (m.core.has_flat_mode) {
-                rows.push_back(row(Id::SwitchToFlat, RowKind::Button)); // AzaharFrame menuux
-            }
+            rows.push_back(row(Id::SwitchToFlat, RowKind::Button)); // AzaharFrame menuux
             rows.push_back(row(Id::HelpHeader, RowKind::Header)); // AzaharFrame crashreport
             rows.push_back(row(Id::ReportProblem, RowKind::Link));
             rows.push_back(row(Id::AboutApp, RowKind::Link));
             return rows;
         }
         if (section == SettingsSection::Graphics) {
-            if (!m.core.is_3ds) {
-                if (m.core.has_stereo_3d) {
-                    Row depth = row(Id::Depth3d, RowKind::Slider);
-                    const SliderRange dr = SliderFor(Id::Depth3d);
-                    depth.t = (static_cast<float>(m.depth_3d) - dr.min) / (dr.max - dr.min);
-                    depth.value = SliderText(Id::Depth3d, static_cast<float>(m.depth_3d));
-                    rows.push_back(depth);
-                }
-                if (m.core.has_dsi_mode) {
-                    Row res =
-                        row(Id::InternalResolution, RowKind::MenuButton, m.internal_resolution - 1);
-                    if (m.internal_resolution < 1 || m.internal_resolution > kMaxResolution) {
-                        res.value = m.internal_resolution < 1
-                                        ? "Auto"
-                                        : std::to_string(m.internal_resolution) + "x";
-                        res.selected = -1;
-                    }
-                    rows.push_back(res);
-                }
-                if (m.core.has_dynamic_resolution) {
-                    Row dynamic = row(Id::DynamicResolution, RowKind::Switch, 0,
-                                      m.dynamic_resolution);
-                    if (dynamic.lock == Lock::None && m.internal_resolution == 1) {
-                        dynamic.lock = Lock::AtLowest;
-                    }
-                    rows.push_back(dynamic);
-                }
-                if (m.core.has_bfi) {
-                    Row bfi =
-                        row(Id::MotionClarityNormal, RowKind::Switch, 0, m.motion_clarity_normal);
-                    if (m.bfi_uneven_hz > 0) {
-                        bfi.value = Immersive::Names::NeedsRefreshNote(m.bfi_uneven_hz);
-                    }
-                    rows.push_back(bfi);
-                    if (m.motion_clarity_normal) {
-                        rows.push_back(row(Id::MatchBottomNormal, RowKind::Switch, 0,
-                                           m.match_bottom));
-                    }
-                }
-                return rows;
-            }
             // AzaharFrame depth3d
             Row depth = row(Id::Depth3d, RowKind::Slider);
             const SliderRange dr = SliderFor(Id::Depth3d);
@@ -554,7 +477,18 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
     return rows;
 }
 
+std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
+                         SettingsSection section = SettingsSection::General) {
+    std::vector<Row> rows = AllRowsFor(tab, m, section);
+    std::erase_if(rows, [&m](const Row& r) { return !RowApplies(r.id, m.core); });
+    return rows;
+}
+
 } // namespace
+
+bool SectionShown(SettingsSection section, const MenuModel& model) {
+    return Is3ds(model.core) || !RowsFor(Tab::Settings, model, section).empty();
+}
 
 // AzaharFrame autosave
 SettingsSection SectionOf(Id id) {
@@ -668,6 +602,10 @@ bool PerGameSetting(Id id) {
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
     case Id::KiuSnapTurn:
+    case Id::DsConsoleMode: // AzaharVR: DS and GBA games
+    case Id::DsTouchEnabled:
+    case Id::DsScreenRotation:
+    case Id::GbaSolarLevel:
         return true;
     default:
         return false;
@@ -892,7 +830,8 @@ int RecommendedModeIndex(const MenuModel& model) {
 std::vector<Id> GameValueRows(const MenuModel& model, Tab tab, SettingsSection section) {
     std::vector<Id> ids;
     const auto add = [&](Id id) {
-        if (PerGameSetting(id) && model.game_value[static_cast<std::size_t>(id)]) {
+        if (PerGameSetting(id) && model.game_value[static_cast<std::size_t>(id)] &&
+            RowApplies(id, model.core)) {
             ids.push_back(id);
         }
     };
@@ -1067,7 +1006,7 @@ const std::vector<std::string>& OptionsFor(Id id) {
     case Id::MarginY:
         return kWider;
     case Id::DsConsoleMode: {
-        static const std::vector<std::string> kDsConsole{"DS", "DSi"};
+        static const std::vector<std::string> kDsConsole{"Automatic", "DS", "DSi"};
         return kDsConsole;
     }
     case Id::DsScreenRotation: {
@@ -1475,6 +1414,13 @@ bool HasOptionTips(Id id) {
            id == Id::TriggerLayout;          // AzaharFrame kiufire
 }
 
+std::string ExplainFor(Id id, const CoreCaps& core) {
+    if (id == Id::FaceButtons && !Is3ds(core)) {
+        return "How A, B, X and Y map to the game's buttons.";
+    }
+    return ExplainFor(id);
+}
+
 std::string ExplainFor(Id id) {
     switch (id) {
     case Id::UseGlobal: // AzaharFrame useglobal: the chip's action
@@ -1635,9 +1581,9 @@ std::string ExplainFor(Id id) {
     case Id::GbaSolarLevel:
         return "Simulated sunlight level for games with a solar sensor.";
     case Id::DsConsoleMode:
-        return "Switch between DS and DSi hardware behaviour (applies on restart).";
+        return "The console the game runs on, from the next start. Automatic picks the game's own.";
     case Id::DsTouchEnabled:
-        return "Allow pointing and touching the DS bottom screen.";
+        return "Lets you touch the Secondary Screen by pointing at it.";
     case Id::DsMicBlow:
         return "Simulate blowing into the DS microphone.";
     case Id::DsLidToggle:
@@ -1844,35 +1790,15 @@ void TabMenu::Draw(Kit& kit, const MenuModel& model, const MenuView& view) {
         DrawModsDialog(kit, AngelsIntroDialog(model), view);
         return;
     }
-    DrawTooltip(kit, view, pane);
+    DrawTooltip(kit, model, view, pane);
 }
 
 void TabMenu::DrawRail(Kit& kit, const MenuModel& model, const MenuView& view) {
-    if (model.core.is_3ds) {
-        const float total = kRailItemH * static_cast<float>(kTabs.size());
-        float y = (kPanelH - total) * 0.5f;
-        const Rect all{0, 0, kPanelW, kPanelH};
-        for (int i = 0; i < static_cast<int>(kTabs.size()); i++) {
-            const Rect r{0.0f, y, kRailW, y + kRailItemH};
-            const Target t{Id::TabButton, i};
-            const bool active = static_cast<int>(view.tab) == i;
-            kit.RailItem(r, kTabs[static_cast<std::size_t>(i)].icon,
-                         kTabs[static_cast<std::size_t>(i)].label, active, StateOf(view, t));
-            AddHit(r, t, all);
-            y += kRailItemH;
-        }
-        return;
-    }
-    std::vector<int> shown_tabs;
+    std::vector<int> shown_tabs; // AzaharVR: the console's own
     for (int i = 0; i < static_cast<int>(kTabs.size()); i++) {
-        const Tab tab = static_cast<Tab>(i);
-        if (tab == Tab::Homebrew) {
-            continue;
+        if (TabApplies(static_cast<Tab>(i), model.core)) {
+            shown_tabs.push_back(i);
         }
-        if (tab == Tab::Mods && !model.core.has_alt_cheats) {
-            continue;
-        }
-        shown_tabs.push_back(i);
     }
     const float total = kRailItemH * static_cast<float>(shown_tabs.size());
     float y = (kPanelH - total) * 0.5f;
@@ -1881,8 +1807,9 @@ void TabMenu::DrawRail(Kit& kit, const MenuModel& model, const MenuView& view) {
         const Rect r{0.0f, y, kRailW, y + kRailItemH};
         const Target t{Id::TabButton, i};
         const bool active = static_cast<int>(view.tab) == i;
-        const char* label =
-            static_cast<Tab>(i) == Tab::Mods ? "Cheats" : kTabs[static_cast<std::size_t>(i)].label;
+        const char* label = static_cast<Tab>(i) == Tab::Mods && !Is3ds(model.core)
+                                ? "Cheats"
+                                : kTabs[static_cast<std::size_t>(i)].label;
         kit.RailItem(r, kTabs[static_cast<std::size_t>(i)].icon, label, active, StateOf(view, t));
         AddHit(r, t, all);
         y += kRailItemH;
@@ -1922,7 +1849,7 @@ void TabMenu::DrawMain(Kit& kit, const MenuModel& model, const MenuView& view, c
     }};
     const float gap = 12.0f;
     const Rect flat{c.x0, c.y1 - 56.0f, c.x1, c.y1};
-    const bool flat_ok = model.core.has_flat_mode;
+    const bool flat_ok = RowApplies(Id::SwitchToFlat, model.core);
     kit.Button(flat, ButtonStyle::Tonal, Sym::kTv, LabelFor(Id::SwitchToFlat),
                StateOf(view, {Id::SwitchToFlat}, flat_ok), Type::Title);
     if (flat_ok) {
@@ -1961,9 +1888,11 @@ void TabMenu::DrawSlots(Kit& kit, const MenuModel& model, const MenuView& view, 
     if (!saving) {
         // AzaharFrame autosave: the Autosave card over the slots (owner's Option B), and after an
         // autosave was loaded the Undo Load snackbar under them.
-        card = {c.x0, top, c.x1, top + kAutosaveCardH};
-        DrawAutosaveCard(kit, model, view, card, pane);
-        top = card.y1 + gap;
+        if (RowApplies(Id::AutosaveCard, model.core)) {
+            card = {c.x0, top, c.x1, top + kAutosaveCardH};
+            DrawAutosaveCard(kit, model, view, card, pane);
+            top = card.y1 + gap;
+        }
         if (!model.undo_load.empty()) {
             bottom = DrawActionSnackbar(kit, view, pane, model.undo_load, Id::UndoLoad, c.y1);
         }
@@ -2453,7 +2382,7 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
             const float home_w = chip_w(DsButton::Home, c.W());
             // AzaharVR: the running DS game's Microphone Blow: first in the row, in what the three
             // leave.
-            if (model.core.has_mic_blow) {
+            if (RowApplies(Id::DsMicBlow, model.core)) {
                 const int t = DsButton::MicBlow;
                 const float room = c.x1 - row_x - home_w - sel_w - start_w - 3.0f * kChipGap;
                 const Rect r{row_x, under.y0, row_x + chip_w(t, room), under.y1};
@@ -2716,8 +2645,8 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
     const Rect list{pane.x0, seg.y1 + 8.0f, pane.x1, pane.y1 - 8.0f};
     constexpr float kChoiceH = kControlH + 8.0f;
     constexpr float kSupportH = 16.0f; ///< the Touchpad's supporting line and its gaps
-    const bool show_touch_rows = model.core.is_3ds || model.core.has_touch;
-    const bool show_aim_rows = model.core.is_3ds || model.core.has_gyro;
+    const bool show_touch_rows = RowApplies(Id::TouchpadTouch, model.core);
+    const bool show_aim_rows = RowApplies(Id::GyroAim, model.core);
     const bool reticle_on = show_touch_rows && model.bottom_screen_reticle != 0;
     const float rows_h =
         show_touch_rows
@@ -3097,7 +3026,7 @@ void TabMenu::DrawRows(Kit& kit, const MenuModel& model, const MenuView& view, c
             const float bw = (room - 12.0f - 10.0f) * 0.5f; // filled: a wider gap to the toggle
             const Rect a{c.x0, top, c.x0 + bw, top + kControlH};
             const Rect b{a.x1 + 12.0f, top, a.x1 + 12.0f + bw, top + kControlH};
-            const bool can_swap = model.core.is_3ds || model.core.has_bottom;
+            const bool can_swap = RowApplies(Id::SwapScreens, model.core);
             kit.Button(a, ButtonStyle::Tonal, Sym::kRecenter, LabelFor(Id::ResetPosition),
                        StateOf(view, {Id::ResetPosition}));
             kit.Button(b, ButtonStyle::Tonal, Sym::kSwapVert, LabelFor(Id::SwapScreens),
@@ -3107,21 +3036,35 @@ void TabMenu::DrawRows(Kit& kit, const MenuModel& model, const MenuView& view, c
                 AddHit(b, {Id::SwapScreens}, pane);
             }
         } else {
-            // AzaharFrame autosave: the section (General, Graphics, Immersive).
-            static const std::vector<std::string> kSectionsNoImmersive{"General", "Graphics"};
-            const auto& sections = model.core.has_immersive_modes
-                                       ? OptionsFor(Id::SettingsSection)
-                                       : kSectionsNoImmersive;
-            const Rect seg{c.x0, top, c.x0 + kit.SegmentedWidth(sections, room),
-                           top + kControlH};
-            const int hover = view.hover.id == Id::SettingsSection ? view.hover.index : -1;
-            const int pressed = view.pressed.id == Id::SettingsSection ? view.pressed.index : -1;
-            kit.Segmented(seg, sections, static_cast<int>(view.section), hover, pressed);
-            const auto se = kit.SegmentEdges(seg, sections);
-            for (int i = 0; i < static_cast<int>(sections.size()); i++) {
-                AddHit({se[static_cast<std::size_t>(i)], seg.y0,
-                        se[static_cast<std::size_t>(i + 1)], seg.y1},
-                       {Id::SettingsSection, i}, pane);
+            // AzaharFrame autosave: the section (General, Graphics, Immersive). AzaharVR: those
+            // with rows for the console, and none to pick from when that is General alone; a
+            // target's index is the section's own value.
+            std::vector<std::string> sections;
+            std::vector<int> values;
+            for (int i = 0; i < static_cast<int>(SettingsSection::Count); i++) {
+                if (SectionShown(static_cast<SettingsSection>(i), model)) {
+                    sections.push_back(
+                        OptionsFor(Id::SettingsSection)[static_cast<std::size_t>(i)]);
+                    values.push_back(i);
+                }
+            }
+            if (sections.size() > 1) {
+                const auto place = [&values](int value) {
+                    const auto it = std::find(values.begin(), values.end(), value);
+                    return it == values.end() ? -1 : static_cast<int>(it - values.begin());
+                };
+                const Rect seg{c.x0, top, c.x0 + kit.SegmentedWidth(sections, room),
+                               top + kControlH};
+                const int hover = view.hover.id == Id::SettingsSection ? view.hover.index : -1;
+                const int pressed =
+                    view.pressed.id == Id::SettingsSection ? view.pressed.index : -1;
+                kit.Segmented(seg, sections, place(static_cast<int>(view.section)), place(hover),
+                              place(pressed));
+                const auto se = kit.SegmentEdges(seg, sections);
+                for (std::size_t i = 0; i < sections.size(); i++) {
+                    AddHit({se[i], seg.y0, se[i + 1], seg.y1}, {Id::SettingsSection, values[i]},
+                           pane);
+                }
             }
         }
         top += kControlH + kScopeRowsGap;
@@ -3468,7 +3411,8 @@ void TabMenu::DrawScrollbar(Kit& kit, const MenuView& view, const Rect& list, fl
     AddHit(Scrolling::HitRect(bar), {Id::Scrollbar}, everything);
 }
 
-void TabMenu::DrawTooltip(Kit& kit, const MenuView& view, const Rect& pane) {
+void TabMenu::DrawTooltip(Kit& kit, const MenuModel& model, const MenuView& view,
+                          const Rect& pane) {
     if (view.tooltip == Id::None || view.open_menu != Id::None) {
         return;
     }
@@ -3491,7 +3435,7 @@ void TabMenu::DrawTooltip(Kit& kit, const MenuView& view, const Rect& pane) {
         const Anchor& a = *found;
         const std::string text = !a.text.empty()       ? a.text
                                  : a.lock != Lock::None ? ExplainLock(a.lock)
-                                                        : ExplainFor(a.id);
+                                                        : ExplainFor(a.id, model.core);
         if (text.empty()) {
             return;
         }

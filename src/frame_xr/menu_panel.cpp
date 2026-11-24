@@ -375,6 +375,14 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::ProjectileOpacity;
     case Id::MuzzleFlashSize: // AzaharFrame kiuweap2
         return MenuSetting::MuzzleFlashSize;
+    case Id::DsConsoleMode: // AzaharVR: DS and GBA games
+        return MenuSetting::DsConsoleMode;
+    case Id::DsTouchEnabled:
+        return MenuSetting::DsTouchEnabled;
+    case Id::DsScreenRotation:
+        return MenuSetting::DsScreenRotation;
+    case Id::GbaSolarLevel:
+        return MenuSetting::GbaSolarLevel;
     case Id::AutosaveKeep:
     default: // UseGlobal checks PerGameSetting first
         return MenuSetting::AutosaveKeep;
@@ -1309,42 +1317,20 @@ void MenuPanel::BuildModel(const Host& host) {
     m.aim_calibrated = host.aim_calibrated; // AzaharFrame kiufix
     m.aim_calibration_ok = host.aim_calibration_ok;
     {
-        const Common::AltCore::Capabilities caps = GetCoreCapabilities();
-        m.core.is_3ds = caps.kind == Common::AltCore::CoreKind::N3DS;
-        m.core.has_stereo_3d = caps.has_stereo_3d;
-        m.core.has_immersive_modes = caps.has_immersive_modes;
-        m.core.has_touch = caps.has_touch;
-        m.core.has_gyro = caps.has_gyro;
-        m.core.has_mods = caps.has_mods;
-        m.core.has_texture_packs = caps.has_texture_packs;
-        m.core.has_3ds_cheats = caps.has_3ds_cheats;
-        m.core.has_alt_cheats = caps.has_alt_cheats;
-        m.core.has_flat_mode = caps.has_flat_mode;
-        m.core.has_bfi = caps.has_bfi;
-        m.core.has_dynamic_resolution = caps.has_dynamic_resolution;
-        m.core.has_render_margin = caps.has_render_margin;
-        m.core.has_solar_sensor = caps.has_solar_sensor;
-        m.core.has_mic_blow = caps.has_mic_blow;
-        m.core.has_lid_close = caps.has_lid_close;
-        m.core.has_dsi_mode = caps.has_dsi_mode;
-        m.core.has_screen_rotation = caps.has_screen_rotation;
-        m.core.has_save_import = caps.has_save_import;
-        m.core.has_bottom = caps.screens.has_bottom;
-        const AltMenuState alt = GetAltMenuState();
-        m.gba_solar_level = alt.gba_solar_level;
-        m.ds_console_mode = alt.ds_console_mode;
-        m.ds_touch_enabled = alt.ds_touch_enabled;
-        m.ds_screen_rotation = alt.ds_screen_rotation;
-        m.ds_lid_closed = alt.ds_lid_closed;
-        m.ds_mic_active = alt.ds_mic_active;
-        if (!m.core.is_3ds) {
-            if (view.tab == Menu::Tab::Homebrew ||
-                (view.tab == Menu::Tab::Mods && !m.core.has_alt_cheats)) {
-                view.tab = Menu::Tab::Main;
-            }
-            if (!m.core.has_immersive_modes && view.section == Menu::SettingsSection::Immersive) {
-                view.section = Menu::SettingsSection::General;
-            }
+        // AzaharVR: the running game's console, and the DS and GBA rows
+        m.core = GetCoreCapabilities();
+        m.ds_console_mode = static_cast<int>(v.ds_console_mode.GetValue());
+        m.ds_touch_enabled = v.ds_touch_enabled.GetValue();
+        m.ds_screen_rotation = static_cast<int>(v.ds_screen_rotation.GetValue());
+        m.gba_solar_level = static_cast<int>(v.gba_solar_level.GetValue());
+        const DsHeld held = GetDsHeld();
+        m.ds_lid_closed = held.lid_closed;
+        m.ds_mic_active = held.mic_blow;
+        if (!Menu::TabApplies(view.tab, m.core)) {
+            view.tab = Menu::Tab::Main;
+        }
+        if (!Menu::SectionShown(view.section, m)) {
+            view.section = Menu::SettingsSection::General;
         }
     }
     model = std::move(m);
@@ -1868,42 +1854,27 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         }
         r.setting = MenuSetting::Depth3d;
         break;
-    case Id::GbaSolarLevel: {
-        AltMenuState alt = GetAltMenuState();
-        alt.gba_solar_level = std::clamp(value, 0, 10);
-        SetAltMenuState(alt);
-        r.setting = MenuSetting::GbaSolarLevel;
-        r.value = alt.gba_solar_level;
-        break;
-    }
-    case Id::DsConsoleMode: {
-        AltMenuState alt = GetAltMenuState();
-        alt.ds_console_mode = std::clamp(value, 0, 1);
-        SetAltMenuState(alt);
+    // AzaharVR: DS and GBA games; the Qt side gives the running game the new value.
+    case Id::DsConsoleMode:
+        r.value = static_cast<int>(std::min<u32>(u, 2));
+        Apply(v.ds_console_mode, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::DsConsoleMode;
-        r.value = alt.ds_console_mode;
+        ShowToastText("Console Mode: From the Next Start", ToastTime::Long);
         break;
-    }
-    case Id::DsTouchEnabled: {
-        AltMenuState alt = GetAltMenuState();
-        alt.ds_touch_enabled = value != 0;
-        SetAltMenuState(alt);
+    case Id::DsTouchEnabled:
+        Apply(v.ds_touch_enabled, value != 0, per_game);
         r.setting = MenuSetting::DsTouchEnabled;
-        r.value = alt.ds_touch_enabled ? 1 : 0;
         break;
-    }
-    case Id::DsScreenRotation: {
-        AltMenuState alt = GetAltMenuState();
-        alt.ds_screen_rotation = std::clamp(value, 0, 2);
-        SetAltMenuState(alt);
-        Common::AltCore::ScreenMetrics metrics = GetCoreCapabilities().screens;
-        metrics.rotation_deg =
-            alt.ds_screen_rotation == 1 ? 90 : (alt.ds_screen_rotation == 2 ? 270 : 0);
-        UpdateCoreScreenMetrics(metrics);
+    case Id::DsScreenRotation:
+        r.value = static_cast<int>(std::min<u32>(u, 2));
+        Apply(v.ds_screen_rotation, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::DsScreenRotation;
-        r.value = alt.ds_screen_rotation;
         break;
-    }
+    case Id::GbaSolarLevel:
+        r.value = std::clamp(value, 0, 10);
+        Apply(v.gba_solar_level, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::GbaSolarLevel;
+        break;
     default:
         return;
     }
@@ -1923,6 +1894,7 @@ void MenuPanel::UseGlobal(Id id, Host& host) {
     const auto& v = Settings::values;
     const bool hide = v.vr_hide_bottom_screen.GetValue();
     const bool async = v.async_shader_compilation.GetValue();
+    const u32 console = v.ds_console_mode.GetValue();
     if (!PerGame::UseGlobalValue(id)) {
         return;
     }
@@ -1932,6 +1904,8 @@ void MenuPanel::UseGlobal(Id id, Host& host) {
         ShowToastText("Hide Secondary Screen: From the Next Start", ToastTime::Long);
     } else if (id == Id::AsyncShaders && async != v.async_shader_compilation.GetValue()) {
         ShowToastText("Async Shader Compilation: From the Next Start", ToastTime::Long);
+    } else if (id == Id::DsConsoleMode && console != v.ds_console_mode.GetValue()) {
+        ShowToastText("Console Mode: From the Next Start", ToastTime::Long);
     }
     LOG_INFO(Frontend, "xr: in-game menu: {}: Use Global Value", Menu::LabelFor(id));
     MenuRequest r;
@@ -2746,17 +2720,17 @@ void MenuPanel::Click(Target t, Host& host) {
         SetSetting(Id::DsTouchEnabled, model.ds_touch_enabled ? 0 : 1, host);
         break;
     case Id::DsMicBlow: {
-        AltMenuState alt = GetAltMenuState();
-        alt.ds_mic_active = !alt.ds_mic_active;
-        SetAltMenuState(alt);
-        ask(MenuCommand::DsMicBlow, alt.ds_mic_active ? 1 : 0);
+        DsHeld held = GetDsHeld();
+        held.mic_blow = !held.mic_blow;
+        SetDsHeld(held);
+        ask(MenuCommand::DsMicBlow, held.mic_blow ? 1 : 0);
         break;
     }
     case Id::DsLidToggle: {
-        AltMenuState alt = GetAltMenuState();
-        alt.ds_lid_closed = !alt.ds_lid_closed;
-        SetAltMenuState(alt);
-        ask(MenuCommand::DsLidToggle, alt.ds_lid_closed ? 1 : 0);
+        DsHeld held = GetDsHeld();
+        held.lid_closed = !held.lid_closed;
+        SetDsHeld(held);
+        ask(MenuCommand::DsLidToggle, held.lid_closed ? 1 : 0);
         break;
     }
     case Id::ImportSave:

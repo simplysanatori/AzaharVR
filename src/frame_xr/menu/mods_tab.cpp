@@ -30,7 +30,7 @@ ModsSegment ShownSegment(const ModsTabModel& m, ModsSegment chosen) {
 }
 
 void TabMenu::DrawMods(Kit& kit, const MenuModel& model, const MenuView& view, const Rect& pane) {
-    if (!model.core.is_3ds) {
+    if (!Is3ds(model.core)) {
         if (model.core.has_alt_cheats) {
             DrawCheats(kit, model, view, pane);
         }

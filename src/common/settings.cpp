@@ -378,6 +378,10 @@ void RestoreGlobalState(bool is_powered_on) {
     values.autosave_enabled.SetGlobal(true);      // AzaharFrame autosave
     values.autosave_every.SetGlobal(true);
     values.autosave_keep.SetGlobal(true);
+    values.ds_console_mode.SetGlobal(true); // AzaharVR: DS and GBA games
+    values.ds_touch_enabled.SetGlobal(true);
+    values.ds_screen_rotation.SetGlobal(true);
+    values.gba_solar_level.SetGlobal(true);
 }
 
 /// Gets the graphics API that should be used; not necessarily one set in settings

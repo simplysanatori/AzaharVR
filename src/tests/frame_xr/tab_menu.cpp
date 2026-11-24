@@ -1573,9 +1573,7 @@ TEST_CASE("Toasts: the mouse and the reticle's one-time toasts fit", "[frame_xr]
 TEST_CASE("Tab menu: no 3DS cheat buttons for a DS or GBA game", "[frame_xr][tabmenu]") {
     Drawn d;
     MenuModel m = Sample();
-    m.core.is_3ds = false;
-    m.core.has_3ds_cheats = false;
-    m.core.has_alt_cheats = true;
+    m.core = CoreCaps::ForGBA();
     MenuView v;
     v.tab = kModsTab;
     for (const bool list : {false, true}) {

@@ -26,6 +26,7 @@ struct ScreenMetrics {
     uint32_t touch_width = 320;            ///< Touch coordinate width in core pixels
     uint32_t touch_height = 240;           ///< Touch coordinate height in core pixels
     int rotation_deg = 0;                  ///< 0, 90, 270 (DS Book Mode)
+    bool operator==(const ScreenMetrics&) const = default;
 };
 
 struct Capabilities {
@@ -50,6 +51,7 @@ struct Capabilities {
     bool has_save_import = false;
     bool has_gba_slot = false;
     ScreenMetrics screens{};
+    bool operator==(const Capabilities&) const = default;
 
     static constexpr Capabilities ForN3DS() {
         return Capabilities{};
@@ -128,6 +130,18 @@ struct Capabilities {
 /// Whether the Secondary Screen takes touches. The DS's Touch Screen Input is not the 3DS's.
 constexpr bool TouchEnabled(const Capabilities& caps, bool ds_touch_enabled) {
     return caps.has_touch && (caps.kind == CoreKind::N3DS || ds_touch_enabled);
+}
+
+/// Settings::values.ds_console_mode
+enum DsConsole : uint32_t {
+    DsConsoleAutomatic = 0, ///< the console the game was made for
+    DsConsoleDS = 1,
+    DsConsoleDSi = 2,
+};
+
+/// Settings::values.ds_screen_rotation (0, 1, 2) in degrees.
+constexpr int RotationDegrees(uint32_t index) {
+    return index == 1 ? 90 : (index == 2 ? 270 : 0);
 }
 
 /// Neutral controller + touch snapshot delivered from FrameXr to an active AltCoreHost.

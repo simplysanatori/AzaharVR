@@ -410,10 +410,10 @@ enum class MenuSetting {
     /// vr_bfi_set_dynamic_resolution, bit 1 vr_bfi_set_panel
     BfiHelperMarks,
     // Non-3DS cores (GBA / GB / DS / DSi)
-    GbaSolarLevel,    ///< `value`: 0 to 10 (solar sensor level)
-    DsConsoleMode,    ///< `value`: 0 DS, 1 DSi
-    DsTouchEnabled,   ///< `value`: 0 Off, 1 On
-    DsScreenRotation, ///< `value`: 0 (0°), 1 (90°), 2 (270°)
+    GbaSolarLevel,    ///< `value`: 0 to 10 (gba_solar_level), may be per game, as the next three
+    DsConsoleMode,    ///< `value`: 0 Automatic, 1 DS, 2 DSi (ds_console_mode)
+    DsTouchEnabled,   ///< `value`: 0 Off, 1 On (ds_touch_enabled)
+    DsScreenRotation, ///< `value`: 0 (0°), 1 (90°), 2 (270°) (ds_screen_rotation)
 };
 struct MenuRequest {
     MenuCommand command = MenuCommand::Continue;
@@ -671,16 +671,12 @@ void SetAltInputSink(Common::AltCore::InputSink sink);
 /// and automatically stopped when the menu opens or the game stops. Any thread.
 void SetRumble(float strength);
 
-/// Current menu state for non-3DS core controls (displayed in the VR menu and updated when changed).
-struct AltMenuState {
-    int gba_solar_level = 0;      ///< 0 to 10
-    int ds_console_mode = 0;      ///< 0 DS, 1 DSi
-    bool ds_touch_enabled = true; ///< DS touch input enabled
-    int ds_screen_rotation = 0;   ///< 0 = 0°, 1 = 90°, 2 = 270°
-    bool ds_lid_closed = false;   ///< DS lid closed
-    bool ds_mic_active = false;   ///< DS microphone blow active
+/// What the VR menu holds down on a running DS: commands, not settings (a game starts without).
+struct DsHeld {
+    bool lid_closed = false;
+    bool mic_blow = false;
 };
-void SetAltMenuState(const AltMenuState& state);
-AltMenuState GetAltMenuState();
+void SetDsHeld(const DsHeld& held);
+DsHeld GetDsHeld();
 
 } // namespace FrameXr
