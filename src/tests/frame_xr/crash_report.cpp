@@ -298,6 +298,7 @@ TEST_CASE("Crash report: Send Report to a server on this machine", "[frame_xr]")
     });
     const int port = server.bind_to_any_port("127.0.0.1");
     std::thread t([&] { server.listen_after_bind(); });
+    server.wait_until_ready(); // a stop() before it runs does nothing, and join() waits forever
     const std::string dir = TempDir("send");
     const CR::SendResult result =
         CR::Send(r, "http://publickey@127.0.0.1:" + std::to_string(port) + "/42", dir);
@@ -433,6 +434,7 @@ TEST_CASE("Problem report: Send Report as a warning, tagged manual", "[frame_xr]
     });
     const int port = server.bind_to_any_port("127.0.0.1");
     std::thread t([&] { server.listen_after_bind(); });
+    server.wait_until_ready(); // a stop() before it runs does nothing, and join() waits forever
     const std::string dir = TempDir("send-manual");
     const CR::SendResult result =
         CR::Send(r, "http://publickey@127.0.0.1:" + std::to_string(port) + "/42", dir);
