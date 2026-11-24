@@ -28,7 +28,7 @@ constexpr std::array kBindings{
     Binding{NB::Y, BtnY},         Binding{NB::Up, BtnUp},     Binding{NB::Down, BtnDown},
     Binding{NB::Left, BtnLeft},   Binding{NB::Right, BtnRight}, Binding{NB::L, BtnL},
     Binding{NB::R, BtnR},         Binding{NB::Start, BtnStart},
-    Binding{NB::Select, BtnSelect}, Binding{NB::MicBlow, BtnMic}, Binding{NB::Rewind, BtnRewind},
+    Binding{NB::Select, BtnSelect},
 };
 
 /// The Circle Pad is the D-pad too, past this much of its way.

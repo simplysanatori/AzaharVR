@@ -32,8 +32,6 @@ struct CoreBootOptions {
     bool use_bios = true;          ///< Auto-load optional user BIOS/firmware if present
     bool color_correction = true;  ///< Enable GB/GBC/GBA colour correction
     bool enable_mapcap = true;     ///< Enable gba-ds secondary-screen map capture
-    bool enable_rewind = true;     ///< Enable rewind ring buffer (GBA / GB / GBC)
-    std::size_t rewind_entries = 300;
     std::string gba_slot_rom;      ///< Optional Slot-2 GBA ROM path (DS mode)
     bool rumble_pak = false;       ///< Insert DS Rumble Pak in Slot-2 when no GBA ROM
 };
@@ -75,9 +73,6 @@ public:
     virtual bool SaveStateToFile(const std::string& path) = 0;
     virtual bool LoadStateFromFile(const std::string& path) = 0;
 
-    virtual bool RewindStep() {
-        return false;
-    }
     virtual bool ImportBatterySave(const std::string& /*sav_path*/) {
         return false;
     }
@@ -96,7 +91,6 @@ public:
 
     // Core-specific controls
     virtual void SetSolarLevel(int /*level*/) {}
-    virtual void SetMicBlow(bool /*on*/) {}
     /// DS/DSi: the microphone's input, before Load.
     virtual void SetMicrophone(MicrophoneFactory /*factory*/) {}
     /// Its settings changed (any thread).

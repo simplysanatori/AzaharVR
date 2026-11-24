@@ -29,7 +29,6 @@ namespace {
 
 constexpr uint32_t kGbaWidth = GBA_W;
 constexpr uint32_t kGbaHeight = GBA_H;
-constexpr uint32_t kRewindAppendInterval = 6; // ~10 snapshots/second
 
 bool EnsureDir(const std::string& dir) {
     if (dir.empty()) {
@@ -84,7 +83,6 @@ struct GbaCore::Impl {
     uint32_t audio_rate = 32768;
     uint32_t keys = 0;
     uint64_t frame_count = 0;
-    bool rewind_inited = false;
 
     // Framebuffers with alpha guaranteed to 0xFF (RGBA8888, bytes R,G,B,A)
     std::vector<uint32_t> primary_rgba;
@@ -199,12 +197,6 @@ bool GbaCore::Load(const std::string& rom_path, const CorePaths& paths,
     impl->audio_scratch.resize(4096u * 2u, 0);
 
     impl->caps.has_solar_sensor = emu_has_solar(&impl->emu);
-    impl->caps.has_rewind = opts.enable_rewind;
-
-    if (opts.enable_rewind && opts.rewind_entries > 0) {
-        emu_rewind_init(&impl->emu, opts.rewind_entries);
-        impl->rewind_inited = true;
-    }
 
     // Shadow-instance map capture (gba-ds profiles)
     if (opts.enable_mapcap && impl->emu.gameCode[0] != '\0') {
@@ -268,10 +260,6 @@ void GbaCore::Unload() {
     cheats_free(&impl->cheats);
     impl->custom_cheats.clear();
 
-    if (impl->rewind_inited) {
-        emu_rewind_deinit();
-        impl->rewind_inited = false;
-    }
     if (impl->loaded) {
         emu_close(&impl->emu);
         impl->loaded = false;
@@ -314,10 +302,6 @@ void GbaCore::RunFrame(FrameOutput& out) {
 
     emu_frame(&impl->emu, impl->keys);
     ++impl->frame_count;
-
-    if (impl->rewind_inited && (impl->frame_count % kRewindAppendInterval) == 0) {
-        emu_rewind_append(&impl->emu);
-    }
 
     // Copy XBGR8888 (bytes R,G,B,X) to opaque RGBA8888 (bytes R,G,B,0xFF)
     const uint32_t* src_fb = impl->emu.fb;
@@ -499,13 +483,6 @@ bool GbaCore::LoadStateFromFile(const std::string& path) {
         impl->last_map_req_frame = 0;
     }
     return ok;
-}
-
-bool GbaCore::RewindStep() {
-    if (!impl->loaded || !impl->rewind_inited) {
-        return false;
-    }
-    return emu_rewind_step(&impl->emu);
 }
 
 bool GbaCore::ImportBatterySave(const std::string& sav_path) {

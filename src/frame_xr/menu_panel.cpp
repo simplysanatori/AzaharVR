@@ -107,8 +107,6 @@ static_assert(Menu::DsButton::A == Settings::NativeButton::A &&
               Menu::DsButton::ZL == Settings::NativeButton::ZL &&
               Menu::DsButton::ZR == Settings::NativeButton::ZR &&
               Menu::DsButton::Home == Settings::NativeButton::Home &&
-              Menu::DsButton::MicBlow == Settings::NativeButton::MicBlow &&
-              Menu::DsButton::Rewind == Settings::NativeButton::Rewind &&
               Menu::kRemapButtons == Settings::NativeButton::NumButtons);
 
 // AzaharFrame remap: the controls profile's 3DS buttons as a table (the Frame control driving
@@ -1325,11 +1323,9 @@ void MenuPanel::BuildModel(const Host& host) {
         m.core.has_dynamic_resolution = caps.has_dynamic_resolution;
         m.core.has_render_margin = caps.has_render_margin;
         m.core.has_solar_sensor = caps.has_solar_sensor;
-        m.core.has_mic_blow = caps.has_mic_blow;
         m.core.has_lid_close = caps.has_lid_close;
         m.core.has_dsi_mode = caps.has_dsi_mode;
         m.core.has_screen_rotation = caps.has_screen_rotation;
-        m.core.has_rewind = caps.has_rewind;
         m.core.has_save_import = caps.has_save_import;
         m.core.has_bottom = caps.screens.has_bottom;
         const AltMenuState alt = GetAltMenuState();
@@ -1338,7 +1334,6 @@ void MenuPanel::BuildModel(const Host& host) {
         m.ds_touch_enabled = alt.ds_touch_enabled;
         m.ds_screen_rotation = alt.ds_screen_rotation;
         m.ds_lid_closed = alt.ds_lid_closed;
-        m.ds_mic_active = alt.ds_mic_active;
         if (!m.core.is_3ds) {
             if (view.tab == Menu::Tab::Homebrew ||
                 (view.tab == Menu::Tab::Mods && !m.core.has_alt_cheats)) {
@@ -2747,13 +2742,6 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::DsTouchEnabled:
         SetSetting(Id::DsTouchEnabled, model.ds_touch_enabled ? 0 : 1, host);
         break;
-    case Id::DsMicBlow: {
-        AltMenuState alt = GetAltMenuState();
-        alt.ds_mic_active = !alt.ds_mic_active;
-        SetAltMenuState(alt);
-        ask(MenuCommand::DsMicBlow, alt.ds_mic_active ? 1 : 0);
-        break;
-    }
     case Id::DsLidToggle: {
         AltMenuState alt = GetAltMenuState();
         alt.ds_lid_closed = !alt.ds_lid_closed;
@@ -2763,9 +2751,6 @@ void MenuPanel::Click(Target t, Host& host) {
     }
     case Id::ImportSave:
         ask(MenuCommand::ImportSave);
-        break;
-    case Id::GbaRewind:
-        ask(MenuCommand::GbaRewind);
         break;
     default:
         break;

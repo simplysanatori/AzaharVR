@@ -80,11 +80,9 @@ std::string JoinValues(const int8_t* values, std::size_t count) {
     return out;
 }
 
-// Reads comma-separated numbers into `out`; false (and `out` untouched) unless all fit and there
-// are at least `least` (the rest are -1).
+// Reads comma-separated numbers into `out`; false (and `out` untouched) unless all fit.
 template <std::size_t N>
-bool ParseValues(const std::string& text, std::array<int8_t, N>& out, int max,
-                 std::size_t least = N) {
+bool ParseValues(const std::string& text, std::array<int8_t, N>& out, int max) {
     std::array<int8_t, N> values;
     values.fill(-1);
     std::size_t i = 0;
@@ -103,7 +101,7 @@ bool ParseValues(const std::string& text, std::array<int8_t, N>& out, int max,
         values[i++] = static_cast<int8_t>(v);
         start = end + 1;
     }
-    if (i < least) {
+    if (i != N) {
         return false;
     }
     out = values;
@@ -371,10 +369,6 @@ void MergeIntoFrame(const ThreeDsPadState& pad, const ProfileRoutes& routes,
         const int c = routes.buttons[b];
         if (pad.buttons[b] && c >= 0 && c < kNumControls) {
             controls.buttons[static_cast<std::size_t>(c)] = true;
-        } else if (pad.buttons[b] && b >= Settings::NativeButton::MicBlow) {
-            // AzaharVR: no Frame control is bound to these by default; a mapping's own press
-            // counts without one.
-            (b == Settings::NativeButton::MicBlow ? controls.mic_blow : controls.rewind) = true;
         }
     }
     for (std::size_t a = 0; a < pad.analogs.size(); a++) {
@@ -941,9 +935,7 @@ void MappingFile::Parse(const std::string& text) {
             const std::string k = w.substr(0, eq);
             const std::string v = w.substr(eq + 1);
             if (k == "buttons") {
-                // Files from before Microphone Blow and Rewind end at Power.
-                have_buttons = ParseValues(v, e.mapping.buttons, kNumPadInputs,
-                                           Settings::NativeButton::MicBlow);
+                have_buttons = ParseValues(v, e.mapping.buttons, kNumPadInputs);
             } else if (k == "analogs") {
                 // AzaharFrame padsui: stick routes (0 and 1 as before, flags above them).
                 have_analogs = ParseValues(v, e.mapping.analogs, 32);
@@ -981,7 +973,7 @@ void MappingFile::Parse(const std::string& text) {
 std::string MappingFile::Format() const {
     std::string out = "# Azahar for Frame: 3DS mappings of other controllers (Edit Controls).\n"
                       "# <key> buttons=<3DS A,B,X,Y,Up,Down,Left,Right,L,R,Start,Select,Debug,"
-                      "Gpio14,ZL,ZR,Home,Power,Microphone Blow,Rewind> analogs=<Circle Pad,C-Stick> vendor= product= "
+                      "Gpio14,ZL,ZR,Home,Power> analogs=<Circle Pad,C-Stick> vendor= product= "
                       "name=\n"
                       "# keyboard: only what differs from the default, as Linux key codes "
                       "(-1 none): <3DS button>= circle= c_stick=<up,down,left,right> modifier= "
@@ -1024,7 +1016,7 @@ std::string MappingFile::Format() const {
 namespace {
 constexpr std::array<const char*, Settings::NativeButton::NumButtons> kKeyButtonNames{
     "a", "b", "x", "y", "up", "down", "left", "right", "l", "r", "start", "select",
-    "debug", "gpio14", "zl", "zr", "home", "power", "mic_blow", "rewind"};
+    "debug", "gpio14", "zl", "zr", "home", "power"};
 
 int8_t KeyValue(const std::string& v) {
     const long n = std::strtol(v.c_str(), nullptr, 10);

@@ -145,7 +145,6 @@ struct AltCoreHost::Impl {
 
     std::thread emu_thread;
     float last_rumble = 0.0f;
-    uint32_t rewind_frame_div = 0;
 
     std::string SlotPath(int slot) const {
         return (std::filesystem::path(paths.state_dir) /
@@ -202,16 +201,6 @@ struct AltCoreHost::Impl {
 
         const auto t0 = std::chrono::steady_clock::now();
 
-        bool rewound = false;
-        if ((in.buttons & Common::AltCore::BtnRewind) != 0 && caps.has_rewind) {
-            ++rewind_frame_div;
-            if ((rewind_frame_div % 2u) == 0u) {
-                rewound = core->RewindStep();
-            }
-        } else {
-            rewind_frame_div = 0;
-        }
-
         core->SetInput(in);
         core->RunFrame(last_frame);
 
@@ -224,7 +213,7 @@ struct AltCoreHost::Impl {
             }
         }
 
-        if (!rewound && !last_frame.audio_pcm.empty()) {
+        if (!last_frame.audio_pcm.empty()) {
             audio.Push(last_frame.audio_pcm.data(), last_frame.audio_pcm.size() / 2u);
         }
 
@@ -717,13 +706,6 @@ void AltCoreHost::SetSolarLevel(int level) {
     }
 }
 
-void AltCoreHost::SetMicBlow(bool on) {
-    std::lock_guard lock(impl->core_mutex);
-    if (impl->core) {
-        impl->core->SetMicBlow(on);
-    }
-}
-
 void AltCoreHost::SetLidClosed(bool closed) {
     std::lock_guard lock(impl->core_mutex);
     if (impl->core) {
@@ -773,25 +755,10 @@ void AltCoreHost::SetConsoleMode(bool dsi) {
     }
 }
 
-bool AltCoreHost::RewindStep() {
-    std::lock_guard lock(impl->core_mutex);
-    if (!impl->core) {
-        return false;
-    }
-    const bool ok = impl->core->RewindStep();
-    if (ok) {
-        impl->audio.Flush();
-    }
-    return ok;
-}
-
 bool AltCoreHost::HandleMenuSetting(AltMenuSetting setting, int value) {
     switch (setting) {
     case AltMenuSetting::SolarLevel:
         SetSolarLevel(value);
-        return true;
-    case AltMenuSetting::MicBlow:
-        SetMicBlow(value != 0);
         return true;
     case AltMenuSetting::LidClosed:
         SetLidClosed(value != 0);
@@ -859,8 +826,6 @@ bool AltCoreHost::HandleMenuCommand(AltMenuCommand command, int value, const std
         return ImportSave(text);
     case AltMenuCommand::SetGbaSlotRom:
         return SetGbaSlotRom(text);
-    case AltMenuCommand::RewindStep:
-        return RewindStep();
     }
     return false;
 }

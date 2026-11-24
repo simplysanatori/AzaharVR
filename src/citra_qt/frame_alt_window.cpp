@@ -94,10 +94,6 @@ bool GMainWindow::AltWindowOpen(const FrameCores::RomInfo& info) {
         if (FrameXr::VrShowing()) { // the XR thread maps VR's touches (PushInput)
             state.touching = false;
         }
-        // A gamepad's or the keyboard's own, in VR and Flat (Edit Controls).
-        const auto controls = InputCommon::FrameXr::GetPad().Snapshot();
-        state.buttons |= (controls.mic_blow ? Common::AltCore::BtnMic : 0) |
-                         (controls.rewind ? Common::AltCore::BtnRewind : 0);
 #endif
         return state;
     };

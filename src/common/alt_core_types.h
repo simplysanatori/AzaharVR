@@ -43,11 +43,9 @@ struct Capabilities {
     bool has_dynamic_resolution = true;
     bool has_render_margin = true;
     bool has_solar_sensor = false;
-    bool has_mic_blow = false;
     bool has_lid_close = false;
     bool has_dsi_mode = false;
     bool has_screen_rotation = false;
-    bool has_rewind = false;
     bool has_save_import = false;
     bool has_gba_slot = false;
     ScreenMetrics screens{};
@@ -71,7 +69,6 @@ struct Capabilities {
         c.has_dynamic_resolution = false;
         c.has_render_margin = false;
         c.has_solar_sensor = true;
-        c.has_rewind = true;
         c.has_save_import = true;
         c.screens.top_aspect = 240.0f / 160.0f;
         c.screens.bottom_aspect = 240.0f / 160.0f;
@@ -110,7 +107,6 @@ struct Capabilities {
         c.has_bfi = false;
         c.has_dynamic_resolution = false;
         c.has_render_margin = false;
-        c.has_mic_blow = true;
         c.has_lid_close = true;
         c.has_dsi_mode = true;
         c.has_screen_rotation = true;
@@ -146,8 +142,6 @@ enum ButtonBit : uint32_t {
     BtnL      = 1u << 9,
     BtnX      = 1u << 10,
     BtnY      = 1u << 11,
-    BtnRewind = 1u << 12,
-    BtnMic    = 1u << 13,
 };
 
 struct InputState {

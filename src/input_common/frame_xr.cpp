@@ -190,8 +190,6 @@ void PadState::SetControls(const ControlState& controls) {
         sticks_[static_cast<std::size_t>(i)].store(PackStick(stick.x, stick.y),
                                                    std::memory_order_relaxed);
     }
-    mic_blow_.store(controls.mic_blow, std::memory_order_relaxed);
-    rewind_.store(controls.rewind, std::memory_order_relaxed);
 }
 
 void PadState::ReleaseAll() {
@@ -215,8 +213,6 @@ ControlState PadState::Snapshot() const {
         const auto [x, y] = GetStick(static_cast<AnalogControl>(i));
         state.sticks[static_cast<std::size_t>(i)] = {x, y};
     }
-    state.mic_blow = mic_blow_.load(std::memory_order_relaxed);
-    state.rewind = rewind_.load(std::memory_order_relaxed);
     return state;
 }
 

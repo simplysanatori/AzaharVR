@@ -63,7 +63,6 @@ struct HostFrontend {
 
 enum class AltMenuSetting : int {
     SolarLevel = 0,       ///< 0..10 (GBA solar sensor)
-    MicBlow = 1,          ///< 0 or 1 (DS/DSi microphone blow toggle)
     LidClosed = 2,        ///< 0 or 1 (DS/DSi sleep lid switch)
     TouchEnabled = 3,     ///< 0 or 1 (DS/DSi touch screen input)
     ScreenRotation = 4,   ///< 0, 90, 270 (DS/DSi Book Mode)
@@ -83,7 +82,6 @@ enum class AltMenuCommand : int {
     AddCheat = 8,      ///< `text`: "name\ncode" or raw code
     ImportSave = 9,    ///< `text`: path to .sav file
     SetGbaSlotRom = 10,///< `text`: path to .gba ROM (empty to eject)
-    RewindStep = 11,   ///< Step back one rewind snapshot (GBA/GB/GBC)
 };
 
 /**
@@ -92,7 +90,7 @@ enum class AltMenuCommand : int {
  *
  * Manages core selection, XR frame pacing, Vulkan::AltXrRenderer presentation,
  * AudioResampler output, controller/touch input delivery, save states,
- * rewind, cheats, and clean teardown back to 3DS defaults.
+ * cheats, and clean teardown back to 3DS defaults.
  */
 class AltCoreHost {
 public:
@@ -173,13 +171,11 @@ public:
     void ReloadMicrophone();
 
     void SetSolarLevel(int level);
-    void SetMicBlow(bool on);
     void SetLidClosed(bool closed);
     void SetTouchEnabled(bool on);
     void SetScreenRotation(int deg);
     bool SetGbaSlotRom(const std::string& path);
     void SetConsoleMode(bool dsi);
-    bool RewindStep();
 
     bool HandleMenuSetting(AltMenuSetting setting, int value);
     bool HandleMenuCommand(AltMenuCommand command, int value = 0, const std::string& text = {});

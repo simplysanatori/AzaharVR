@@ -5759,33 +5759,12 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
             g_frame_cheats->Command(r);
         }
         return;
-    case C::DsMicBlow:
-#ifdef ENABLE_ALT_CORES
-        if (alt_core_host && alt_core_host->IsRunning()) {
-            const bool on = r.value != 0; // the menu has flipped it
-            alt_core_host->SetMicBlow(on);
-            FrameXr::ShowToastText(on ? "Microphone Blow: On" : "Microphone Blow: Off");
-        }
-#endif
-        return;
     case C::DsLidToggle:
 #ifdef ENABLE_ALT_CORES
         if (alt_core_host && alt_core_host->IsRunning()) {
             const bool closed = r.value != 0; // the menu has flipped it
             alt_core_host->SetLidClosed(closed);
             FrameXr::ShowToastText(closed ? "Lid Closed" : "Lid Opened");
-        }
-#endif
-        return;
-    case C::GbaRewind:
-#ifdef ENABLE_ALT_CORES
-        if (alt_core_host && alt_core_host->IsRunning()) {
-            close_menu();
-            if (alt_core_host->RewindStep()) {
-                FrameXr::ShowToastText("Rewound");
-            } else {
-                FrameXr::ShowToastText("Nothing to Rewind");
-            }
         }
 #endif
         return;

@@ -24,7 +24,6 @@ extern "C" {
 #include <mgba/core/config.h>
 #include <mgba/core/core.h>
 #include <mgba/core/log.h>
-#include <mgba/core/rewind.h>
 #include <mgba/core/serialize.h>
 #include <mgba/gb/core.h>
 #include <mgba/gb/interface.h>
@@ -36,7 +35,6 @@ namespace {
 
 constexpr uint32_t kGbWidth = 160;
 constexpr uint32_t kGbHeight = 144;
-constexpr uint32_t kRewindAppendInterval = 6;
 
 bool EnsureDir(const std::string& dir) {
     if (dir.empty()) {
@@ -108,8 +106,6 @@ void OnGbRumbleSet(struct mRumbleIntegrator* integ, float value) {
 
 struct GbCore::Impl {
     mCore* core = nullptr;
-    mCoreRewindContext rewind_ctx{};
-    bool rewind_inited = false;
 
     std::string rom_path;
     std::string save_path;
@@ -120,7 +116,6 @@ struct GbCore::Impl {
     uint32_t height = kGbHeight;
     uint32_t audio_rate = 32768;
     uint32_t keys = 0;
-    uint64_t frame_count = 0;
 
     std::vector<mColor> fb;
     std::vector<uint32_t> rgba_fb;
@@ -254,21 +249,14 @@ bool GbCore::Load(const std::string& rom_path, const CorePaths& paths,
     core->setVideoBuffer(core, impl->fb.data(), impl->width);
 
     impl->core = core;
-    impl->frame_count = 0;
     impl->keys = 0;
     const unsigned rate = core->audioSampleRate(core);
     impl->audio_rate = rate > 0 ? rate : 32768u;
 
-    impl->caps.has_rewind = opts.enable_rewind;
     impl->caps.screens.top_aspect =
         static_cast<float>(impl->width) / static_cast<float>(impl->height);
     impl->caps.screens.touch_width = impl->width;
     impl->caps.screens.touch_height = impl->height;
-
-    if (opts.enable_rewind && opts.rewind_entries > 0) {
-        mCoreRewindContextInit(&impl->rewind_ctx, opts.rewind_entries, false);
-        impl->rewind_inited = true;
-    }
 
     LOG_INFO(Core, "GbCore: loaded {} ({}x{}, rate={} Hz)", rom_path, impl->width, impl->height,
              impl->audio_rate);
@@ -279,10 +267,6 @@ void GbCore::Unload() {
     if (!impl) {
         return;
     }
-    if (impl->rewind_inited) {
-        mCoreRewindContextDeinit(&impl->rewind_ctx);
-        impl->rewind_inited = false;
-    }
     if (impl->core) {
         impl->core->unloadROM(impl->core);
         mCoreConfigDeinit(&impl->core->config);
@@ -291,7 +275,6 @@ void GbCore::Unload() {
     }
     impl->fb.clear();
     impl->rgba_fb.clear();
-    impl->frame_count = 0;
     impl->rumble.level.store(0.0f, std::memory_order_relaxed);
 }
 
@@ -300,7 +283,6 @@ void GbCore::Reset() {
         return;
     }
     impl->core->reset(impl->core);
-    impl->frame_count = 0;
     impl->rumble.level.store(0.0f, std::memory_order_relaxed);
 }
 
@@ -322,11 +304,6 @@ void GbCore::RunFrame(FrameOutput& out) {
 
     impl->core->setKeys(impl->core, impl->keys);
     impl->core->runFrame(impl->core);
-    ++impl->frame_count;
-
-    if (impl->rewind_inited && (impl->frame_count % kRewindAppendInterval) == 0) {
-        mCoreRewindAppend(&impl->rewind_ctx, impl->core);
-    }
 
     const std::size_t n_pixels = static_cast<std::size_t>(impl->width) * impl->height;
     for (std::size_t i = 0; i < n_pixels; ++i) {
@@ -440,13 +417,6 @@ bool GbCore::LoadStateFromFile(const std::string& path) {
         return false;
     }
     return LoadStateFromMemory(buf.data(), buf.size());
-}
-
-bool GbCore::RewindStep() {
-    if (!impl->core || !impl->rewind_inited) {
-        return false;
-    }
-    return mCoreRewindRestore(&impl->rewind_ctx, impl->core, 1);
 }
 
 bool GbCore::ImportBatterySave(const std::string& sav_path) {

@@ -61,7 +61,6 @@ public:
     bool SetCheatEnabled(std::size_t idx, bool on) override;
     bool AddCheat(const std::string& name, const std::string& code) override;
 
-    void SetMicBlow(bool on) override;
     void SetMicrophone(MicrophoneFactory factory) override;
     void ReloadMicrophone() override;
     void CloseMicrophone() override;

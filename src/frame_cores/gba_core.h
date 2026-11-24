@@ -14,7 +14,7 @@ namespace FrameCores {
 
 /**
  * GBA emulation backend wrapping gba-ds (kyannon) on top of libmgba, including
- * shadow-instance map capture (mapcap), solar sensor, cartridge rumble, rewind,
+ * shadow-instance map capture (mapcap), solar sensor, cartridge rumble,
  * ROM auto-patching, and RetroArch .cht cheats.
  */
 class GbaCore final : public CoreBackend {
@@ -44,7 +44,6 @@ public:
     bool SaveStateToFile(const std::string& path) override;
     bool LoadStateFromFile(const std::string& path) override;
 
-    bool RewindStep() override;
     bool ImportBatterySave(const std::string& sav_path) override;
 
     std::vector<CheatEntry> ListCheats() const override;

@@ -15,7 +15,7 @@ namespace FrameCores {
 /**
  * Game Boy / Game Boy Color emulation backend directly wrapping libmgba's mCore
  * (GBCoreCreate). Independent of gba-ds statics; provides 160x144 output, GBC/SGB
- * colour palettes, stereo audio, battery saves, save states, rewind, and cartridge
+ * colour palettes, stereo audio, battery saves, save states, and cartridge
  * rumble.
  */
 class GbCore final : public CoreBackend {
@@ -45,7 +45,6 @@ public:
     bool SaveStateToFile(const std::string& path) override;
     bool LoadStateFromFile(const std::string& path) override;
 
-    bool RewindStep() override;
     bool ImportBatterySave(const std::string& sav_path) override;
 
 private:

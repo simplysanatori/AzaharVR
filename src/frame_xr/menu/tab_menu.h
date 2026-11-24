@@ -308,10 +308,8 @@ enum class Id : int {
     // Non-3DS core rows (GBA / GB / DS / DSi)
     CoreHeader,
     GbaSolarLevel,
-    GbaRewind,
     DsConsoleMode,
     DsTouchEnabled,
-    DsMicBlow,
     DsLidToggle,
     DsScreenRotation,
     ImportSave,
@@ -555,11 +553,9 @@ struct MenuModel {
         bool has_dynamic_resolution = true;
         bool has_render_margin = true;
         bool has_solar_sensor = false;
-        bool has_mic_blow = false;
         bool has_lid_close = false;
         bool has_dsi_mode = false;
         bool has_screen_rotation = false;
-        bool has_rewind = false;
         bool has_save_import = false;
         bool has_bottom = true;
         bool operator==(const CoreMenuCaps&) const = default;
@@ -569,7 +565,6 @@ struct MenuModel {
     bool ds_touch_enabled = true; ///< DS touch input switch
     int ds_screen_rotation = 0;   ///< 0 = 0°, 1 = 90°, 2 = 270°
     bool ds_lid_closed = false;   ///< DS lid closed toggle
-    bool ds_mic_active = false;   ///< DS microphone blow toggle
     bool operator==(const MenuModel&) const = default;
 };
 
