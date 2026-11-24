@@ -140,8 +140,12 @@ endif()
 
 # Propagate mGBA's public feature macros to downstream consumers (gbads_core and Azahar).
 # mGBA stores these as private COMPILE_DEFINITIONS on the mgba target, not INTERFACE.
+# These decide the layout of mGBA's structs, so they must match what mGBA itself is built with
+# (its CMakeLists.txt picks USE_PTHREADS by itself). Without USE_PTHREADS, mCoreRewindContext is
+# 64 bytes here and 168 in mGBA, which then writes past the end of ours.
 target_compile_definitions(mgba INTERFACE
     M_CORE_GBA
+    $<$<NOT:$<PLATFORM_ID:Windows>>:USE_PTHREADS>
     M_CORE_GB
     BUILD_STATIC
     ENABLE_VFS
