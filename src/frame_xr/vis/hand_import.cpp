@@ -1215,6 +1215,7 @@ std::vector<uint8_t> Build(std::span<const uint8_t> zip_bytes, const HandImportP
         };
         const auto only_forearm = [](const Vertex& v) { return v.weights.size() == 1 && v.weights[0].first == 0; };
         for (int round = 0; round < 2; round++) {
+            ask("Building the hand.", 0.32f + 0.03f * static_cast<float>(round));
             // Welded places: the smooth normal there, and which turned piece it belongs to.
             std::map<std::tuple<int64_t, int64_t, int64_t>, uint32_t> weld;
             std::vector<uint32_t> at(vertices.size());
@@ -1539,7 +1540,13 @@ std::vector<uint8_t> Build(std::span<const uint8_t> zip_bytes, const HandImportP
             }
         }
         std::vector<float> rosy(pixels, 0.0f);
+        // No more texels are walked than a few times the picture: overlapping triangles in a
+        // file made to waste time are left unpainted.
+        std::size_t budget = pixels * 8, walked = 0;
         for (const auto& t : triangles) {
+            if ((++walked & 1023) == 0) {
+                ask("Building the hand.", 0.86f);
+            }
             const Vertex& a = vertices[t[0]];
             if (a.tex != kSkinTex || a.stub) {
                 continue;
@@ -1555,9 +1562,11 @@ std::vector<uint8_t> Build(std::span<const uint8_t> zip_bytes, const HandImportP
             }
             const auto x0 = static_cast<int64_t>(std::floor(std::min({ax, bx, cx}))) - 1, x1 = static_cast<int64_t>(std::ceil(std::max({ax, bx, cx}))) + 1;
             const auto y0 = static_cast<int64_t>(std::floor(std::min({ay, by, cy}))) - 1, y1 = static_cast<int64_t>(std::ceil(std::max({ay, by, cy}))) + 1;
-            if (x1 - x0 > 2048 || y1 - y0 > 2048) {
+            const auto area = static_cast<std::size_t>(std::max<int64_t>(x1 - x0 + 1, 0)) * static_cast<std::size_t>(std::max<int64_t>(y1 - y0 + 1, 0));
+            if (x1 - x0 > 2048 || y1 - y0 > 2048 || area > budget) {
                 continue;
             }
+            budget -= area;
             for (int64_t py = std::max<int64_t>(y0, 0); py <= std::min<int64_t>(y1, height - 1); py++) {
                 for (int64_t px = std::max<int64_t>(x0, 0); px <= std::min<int64_t>(x1, width - 1); px++) {
                     const double qx = static_cast<double>(px) + 0.5, qy = static_cast<double>(py) + 0.5;
@@ -1603,7 +1612,7 @@ std::vector<uint8_t> Build(std::span<const uint8_t> zip_bytes, const HandImportP
         if (!r.stub) {
             continue;
         }
-        // The stub's patch: plain skin, solid at the vambrace, clear at its end.
+        // The stub's patch: plain skin, a little darker toward its rounded end.
         for (int64_t row = 0; row < r.h; row++) {
             const double fade = std::clamp(static_cast<double>(row - kPad) / static_cast<double>(r.h - 2 * kPad - 1), 0.0, 1.0);
             for (int64_t col = 0; col < r.w; col++) {
@@ -1612,7 +1621,10 @@ std::vector<uint8_t> Build(std::span<const uint8_t> zip_bytes, const HandImportP
                     colour[at + k] = static_cast<uint8_t>(std::lround(std::clamp(tone[k], 0.0, 255.0)));
                 }
                 colour[at + 3] = 235;
-                surface[at + 2] = static_cast<uint8_t>(std::lround(255.0 * fade));
+                // solid: a rounded end, drawn without blending (the file's format has an opacity, were a
+                // fade wanted); a little shade toward the end
+                surface[at + 2] = 255;
+                colour[at + 3] = static_cast<uint8_t>(std::lround(150.0 + 85.0 * fade));
                 surface[at + 3] = kSkin;
             }
         }

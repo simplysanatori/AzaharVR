@@ -7,8 +7,9 @@
 // model_shaders.h kModelFrag for that draw alone and has the same inputs: the push constants
 // (mvp, eye, key, up, params: z the fade, w + 1 a mirrored model), the two images and the four
 // vertex inputs of kModelVert, with OUT_LINEAR defined as there. Its output is premultiplied by
-// its alpha (the fade times the surface image's opacity), so it wants the blended pipeline; drawn
-// without blending the arm's faded end is simply solid.
+// its alpha (the fade times the surface image's opacity): where both are 1 it is plain colour
+// and any pipeline draws it; a fade below 1, or a file whose surface has opacity under 255,
+// wants the blended pipeline (without blending those pixels would only darken).
 //
 //   Colour image   sRGB colour, ambient occlusion in alpha.
 //   Surface image  red, green: the normal's x and y in tangent space (128 flat; green up);

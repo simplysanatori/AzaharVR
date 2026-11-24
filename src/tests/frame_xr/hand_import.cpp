@@ -32,6 +32,7 @@ struct File {
     std::vector<uint8_t> data;
     uint32_t claimed_size = 0; ///< above 0: what the directory says it unpacks to
     uint16_t method = 0;
+    std::vector<uint8_t> crc_of{}; ///< not empty: the unpacked bytes the checksum is of
 };
 
 void Put16(std::vector<uint8_t>& out, uint32_t v) {
@@ -47,7 +48,7 @@ void Put32(std::vector<uint8_t>& out, uint32_t v) {
 std::vector<uint8_t> Zip(const std::vector<File>& files) {
     std::vector<uint8_t> out, directory;
     for (const File& f : files) {
-        const uint32_t crc = lodepng_crc32(f.data.data(), f.data.size());
+        const uint32_t crc = f.crc_of.empty() ? lodepng_crc32(f.data.data(), f.data.size()) : lodepng_crc32(f.crc_of.data(), f.crc_of.size());
         const auto size = static_cast<uint32_t>(f.data.size());
         const uint32_t unpacked = f.claimed_size ? f.claimed_size : size;
         const auto offset = static_cast<uint32_t>(out.size());
@@ -222,8 +223,21 @@ std::string Dae(const Options& o = {}) {
     return s;
 }
 
+File Stored(const std::string& dae) {
+    return {"Model/pit.dae", {dae.begin(), dae.end()}};
+}
+
 std::vector<File> Files(const std::string& dae) {
-    std::vector<File> files{{"Model/pit.dae", {dae.begin(), dae.end()}}};
+    // The model deflated, as a real zip's is (the pictures stay stored).
+    unsigned char* packed = nullptr;
+    std::size_t packed_size = 0;
+    LodePNGCompressSettings settings;
+    lodepng_compress_settings_init(&settings);
+    REQUIRE(lodepng_deflate(&packed, &packed_size, reinterpret_cast<const unsigned char*>(dae.data()), dae.size(), &settings) == 0);
+    File model{"Model/pit.dae", {packed, packed + packed_size}, static_cast<uint32_t>(dae.size()), 8};
+    model.crc_of.assign(dae.begin(), dae.end());
+    std::free(packed);
+    std::vector<File> files{model};
     for (const char* set : {"skin_pit_001", "def_pit_001", "met_pit_001"}) {
         // "mtl" is white on skin (it marks skin there); the gold's picture is yellow, not red
         files.push_back({std::string("Model/images/") + set + "_col.png", Png(230, 200, 60)});
@@ -352,21 +366,26 @@ TEST_CASE("Hand importer: what is missing or wrong is said in a plain sentence",
     // A member that says it unpacks to more than is allowed, or to more than its packing could
     // hold, or is packed some other way, or whose bytes do not match its checksum.
     files = Files(Dae());
+    files[0] = Stored(Dae());
     files[0].claimed_size = 0x7FFFFFFFu;
     CHECK(Import(Zip(files)) == "A file in the zip is too big: Model/pit.dae.");
     files[0].claimed_size = static_cast<uint32_t>(files[0].data.size()) + 5;
     CHECK(Import(Zip(files)) == "A file in the zip is damaged: Model/pit.dae.");
     files = Files(Dae());
+    files[0] = Stored(Dae());
     files[0].method = 8; // "deflated", but it is not
     files[0].claimed_size = static_cast<uint32_t>(files[0].data.size()) * 100;
     CHECK(Import(Zip(files)) == "A file in the zip is damaged: Model/pit.dae.");
     files[0].claimed_size = static_cast<uint32_t>(files[0].data.size()) * 1000; // past the packing ratio
     CHECK(Import(Zip(files)) == "A file in the zip is damaged: Model/pit.dae.");
     files = Files(Dae());
+    files[0] = Stored(Dae());
     files[0].method = 14;
     CHECK(Import(Zip(files)) == "A file in the zip is packed in a way this cannot read: Model/pit.dae.");
     {
-        std::vector<uint8_t> zip = Zip(Files(Dae()));
+        std::vector<File> stored = Files(Dae());
+        stored[0] = Stored(Dae());
+        std::vector<uint8_t> zip = Zip(stored);
         zip[60] ^= 0x20; // a letter of the model's text
         CHECK(Import(zip) == "A file in the zip is damaged: Model/pit.dae.");
     }
@@ -380,6 +399,15 @@ TEST_CASE("Hand importer: what is missing or wrong is said in a plain sentence",
     int calls = 0;
     CHECK(ImportHand(Zip(Files(Dae())), hand, [&calls](std::string_view, float) { return ++calls < 3; }) == "Stopped.");
     CHECK(hand.empty());
+    // ... at any point of the work: every count of answers before the "no" stops it cleanly.
+    int asked = 0;
+    REQUIRE(ImportHand(Zip(Files(Dae())), hand, [&asked](std::string_view, float) { return ++asked > 0; }) == "");
+    CHECK(asked > 12);
+    for (int stop_at = 1; stop_at <= asked; stop_at++) {
+        int n = 0;
+        REQUIRE(ImportHand(Zip(Files(Dae())), hand, [&n, stop_at](std::string_view, float) { return ++n < stop_at; }) == "Stopped.");
+        REQUIRE(hand.empty());
+    }
 }
 
 TEST_CASE("Hand importer: no damage to a zip does worse than an error", "[kiuhand]") {

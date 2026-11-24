@@ -13,6 +13,7 @@
 // indices.u32, colour.rgba, surface.rgba, and info.json (counts, sizes, the fits).
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -140,6 +141,48 @@ int main(int argc, char** argv) {
         }
         const std::string label(PitHandNamedLabel(name));
         std::fprintf(f, "  \"handle_gap_%s\": %.5f,\n", label.c_str(), least);
+    }
+    // On the controller (through the fit, the left one's aim space, metres): how far the index
+    // finger's tip is from the trigger's face and the thumb's from the stick's top in each pose
+    // the app can make, and how far the wrist is bent to reach the elbow.
+    {
+        const float trigger[3] = {-0.0055f, -0.0395f, 0.0100f}, stick[3] = {0.0089f, 0.0113f, 0.0401f};
+        const auto to_aim = [&fit](const std::array<float, 3>& p) {
+            return std::array<float, 3>{fit[0] * p[0] + fit[4] * p[1] + fit[8] * p[2] + fit[12],
+                                        fit[1] * p[0] + fit[5] * p[1] + fit[9] * p[2] + fit[13],
+                                        fit[2] * p[0] + fit[6] * p[1] + fit[10] * p[2] + fit[14]};
+        };
+        const auto tip = [&](const PitHandPose& p, int role) {
+            const std::vector<PitMat34> bones = PitModelEvaluate(model, &p, nullptr);
+            for (std::size_t j = 0; j < model.joints.size(); j++) {
+                if (model.joints[j].role == role) {
+                    const PitMat34& b = bones[j];
+                    const auto& q = model.joints[j].position;
+                    return to_aim({b[0] * q[0] + b[1] * q[1] + b[2] * q[2] + b[3], b[4] * q[0] + b[5] * q[1] + b[6] * q[2] + b[7],
+                                   b[8] * q[0] + b[9] * q[1] + b[10] * q[2] + b[11]});
+                }
+            }
+            return std::array<float, 3>{};
+        };
+        const auto apart = [](const std::array<float, 3>& a, const float* b) {
+            return std::hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+        };
+        PitHandInputs in;
+        in.trigger_touch = true;
+        const PitHandPose touch = PitHandPoseFromInputs(in, PitHandGrasp::Free);
+        in.trigger = 1.0f;
+        in.thumb_stick = true;
+        in.grip_touch = true;
+        in.grip = 1.0f;
+        const PitHandPose pulled = PitHandPoseFromInputs(in, PitHandGrasp::Free);
+        std::fprintf(f, "  \"index_tip_to_trigger_free_touch\": %.4f,\n", apart(tip(touch, kPitIndexTip), trigger));
+        std::fprintf(f, "  \"index_tip_to_trigger_free_pulled\": %.4f,\n", apart(tip(pulled, kPitIndexTip), trigger));
+        std::fprintf(f, "  \"index_tip_to_trigger_held_grip\": %.4f,\n", apart(tip(PitHandNamedPose(PitHandNamed::Grip), kPitIndexTip), trigger));
+        std::fprintf(f, "  \"thumb_tip_to_stick_free_fist\": %.4f,\n", apart(tip(pulled, kPitThumbTip), stick));
+        std::fprintf(f, "  \"thumb_tip_to_stick_held\": %.4f,\n", apart(tip(PitHandNamedPose(PitHandNamed::GripStick), kPitThumbTip), stick));
+        const float el = std::hypot(elbow[0], elbow[1], elbow[2]), bl = std::hypot(model.elbow[0], model.elbow[1], model.elbow[2]);
+        const float c = (elbow[0] * model.elbow[0] + elbow[1] * model.elbow[1] + elbow[2] * model.elbow[2]) / (el * bl);
+        std::fprintf(f, "  \"wrist_bend_degrees\": %.1f,\n", std::acos(std::clamp(c, -1.0f, 1.0f)) * 57.29578f);
     }
     Matrix(f, "fit_left", fit);
     Matrix(f, "fit_right", PitModelControllerFit(model, false));
