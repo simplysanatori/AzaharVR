@@ -310,6 +310,10 @@ struct Visuals::Impl {
     int weapon_hand = -1;      ///< AzaharFrame kiuguns: the weapon in hand, this frame
     int weapon_id = -1;
     float weapon_opacity = 1.0f; ///< AzaharFrame kiuopacity
+    int pit_hand = -1;           ///< AzaharFrame kiu140: Pit's hand, and the wrist screen's laurel
+    int laurel_hand = -1;
+    Input::Posef laurel_pose{};
+    float laurel_width = 0.0f;
     FlashFrame flash;          ///< AzaharFrame kiuflash: its muzzle flash, this frame
     int shots_hand = -1;       ///< AzaharFrame kiuflash: the projectiles' hand and signal
     ShotSignal shots;
@@ -476,6 +480,8 @@ void Visuals::TakeInput(const FrameInfo& info, Where where, Input::InputFrame& i
     m.laser_hand = -1; // AzaharFrame kiugyro: GameFrame sets it again for this frame
     m.aim_target = false; // AzaharFrame kiuaim2: the same
     m.weapon_hand = -1; // AzaharFrame kiuguns: the same
+    m.pit_hand = -1;    // AzaharFrame kiu140: the same
+    m.laurel_hand = -1;
     m.flash = {};       // AzaharFrame kiuflash: the same
     m.shots_hand = -1;
     m.hide_hand = -1;
@@ -1103,6 +1109,20 @@ void Visuals::Frame(Runtime& rt, const FrameInfo& info, Where where, const Windo
             out.weapon_opacity = h == m.weapon_hand ? m.weapon_opacity : 1.0f; // kiuopacity
             out.flash = h == m.weapon_hand ? m.flash : FlashFrame{}; // AzaharFrame kiuflash
             out.shots = h == m.shots_hand ? m.shots : ShotSignal{};
+            // AzaharFrame kiu140
+            const Input::HandInput& held = in.hand[static_cast<std::size_t>(h)];
+            out.pit_arm = h == m.pit_hand;
+            out.pit = {.trigger_touch = held.trigger_touch,
+                       .trigger = held.trigger,
+                       .grip_touch = held.grip_touch,
+                       .grip = held.grip,
+                       .thumb_stick = std::hypot(held.stick.x, held.stick.y) > 0.1f ||
+                                      held.stick_click,
+                       .thumb_rest = held.thumb_touch};
+            if (h == m.laurel_hand) {
+                out.laurel_pose = m.laurel_pose;
+                out.laurel_width = m.laurel_width;
+            }
         }
     } else if (ControllerModelsWanted(Settings::values.vr_show_controllers.GetValue(),
                                       passthrough_shown)) {
@@ -1129,6 +1149,16 @@ void Visuals::SetWeapon(int hand, int id, float opacity) {
     impl->weapon_hand = hand;
     impl->weapon_id = id;
     impl->weapon_opacity = opacity; // AzaharFrame kiuopacity
+}
+
+void Visuals::SetPitArm(int hand) { // AzaharFrame kiu140
+    impl->pit_hand = hand;
+}
+
+void Visuals::SetLaurel(int hand, const Input::Posef& pose, float width) { // AzaharFrame kiu140
+    impl->laurel_hand = hand;
+    impl->laurel_pose = pose;
+    impl->laurel_width = width;
 }
 
 void Visuals::SetMuzzleFlash(const FlashFrame& flash) { // AzaharFrame kiuflash

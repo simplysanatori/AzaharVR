@@ -42,6 +42,7 @@
 
 #include "frame_xr/frame_xr.h"
 #include "frame_xr/input/types.h"
+#include "frame_xr/vis/pit_hand.h" // AzaharFrame kiu140
 #include "frame_xr/vis/model_file.h"
 #include "frame_xr/vis/model_plane.h"  // AzaharFrame ctrlfront
 #include "frame_xr/vis/muzzle_flash.h" // AzaharFrame kiuflash
@@ -89,6 +90,14 @@ public:
         /// AzaharFrame kiuflash: the projectiles' signal (projectile.h): a new shot flies from the
         /// muzzle to its target.
         ShotSignal shots;
+        /// AzaharFrame kiu140: Pit's hand and forearm (pit_hand.h) in place of this controller,
+        /// its fingers from what the controller feels; drawn while the weapon is in the other.
+        bool pit_arm = false;
+        PitHandInputs pit;
+        /// AzaharFrame kiu140: the laurel round the wrist screen on this hand (laurel_frame.h):
+        /// the screen's pose (LOCAL) and its width in metres (0: none).
+        Input::Posef laurel_pose{};
+        float laurel_width = 0.0f;
     };
 
     /// XR thread, each frame while models are wanted (anything shown or not): reads the files
@@ -211,8 +220,17 @@ private:
         FitPart fit;
         bool turned = false;
         FitMat turn{};
+        /// AzaharFrame kiu140: Pit's hand of our own, and where its elbow is (arm space).
+        bool pit = false;
+        bool pit_elbow = false;
+        PitVec3 elbow{};
     };
     std::array<ArmDraw, 2> arm_draws{};
+    std::array<int64_t, 2> pit_time_ns{};
+    PitHandPose pit_pose;      ///< eased toward the controller's (one hand at a time is Pit's)
+    bool pit_posed = false;
+    void MakePit();            ///< the GPU side, recorded into the frame's commands (once)
+    void SkinPit(const std::array<Hand, 2>& hands);
     std::array<std::array<float, 3>, 2> arm_dir{}; ///< the smoothed forearm directions (LOCAL)
     std::array<int64_t, 2> arm_time_ns{};
     std::string arm_logged;

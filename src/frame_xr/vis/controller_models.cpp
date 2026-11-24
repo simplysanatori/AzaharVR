@@ -24,6 +24,7 @@
 #include "frame_xr/retired_swapchains.h" // AzaharFrame projdef
 #include "frame_xr/session.h"
 #include "frame_xr/vis/controller_models.h"
+#include "frame_xr/vis/laurel_frame.h" // AzaharFrame kiu140
 #include "frame_xr/vis/see_through.h" // AzaharFrame kiuopacity
 #include "frame_xr/vis/model_shaders.h"
 #include "frame_xr/vis/proj_screen.h" // AzaharFrame projscreen
@@ -576,6 +577,20 @@ struct ControllerModels::Gpu {
     std::string weapon_fit_logged;
     std::string weapon_draw_logged; ///< AzaharFrame kiuweapon
 
+    // ---- AzaharFrame kiu140: Pit's hand and the laurel (pit_hand.h, laurel_frame.h) ----
+    struct Pit {
+        int state = 0; ///< 0 not made, 1 made, 2 failed
+        vk::Buffer vertices, indices; ///< the hand's, then the laurel's, in one buffer each
+        float* map = nullptr;         ///< the hand's vertices (written when its pose changes)
+        uint32_t hand_indices = 0, laurel_indices = 0;
+        vk::DescriptorPool pool;
+        vk::DescriptorSet set;
+        vk::Sampler sampler;
+        PitHandPose skinned;
+        PitVec3 elbow{};
+        bool skinned_once = false;
+    } pit;
+
     void FreeWeapon(Weapon& w) {
         if (!w.sets.empty()) {
             device.freeDescriptorSets(weapon_pool, w.sets);
@@ -751,6 +766,13 @@ void ControllerModels::DestroyXr() {
         }
         for (auto& [key, sampler] : g.weapon_samplers) {
             g.device.destroySampler(sampler);
+        }
+        // AzaharFrame kiu140: Pit's hand (its buffers and images are the owned ones)
+        if (g.pit.sampler) {
+            g.device.destroySampler(g.pit.sampler);
+        }
+        if (g.pit.pool) {
+            g.device.destroyDescriptorPool(g.pit.pool);
         }
         if (g.weapon_pool) {
             g.device.destroyDescriptorPool(g.weapon_pool);
@@ -2517,6 +2539,33 @@ void RecordArm(vk::CommandBuffer& c, GpuT& g, const PartT& part, const Mat& view
     }
 }
 
+// AzaharFrame kiu140: Pit's hand or the laurel: `count` indices from `first`, lit and solid, at
+// `model` (LOCAL).
+template <typename GpuT>
+void RecordPit(vk::CommandBuffer& c, GpuT& g, const Mat& model, const Mat& view_proj,
+               const XrVector3f& eye_pos, const Mat& head, float fade, bool mirrored,
+               uint32_t first, uint32_t count) {
+    const Mat to_model = InverseAffine(model);
+    PushConstants pc{};
+    const auto eye = Apply(to_model, eye_pos.x, eye_pos.y, eye_pos.z, 1.0f);
+    pc.eye = {eye[0], eye[1], eye[2], 0.0f}; // no cut
+    const auto back = Apply(head, 0.0f, 0.0f, 1.0f, 0.0f);
+    const auto key = Apply(to_model, back[0] * 0.6f, 1.0f + back[1] * 0.6f, back[2] * 0.6f, 0.0f);
+    pc.key = {key[0], key[1], key[2], 0.0f};
+    const auto up = Apply(to_model, 0.0f, 1.0f, 0.0f, 0.0f);
+    pc.up = {up[0], up[1], up[2], 0.0f};
+    pc.params = {0.0f, 1.0f, std::clamp(fade, 0.0f, 1.0f), mirrored ? 1.0f : 0.0f};
+    pc.mvp = Multiply(view_proj, model);
+    c.bindPipeline(vk::PipelineBindPoint::eGraphics, g.pipeline);
+    c.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g.pipeline_layout, 0, g.pit.set, {});
+    c.bindVertexBuffers(0, g.pit.vertices, vk::DeviceSize{0});
+    c.bindIndexBuffer(g.pit.indices, 0, vk::IndexType::eUint32);
+    c.pushConstants(g.pipeline_layout,
+                    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0,
+                    sizeof(pc), &pc);
+    c.drawIndexed(count, 1, first, 0, 0);
+}
+
 // AzaharFrame kiuflash: the muzzle flash's cards of its kind (muzzle_flash.h), added to what is
 // behind (the glow pipeline), every card placed from the centre eye so both eyes see one card.
 template <typename GpuT, typename WeaponT>
@@ -2990,6 +3039,18 @@ void ControllerModels::FitArms(const ViewPose& views, const std::array<Hand, 2>&
             }
         }
     }
+    // AzaharFrame kiu140: Pit's hand of our own on the hand without the weapon.
+    for (int h = 0; h < 2; h++) {
+        const Hand& hand = hands[static_cast<std::size_t>(h)];
+        ArmDraw& d = draws[static_cast<std::size_t>(h)];
+        if (!d.on && hand.shown && hand.pit_arm && hand.weapon < 0 && weapon_hand >= 0 &&
+            h != weapon_hand && gpu && gpu->pit.state != 2) {
+            const bool left = h == Input::HandIndex(Input::Hand::Left);
+            d.on = d.pit = true;
+            d.fit.transform = PitHandControllerFit(left, arm_tune.scale);
+            d.fit.mirrored = !left;
+        }
+    }
     const int64_t now = std::chrono::duration_cast<std::chrono::nanoseconds>(
                             std::chrono::steady_clock::now().time_since_epoch())
                             .count();
@@ -3010,7 +3071,10 @@ void ControllerModels::FitArms(const ViewPose& views, const std::array<Hand, 2>&
         std::copy(d.fit.transform.begin(), d.fit.transform.end(), fit_m.begin());
         const Mat world = Multiply(FromPose(aim.orientation, aim.position), fit_m);
         const auto wrist = Apply(world, 0.0f, 0.0f, 0.0f, 1.0f);
-        const auto& e = live->arm.elbow;
+        const std::array<float, 3> e =
+            d.pit ? std::array<float, 3>{kPitElbowAt[0], kPitElbowAt[1], kPitElbowAt[2]}
+                  : std::array<float, 3>{live->arm.elbow[0], live->arm.elbow[1],
+                                         live->arm.elbow[2]};
         const auto far = Apply(world, e[0], e[1], e[2], 1.0f);
         const std::array<float, 3> w3{wrist[0], wrist[1], wrist[2]};
         const std::array<float, 3> along{far[0] - w3[0], far[1] - w3[1], far[2] - w3[2]};
@@ -3023,6 +3087,19 @@ void ControllerModels::FitArms(const ViewPose& views, const std::array<Hand, 2>&
         const float dt = time_ns ? static_cast<float>(now - time_ns) * 1e-9f : -1.0f;
         time_ns = now;
         dir = SmoothDirection(dir, target, dt);
+        if (d.pit) { // AzaharFrame kiu140: the forearm's bone, in arm space
+            const float reach = std::sqrt(along[0] * along[0] + along[1] * along[1] +
+                                          along[2] * along[2]);
+            const float len = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+            if (len > 1e-6f) {
+                const float k = reach / len;
+                const auto at = Apply(InverseAffine(world), w3[0] + dir[0] * k, w3[1] + dir[1] * k,
+                                      w3[2] + dir[2] * k, 1.0f);
+                d.elbow = {at[0], at[1], at[2]};
+                d.pit_elbow = true;
+            }
+            continue;
+        }
         d.turn = RotationBetween(w3, along, dir);
         d.turned = true;
     }
@@ -3044,6 +3121,119 @@ void ControllerModels::FitArms(const ViewPose& views, const std::array<Hand, 2>&
                  kArmScale * arm_tune.scale,
                  arm_value ? std::string{kArmFitSwitch} + "=" + *arm_value : std::string{"default"},
                  elbow ? "turned toward the elbow" : "straight");
+    }
+}
+
+// AzaharFrame kiu140: the hand's vertices (host visible, written again when its pose changes: one
+// image is drawn at a time, and Record runs once the last one is done), the laurel's after them, the
+// indices, and the palette; the copies go into this frame's commands.
+void ControllerModels::MakePit() {
+    Gpu& g = *gpu;
+    Gpu::Pit& p = g.pit;
+    p.state = 2;
+    try {
+        const LaurelMesh& laurel = LaurelFrame();
+        const std::span<const uint32_t> hand = PitHandIndices(false);
+        const std::size_t hand_floats = std::size_t{PitHandVertexCount()} * kPitVertexFloats;
+        const auto host = vk::MemoryPropertyFlagBits::eHostVisible |
+                          vk::MemoryPropertyFlagBits::eHostCoherent;
+        const auto make = [&](std::size_t size, vk::BufferUsageFlags usage, vk::Buffer& out) {
+            vk::DeviceMemory memory;
+            out = g.Buffer(size, usage, host, &memory);
+            g.buffers.emplace_back(out, memory);
+            return g.device.mapMemory(memory, 0, size);
+        };
+        p.map = static_cast<float*>(make((hand_floats + laurel.vertices.size()) * sizeof(float),
+                                         vk::BufferUsageFlagBits::eVertexBuffer, p.vertices));
+        std::copy(laurel.vertices.begin(), laurel.vertices.end(), p.map + hand_floats);
+        auto* indices = static_cast<uint32_t*>(
+            make((hand.size() + laurel.indices.size()) * sizeof(uint32_t),
+                 vk::BufferUsageFlagBits::eIndexBuffer, p.indices));
+        std::copy(hand.begin(), hand.end(), indices);
+        for (std::size_t k = 0; k < laurel.indices.size(); ++k) {
+            indices[hand.size() + k] = laurel.indices[k] + PitHandVertexCount();
+        }
+        p.hand_indices = static_cast<uint32_t>(hand.size());
+        p.laurel_indices = static_cast<uint32_t>(laurel.indices.size());
+
+        const std::vector<uint8_t> colour = PitHandPalette(PitHandDefaultColours());
+        const std::vector<uint8_t> surface = PitHandSurface();
+        vk::Buffer staging;
+        auto* pixels = static_cast<uint8_t*>(make(colour.size() + surface.size(),
+                                                  vk::BufferUsageFlagBits::eTransferSrc, staging));
+        std::copy(colour.begin(), colour.end(), pixels);
+        std::copy(surface.begin(), surface.end(), pixels + colour.size());
+        g.staging_for_upload = staging;
+        const vk::ImageView colour_view =
+            g.UploadImage(g.cmd, 0, kPitPaletteWidth, kPitPaletteHeight,
+                          vk::Format::eR8G8B8A8Srgb, nullptr, nullptr);
+        const vk::ImageView surface_view =
+            g.UploadImage(g.cmd, colour.size(), kPitPaletteWidth, kPitPaletteHeight,
+                          vk::Format::eR8G8B8A8Unorm, nullptr, nullptr);
+        p.sampler = g.device.createSampler({
+            .magFilter = vk::Filter::eLinear,
+            .minFilter = vk::Filter::eLinear,
+            .mipmapMode = vk::SamplerMipmapMode::eNearest,
+            .addressModeU = vk::SamplerAddressMode::eClampToEdge,
+            .addressModeV = vk::SamplerAddressMode::eClampToEdge,
+            .addressModeW = vk::SamplerAddressMode::eClampToEdge,
+            .maxLod = 0.0f, // no smaller ones: they would mix materials
+        });
+        const vk::DescriptorPoolSize size{vk::DescriptorType::eCombinedImageSampler, 2};
+        p.pool = g.device.createDescriptorPool(
+            {.maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &size});
+        p.set = g.device.allocateDescriptorSets({.descriptorPool = p.pool,
+                                                 .descriptorSetCount = 1,
+                                                 .pSetLayouts = &g.set_layout})[0];
+        const std::array<vk::DescriptorImageInfo, 2> infos{{
+            {p.sampler, colour_view, vk::ImageLayout::eShaderReadOnlyOptimal},
+            {p.sampler, surface_view, vk::ImageLayout::eShaderReadOnlyOptimal},
+        }};
+        std::array<vk::WriteDescriptorSet, 2> writes{};
+        for (uint32_t k = 0; k < 2; ++k) {
+            writes[k] = {.dstSet = p.set,
+                         .dstBinding = k,
+                         .descriptorCount = 1,
+                         .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                         .pImageInfo = &infos[k]};
+        }
+        g.device.updateDescriptorSets(writes, {});
+        p.state = 1;
+        LOG_INFO(Frontend, "xr: Pit's hand: {} triangles, the laurel {}", p.hand_indices / 3,
+                 p.laurel_indices / 3);
+    } catch (const std::exception& error) {
+        LOG_ERROR(Frontend, "xr: Pit's hand could not be made ({}): the controller shows",
+                  error.what());
+    }
+}
+
+void ControllerModels::SkinPit(const std::array<Hand, 2>& hands) {
+    Gpu::Pit& p = gpu->pit;
+    for (std::size_t h = 0; h < 2; h++) {
+        if (!arm_draws[h].pit) {
+            continue;
+        }
+        const int64_t now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                std::chrono::steady_clock::now().time_since_epoch())
+                                .count();
+        const float dt = pit_posed && now > pit_time_ns[h]
+                             ? std::min(static_cast<float>(now - pit_time_ns[h]) * 1e-9f, 0.1f)
+                             : 0.0f;
+        pit_time_ns[h] = now;
+        const PitHandPose target = PitHandPoseFromInputs(hands[h].pit, PitHandGrasp::Free);
+        pit_pose = pit_posed ? PitHandEase(pit_pose, target, dt) : target;
+        pit_posed = true;
+        const PitVec3 elbow = arm_draws[h].pit_elbow ? arm_draws[h].elbow : kPitElbowAt;
+        const float moved = std::hypot(elbow[0] - p.elbow[0], elbow[1] - p.elbow[1],
+                                       elbow[2] - p.elbow[2]);
+        if (!p.skinned_once || moved > 0.01f || PitHandPoseDiffers(pit_pose, p.skinned)) {
+            PitHandSkin(PitHandEvaluate(pit_pose, &elbow), false,
+                        {p.map, std::size_t{PitHandVertexCount()} * kPitVertexFloats});
+            p.skinned = pit_pose;
+            p.elbow = elbow;
+            p.skinned_once = true;
+        }
+        return;
     }
 }
 
@@ -3077,6 +3267,19 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
     vk::CommandBuffer& c = g.cmd;
     c.reset();
     c.begin({.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+    // AzaharFrame kiu140: Pit's hand and the laurel, made the first time one shows.
+    {
+        bool wanted = false;
+        for (std::size_t h = 0; h < 2; h++) {
+            wanted = wanted || arm_draws[h].pit || (hands[h].shown && hands[h].laurel_width > 0.0f);
+        }
+        if (wanted && g.pit.state == 0) {
+            MakePit();
+        }
+        if (g.pit.state == 1) {
+            SkinPit(hands);
+        }
+    }
     if (g.queries) { // AzaharFrame ctrlfront
         c.resetQueryPool(g.queries, 0, 2);
         c.writeTimestamp(vk::PipelineStageFlagBits::eTopOfPipe, g.queries, 0);
@@ -3286,7 +3489,28 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
             // AzaharFrame kiuarm: Pit's arm: in place of the controller, or under the weapon (a
             // see-through weapon shows it through).
             const ArmDraw& arm = arm_draws[static_cast<std::size_t>(h)];
-            if (arm.on && g.weapon_live && g.weapon_live->arm_part >= 0) {
+            // AzaharFrame kiu140: the laurel round the wrist screen, and Pit's own hand.
+            if (hand.laurel_width > 0.0f && g.pit.state == 1) {
+                const XrPosef at = ToXr(hand.laurel_pose);
+                Mat scale{};
+                scale[0] = scale[5] = scale[10] = hand.laurel_width;
+                scale[15] = 1.0f;
+                RecordPit(c, g, Multiply(FromPose(at.orientation, at.position), scale), view_proj,
+                          views.eye[e].position, head, hand.fade, false, g.pit.hand_indices,
+                          g.pit.laurel_indices);
+                c.bindPipeline(vk::PipelineBindPoint::eGraphics, g.pipeline);
+            }
+            if (arm.pit && g.pit.state == 1) {
+                const XrPosef aim = ToXr(hand.aim);
+                Mat fit_m{};
+                std::copy(arm.fit.transform.begin(), arm.fit.transform.end(), fit_m.begin());
+                RecordPit(c, g, Multiply(FromPose(aim.orientation, aim.position), fit_m),
+                          view_proj, views.eye[e].position, head, hand.fade, arm.fit.mirrored, 0,
+                          g.pit.hand_indices);
+                c.bindPipeline(vk::PipelineBindPoint::eGraphics, g.pipeline);
+                continue;
+            }
+            if (arm.on && !arm.pit && g.weapon_live && g.weapon_live->arm_part >= 0) {
                 RecordArm(c, g,
                           g.weapon_live->parts[static_cast<std::size_t>(g.weapon_live->arm_part)],
                           view_proj, views.eye[e].position, head, hand, arm.fit,

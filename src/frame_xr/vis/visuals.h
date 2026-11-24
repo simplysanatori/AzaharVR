@@ -154,6 +154,12 @@ public:
     /// is not ready). Cleared by TakeInput; GameFrame sets it. AzaharFrame kiuopacity:
     /// `opacity`, Weapon Opacity (0.2 to 1; see_through.h).
     void SetWeapon(int hand, int id, float opacity = 1.0f);
+    /// AzaharFrame kiu140: Pit's hand and forearm (pit_hand.h) in place of `hand`'s controller,
+    /// while the weapon is drawn in the other. Cleared by TakeInput; GameFrame sets it.
+    void SetPitArm(int hand);
+    /// AzaharFrame kiu140: the laurel (laurel_frame.h) round the wrist screen on `hand`: its pose
+    /// (LOCAL) and width in metres. Cleared by TakeInput; GameFrame sets it.
+    void SetLaurel(int hand, const Input::Posef& pose, float width);
     /// AzaharFrame kiuflash: the weapon's muzzle flash this frame (muzzle_flash.h), drawn with
     /// the weapon set by SetWeapon. Cleared by TakeInput; GameFrame sets it.
     void SetMuzzleFlash(const FlashFrame& flash);

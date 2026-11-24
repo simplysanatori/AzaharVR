@@ -1773,6 +1773,9 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                                 Input::Rotate(ToInput(head_view.head).orientation, {0, 1, 0}));
         wrist_on = w.shown;
         wrist_wanted = wanted; // AzaharFrame kiupanel
+        if (w.shown && Settings::values.vr_kiu_laurel.GetValue() != 0) { // AzaharFrame kiu140
+            visuals.SetLaurel(Input::HandIndex(hand), w.pose, wrist_w);
+        }
         Immersive::SetWristScreen(w.shown, ToXr(w.pose), {wrist_w, wrist_h}, info.display_time);
         if (w.changed && wrist_logs < 200) {
             wrist_logs++;
@@ -2414,6 +2417,11 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                     static_cast<int>(Settings::values.vr_light_gun_weapon_opacity.GetValue()),
                     see.weapon));
             weapon_shown = true;
+            // AzaharFrame kiu140: Pit's Arm on the free hand, in first person.
+            if (Settings::values.vr_kiu_arm.GetValue() != 0 && Kiu::FirstPerson::AngelsAim() &&
+                !Kiu::FirstPerson::OutsideViewOn()) {
+                visuals.SetPitArm(gyro_aim_hand ^ 1);
+            }
         }
     }
     // AzaharFrame kiuflash: a flash at the weapon's muzzle on each of the game's own shots.
