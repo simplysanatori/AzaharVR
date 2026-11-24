@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -85,6 +86,7 @@ private:
     const DriverServices services;
     const GbadsLoop& loop;
     const GbaDsLimits limits;
+    const std::string logo_dir; ///< in the game's own folder
     GbadsHost host{};
     std::thread thread;
 

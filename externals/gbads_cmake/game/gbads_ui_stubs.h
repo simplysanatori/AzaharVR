@@ -83,13 +83,42 @@ void ui_brightness(int a, int b) { (void) a, (void) b; }
 void ui_color_correction(bool on) { (void) on; }
 void ui_shader(int s) { (void) s; }
 
-/* logos: none */
-SDL_Surface* ui_logo_surface(const Config* c, const char* r, const char* g, bool* p, int* s) { (void) c, (void) r, (void) g, (void) p; if (s) *s = 1; return NULL; }
-bool ui_load_logo(const Config* c, const char* r, const char* g, SDL_Texture* t[2], int* w, int* h, bool* p) { (void) c, (void) r, (void) g, (void) w, (void) h, (void) p; t[0] = t[1] = NULL; return false; }
+/* ---------------------------------------------------------------- logos: the one made from the ROM, no other */
+static bool gds_logo_asked;
+static bool gds_logo_file(const char* code, char* path, size_t n) {
+    gds_logo_asked = true;
+    return gds_logo_path(H.host->logo_dir, code, gds_emu->fileCrc, path, n); /* (the file's CRC32: emu_open has it) */
+}
+SDL_Surface* ui_logo_surface(const Config* c, const char* r, const char* g, bool* p, int* s) {
+    (void) c, (void) r;
+    char path[1024];
+    int w, h;
+    if (s) *s = 1;
+    *p = true;
+    uint8_t* px = gds_logo_file(g, path, sizeof(path)) ? gds_logo_read(path, &w, &h) : NULL;
+    if (!px) return NULL;
+    SDL_Surface* o = SDL_CreateRGBSurfaceWithFormatFrom(px, w, h, 32, w * 4, SDL_PIXELFORMAT_RGBA32);
+    if (o) o->owned = true;
+    else free(px);
+    return o;
+}
+bool ui_load_logo(const Config* c, const char* r, const char* g, SDL_Texture* t[2], int* w, int* h, bool* p) {
+    char path[1024];
+    t[0] = t[1] = NULL;
+    SDL_Surface* s = ui_logo_surface(c, r, g, p, NULL);
+    if (!s) {
+        if (r && gds_logo_file(g, path, sizeof(path))) gds_logo_want(r, g, H.host->logo_dir, path);
+        return false;
+    }
+    *w = s->w, *h = s->h;
+    t[0] = SDL_CreateTexture(NULL, SDL_PIXELFORMAT_RGBA32, 0, s->w, s->h);
+    if (t[0] && t[0]->px) memcpy(t[0]->px, s->pixels, (size_t) s->w * s->h * 4);
+    SDL_FreeSurface(s);
+    return true;
+}
 bool ui_logo_provisional(void) { return false; }
 bool ui_logo_custom(const Config* c, const char* r, const char* g) { (void) c, (void) r, (void) g; return false; }
-const char* ui_logo_note(void) { return ""; }
-uint32_t logo_generation(void) { return 0; }
+const char* ui_logo_note(void) { return gds_logo_asked ? "the game's own (custom_logos = off)" : "none yet"; }
 
 /* ---------------------------------------------------------------- the menus: never opened */
 SDL_Color ui_accent_color(int r) { (void) r; return (SDL_Color) { 0, 0, 0, 255 }; }

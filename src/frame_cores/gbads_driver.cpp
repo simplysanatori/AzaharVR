@@ -48,10 +48,13 @@ std::unique_ptr<GbaDsDriver> GbaDsDriver::Make(const DriverServices& services,
 
 GbaDsDriver::GbaDsDriver(const DriverServices& services_, const GbadsLoop& loop_,
                          const GbaDsLimits& limits_)
-    : services(services_), loop(loop_), limits(limits_), scratch(kSoundFrames * 2u, 0) {
+    : services(services_), loop(loop_), limits(limits_),
+      logo_dir(services_.game_dir.empty() ? std::string{} : services_.game_dir + "/logo"),
+      scratch(kSoundFrames * 2u, 0) {
     host.ctx = this;
     host.emu = services.emu;
     host.rom_path = services.rom_path.c_str();
+    host.logo_dir = logo_dir.empty() ? nullptr : logo_dir.c_str();
     host.events = [](void* ctx, bool* turn_page) {
         return static_cast<GbaDsDriver*>(ctx)->OnEvents(turn_page);
     };
