@@ -8,6 +8,7 @@
 #include "common/logging/log.h"
 #include "common/settings.h"
 #include "core/3ds.h"
+#include "core/frontend/alt_screens.h" // AzaharVR
 #include "core/frontend/emu_window.h"
 #include "core/frontend/input.h"
 
@@ -213,8 +214,14 @@ void EmuWindow::TouchMoved(unsigned framebuffer_x, unsigned framebuffer_y) {
 void EmuWindow::UpdateCurrentFramebufferLayout(u32 width, u32 height, bool is_portrait_mode) {
     Layout::FramebufferLayout layout;
     // AzaharFrame: in flat, the window's own layout (common/frame_flat.h).
-    const Settings::LayoutOption layout_option = Settings::WindowLayoutOption();
-    const bool swap_screen = Settings::WindowSwapScreen();
+    Settings::LayoutOption layout_option = Settings::WindowLayoutOption();
+    bool swap_screen = Settings::WindowSwapScreen();
+    // AzaharVR: DS, GBA and Game Boy games; a game with one screen has the window to itself.
+    const auto alt_screens = Layout::GetAltScreens();
+    if (alt_screens && !alt_screens->HasBottom()) {
+        layout_option = Settings::LayoutOption::SingleScreen;
+        swap_screen = false;
+    }
     const Settings::StereoRenderOption stereo_option = get3DMode();
     bool render_full_stereo = (stereo_option == Settings::StereoRenderOption::SideBySideFull);
     bool is_bottom = is_secondary;
@@ -307,6 +314,9 @@ void EmuWindow::UpdateCurrentFramebufferLayout(u32 width, u32 height, bool is_po
     }
 #endif
 
+    if (alt_screens) {
+        layout = Layout::FitAltScreens(layout, *alt_screens, layout_option);
+    }
     if (render_full_stereo) {
         layout.width = width * 2;
     }

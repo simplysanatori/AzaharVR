@@ -1,4 +1,5 @@
 add_executable(tests
+    core/alt_screens.cpp # AzaharVR
     frame_xr/input_engine.cpp # AzaharFrame
     frame_xr/input_geometry.cpp # AzaharFrame
     frame_xr/input_mapper.cpp # AzaharFrame
