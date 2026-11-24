@@ -193,6 +193,13 @@ if (TARGET frame_cores)
         frame_cores/pokedaisy_driver_tests.cpp)
     target_link_libraries(tests PRIVATE frame_cores)
 endif()
+if (TARGET gbads_game)
+    # An object of its own: gba-ds's header names (config.h, emu.h, ui.h) stay out of the others
+    add_library(gbads_driver_tests OBJECT EXCLUDE_FROM_ALL frame_cores/gbads_driver_tests.cpp)
+    target_link_libraries(gbads_driver_tests PRIVATE frame_cores gbads_game citra_common catch2
+        Threads::Threads)
+    target_sources(tests PRIVATE $<TARGET_OBJECTS:gbads_driver_tests>)
+endif()
 target_link_libraries(tests PRIVATE input_common) # AzaharFrame
 target_link_libraries(tests PRIVATE httplib) # AzaharFrame crashreport: Send Report to 127.0.0.1
 target_link_libraries(tests PRIVATE json-headers) # AzaharFrame jsoncrash: pack_config.h; emfallback: the recipe parser header

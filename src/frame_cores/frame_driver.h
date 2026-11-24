@@ -125,5 +125,9 @@ std::unique_ptr<FrameDriver> MakePlainDriver(const DriverServices& services, con
 bool PokeDaisyKnows(const std::string& rom_path);
 std::unique_ptr<FrameDriver> MakePokeDaisyDriver(const DriverServices& services);
 #endif
+#ifdef HAVE_GBADS_GAME
+/// Null: nothing here for this game, or game.c did not start.
+std::unique_ptr<FrameDriver> MakeGbaDsDriver(const DriverServices& services);
+#endif
 
 } // namespace FrameCores

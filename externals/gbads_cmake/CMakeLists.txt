@@ -242,3 +242,39 @@ endif()
 if (COMMAND target_disable_warnings)
     target_disable_warnings(gbads_core)
 endif()
+
+# gba-ds's game.c (its second screens), whole and unmodified, behind a host interface: README.md.
+# POSIX only (pthread.h, dirent.h, typeof): without it a game has its maps alone.
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND EXISTS "${GBADS_SRC_DIR}/game.c")
+    add_library(gbads_game STATIC EXCLUDE_FROM_ALL
+        "${CMAKE_CURRENT_SOURCE_DIR}/game/gbads_game.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/game/gbads_game.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/game/gbads_rename.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/game/gbads_ui_stubs.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/game/sdl/SDL.h"
+    )
+    # Our SDL.h, ahead of any real one, for this object alone
+    target_include_directories(gbads_game BEFORE PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/game/sdl")
+    target_include_directories(gbads_game PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/game")
+    target_link_libraries(gbads_game PUBLIC gbads_core PRIVATE Threads::Threads)
+    if (GBADS_MATH_LIBRARY)
+        target_link_libraries(gbads_game PRIVATE ${GBADS_MATH_LIBRARY})
+    endif()
+    target_compile_definitions(gbads_game PRIVATE
+        GBADS_VERSION="${GBADS_VERSION_STR}"
+        _GNU_SOURCE
+    )
+    set_target_properties(gbads_game PROPERTIES
+        C_STANDARD 11
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS ON # typeof
+        C_VISIBILITY_PRESET hidden
+        POSITION_INDEPENDENT_CODE ON
+        INTERPROCEDURAL_OPTIMIZATION FALSE
+        UNITY_BUILD OFF
+    )
+    target_compile_options(gbads_game PRIVATE -w)
+    if (COMMAND target_disable_warnings)
+        target_disable_warnings(gbads_game)
+    endif()
+endif()
