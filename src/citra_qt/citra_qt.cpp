@@ -5734,23 +5734,18 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case C::DsMicBlow:
 #ifdef ENABLE_ALT_CORES
         if (alt_core_host && alt_core_host->IsRunning()) {
-            auto st = FrameXr::GetAltMenuState();
-            st.ds_mic_active = !st.ds_mic_active;
-            FrameXr::SetAltMenuState(st);
-            alt_core_host->SetMicBlow(st.ds_mic_active);
-            FrameXr::ShowToastText(st.ds_mic_active ? "Microphone Blow: On"
-                                                    : "Microphone Blow: Off");
+            const bool on = r.value != 0; // the menu has flipped it
+            alt_core_host->SetMicBlow(on);
+            FrameXr::ShowToastText(on ? "Microphone Blow: On" : "Microphone Blow: Off");
         }
 #endif
         return;
     case C::DsLidToggle:
 #ifdef ENABLE_ALT_CORES
         if (alt_core_host && alt_core_host->IsRunning()) {
-            auto st = FrameXr::GetAltMenuState();
-            st.ds_lid_closed = !st.ds_lid_closed;
-            FrameXr::SetAltMenuState(st);
-            alt_core_host->SetLidClosed(st.ds_lid_closed);
-            FrameXr::ShowToastText(st.ds_lid_closed ? "Lid Closed" : "Lid Opened");
+            const bool closed = r.value != 0; // the menu has flipped it
+            alt_core_host->SetLidClosed(closed);
+            FrameXr::ShowToastText(closed ? "Lid Closed" : "Lid Opened");
         }
 #endif
         return;

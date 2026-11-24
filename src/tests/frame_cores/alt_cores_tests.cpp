@@ -2,6 +2,7 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <csetjmp>
@@ -19,6 +20,7 @@
 #include "common/xr_pacer.h"
 #include "frame_cores/alt_core_host.h"
 #include "frame_cores/audio_resampler.h"
+#include "frame_cores/nds_core.h"
 #include "frame_cores/rom_info.h"
 
 namespace {
@@ -252,6 +254,48 @@ std::vector<uint8_t> MakeHomebrewNdsRom(bool dsi_flag = false) {
     return rom;
 }
 
+/// A DS ROM whose ARM7 copies the lid switch to main RAM; the ARM9 fills the picture by it.
+std::vector<uint8_t> MakeLidNdsRom() {
+    std::vector<uint8_t> rom = MakeHomebrewNdsRom(false);
+    // The ARM9 code past the secure area (0x4000 to 0x7FFF), which a direct boot would not run as is
+    rom.resize(0x10000, 0);
+    std::copy_n(rom.begin() + 0x4000, 5 * 4, rom.begin() + 0x8000);
+    PutLE32(rom, 0x20, 0x8000);
+    PutLE32(rom, 0x80, 0x10000);
+    PutLE16(rom, 0x15E, NdsCrc16(rom.data(), 0x15E));
+    const auto put = [&rom](size_t pc, const std::vector<uint32_t>& code) {
+        for (const uint32_t word : code) {
+            PutLE32(rom, pc, word);
+            pc += 4;
+        }
+    };
+    // ARM9, after the display setup (five instructions)
+    put(0x8000 + 5 * 4, {
+        0xE3A05623u, // mov r5, #0x02300000
+        // loop:
+        0xE5956000u, // ldr r6, [r5]
+        0xE3160080u, // tst r6, #0x80   closed
+        0x13A0301Fu, // movne r3, #0x1F
+        0x03A03B1Fu, // moveq r3, #0x7C00
+        0xE3A02668u, // mov r2, #0x06800000
+        0xE3A04903u, // mov r4, #0xC000
+        0xE0C230B2u, // strh r3, [r2], #2
+        0xE2544001u, // subs r4, r4, #1
+        0x1AFFFFFCu, // bne -2
+        0xEAFFFFF5u, // b loop
+    });
+    put(0x4200, {
+        0xE59F000Cu, // ldr r0, =0x04000136 (EXTKEYIN)
+        0xE59F200Cu, // ldr r2, =0x02300000
+        0xE1D010B0u, // ldrh r1, [r0]
+        0xE5821000u, // str r1, [r2]
+        0xEAFFFFFCu, // b -2
+        0x04000136u,
+        0x02300000u,
+    });
+    return rom;
+}
+
 #ifndef _WIN32
 thread_local sigjmp_buf g_test_jmp;
 thread_local std::atomic<bool> g_test_jmp_armed{false};
@@ -468,6 +512,43 @@ TEST_CASE("Touch Screen Input off is the DS's only", "[frame_cores]") {
     CHECK(!TouchEnabled(Capabilities::ForGBA(), true));
     CHECK(TouchEnabled(Capabilities::ForN3DS(), true));
     CHECK(TouchEnabled(Capabilities::ForN3DS(), false));
+}
+
+// The menu sends the new value, not "the other one": the same value twice changes nothing.
+TEST_CASE("Microphone Blow and Close Lid take the value they get", "[frame_cores]") {
+    {
+        FrameCores::NdsCore core;
+        const auto blows = [&core] {
+            std::vector<int16_t> pcm(256, 1);
+            core.OnMicReadInput(pcm.data(), static_cast<int>(pcm.size()));
+            return std::any_of(pcm.begin(), pcm.end(), [](int16_t s) { return s != 0; });
+        };
+        CHECK(!blows());
+        for (const bool on : {true, true, false, false}) {
+            core.SetMicBlow(on);
+            CHECK(blows() == on);
+        }
+    }
+    TempDir tmp("lid");
+    const fs::path rom_path = tmp.path / "lid.nds";
+    WriteFile(rom_path, MakeLidNdsRom());
+    FrameCores::AltCoreHost host;
+    REQUIRE(host.Boot(rom_path.string(), (tmp.path / "data").string(), /*headless_for_test=*/true));
+    const auto pixel = [&host] {
+        REQUIRE(host.StepFrames(20));
+        return host.LastFrame().primary.pixels[0] & 0x00FFFFFFu;
+    };
+    const uint32_t open = pixel();
+    host.SetLidClosed(true);
+    const uint32_t closed = pixel();
+    CHECK(open != closed);
+    host.SetLidClosed(true);
+    CHECK(pixel() == closed);
+    host.SetLidClosed(false);
+    CHECK(pixel() == open);
+    host.SetLidClosed(false);
+    CHECK(pixel() == open);
+    host.Stop();
 }
 
 TEST_CASE("DS and DSi adapters boot with FreeBIOS + JIT, touch, mic, lid, and save states",
