@@ -235,7 +235,7 @@ private:
     void AltLoadState(u32 slot);
     void AltCaptureScreenshot();
     void FramePushAltCheats();
-    void FrameSyncAltMenuState();
+    void ApplyAltSettings();
 #endif
 
 #ifdef ENABLE_DISCORD_RPC

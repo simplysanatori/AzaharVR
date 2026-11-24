@@ -70,6 +70,10 @@ void ForEachMenuKey(F&& f) {
     f(v.autosave_enabled);    // AzaharFrame autosave
     f(v.autosave_every);
     f(v.autosave_keep);
+    f(v.ds_console_mode); // AzaharVR: DS and GBA games
+    f(v.ds_touch_enabled);
+    f(v.ds_screen_rotation);
+    f(v.gba_solar_level);
     // Controls (AzaharFrame reticle)
     f(v.vr_touchpad_touch);
     f(v.vr_bottom_screen_reticle);

@@ -1557,7 +1557,7 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
     // shows where it points).
     const Common::AltCore::Capabilities core_caps = GetCoreCapabilities();
     const bool allow_touch =
-        Common::AltCore::TouchEnabled(core_caps, GetAltMenuState().ds_touch_enabled);
+        Common::AltCore::TouchEnabled(core_caps, Settings::values.ds_touch_enabled.GetValue());
     const int reticle_hand = Input::ReticleDrivingHand(
         (!allow_touch || (core_caps.has_gyro && Settings::values.vr_gyro_aim.GetValue() != 0))
             ? Input::ReticleHand::Off

@@ -1515,19 +1515,7 @@ GMainWindow::GMainWindow(Core::System& system_)
                 });
             };
             g_frame_xr_fast_forward = [this](bool on, const char* why) {
-#ifdef ENABLE_ALT_CORES
-                if (alt_core_host && alt_core_host->IsRunning()) {
-                    if (on == g_frame_xr_fast_forward_on) {
-                        return;
-                    }
-                    g_frame_xr_fast_forward_on = on;
-                    alt_core_host->SetFastForward(on, Settings::values.turbo_limit.GetValue());
-                    FrameXr::SetFastForwardShown(on);
-                    LOG_INFO(Frontend, "xr: alt fast forward {} ({})", on ? "on" : "off", why);
-                    return;
-                }
-#endif
-                if (on && (!emulation_running || !system.IsPoweredOn())) {
+                if (on && !AltGameRunning() && (!emulation_running || !system.IsPoweredOn())) {
                     return;
                 }
                 if (on == g_frame_xr_fast_forward_on) {
@@ -1826,7 +1814,6 @@ GMainWindow::GMainWindow(Core::System& system_)
                         if (open) {
                             FramePushMenuInfo();
                             FramePushAltCheats();
-                            FrameSyncAltMenuState();
                         }
                         g_frame_mirror->SetMenuOpen(open);
                         FrameXr::SetInGameMenu(open);
@@ -3757,8 +3744,12 @@ bool GMainWindow::BootAltGame(const QString& filename) {
         alt_core_host = std::make_unique<FrameCores::AltCoreHost>();
     }
     const std::string data_dir = FileUtil::GetUserPath(FileUtil::UserPath::UserDir);
+    FrameCores::CoreBootOptions options;
+    const u32 console = Settings::values.ds_console_mode.GetValue();
+    options.force_nds = console == Common::AltCore::DsConsoleDS;
+    options.force_dsi = console == Common::AltCore::DsConsoleDSi;
     if (!AltWindowOpen(info) ||
-        !alt_core_host->Boot(path, data_dir, /*headless_for_test=*/false)) {
+        !alt_core_host->Boot(path, data_dir, /*headless_for_test=*/false, options)) {
         AltWindowClose();
         QMessageBox::critical(this, tr("Unable to Start Game"),
                               tr("Failed to start %1.").arg(QString::fromStdString(info.title)));
@@ -3772,13 +3763,13 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     game_path = filename;
     game_title = QString::fromStdString(info.title);
     emulation_running = true;
+    ApplyAltSettings();
 #ifdef ENABLE_FRAME_XR
     if (g_frame_mirror) {
         g_frame_mirror->SetGameRunning(true);
     }
     FramePushMenuInfo();
     FramePushAltCheats();
-    FrameSyncAltMenuState();
 #endif
     UpdateWindowTitle();
     PreventOSSleep();
@@ -3805,6 +3796,7 @@ void GMainWindow::ShutdownAltGame() {
     g_frame_game_config_name.clear();
 #endif
     const u64 alt_title_id = alt_core_host->GetRomInfo().title_id;
+    SetTurboEnabled(false); // turned on by its hotkey: not into the next game
     play_time_manager->Stop();
     AllowOSSleep();
     if (ui->action_Fullscreen->isChecked()) {
@@ -3844,18 +3836,25 @@ void GMainWindow::FramePushAltCheats() {
 #endif
 }
 
-void GMainWindow::FrameSyncAltMenuState() {
-#ifdef ENABLE_FRAME_XR
-    if (!alt_core_host || !alt_core_host->IsRunning()) {
+// The running game's values of the settings its core keeps itself (Console Mode: BootAltGame).
+void GMainWindow::ApplyAltSettings() {
+    if (!AltGameRunning()) {
         return;
     }
-    FrameXr::AltMenuState st = FrameXr::GetAltMenuState();
+    const auto& v = Settings::values;
     const auto caps = alt_core_host->GetCapabilities();
-    st.ds_console_mode = (caps.kind == Common::AltCore::CoreKind::DSi) ? 1 : 0;
-    st.ds_screen_rotation =
-        caps.screens.rotation_deg == 90 ? 1 : (caps.screens.rotation_deg == 270 ? 2 : 0);
-    FrameXr::SetAltMenuState(st);
-#endif
+    if (caps.has_touch) {
+        alt_core_host->SetTouchEnabled(v.ds_touch_enabled.GetValue());
+    }
+    if (caps.has_screen_rotation) {
+        const int degrees = Common::AltCore::RotationDegrees(v.ds_screen_rotation.GetValue());
+        if (caps.screens.rotation_deg != degrees) {
+            alt_core_host->SetScreenRotation(degrees);
+        }
+    }
+    if (caps.has_solar_sensor) {
+        alt_core_host->SetSolarLevel(static_cast<int>(v.gba_solar_level.GetValue()));
+    }
 }
 #endif
 
@@ -6231,53 +6230,28 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::AutosaveKeep:
         set(v.autosave_keep, Core::Autosave::ClampKeep(u));
         break;
-    case S::GbaSolarLevel:
-#ifdef ENABLE_ALT_CORES
-        if (alt_core_host && alt_core_host->IsRunning()) {
-            const int lvl = std::clamp(r.value, 0, 10);
-            alt_core_host->SetSolarLevel(lvl);
-            auto st = FrameXr::GetAltMenuState();
-            st.gba_solar_level = lvl;
-            FrameXr::SetAltMenuState(st);
-        }
-#endif
-        return;
-    case S::DsConsoleMode:
-#ifdef ENABLE_ALT_CORES
-        if (alt_core_host && alt_core_host->IsRunning()) {
-            const bool dsi = r.value != 0;
-            alt_core_host->SetConsoleMode(dsi);
-            auto st = FrameXr::GetAltMenuState();
-            st.ds_console_mode = dsi ? 1 : 0;
-            FrameXr::SetAltMenuState(st);
-            FrameXr::ShowToastText(dsi ? "Console Mode: DSi" : "Console Mode: DS");
-        }
-#endif
-        return;
+    case S::DsConsoleMode: // AzaharVR: DS and GBA games; from the next start (BootAltGame)
+        set(v.ds_console_mode, std::min<u32>(u, 2));
+        break;
     case S::DsTouchEnabled:
-#ifdef ENABLE_ALT_CORES
-        if (alt_core_host && alt_core_host->IsRunning()) {
-            const bool on = r.value != 0;
-            alt_core_host->SetTouchEnabled(on);
-            auto st = FrameXr::GetAltMenuState();
-            st.ds_touch_enabled = on;
-            FrameXr::SetAltMenuState(st);
-        }
-#endif
-        return;
+        set(v.ds_touch_enabled, r.value != 0);
+        break;
     case S::DsScreenRotation:
-#ifdef ENABLE_ALT_CORES
-        if (alt_core_host && alt_core_host->IsRunning()) {
-            const int idx = std::clamp(r.value, 0, 2);
-            const int deg = idx == 1 ? 90 : (idx == 2 ? 270 : 0);
-            alt_core_host->SetScreenRotation(deg);
-            auto st = FrameXr::GetAltMenuState();
-            st.ds_screen_rotation = idx;
-            FrameXr::SetAltMenuState(st);
-        }
-#endif
-        return;
+        set(v.ds_screen_rotation, std::min<u32>(u, 2));
+        break;
+    case S::GbaSolarLevel:
+        set(v.gba_solar_level, std::min<u32>(u, 10));
+        break;
     }
+#ifdef ENABLE_ALT_CORES
+    if (AltGameRunning()) {
+        if (r.setting == S::FastForwardSpeed || r.setting == S::FastForwardAudio) {
+            ReloadTurbo(); // the core has its own copies
+        } else {
+            ApplyAltSettings();
+        }
+    }
+#endif
     if (r.setting == S::AutosaveKeep) { // AzaharFrame autosave: lowered: this game's oldest go
         FrameAutosaveKeepChanged();
     } else if (r.setting == S::Autosave) {

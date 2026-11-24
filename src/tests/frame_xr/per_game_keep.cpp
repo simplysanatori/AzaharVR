@@ -575,3 +575,94 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
         CHECK(std::find(labels.begin(), labels.end(), key) != labels.end());
     }
 }
+
+// AzaharVR: the DS and GBA rows (Console Mode, Touch Screen Input, Screen Rotation, Solar Sensor
+// Level) are settings with a global value and a game's own, in the file named by the game's key.
+TEST_CASE("Per-Game: the DS and GBA rows' values in two games' files", "[frame_xr][altcores]") {
+    AllGlobal reset;
+    auto& v = Settings::values;
+    CHECK(v.ds_console_mode.GetDefault() == 0u); // Automatic
+    CHECK(v.ds_touch_enabled.GetDefault());
+    CHECK(v.ds_screen_rotation.GetDefault() == 0u);
+    CHECK(v.gba_solar_level.GetDefault() == 6u);
+    CHECK(FrameXr::PerGame::KeysOf(Id::DsConsoleMode) ==
+          std::vector<std::string>{"ds_console_mode"});
+    CHECK(FrameXr::PerGame::KeysOf(Id::DsTouchEnabled) ==
+          std::vector<std::string>{"ds_touch_enabled"});
+    CHECK(FrameXr::PerGame::KeysOf(Id::DsScreenRotation) ==
+          std::vector<std::string>{"ds_screen_rotation"});
+    CHECK(FrameXr::PerGame::KeysOf(Id::GbaSolarLevel) ==
+          std::vector<std::string>{"gba_solar_level"});
+
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString first = dir.filePath(QStringLiteral("D54D534501234567.ini"));
+    const QString second = dir.filePath(QStringLiteral("BA55334989ABCDEF.ini"));
+    const auto write = [](const QString& path) {
+        QSettings ini(path, QSettings::IniFormat);
+        ini.beginGroup(QStringLiteral("VR"));
+        WriteAll(ini);
+    };
+    const auto boot = [](const QString& path) { // after the last game's values went
+        FrameXr::PerGame::ForEachMenuKey([](auto& s) { s.SetGlobal(true); });
+        QSettings ini(path, QSettings::IniFormat);
+        ini.beginGroup(QStringLiteral("VR"));
+        ReadAll(ini);
+    };
+    const auto own = [](auto& s, auto value) { // the menu, Per-Game
+        s.SetGlobal(false);
+        s.SetValue(value);
+    };
+    own(v.ds_console_mode, 1u);
+    own(v.ds_touch_enabled, false);
+    own(v.ds_screen_rotation, 2u);
+    write(first);
+    FrameXr::PerGame::ForEachMenuKey([](auto& s) { s.SetGlobal(true); });
+    own(v.gba_solar_level, 10u);
+    write(second);
+
+    boot(first);
+    CHECK(v.ds_console_mode.GetValue() == 1u);
+    CHECK(!v.ds_touch_enabled.GetValue());
+    CHECK(v.ds_screen_rotation.GetValue() == 2u);
+    CHECK(v.gba_solar_level.UsingGlobal());
+    CHECK(v.gba_solar_level.GetValue() == 6u);
+    CHECK(v.ds_console_mode.GetValue(true) == 0u); // the global values are untouched
+    CHECK(v.ds_touch_enabled.GetValue(true));
+    CHECK(v.ds_screen_rotation.GetValue(true) == 0u);
+
+    boot(second);
+    CHECK(v.ds_console_mode.UsingGlobal());
+    CHECK(v.ds_touch_enabled.GetValue());
+    CHECK(v.ds_screen_rotation.GetValue() == 0u);
+    CHECK(v.gba_solar_level.GetValue() == 10u);
+
+    // Use Global Value, then the save and the next start
+    boot(first);
+    CHECK(FrameXr::PerGame::UseGlobalValue(Id::DsScreenRotation));
+    CHECK(v.ds_screen_rotation.GetValue() == 0u);
+    write(first);
+    boot(first);
+    CHECK(v.ds_screen_rotation.UsingGlobal());
+    CHECK(v.ds_console_mode.GetValue() == 1u);
+    CHECK(!v.ds_touch_enabled.GetValue());
+}
+
+// The game stopped: the next one (a 3DS game too) has none of its values.
+TEST_CASE("Per-Game: a stopped game's DS and GBA values go", "[frame_xr][altcores]") {
+    AllGlobal reset;
+    auto& v = Settings::values;
+    const auto own = [](auto& s, auto value) {
+        s.SetGlobal(false);
+        s.SetValue(value);
+    };
+    own(v.ds_console_mode, 2u);
+    own(v.ds_touch_enabled, false);
+    own(v.ds_screen_rotation, 1u);
+    own(v.gba_solar_level, 0u);
+    Settings::RestoreGlobalState(false);
+    CHECK(v.ds_console_mode.GetValue() == 0u);
+    CHECK(v.ds_touch_enabled.GetValue());
+    CHECK(v.ds_screen_rotation.GetValue() == 0u);
+    CHECK(v.gba_solar_level.GetValue() == 6u);
+}

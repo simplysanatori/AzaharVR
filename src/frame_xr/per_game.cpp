@@ -107,6 +107,18 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::AutosaveKeep:
         f(v.autosave_keep);
         return true;
+    case Id::DsConsoleMode: // AzaharVR: DS and GBA games
+        f(v.ds_console_mode);
+        return true;
+    case Id::DsTouchEnabled:
+        f(v.ds_touch_enabled);
+        return true;
+    case Id::DsScreenRotation:
+        f(v.ds_screen_rotation);
+        return true;
+    case Id::GbaSolarLevel:
+        f(v.gba_solar_level);
+        return true;
     case Id::TouchpadTouch: // AzaharFrame reticle: the Controls tab's rows
         f(v.vr_touchpad_touch);
         return true;

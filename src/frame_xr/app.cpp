@@ -74,8 +74,8 @@ Common::AltCore::InputSink g_alt_input_sink;
 
 std::atomic<float> g_rumble_strength{0.0f};
 
-std::mutex g_alt_menu_mutex;
-AltMenuState g_alt_menu_state{};
+std::mutex g_ds_held_mutex;
+DsHeld g_ds_held{};
 
 using Clock = std::chrono::steady_clock;
 
@@ -2328,7 +2328,7 @@ void SetCoreCapabilities(const Common::AltCore::Capabilities& caps) {
         DynamicResolution::Reset();
     }
     if (caps.kind == Common::AltCore::CoreKind::N3DS) {
-        SetAltMenuState({}); // the game stopped: the next one starts with the defaults
+        SetDsHeld({}); // the game stopped
     }
 }
 
@@ -2377,14 +2377,14 @@ float GetRumbleStrength() {
     return g_rumble_strength.load(std::memory_order_relaxed);
 }
 
-void SetAltMenuState(const AltMenuState& state) {
-    std::scoped_lock lock{g_alt_menu_mutex};
-    g_alt_menu_state = state;
+void SetDsHeld(const DsHeld& held) {
+    std::scoped_lock lock{g_ds_held_mutex};
+    g_ds_held = held;
 }
 
-AltMenuState GetAltMenuState() {
-    std::scoped_lock lock{g_alt_menu_mutex};
-    return g_alt_menu_state;
+DsHeld GetDsHeld() {
+    std::scoped_lock lock{g_ds_held_mutex};
+    return g_ds_held;
 }
 
 } // namespace FrameXr

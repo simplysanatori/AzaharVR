@@ -644,6 +644,11 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.autosave_enabled);
     ReadGlobalSetting(Settings::values.autosave_every);
     ReadGlobalSetting(Settings::values.autosave_keep);
+    // AzaharVR: DS and GBA games, a global value and a game's own
+    ReadGlobalSetting(Settings::values.ds_console_mode);
+    ReadGlobalSetting(Settings::values.ds_touch_enabled);
+    ReadGlobalSetting(Settings::values.ds_screen_rotation);
+    ReadGlobalSetting(Settings::values.gba_solar_level);
     // AzaharFrame reticle: the Controls tab's rows, a global value and a game's own (Per-Game)
     ReadGlobalSetting(Settings::values.vr_touchpad_touch);
     ReadGlobalSetting(Settings::values.vr_bottom_screen_reticle);
@@ -1399,6 +1404,11 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.autosave_enabled);
     WriteGlobalSetting(Settings::values.autosave_every);
     WriteGlobalSetting(Settings::values.autosave_keep);
+    // AzaharVR: DS and GBA games, a global value and a game's own
+    WriteGlobalSetting(Settings::values.ds_console_mode);
+    WriteGlobalSetting(Settings::values.ds_touch_enabled);
+    WriteGlobalSetting(Settings::values.ds_screen_rotation);
+    WriteGlobalSetting(Settings::values.gba_solar_level);
     // AzaharFrame reticle: the Controls tab's rows, a global value and a game's own (Per-Game)
     WriteGlobalSetting(Settings::values.vr_touchpad_touch);
     WriteGlobalSetting(Settings::values.vr_bottom_screen_reticle);

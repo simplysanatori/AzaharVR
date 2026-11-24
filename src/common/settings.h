@@ -1178,6 +1178,14 @@ struct Values {
     SwitchableSetting<bool> autosave_enabled{false, "autosave_enabled"};
     SwitchableSetting<u32, true> autosave_every{5, 1, 15, "autosave_every"};
     SwitchableSetting<u32, true> autosave_keep{3, 1, 10, "autosave_keep"};
+    // AzaharVR: DS and GBA games (a global value and a game's own). Console Mode is read when the
+    // game starts: 0 Automatic, 1 DS, 2 DSi (Common::AltCore::DsConsole).
+    SwitchableSetting<u32, true> ds_console_mode{0, 0, 2, "ds_console_mode"};
+    SwitchableSetting<bool> ds_touch_enabled{true, "ds_touch_enabled"};
+    // 0, 90 or 270 degrees (Common::AltCore::RotationDegrees)
+    SwitchableSetting<u32, true> ds_screen_rotation{0, 0, 2, "ds_screen_rotation"};
+    // The light a game's solar sensor sees; 6 is the GBA core's own start.
+    SwitchableSetting<u32, true> gba_solar_level{6, 0, 10, "gba_solar_level"};
 };
 
 extern Values values;

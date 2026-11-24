@@ -1,0 +1,241 @@
+// Copyright 2026 AzaharVR contributors
+// Licensed under GPLv3 or any later version
+// Refer to the license.txt file included.
+
+// Which rows of the in-game menu each console has (frame_xr/menu/core_rows.h).
+
+#include <set>
+#include <string>
+#include <vector>
+#include <catch2/catch_test_macros.hpp>
+#include "frame_xr/menu/core_rows.h"
+#include "frame_xr/menu/tab_menu.h"
+#include "frame_xr/ui/ui_canvas.h"
+
+using namespace FrameXr::Menu;
+
+namespace {
+
+const std::set<Id> kOthersOnly{Id::CoreHeader,     Id::GbaSolarLevel, Id::DsConsoleMode,
+                               Id::DsTouchEnabled, Id::DsMicBlow,     Id::DsLidToggle,
+                               Id::ImportSave,     Id::DsScreenRotation};
+
+/// Every console's.
+const std::set<Id> kCommon{
+    Id::CoreHeader,       Id::ImportSave,         Id::ScreenCurve,   Id::Background,
+    Id::WindowScale,      Id::FaceButtons,        Id::ShowControllers,
+    Id::ControllersInFront, Id::FastForwardSpeed, Id::FastForwardAudio,
+    Id::MoreSettings,     Id::SwitchToFlat,       Id::HelpHeader,    Id::ReportProblem,
+    Id::AboutApp};
+
+std::set<Id> With(std::set<Id> ids, const std::set<Id>& more) {
+    ids.insert(more.begin(), more.end());
+    return ids;
+}
+
+const std::set<Id> kTwoScreens{Id::HideBottomScreen, Id::ScreenLayout, Id::MoveScreens,
+                               Id::SwapScreens};
+const std::set<Id> kSaves{Id::SavesHeader, Id::Autosave, Id::AutosaveEvery, Id::AutosaveKeep,
+                          Id::AutosaveCard};
+
+std::set<Id> Expected(const std::set<Id>& own) {
+    std::set<Id> ids = With(kCommon, own);
+    return kAltAutosave ? With(ids, kSaves) : ids;
+}
+
+std::set<Id> Table(const CoreCaps& core) {
+    std::set<Id> ids;
+    for (int i = 0; i < kIdCount; i++) {
+        if (RowApplies(static_cast<Id>(i), core)) {
+            ids.insert(static_cast<Id>(i));
+        }
+    }
+    return ids;
+}
+
+const std::set<Id> kDs = With(
+    kTwoScreens, {Id::DsConsoleMode, Id::DsTouchEnabled, Id::DsMicBlow, Id::DsLidToggle,
+                  Id::DsScreenRotation, Id::TouchpadTouch, Id::BottomScreenReticle,
+                  Id::ReticleSpeed, Id::ReticleAtEdge, Id::ReticleCenter, Id::ReticleStick,
+                  Id::ReticleEdgeCStick});
+
+std::vector<CoreCaps> OtherConsoles() {
+    return {CoreCaps::ForGBA(), CoreCaps::ForGB(), CoreCaps::ForNDS(), CoreCaps::ForNDS(true)};
+}
+
+MenuModel Game(const CoreCaps& core) {
+    MenuModel m;
+    m.game_title = "Game";
+    m.core = core;
+    return m;
+}
+
+/// The Ids drawn as targets on a view, scrolled from top to end.
+std::set<Id> Drawn(const MenuModel& m, MenuView v) {
+    std::set<Id> ids;
+    Kit kit{1.0f};
+    frame_xr::ui::Canvas canvas;
+    TabMenu menu;
+    for (float scroll = 0.0f; scroll <= 3000.0f; scroll += kRowH) {
+        v.scroll[static_cast<std::size_t>(v.tab)] = scroll;
+        canvas.Init(static_cast<int>(kPanelW), static_cast<int>(kPanelH));
+        kit.Begin(canvas);
+        menu.Draw(kit, m, v);
+        for (const auto& h : menu.Hits()) {
+            ids.insert(h.t.id);
+        }
+    }
+    return ids;
+}
+
+MenuView SettingsView(SettingsSection section) {
+    MenuView v;
+    v.tab = Tab::Settings;
+    v.section = section;
+    return v;
+}
+
+} // namespace
+
+TEST_CASE("Core rows: a 3DS game has every row but the other consoles'", "[frame_xr][tabmenu]") {
+    for (int i = 0; i < kIdCount; i++) {
+        INFO("id " << i);
+        const Id id = static_cast<Id>(i);
+        CHECK(RowApplies(id, CoreCaps::ForN3DS()) == !kOthersOnly.contains(id));
+    }
+    const MenuModel m = Game(CoreCaps::ForN3DS());
+    for (int i = 0; i < static_cast<int>(SettingsSection::Count); i++) {
+        CHECK(SectionShown(static_cast<SettingsSection>(i), m));
+    }
+    for (int i = 0; i < static_cast<int>(Tab::Count); i++) {
+        CHECK(TabApplies(static_cast<Tab>(i), m.core));
+    }
+    CHECK(MenuModel{}.core == CoreCaps::ForN3DS());
+}
+
+TEST_CASE("Core rows: the table for each other console", "[frame_xr][tabmenu]") {
+    CHECK(Table(CoreCaps::ForGB()) == Expected({}));
+    CHECK(Table(CoreCaps::ForGBA()) == Expected({Id::GbaSolarLevel}));
+    CHECK(Table(CoreCaps::ForNDS()) == Expected(kDs));
+    CHECK(Table(CoreCaps::ForNDS(true)) == Expected(kDs));
+    // A GBA game without the sensor, and one whose map is on the Secondary Screen
+    CoreCaps map = CoreCaps::ForGBA();
+    map.has_solar_sensor = false;
+    map.screens.has_bottom = true;
+    CHECK(Table(map) == Expected(kTwoScreens));
+    // Black Frame Insertion brings its rows and Graphics back.
+    map.has_bfi = true;
+    CHECK(RowApplies(Id::MotionClarityNormal, map));
+    CHECK(SectionShown(SettingsSection::Graphics, Game(map)));
+}
+
+TEST_CASE("Core rows: the menu draws what the table says", "[frame_xr][tabmenu]") {
+    for (const CoreCaps& core : OtherConsoles()) {
+        INFO("console " << static_cast<int>(core.kind));
+        const MenuModel m = Game(core);
+        for (const Id id : Drawn(m, SettingsView(SettingsSection::General))) {
+            if (PerGameSetting(id) || kOthersOnly.contains(id)) {
+                INFO("id " << static_cast<int>(id));
+                CHECK(RowApplies(id, core));
+            }
+        }
+        const auto general = Drawn(m, SettingsView(SettingsSection::General));
+        CHECK(general.contains(Id::FaceButtons));
+        CHECK(general.contains(Id::ImportSave));
+        CHECK(general.contains(Id::Autosave) == kAltAutosave);
+        CHECK(general.contains(Id::DsConsoleMode) == core.has_dsi_mode);
+        // General alone: no section to pick
+        CHECK(SectionShown(SettingsSection::General, m));
+        CHECK(!SectionShown(SettingsSection::Graphics, m));
+        CHECK(!SectionShown(SettingsSection::Immersive, m));
+        CHECK(!general.contains(Id::SettingsSection));
+        CHECK(!TabApplies(Tab::Homebrew, core));
+        CHECK(TabApplies(Tab::Mods, core) == core.has_alt_cheats);
+        MenuView position;
+        position.tab = Tab::Position;
+        const auto placed = Drawn(m, position);
+        CHECK(placed.contains(Id::DsScreenRotation) == core.has_screen_rotation);
+        CHECK(placed.contains(Id::SwapScreens) == core.screens.has_bottom);
+        CHECK(!placed.contains(Id::ScreenShape));
+        // Load State has no Autosave card
+        MenuModel off = m;
+        off.autosave = false;
+        MenuView load;
+        load.page = Page::LoadSlots;
+        CHECK(Drawn(off, load).contains(Id::AutosaveSettings) == kAltAutosave);
+        CHECK(Drawn(off, load).contains(Id::SlotsBack));
+    }
+    // The 3DS keeps its sections and the card.
+    const MenuModel ds3 = Game(CoreCaps::ForN3DS());
+    CHECK(Drawn(ds3, SettingsView(SettingsSection::General)).contains(Id::SettingsSection));
+    CHECK(Drawn(ds3, SettingsView(SettingsSection::Graphics)).contains(Id::InternalResolution));
+    MenuView load;
+    load.page = Page::LoadSlots;
+    CHECK(Drawn(ds3, load).contains(Id::AutosaveSettings));
+}
+
+TEST_CASE("Core rows: a section's target keeps its own value", "[frame_xr][tabmenu]") {
+    CoreCaps core = CoreCaps::ForNDS();
+    core.has_bfi = true; // General and Graphics
+    const MenuModel m = Game(core);
+    Kit kit{1.0f};
+    frame_xr::ui::Canvas canvas;
+    TabMenu menu;
+    canvas.Init(static_cast<int>(kPanelW), static_cast<int>(kPanelH));
+    kit.Begin(canvas);
+    menu.Draw(kit, m, SettingsView(SettingsSection::Graphics));
+    std::vector<int> sections;
+    for (const auto& h : menu.Hits()) {
+        if (h.t.id == Id::SettingsSection) {
+            sections.push_back(h.t.index);
+        }
+    }
+    CHECK(sections == std::vector<int>{static_cast<int>(SettingsSection::General),
+                                       static_cast<int>(SettingsSection::Graphics)});
+}
+
+TEST_CASE("Core rows: Use Global Values counts only the console's rows", "[frame_xr][tabmenu]") {
+    MenuModel m = Game(CoreCaps::ForNDS());
+    for (int i = 0; i < kIdCount; i++) {
+        m.game_value[static_cast<std::size_t>(i)] = PerGameSetting(static_cast<Id>(i));
+    }
+    for (const Tab tab : {Tab::Settings, Tab::Position, Tab::Controls}) {
+        for (const Id id : GameValueRows(m, tab)) {
+            INFO("id " << static_cast<int>(id));
+            CHECK(RowApplies(id, m.core));
+        }
+    }
+    CHECK(GameValueRows(m, Tab::Position) ==
+          std::vector<Id>{Id::HideBottomScreen, Id::DsScreenRotation});
+}
+
+TEST_CASE("Core rows: the text", "[frame_xr][tabmenu]") {
+    CHECK(OptionsFor(Id::DsConsoleMode) == std::vector<std::string>{"Automatic", "DS", "DSi"});
+    const CoreCaps n3ds = CoreCaps::ForN3DS();
+    for (int i = 0; i < kIdCount; i++) {
+        const Id id = static_cast<Id>(i);
+        CHECK(ExplainFor(id, n3ds) == ExplainFor(id));
+    }
+    for (const CoreCaps& core : OtherConsoles()) {
+        for (const Id id : Table(core)) {
+            const std::string text = ExplainFor(id, core);
+            INFO(text);
+            CHECK(text.find("3DS") == std::string::npos);
+        }
+    }
+    for (const Id id : kOthersOnly) {
+        CHECK(ExplainFor(id).find("ottom") == std::string::npos);
+    }
+}
+
+TEST_CASE("DS settings: degrees and consoles", "[frame_xr]") {
+    using namespace Common::AltCore;
+    CHECK(RotationDegrees(0) == 0);
+    CHECK(RotationDegrees(1) == 90);
+    CHECK(RotationDegrees(2) == 270);
+    CHECK(RotationDegrees(3) == 0);
+    CHECK(TouchEnabled(CoreCaps::ForN3DS(), false)); // the DS's switch is not the 3DS's
+    CHECK(!TouchEnabled(CoreCaps::ForNDS(), false));
+    CHECK(TouchEnabled(CoreCaps::ForNDS(), true));
+    CHECK(!TouchEnabled(CoreCaps::ForGBA(), true));
+}
