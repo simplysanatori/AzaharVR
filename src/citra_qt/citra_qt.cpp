@@ -3036,11 +3036,18 @@ void GMainWindow::OnAppFocusStateChanged(Qt::ApplicationState state) {
         return;
     }
     if (UISettings::values.pause_when_in_background) {
-        if (emu_thread->IsRunning() &&
-            (state & (Qt::ApplicationHidden | Qt::ApplicationInactive))) {
+        const bool running = [this] {
+#ifdef ENABLE_ALT_CORES
+            if (AltGameRunning()) {
+                return !alt_core_host->IsPaused();
+            }
+#endif
+            return emu_thread->IsRunning();
+        }();
+        if (running && (state & (Qt::ApplicationHidden | Qt::ApplicationInactive))) {
             auto_paused = true;
             OnPauseGame();
-        } else if (!emu_thread->IsRunning() && auto_paused && state == Qt::ApplicationActive) {
+        } else if (!running && auto_paused && state == Qt::ApplicationActive) {
             auto_paused = false;
             OnResumeGame(false);
         }
@@ -5305,6 +5312,13 @@ void GMainWindow::OnMenuRecentFile() {
 }
 
 void GMainWindow::OnResumeGame(bool first_start) {
+#ifdef ENABLE_ALT_CORES
+    if (alt_core_host && alt_core_host->IsRunning()) {
+        // The in-game menu keeps it paused
+        alt_core_host->Pause(g_frame_mirror && g_frame_mirror->MenuOpen());
+        return;
+    }
+#endif
     qt_cameras->ResumeCameras();
 
     PreventOSSleep();
