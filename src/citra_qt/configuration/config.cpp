@@ -1145,6 +1145,10 @@ void QtConfig::ReadUIGameListValues() {
     ReadBasicSetting(UISettings::values.show_type_column);
     ReadBasicSetting(UISettings::values.show_size_column);
     ReadBasicSetting(UISettings::values.show_play_time_column);
+#ifdef ENABLE_ALT_CORES
+    ReadBasicSetting(UISettings::values.show_system_column);
+    ReadBasicSetting(UISettings::values.game_list_system_filter);
+#endif
 
     const int favorites_size = qt_config->beginReadArray(QStringLiteral("favorites"));
     for (int i = 0; i < favorites_size; i++) {
@@ -1826,6 +1830,18 @@ void QtConfig::SaveUIGameListValues() {
     WriteBasicSetting(UISettings::values.show_type_column);
     WriteBasicSetting(UISettings::values.show_size_column);
     WriteBasicSetting(UISettings::values.show_play_time_column);
+#ifdef ENABLE_ALT_CORES
+    // only when changed, so a file of a 3DS-only user gets no new keys
+    const auto write_if_changed = [this](const auto& setting) {
+        if (setting.GetValue() != setting.GetDefault()) {
+            WriteBasicSetting(setting);
+        } else {
+            qt_config->remove(QString::fromStdString(setting.GetLabel()));
+        }
+    };
+    write_if_changed(UISettings::values.show_system_column);
+    write_if_changed(UISettings::values.game_list_system_filter);
+#endif
 
     qt_config->beginWriteArray(Settings::QKeys::favorites);
     for (int i = 0; i < UISettings::values.favorited_ids.size(); i++) {

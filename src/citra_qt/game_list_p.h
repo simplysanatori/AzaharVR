@@ -25,6 +25,9 @@
 #include "common/play_time_manager.h"
 #include "common/string_util.h"
 #include "core/loader/smdh.h"
+#ifdef ENABLE_ALT_CORES
+#include "frame_cores/rom_info.h"
+#endif
 
 namespace Service::FS {
 enum class MediaType : u32;
@@ -139,6 +142,24 @@ public:
     }
 };
 
+#ifdef ENABLE_ALT_CORES
+/// The System column's text.
+static QString SystemDisplayName(FrameCores::GameSystem system) {
+    switch (system) {
+    case FrameCores::GameSystem::DS:
+        return QObject::tr("Nintendo DS");
+    case FrameCores::GameSystem::GBA:
+        return QObject::tr("Game Boy Advance");
+    case FrameCores::GameSystem::GB:
+        return QObject::tr("Game Boy");
+    case FrameCores::GameSystem::GBC:
+        return QObject::tr("Game Boy Color");
+    default:
+        return QObject::tr("Nintendo 3DS");
+    }
+}
+#endif
+
 /// Game list icon sizes (in px)
 static const std::unordered_map<UISettings::GameListIconSize, int> IconSizes{
     {UISettings::GameListIconSize::NoIcon, 0},
@@ -161,6 +182,8 @@ public:
     static constexpr int LongTitleRole = SortRole + 5;
     static constexpr int MediaTypeRole = SortRole + 6;
     static constexpr int CanInsertRole = SortRole + 7;
+    static constexpr int SystemRole = SortRole + 8;     ///< FrameCores::GameSystem; unset is 3DS
+    static constexpr int TwoScreensRole = SortRole + 9; ///< bool: the Two Screens badge
 
     GameListItemPath() = default;
     GameListItemPath(const QString& game_path, std::span<const u8> smdh_data, u64 program_id,
@@ -530,6 +553,7 @@ public:
 
     void setFilterResult(int visible, int total);
     bool IsEmpty() const;
+    QString Text() const;
 
     void clear();
     void setFocus();

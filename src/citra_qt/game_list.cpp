@@ -37,6 +37,7 @@
 #include "citra_qt/game_list_p.h"
 #include "citra_qt/game_list_worker.h"
 #include "citra_qt/uisettings.h"
+#include "common/alt_core_types.h"
 #include "common/common_paths.h"
 #include "common/file_util.h"
 #include "common/logging/log.h"
@@ -175,6 +176,10 @@ bool GameListSearchField::IsEmpty() const {
     return edit_filter->text().isEmpty();
 }
 
+QString GameListSearchField::Text() const {
+    return edit_filter->text();
+}
+
 QString GameList::GetLastFilterResultItem() const {
     QString file_path;
     const int folderCount = item_model->rowCount();
@@ -278,16 +283,35 @@ void GameList::OnTextChanged(const QString& new_text) {
     if (edit_filter_text.isEmpty()) {
         tree_view->setRowHidden(0, item_model->invisibleRootItem()->index(),
                                 UISettings::values.favorited_ids.size() == 0);
+        int shown_total = 0;
         for (int i = 1; i < folder_count; ++i) {
             folder = item_model->item(i, 0);
             const QModelIndex folder_index = folder->index();
             const int children_count = folder->rowCount();
             for (int j = 0; j < children_count; ++j) {
                 ++children_total;
+#ifdef ENABLE_ALT_CORES
+                const bool shown = PassesSystemFilter(folder->child(j, 0));
+                tree_view->setRowHidden(j, folder_index, !shown);
+                shown_total += shown ? 1 : 0;
+#else
                 tree_view->setRowHidden(j, folder_index, false);
+                ++shown_total;
+#endif
             }
         }
-        search_field->setFilterResult(children_total, children_total);
+#ifdef ENABLE_ALT_CORES
+        // the Favorites row's copies follow the chip too
+        if (folder_count > 0 && item_model->item(0, 0) != nullptr &&
+            item_model->item(0, 0)->type() == static_cast<int>(GameListItemType::Favorites)) {
+            const QStandardItem* favorites = item_model->item(0, 0);
+            for (int j = 0; j < favorites->rowCount(); ++j) {
+                tree_view->setRowHidden(j, favorites->index(),
+                                        !PassesSystemFilter(favorites->child(j, 0)));
+            }
+        }
+#endif
+        search_field->setFilterResult(shown_total, children_total);
     } else {
         tree_view->setRowHidden(0, item_model->invisibleRootItem()->index(), true);
         int result_count = 0;
@@ -313,9 +337,13 @@ void GameList::OnTextChanged(const QString& new_text) {
                 const QString file_name =
                     file_path.mid(file_path.lastIndexOf(QLatin1Char{'/'}) + 1) + QLatin1Char{' '} +
                     file_title;
-                if (ContainsAllWords(file_name, edit_filter_text) ||
-                    (file_program_id.length() == 16 &&
-                     edit_filter_text.contains(file_program_id))) {
+                if ((ContainsAllWords(file_name, edit_filter_text) ||
+                     (file_program_id.length() == 16 &&
+                      edit_filter_text.contains(file_program_id)))
+#ifdef ENABLE_ALT_CORES
+                    && PassesSystemFilter(child)
+#endif
+                ) {
                     tree_view->setRowHidden(j, folder_index, false);
                     ++result_count;
                 } else {
@@ -404,6 +432,35 @@ public:
 
             painter->drawPixmap(pmRect, pixmap);
         }
+
+        if (index.data(GameListItemPath::TwoScreensRole).toBool()) {
+            DrawTwoScreensGlyph(painter, opt);
+        }
+    }
+
+private:
+    /// Two stacked rectangles at the right edge of the row.
+    static void DrawTwoScreensGlyph(QPainter* painter, const QStyleOptionViewItem& opt) {
+        const int total_h = std::min(20, opt.rect.height() - 4);
+        if (total_h < 8) {
+            return;
+        }
+        const int gap = 2;
+        const int rect_h = (total_h - gap) / 2;
+        const int rect_w = rect_h * 4 / 3;
+        const int margin = 12;
+        const int x = opt.rect.right() - margin - rect_w;
+        const int y = opt.rect.center().y() - total_h / 2;
+        const QColor color = opt.palette.color(opt.state & QStyle::State_Selected
+                                                   ? QPalette::HighlightedText
+                                                   : QPalette::Text);
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+        painter->setPen(QPen(color, 1.5));
+        painter->setBrush(Qt::NoBrush);
+        painter->drawRoundedRect(QRectF(x, y, rect_w, rect_h), 2, 2);
+        painter->drawRoundedRect(QRectF(x, y + rect_h + gap, rect_w, rect_h), 2, 2);
+        painter->restore();
     }
 };
 
@@ -454,6 +511,9 @@ GameList::GameList(PlayTime::PlayTimeManager& play_time_manager_, GMainWindow* p
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
+#ifdef ENABLE_ALT_CORES
+    BuildSystemChips();
+#endif
     layout->addWidget(tree_view);
     layout->addWidget(search_field);
     setLayout(layout);
@@ -598,6 +658,9 @@ void GameList::DonePopulating(const QStringList& watch_list) {
     }
     item_model->sort(tree_view->header()->sortIndicatorSection(),
                      tree_view->header()->sortIndicatorOrder());
+#ifdef ENABLE_ALT_CORES
+    UpdateSystemChips();
+#endif
 
     // resize all columns except for Name to fit their contents
     for (int i = 1; i < COLUMN_COUNT; i++) {
@@ -665,6 +728,9 @@ void GameList::PopupHeaderContextMenu(const QPoint& menu_location) {
         {tr("Region"), &UISettings::values.show_region_column},
         {tr("File type"), &UISettings::values.show_type_column},
         {tr("Size"), &UISettings::values.show_size_column},
+#ifdef ENABLE_ALT_CORES
+        {tr("System"), &UISettings::values.show_system_column},
+#endif
         {tr("Play time"), &UISettings::values.show_play_time_column}};
 
     QActionGroup* column_group = new QActionGroup(this);
@@ -688,6 +754,11 @@ void GameList::UpdateColumnVisibility() {
     tree_view->setColumnHidden(COLUMN_FILE_TYPE, !UISettings::values.show_type_column);
     tree_view->setColumnHidden(COLUMN_SIZE, !UISettings::values.show_size_column);
     tree_view->setColumnHidden(COLUMN_PLAY_TIME, !UISettings::values.show_play_time_column);
+#ifdef ENABLE_ALT_CORES
+    // only once a DS, GBA or Game Boy game is listed
+    tree_view->setColumnHidden(COLUMN_SYSTEM,
+                               !(UISettings::values.show_system_column && has_alt_games));
+#endif
 }
 
 #ifdef ENABLE_OPENGL
@@ -841,6 +912,20 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, const QStr
         is_application &&
         FileUtil::Exists(Service::AM::GetTitlePath(Service::FS::MediaType::SDMC, dlc_program_id) +
                          "content/");
+
+    if (Common::AltCore::IsAltKey(program_id)) {
+        // a DS, GBA or Game Boy game: nothing of the 3DS's saves, shaders or installs applies
+        open_menu->menuAction()->setVisible(false);
+        dump_romfs->setVisible(false);
+        shader_menu->menuAction()->setVisible(false);
+        uninstall_menu->menuAction()->setVisible(false);
+#if !defined(__APPLE__)
+        shortcut_menu->menuAction()->setVisible(false);
+#endif
+#ifdef ENABLE_DEVELOPER_OPTIONS
+        stress_test_launch->setVisible(false);
+#endif
+    }
 
     open_application_location->setEnabled(is_installed);
     open_update_location->setEnabled(has_update);
@@ -1205,6 +1290,17 @@ void GameList::RetranslateUI() {
     item_model->setHeaderData(COLUMN_FILE_TYPE, Qt::Horizontal, tr("File type"));
     item_model->setHeaderData(COLUMN_SIZE, Qt::Horizontal, tr("Size"));
     item_model->setHeaderData(COLUMN_PLAY_TIME, Qt::Horizontal, tr("Play time"));
+#ifdef ENABLE_ALT_CORES
+    item_model->setHeaderData(COLUMN_SYSTEM, Qt::Horizontal, tr("System"));
+    if (chips.size() == 5) {
+        const QString labels[5] = {tr("All"), tr("3DS"), tr("DS"), tr("Game Boy Advance"),
+                                   tr("Game Boy / Color")};
+        for (int i = 0; i < 5; ++i) {
+            chips[i]->setText(labels[i]);
+            chips[i]->setAccessibleName(labels[i]);
+        }
+    }
+#endif
 }
 
 void GameListSearchField::changeEvent(QEvent* event) {
@@ -1286,7 +1382,7 @@ const QStringList GameList::supported_file_extensions = {
 void GameList::RefreshGameDirectory() {
     // Do not scan directories when the system is powered on, it will be
     // repopulated on shutdown anyways.
-    if (Core::System::GetInstance().IsPoweredOn()) {
+    if (Core::System::GetInstance().IsPoweredOn() || AltGameRunning()) {
         // AzaharFrame ctgp7b: not on every shutdown (a game that stops by itself, Close Game in
         // VR): kept for RefreshIfPending, which the shutdown calls
         refresh_pending = true;
@@ -1312,7 +1408,7 @@ bool GameList::RefreshIfPending(bool force) {
     if (force) {
         refresh_pending = true;
     }
-    if (!refresh_pending || Core::System::GetInstance().IsPoweredOn()) {
+    if (!refresh_pending || Core::System::GetInstance().IsPoweredOn() || AltGameRunning()) {
         return false; // a game runs: when it stops
     }
     refresh_pending = false;
@@ -1325,6 +1421,133 @@ bool GameList::RefreshIfPending(bool force) {
     return true;
 }
 
+#ifdef ENABLE_ALT_CORES
+namespace {
+constexpr int kChipCount = 5;
+} // Anonymous namespace
+
+void GameList::BuildSystemChips() {
+    chip_bar = new QWidget(this);
+    chip_bar->setVisible(false);
+    auto* row = new QHBoxLayout(chip_bar);
+    row->setContentsMargins(8, 6, 8, 6);
+    row->setSpacing(8);
+    chip_bar->setStyleSheet(QStringLiteral(
+        "QToolButton{ border: 1px solid palette(mid); border-radius: 14px; padding: 4px 14px;"
+        " background: transparent; }"
+        "QToolButton:hover{ background: palette(alternate-base); }"
+        "QToolButton:checked{ background: palette(highlight); color: palette(highlighted-text);"
+        " border-color: palette(highlight); }"
+        "QToolButton:focus{ border-color: palette(text); }"
+        "QToolButton:checked:focus{ border-color: palette(highlighted-text); }"));
+    for (int i = 0; i < kChipCount; ++i) {
+        auto* chip = new QToolButton(chip_bar);
+        chip->setCheckable(true);
+        chip->setAutoExclusive(true); // arrow keys move between chips, Space picks one
+        chip->setFocusPolicy(Qt::TabFocus);
+        chip->setMinimumHeight(28);
+        chip->setCursor(Qt::PointingHandCursor);
+        chips.append(chip);
+        row->addWidget(chip);
+        connect(chip, &QToolButton::toggled, this, [this, i](bool checked) {
+            if (!checked) {
+                return;
+            }
+            system_filter = static_cast<FrameCores::SystemFilter>(i);
+            UISettings::values.game_list_system_filter.SetValue(i);
+            ApplySystemFilter();
+        });
+    }
+    row->addStretch();
+    {
+        const QSignalBlocker blocker(chips[0]); // the saved choice is kept: UpdateSystemChips
+        chips[0]->setChecked(true);
+    }
+    layout->addWidget(chip_bar);
+    RetranslateUI(); // the chips' labels
+}
+
+void GameList::UpdateSystemChips() {
+    // how many games each chip would show
+    int counts[kChipCount] = {};
+    for (int i = 1; i < item_model->rowCount(); ++i) {
+        const QStandardItem* folder = item_model->item(i, 0);
+        for (int j = 0; j < folder->rowCount(); ++j) {
+            const QStandardItem* child = folder->child(j, 0);
+            const auto system = static_cast<FrameCores::GameSystem>(
+                child->data(GameListItemPath::SystemRole).toInt());
+            ++counts[0];
+            for (int f = 1; f < kChipCount; ++f) {
+                counts[f] += FrameCores::FilterMatches(static_cast<FrameCores::SystemFilter>(f),
+                                                       system)
+                                 ? 1
+                                 : 0;
+            }
+        }
+    }
+    has_alt_games = counts[0] > counts[1];
+    for (int f = 0; f < kChipCount; ++f) {
+        chips[f]->setVisible(f == 0 || counts[f] > 0);
+    }
+
+    // the saved choice, when something shows under it
+    int chosen = UISettings::values.game_list_system_filter.GetValue();
+    if (!has_alt_games || chosen < 0 || chosen >= kChipCount || counts[chosen] == 0) {
+        chosen = 0;
+    }
+    system_filter = static_cast<FrameCores::SystemFilter>(chosen);
+    chips[chosen]->blockSignals(true);
+    chips[chosen]->setChecked(true);
+    chips[chosen]->blockSignals(false);
+    chip_bar->setVisible(has_alt_games);
+    UpdateColumnVisibility();
+    if (system_filter != FrameCores::SystemFilter::All) {
+        ApplySystemFilter();
+    }
+}
+
+void GameList::ApplySystemFilter() {
+    OnTextChanged(search_field->Text());
+}
+
+bool GameList::PassesSystemFilter(const QStandardItem* item) const {
+    if (system_filter == FrameCores::SystemFilter::All) {
+        return true;
+    }
+    return FrameCores::FilterMatches(
+        system_filter,
+        static_cast<FrameCores::GameSystem>(item->data(GameListItemPath::SystemRole).toInt()));
+}
+
+void GameList::SetAltGameRunning(bool running) {
+    alt_game_running = running;
+}
+
+void GameList::AltGameStopped(u64 program_id) {
+    alt_game_running = false;
+    // play time in the rows (the list's own copies and the Favorites copies)
+    const qulonglong seconds = play_time_manager.GetPlayTime(program_id);
+    for (int i = 0; i < item_model->rowCount(); ++i) {
+        const QStandardItem* folder = item_model->item(i, 0);
+        if (folder == nullptr) {
+            continue;
+        }
+        for (int j = 0; j < folder->rowCount(); ++j) {
+            if (folder->child(j, 0)->data(GameListItemPath::ProgramIdRole).toULongLong() ==
+                program_id) {
+                if (QStandardItem* cell = folder->child(j, COLUMN_PLAY_TIME)) {
+                    // a Favorites copy is a plain item: both roles; the list's own item sets both
+                    // from the second call
+                    cell->setData(ReadableDuration(seconds), Qt::DisplayRole);
+                    cell->setData(seconds, GameListItemPlayTime::PlayTimeRole);
+                }
+            }
+        }
+    }
+    RefreshIfPending();
+}
+#endif
+
 void GameList::ToggleFavorite(u64 program_id) {
     if (!UISettings::values.favorited_ids.contains(program_id)) {
         tree_view->setRowHidden(0, item_model->invisibleRootItem()->index(),
@@ -1333,6 +1556,11 @@ void GameList::ToggleFavorite(u64 program_id) {
         AddFavorite(program_id);
         item_model->sort(tree_view->header()->sortIndicatorSection(),
                          tree_view->header()->sortIndicatorOrder());
+#ifdef ENABLE_ALT_CORES
+        if (system_filter != FrameCores::SystemFilter::All) {
+            ApplySystemFilter();
+        }
+#endif
     } else {
         UISettings::values.favorited_ids.removeOne(program_id);
         RemoveFavorite(program_id);

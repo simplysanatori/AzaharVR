@@ -22,10 +22,23 @@ struct RomInfo {
     uint32_t crc32 = 0;
     bool dsi_enhanced = false;
     bool dsi_ware = false;
+    bool is_gbc = false; ///< Game Boy kind only: the header marks a Game Boy Color game
     std::vector<uint8_t> icon_rgba; ///< icon_w * icon_h * 4 RGBA8888 pixels
     uint32_t icon_w = 0;
     uint32_t icon_h = 0;
 };
+
+/// What the game list calls a game's system (a DSi game is a DS game there).
+enum class GameSystem { N3DS, DS, GBA, GB, GBC };
+
+/// The list's system of a probed ROM.
+GameSystem SystemOf(const RomInfo& info);
+
+/// The list's filter choices; Game Boy covers Game Boy Color too.
+enum class SystemFilter { All = 0, N3DS, DS, GBA, GB };
+
+/// Whether a game of `system` shows under `filter`.
+bool FilterMatches(SystemFilter filter, GameSystem system);
 
 /// Fast detection of non-3DS ROM type from extension or ZIP directory entries.
 /// Supports .nds, .dsi, .gba, .gb, .gbc (case-insensitive) and .zip archives
