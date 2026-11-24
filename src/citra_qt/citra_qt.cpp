@@ -5549,6 +5549,7 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         r.command == C::SetSetting &&
         (r.setting == S::MeasuredGameFov || r.setting == S::WorldScaleSaved ||
          r.setting == S::KiuBottomX || r.setting == S::KiuBottomY ||
+         r.setting == S::KiuBottomSize || // AzaharFrame kiu140: sized by a grip's stick
          (r.setting == S::Depth3d && r.text == kFrameDepthShortcut));
     if (!emulation_running ||
         (!measured_fov && (!g_frame_mirror || !g_frame_mirror->MenuOpen()))) {
@@ -6157,6 +6158,51 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         break;
     case S::KiuBottomY:
         set(v.vr_kiu_bottom_y, std::clamp(static_cast<float>(r.value) / 10.0f, -60.0f, 60.0f));
+        break;
+    case S::KiuWristAngle: // AzaharFrame kiu140
+        set(v.vr_kiu_wrist_angle, std::clamp<u32>(u, 0, 360));
+        break;
+    case S::KiuWristAlong: // AzaharFrame kiu140
+        set(v.vr_kiu_wrist_along, std::clamp(r.value, -12, 25));
+        break;
+    case S::KiuCutscenes: // AzaharFrame kiu140
+        set(v.vr_kiu_cutscenes, std::clamp<u32>(u, 0, 1));
+        break;
+    case S::KiuHud: // AzaharFrame kiu140
+        set(v.vr_kiu_hud, std::clamp<u32>(u, 0, 1));
+        break;
+    case S::KiuHudSize: // AzaharFrame kiu140
+        set(v.vr_kiu_hud_size, std::clamp<u32>(u, 40, 200));
+        break;
+    case S::KiuArm: // AzaharFrame kiu140
+        set(v.vr_kiu_arm, std::clamp<u32>(u, 0, 1));
+        break;
+    case S::KiuHudLinked: // AzaharFrame kiu140
+        set(v.vr_kiu_hud_linked, std::clamp<u32>(u, 0, 1));
+        break;
+    case S::KiuHudAcross: // AzaharFrame kiu140
+        set(v.vr_kiu_hud_across, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuHudHeight: // AzaharFrame kiu140
+        set(v.vr_kiu_hud_height, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuBarAcross: // AzaharFrame kiu140
+        set(v.vr_kiu_bar_across, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuBarHeight: // AzaharFrame kiu140
+        set(v.vr_kiu_bar_height, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuScoreAcross: // AzaharFrame kiu140
+        set(v.vr_kiu_score_across, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuScoreHeight: // AzaharFrame kiu140
+        set(v.vr_kiu_score_height, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuSubtitleHeight: // AzaharFrame kiu140
+        set(v.vr_kiu_subtitle_height, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuSubtitleSize: // AzaharFrame kiu140
+        set(v.vr_kiu_subtitle_size, std::clamp<u32>(u, 50, 250));
         break;
     case S::KiuReticleSize:
         set(v.vr_kiu_reticle_size, std::clamp<u32>(u, 30, 150));

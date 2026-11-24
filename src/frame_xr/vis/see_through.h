@@ -33,6 +33,18 @@
 //   - A faded weapon is drawn after the other hand's controller, so the controller shows
 //     through it too.
 // Laser Sight is drawn elsewhere and is unchanged.
+//
+// AzaharFrame kiu140w: a weapon's own see-through parts (core/frame_weapon_models.h SeeKind), at
+// any opacity:
+//   - Cut: a lit part like any other, its texels under the alpha test discarded.
+//   - Blend, lit: its texels that are solid (kSolidAlpha or more) are drawn with the lit parts,
+//     so they keep their depth; the rest after every lit part, over what is there, premultiplied,
+//     at their alpha: where the game writes depth, the nearest layer only (ClearDepth, then
+//     ClearColour); where it does not, back faces, then front faces.
+//   - Blend, unlit: the same second half only, with the combiner's own colour.
+//   - Add: with the glows, always.
+// Under opacity 1 the alpha is times the opacity. A see-through texel in front of a solid one is
+// then two layers, o a + o (1 - o a): over what one layer at the opacity covers by up to o (1 - o).
 
 #pragma once
 
@@ -65,11 +77,35 @@ enum class DrawStage : uint8_t {
     Depth,  ///< see-through: the lit parts' depth only
     Colour, ///< see-through: the lit parts, nearest surface, blended at the opacity
     Added,  ///< see-through: the added parts, light and coverage times the opacity
+    // AzaharFrame kiu140w: a weapon with see-through parts of its own.
+    WholeSolid,  ///< opacity 1: the lit parts, as in Whole
+    ClearDepth,  ///< the blended parts' see-through texels, depth only
+    ClearColour, ///< and their colour, over what is there
+    WholeAdded,  ///< opacity 1: the added parts, as in Whole
 };
 
-/// The stages in order: Whole, or Depth, Colour, Added.
+/// AzaharFrame kiu140w: what a part is drawn as.
+enum class PartKind : uint8_t {
+    Lit,        ///< solid (or cut out: discarded texels)
+    Blend,      ///< lit, its solid texels with the lit parts, the rest blended; depth written
+    BlendClear, ///< the same, the game writing no depth (or unlit: nothing of it solid)
+    Added,      ///< a glow, a flash card, an added bullet, added light
+};
+/// A blended part's texel this solid is drawn with the lit parts (model_shaders.h).
+inline constexpr float kSolidAlpha = 0.98f;
+/// The shader's flags (params.w) of a see-through draw: its data in the tangent (and normal), the
+/// blended half of it, and one side only.
+inline constexpr float kSeeFlag = 64.0f;
+inline constexpr float kSeeBlendFlag = 128.0f;
+inline constexpr float kSeeBackFlag = 256.0f;
+inline constexpr float kSeeFrontFlag = 512.0f;
+inline constexpr float kSeeSlidesFlag = 1024.0f;
+
+/// The stages in order: Whole, or Depth, Colour, Added; with see-through parts (kiu140w):
+/// WholeSolid, ClearDepth, ClearColour, WholeAdded, or Depth, Colour, ClearDepth, ClearColour,
+/// Added.
 struct DrawStages {
-    std::array<DrawStage, 3> list{};
+    std::array<DrawStage, 5> list{};
     int count = 0;
     const DrawStage* begin() const {
         return list.data();
@@ -78,25 +114,45 @@ struct DrawStages {
         return list.data() + count;
     }
 };
-constexpr DrawStages StagesFor(float opacity) {
+constexpr DrawStages StagesFor(float opacity, bool clear_parts = false) {
+    if (clear_parts) { // AzaharFrame kiu140w
+        return SeeThrough(opacity)
+                   ? DrawStages{{DrawStage::Depth, DrawStage::Colour, DrawStage::ClearDepth,
+                                 DrawStage::ClearColour, DrawStage::Added},
+                                5}
+                   : DrawStages{{DrawStage::WholeSolid, DrawStage::ClearDepth,
+                                 DrawStage::ClearColour, DrawStage::WholeAdded},
+                                4};
+    }
     if (!SeeThrough(opacity)) {
         return {{DrawStage::Whole}, 1};
     }
     return {{DrawStage::Depth, DrawStage::Colour, DrawStage::Added}, 3};
 }
 
-/// Whether a part is drawn in a stage (`added`: a glow, a flash card, an added bullet).
-constexpr bool DrawnIn(DrawStage stage, bool added) {
+/// Whether a part is drawn in a stage.
+constexpr bool DrawnIn(DrawStage stage, PartKind kind) { // AzaharFrame kiu140w
+    const bool added = kind == PartKind::Added;
     switch (stage) {
     case DrawStage::Whole:
         return true;
     case DrawStage::Depth:
     case DrawStage::Colour:
+    case DrawStage::WholeSolid:
         return !added;
     case DrawStage::Added:
+    case DrawStage::WholeAdded:
         return added;
+    case DrawStage::ClearDepth:
+        return kind == PartKind::Blend;
+    case DrawStage::ClearColour:
+        return kind == PartKind::Blend || kind == PartKind::BlendClear;
     }
     return false;
+}
+/// `added`: a glow, a flash card, an added bullet.
+constexpr bool DrawnIn(DrawStage stage, bool added) {
+    return DrawnIn(stage, added ? PartKind::Added : PartKind::Lit);
 }
 
 /// The pipelines of the controllers' pass.
@@ -117,6 +173,14 @@ constexpr Pipe PipeFor(DrawStage stage, bool added) {
         return Pipe::Blended;
     case DrawStage::Added:
         return Pipe::AddedHeld;
+    case DrawStage::WholeSolid: // AzaharFrame kiu140w
+        return Pipe::Opaque;
+    case DrawStage::ClearDepth:
+        return Pipe::DepthOnly;
+    case DrawStage::ClearColour:
+        return Pipe::Blended;
+    case DrawStage::WholeAdded:
+        return Pipe::Added;
     }
     return Pipe::Opaque;
 }
@@ -133,7 +197,12 @@ constexpr float StageFade(DrawStage stage, float fade, float opacity) {
 
 /// The shader's flags (params.w) for a stage.
 constexpr float StageFlags(DrawStage stage, float flags) {
-    return stage == DrawStage::Depth ? flags + kDepthOnlyFlag : flags;
+    return stage == DrawStage::Depth || stage == DrawStage::ClearDepth ? flags + kDepthOnlyFlag
+                                                                       : flags;
+}
+/// AzaharFrame kiu140w: the stage draws a blended part's see-through texels (not its solid ones).
+constexpr bool ClearStage(DrawStage stage) {
+    return stage == DrawStage::ClearDepth || stage == DrawStage::ClearColour;
 }
 
 /// Hands in draw order: a faded weapon's hand after the other one.

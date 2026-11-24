@@ -1158,6 +1158,28 @@ struct Values {
     // Its size and opacity in percent (Persistent and Wrist alike).
     SwitchableSetting<u32, true> vr_kiu_bottom_size{100, 50, 200, "vr_kiu_bottom_size"};
     SwitchableSetting<u32, true> vr_kiu_bottom_opacity{100, 20, 100, "vr_kiu_bottom_opacity"};
+    // AzaharFrame kiu140: HUD in Angel's Aim: 0 where the game puts it, 1 in the view, its size in
+    // percent; the health bar and the score side by side as one (linked), where that is (degrees
+    // to the right and up from straight ahead), or each with a place of its own.
+    SwitchableSetting<u32, true> vr_kiu_hud{1, 0, 1, "vr_kiu_hud"};
+    SwitchableSetting<u32, true> vr_kiu_hud_size{100, 40, 200, "vr_kiu_hud_size"};
+    SwitchableSetting<u32, true> vr_kiu_hud_linked{1, 0, 1, "vr_kiu_hud_linked"};
+    SwitchableSetting<s32, true> vr_kiu_hud_across{0, -40, 40, "vr_kiu_hud_across"};
+    SwitchableSetting<s32, true> vr_kiu_hud_height{22, -40, 40, "vr_kiu_hud_height"};
+    SwitchableSetting<u32, true> vr_kiu_subtitle_size{130, 50, 250, "vr_kiu_subtitle_size"};
+    SwitchableSetting<s32, true> vr_kiu_subtitle_height{-18, -40, 40, "vr_kiu_subtitle_height"};
+    SwitchableSetting<s32, true> vr_kiu_bar_across{-20, -40, 40, "vr_kiu_bar_across"};
+    SwitchableSetting<s32, true> vr_kiu_bar_height{22, -40, 40, "vr_kiu_bar_height"};
+    SwitchableSetting<s32, true> vr_kiu_score_across{20, -40, 40, "vr_kiu_score_across"};
+    SwitchableSetting<s32, true> vr_kiu_score_height{22, -40, 40, "vr_kiu_score_height"};
+    // AzaharFrame kiu140: Pit's Arm on the free hand.
+    SwitchableSetting<u32, true> vr_kiu_arm{1, 0, 1, "vr_kiu_arm"};
+    // AzaharFrame kiu140: Cutscenes in Angel's Aim: 0 in the view, 1 on the Primary Screen.
+    SwitchableSetting<u32, true> vr_kiu_cutscenes{1, 0, 1, "vr_kiu_cutscenes"};
+    // AzaharFrame kiu140: the Wrist's place: degrees round the wrist from Wrist Side's, and
+    // centimetres up the arm from there (toward the hand below 0).
+    SwitchableSetting<u32, true> vr_kiu_wrist_angle{0, 0, 360, "vr_kiu_wrist_angle"};
+    SwitchableSetting<s32, true> vr_kiu_wrist_along{0, -12, 25, "vr_kiu_wrist_along"};
     // Persistent's place moved by the grip: degrees right of and below its default place.
     SwitchableSetting<float, true> vr_kiu_bottom_x{0.f, -60.f, 60.f, "vr_kiu_bottom_x"};
     SwitchableSetting<float, true> vr_kiu_bottom_y{0.f, -60.f, 60.f, "vr_kiu_bottom_y"};

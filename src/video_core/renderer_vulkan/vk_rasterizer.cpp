@@ -450,7 +450,8 @@ bool RasterizerVulkan::SetupGeometryShader() {
 }
 
 bool RasterizerVulkan::AccelerateDrawBatch(bool is_indexed) {
-    if (ReticleDraw()) { // AzaharFrame kiu131: Reticle Size scales it on the CPU
+    // AzaharFrame kiu131: Reticle Size scales it on the CPU; kiu140: the HUD, the cloud sheets
+    if (ReticleDraw() || HudDraw() || (is_indexed && SheetDraw())) {
         return false;
     }
     if (regs.pipeline.use_gs != Pica::PipelineRegs::UseGS::No) {
@@ -576,7 +577,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         const auto& va = regs.pipeline.vertex_attributes;
         LOG_INFO(Render,
                  "kiu draw: tex0 {} {:08X} {}x{} fmt {} | verts {} {} attr0 {:08X} idx {:08X} | "
-                 "blend {} src {} dst {} | depth test {} write {} | colour {:08X}",
+                 "blend {} src {} dst {} | depth test {} write {} | colour {:08X} | view {}x{}",
                  regs.texturing.main_config.texture0_enable.Value(),
                  regs.texturing.texture0.GetPhysicalAddress(),
                  regs.texturing.texture0.width.Value(), regs.texturing.texture0.height.Value(),
@@ -588,7 +589,9 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                  om.alphablend_enable.Value(), static_cast<u32>(om.alpha_blending.factor_source_rgb.Value()),
                  static_cast<u32>(om.alpha_blending.factor_dest_rgb.Value()),
                  om.depth_test_enable.Value(), om.depth_write_enable.Value(),
-                 regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress());
+                 regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress(),
+                 Pica::f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f,
+                 Pica::f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f);
     }
 
     const bool shadow_rendering = regs.framebuffer.IsShadowRendering();

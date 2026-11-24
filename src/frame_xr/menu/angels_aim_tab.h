@@ -47,6 +47,8 @@ struct AngelsAimModel {
     bool mapped = false;
     bool mod_installed = false; ///< a C-Stick & Gyro mod (FrameXr::CStickModInstalled)
     bool textures_pack = false; ///< the catalog's weapons and effects pack is on (kAngelsAimPackIds)
+    std::string hand_zip;       ///< AzaharFrame kiu140: a hand model's zip in Downloads, or ""
+    bool hand_installed = false; ///< AzaharFrame kiu140: a hand model for Pit's arm is there
     std::string report_url;     ///< Report an Issue's page ("" none)
     bool operator==(const AngelsAimModel&) const = default;
 };
@@ -83,6 +85,15 @@ inline constexpr const char* kAngelsAimModName = "Darkshade's C-Stick & Gyro Mod
 inline constexpr const char* kAngelsAimSuggested = "Suggested";
 /// One row for the weapons and effects textures, named as the catalog names the pack.
 inline constexpr const char* kAngelsAimTexturesPack = "Kid Icarus Uprising Weapons HD";
+/// AzaharFrame kiu140: the row that takes a hand model from a zip, and its toast (approved
+/// 2026-11-24).
+inline constexpr const char* kAngelsAimHandModel = "Pit's Hand Model";
+/// With such a zip in Downloads and no hand yet (PROPOSED): its state, and Install in place of
+/// Install from Zip (Id::InstallFromZip's index).
+inline constexpr const char* kAngelsAimHandFound = "Found in Downloads";
+inline constexpr const char* kAngelsAimHandInstall = "Install";
+inline constexpr int kAngelsAimHandFoundIndex = 100;
+inline constexpr const char* kAngelsAimHandToast = "Hand Model Installed";
 inline constexpr const char* kAngelsAimSettings = "Settings";
 inline constexpr const char* kAngelsAimInstalled = "Installed";
 inline constexpr const char* kAngelsAimNotInstalled = "Not Installed";
@@ -143,6 +154,51 @@ inline constexpr const char* kWristSideBack = "Back";
 inline constexpr const char* kWristSideInside = "Inside";
 inline constexpr const char* kWristSideTip =
     "Where wrist displays sit: on the back of your wrist, or on the inside.";
+inline constexpr const char* kKiuWristAngleRow = "Wrist Angle"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuWristAngleTip =
+    "Where round your wrist the Bottom Screen sits. 0\u00B0 is the Wrist Side.";
+inline constexpr const char* kKiuWristAlongRow = "Arm Position"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuWristAlongTip =
+    "How far up your arm the Bottom Screen sits. Below 0 is toward your hand.";
+inline constexpr const char* kKiuCutscenesRow = "Cutscenes"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuCutscenesTip =
+    "Primary Screen: the game's cutscenes play on the Primary Screen, then your view comes back.";
+inline constexpr const char* kKiuHudRow = "HUD"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuHudTip =
+    "In View: the health bar, the score and the rest sit inside your view. Game's Own: where the game puts them.";
+inline constexpr const char* kKiuHudSizeRow = "HUD Size"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuHudSizeTip =
+    "How big the HUD is.";
+inline constexpr const char* kKiuArmRow = "Pit's Arm"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuArmTip =
+    "Your free hand is Pit's arm instead of the controller.";
+inline constexpr const char* kKiuHudLinkedRow = "Health and Score"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuHudLinkedTip =
+    "Linked: side by side, moved as one. Separate: each has its own place.";
+inline constexpr const char* kKiuHudAcrossRow = "HUD Left/Right"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuHudAcrossTip =
+    "How far left or right the health bar and score are. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuHudHeightRow = "HUD Height"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuHudHeightTip =
+    "How high the health bar and score are. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuBarAcrossRow = "Health Bar Left/Right"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuBarAcrossTip =
+    "How far left or right the health bar is. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuBarHeightRow = "Health Bar Height"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuBarHeightTip =
+    "How high the health bar is. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuScoreAcrossRow = "Score Left/Right"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuScoreAcrossTip =
+    "How far left or right the score is. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuScoreHeightRow = "Score Height"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuScoreHeightTip =
+    "How high the score is. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuSubtitleHeightRow = "Subtitle Height"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuSubtitleHeightTip =
+    "How high the subtitles are. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuSubtitleSizeRow = "Subtitle Size"; // AzaharFrame kiu140 PROPOSED
+inline constexpr const char* kKiuSubtitleSizeTip =
+    "How big the subtitles are.";
 inline constexpr const char* kOverShoulderRow = "Over the Shoulder";
 inline constexpr const char* kOverShoulderTip =
     "Moves your view behind and above Pit, so you can see him.";

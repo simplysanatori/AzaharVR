@@ -315,6 +315,11 @@ bool VrUi::Create(Runtime& rt) {
     if (!actions_ok) {
         LOG_ERROR(Frontend, "xr: controller actions unavailable; no VR input");
     }
+    if (rt.HasExtension(XR_EXT_HAND_TRACKING_EXTENSION_NAME)) { // AzaharFrame kiu140
+        hand_joints.Create(rt.instance, rt.system, rt.session,
+                           rt.HasExtension(XR_EXT_HAND_TRACKING_DATA_SOURCE_EXTENSION_NAME),
+                           rt.HasExtension(XR_EXT_HAND_JOINTS_MOTION_RANGE_EXTENSION_NAME));
+    }
 
     uploader.Init(rt.vulkan->Device(), rt.vulkan->PhysicalDevice(), rt.vulkan->QueueFamily(),
                   rt.queue_lock);
@@ -371,6 +376,7 @@ void VrUi::DestroyXr() {
     mouse_pointer.Reset();
     InputCommon::FrameXr::SetVrMouseOwned(false);
     uploader.Shutdown();
+    hand_joints.Destroy(); // AzaharFrame kiu140: before the session goes
     actions.Destroy();
     actions_ok = false;
     rumble_active = false;
@@ -1501,6 +1507,10 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
     const bool have_input = focused && actions_ok &&
                             actions.Sync(info.session, info.local_space, info.display_time, in, true,
                                          info.display_period); // AzaharFrame ctrlglitch
+    if (have_input && pit_arm_hand >= 0) { // AzaharFrame kiu140: the arm's fingers
+        hand_joints.Locate(pit_arm_hand, info.local_space, info.display_time,
+                           in.joints[static_cast<std::size_t>(pit_arm_hand)]);
+    }
     // AzaharVR: the controller scheme of the profile in use, looked up when it changes (PC
     // builds; the Frame's build keeps the Frame's scheme whatever the profile).
     if (rt.profile_changes != profile_changes_seen) {
@@ -1787,9 +1797,21 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
             Vis::WristScreenHand(Settings::values.vr_motion_controls.GetValue());
         const Input::HandInput& off = in.hand[static_cast<std::size_t>(Input::HandIndex(hand))];
         const bool beside_stats = hand == Input::Hand::Left && visuals.StatsOnWrist();
+        // AzaharFrame kiu140: past Pit's Arm, where it was drawn on that hand last frame.
+        Vis::WristAt at =
+            Vis::WristAtFor(static_cast<int>(Settings::values.vr_kiu_wrist_angle.GetValue()),
+                            Settings::values.vr_kiu_wrist_along.GetValue());
+        if (float radius = 0.0f;
+            pit_arm_hand == Input::HandIndex(hand) &&
+            visuals.PitForearm(Input::HandIndex(hand), &at.wrist, &at.elbow, &radius)) {
+            at.arm = true;
+            at.out_m = Vis::WristOutFor(radius);
+        }
         const Vis::WristScreen::Out w =
             wrist_screen.Update(wanted, off.active, off.aim, hand, beside_stats,
-                                ToInput(head_view.head).position, side, wrist_w);
+                                ToInput(head_view.head).position, side, wrist_w,
+                                at, // AzaharFrame kiu140
+                                Input::Rotate(ToInput(head_view.head).orientation, {0, 1, 0}));
         wrist_on = w.shown;
         wrist_wanted = wanted; // AzaharFrame kiupanel
         Immersive::SetWristScreen(w.shown, ToXr(w.pose), {wrist_w, wrist_h}, info.display_time);
@@ -1865,6 +1887,10 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     // and is saved for the game when let go. That grip is taken out of the game's input while it
     // holds (neither Grip Frees Aim nor the fixed screen's toast sees it); a grip closed anywhere
     // else keeps its meaning.
+    // AzaharFrame kiu140: the off hand's grip holds it from anywhere, no beam needed, and while
+    // either hand holds it that hand's stick sizes it (Bottom Screen Size; the stick does not reach
+    // the game). A grip that only closes moves nothing (vis/panel_hold.h).
+    bool bottom_held = false;
     {
         const ViewPose view = LatestViewPose();
         const Input::PanelQuad panel{ToInput(shown.bottom_pose), shown.bottom_size.width,
@@ -1885,14 +1911,21 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                 hand.active && view.valid) {
                 const Input::Ray ray = Input::RayFromPose(hand.aim);
                 const Input::QuadHit hit = Input::IntersectQuad(ray, panel);
-                if (hit.in_bounds) {
+                const bool off_hand =
+                    h == Input::HandIndex(Vis::WristScreenHand(
+                             Settings::values.vr_motion_controls.GetValue()));
+                if (hit.in_bounds || off_hand) {
                     const Input::Posef local{Input::Normalized(Input::Multiply(
                                                  to_head.orientation, panel.pose.orientation)),
                                              Input::Transform(to_head, panel.pose.position)};
-                    bottom_grab.Begin({}, local, Input::Transform(to_head, hit.point_world));
+                    const Kiu::FirstPerson::BottomNow b = Kiu::FirstPerson::BottomScreenNow();
+                    bottom_hold.Begin(local, in_head(ray), Kiu::FirstPerson::kTalkDistanceM,
+                                      b.scale * 100.0f);
                     bottom_grab_hand = h;
-                    LOG_INFO(Frontend, "xr: Angel's Aim: the Bottom Screen held by the {} grip",
-                             h == 0 ? "left" : "right");
+                    bottom_grab_right = b.right_deg;
+                    bottom_grab_down = b.down_deg;
+                    LOG_INFO(Frontend, "xr: Angel's Aim: the Bottom Screen held by the {} grip{}",
+                             h == 0 ? "left" : "right", hit.in_bounds ? "" : " (the off hand)");
                 }
             }
         }
@@ -1900,36 +1933,46 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
             const std::size_t h = static_cast<std::size_t>(bottom_grab_hand);
             const Kiu::FirstPerson::BottomNow b = Kiu::FirstPerson::BottomScreenNow();
             if (!bottom_grip_down[h] || !panel.visible || !in.hand[h].active || !view.valid) {
-                // Let go (or gone): saved for this game.
+                // Let go (or gone): what changed is saved for this game.
                 MenuRequest r;
                 r.command = MenuCommand::SetSetting;
-                r.per_game = true;
-                r.setting = MenuSetting::KiuBottomX;
-                r.value = static_cast<int>(std::lround(bottom_grab_right * 10.0f));
+                r.per_game = GameTitleId() != 0;
                 {
                     std::scoped_lock lock{hooks_mutex};
-                    if (hooks.menu_request) {
+                    if (hooks.menu_request && bottom_hold.moved()) {
+                        r.setting = MenuSetting::KiuBottomX;
+                        r.value = static_cast<int>(std::lround(bottom_grab_right * 10.0f));
                         hooks.menu_request(r);
                         r.setting = MenuSetting::KiuBottomY;
                         r.value = static_cast<int>(std::lround(bottom_grab_down * 10.0f));
                         hooks.menu_request(r);
                     }
+                    if (hooks.menu_request && bottom_hold.sized()) {
+                        r.setting = MenuSetting::KiuBottomSize;
+                        r.value = static_cast<int>(bottom_hold.SizePercent());
+                        hooks.menu_request(r);
+                    }
                 }
                 LOG_INFO(Frontend,
                          "xr: Angel's Aim: the Bottom Screen let go at {:.1f} deg right, {:.1f} "
-                         "deg down of its place",
-                         bottom_grab_right, bottom_grab_down);
+                         "deg down of its place, {}% (moved {}, sized {})",
+                         bottom_grab_right, bottom_grab_down, bottom_hold.SizePercent(),
+                         bottom_hold.moved(), bottom_hold.sized());
                 bottom_grab_hand = -1;
             } else {
-                const Input::Vec3f dir = bottom_grab.Direction(
-                    {}, in_head(Input::RayFromPose(in.hand[h].aim)), Kiu::FirstPerson::kTalkDistanceM);
+                const Input::Vec3f dir = bottom_hold.Update(
+                    in_head(Input::RayFromPose(in.hand[h].aim)), in.hand[h].stick.x,
+                    in.hand[h].stick.y,
+                    last_time ? static_cast<float>(info.display_time - last_time) * 1e-9f : 0.0f);
                 constexpr float kToDeg = 57.29578f;
-                bottom_grab_right =
-                    std::clamp(-Vis::YawOf(dir) * kToDeg, -Kiu::FirstPerson::kBottomMaxRightDeg,
-                               Kiu::FirstPerson::kBottomMaxRightDeg);
-                bottom_grab_down = std::clamp(-Vis::PitchOf(dir) * kToDeg - b.place.down_deg,
-                                              -Kiu::FirstPerson::kBottomMaxUpDeg,
-                                              Kiu::FirstPerson::kBottomMaxDownDeg);
+                if (bottom_hold.moved()) {
+                    bottom_grab_right = std::clamp(-Vis::YawOf(dir) * kToDeg,
+                                                   -Kiu::FirstPerson::kBottomMaxRightDeg,
+                                                   Kiu::FirstPerson::kBottomMaxRightDeg);
+                    bottom_grab_down = std::clamp(-Vis::PitchOf(dir) * kToDeg - b.place.down_deg,
+                                                  -Kiu::FirstPerson::kBottomMaxUpDeg,
+                                                  Kiu::FirstPerson::kBottomMaxDownDeg);
+                }
                 // Live (this thread draws it); per game, as the menu's rows are.
                 auto& v = Settings::values;
                 if (GameTitleId() != 0) {
@@ -1938,7 +1981,15 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                 }
                 v.vr_kiu_bottom_x.SetValue(bottom_grab_right);
                 v.vr_kiu_bottom_y.SetValue(bottom_grab_down);
+                if (bottom_hold.sized()) {
+                    if (GameTitleId() != 0) {
+                        v.vr_kiu_bottom_size.SetGlobal(false);
+                    }
+                    v.vr_kiu_bottom_size.SetValue(bottom_hold.SizePercent());
+                }
                 game_in.hand[h].grip = 0.0f;
+                game_in.hand[h].stick = {};
+                bottom_held = true;
             }
         }
     }
@@ -1984,8 +2035,10 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
             // 1.2.0 RC2 (the owner): while the other controller's grip is held (moving a
             // screen), the aiming controller is free: its grip is left to the screens (both
             // grips, a second hand on the screen) and its aim unlocked.
+            // AzaharFrame kiu140: the off hand's grip on the Bottom Screen leaves the aim locked.
             const bool other_holds = other_grip_clutch.Update(
-                in.hand[static_cast<std::size_t>(1 - gyro_aim_hand)].grip);
+                bottom_held ? game_in.hand[static_cast<std::size_t>(1 - gyro_aim_hand)].grip
+                            : in.hand[static_cast<std::size_t>(1 - gyro_aim_hand)].grip);
             const float aim_grip_value =
                 Input::TakeAimGrip(game_in, gyro_aim_hand, /*leave=*/other_holds);
             if (gyro_aim_frame.mode == Input::GyroAimMode::LightGun) {
@@ -2381,6 +2434,7 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     // AzaharFrame kiuflash: Projectiles, the same way (each shot flies into the screen).
     const bool projectiles_on = weapon_on && Settings::values.vr_light_gun_projectile.GetValue();
     bool weapon_shown = false;
+    pit_arm_hand = -1; // AzaharFrame kiu140
     Kiu::SetWanted(weapon_on, kiu && (recoil_on || flash_on || projectiles_on), kiu);
     if (weapon_on) {
         FrameWeapons::Request(); // made the first time they are wanted (once a boot)
@@ -2393,7 +2447,8 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                 id = static_cast<int>(v);
             }
         }
-        if (id >= 0) {
+        // AzaharFrame kiu140: no weapon over a cutscene.
+        if (id >= 0 && !Kiu::FirstPerson::Cutscene()) {
             // AzaharFrame kiuopacity: Weapon Opacity, or AZAHARFRAME_KIU_OPACITY's (live).
             const Vis::OpacityTune see = Vis::ParseOpacityTune(
                 Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_OPACITY"));
@@ -2403,6 +2458,12 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                     static_cast<int>(Settings::values.vr_light_gun_weapon_opacity.GetValue()),
                     see.weapon));
             weapon_shown = true;
+            // AzaharFrame kiu140: Pit's Arm on the free hand, in first person.
+            if (Settings::values.vr_kiu_arm.GetValue() != 0 && Kiu::FirstPerson::AngelsAim() &&
+                !Kiu::FirstPerson::OutsideViewOn()) {
+                visuals.SetPitArm(gyro_aim_hand ^ 1);
+                pit_arm_hand = gyro_aim_hand ^ 1;
+            }
         }
     }
     // AzaharFrame kiuflash: a flash at the weapon's muzzle on each of the game's own shots.
@@ -2507,6 +2568,9 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         } else if (gyro_aim_frame.clutch &&
                    gyro_aim_frame.mode == Input::GyroAimMode::LightGun) {
             beam = {}; // AzaharFrame kiuaim3: aim freed: the usual beam, to point anywhere
+        }
+        if (Kiu::FirstPerson::Cutscene()) {
+            beam = {false, true}; // AzaharFrame kiu140: no laser and no beam over a cutscene
         }
         const bool laser_now = Settings::values.vr_light_gun_laser.GetValue() &&
                                gyro_aim_frame.mode == Input::GyroAimMode::LightGun;

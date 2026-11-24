@@ -84,6 +84,68 @@ struct UvMotion {
     float turns = 0.0f; ///< the coordinator's turn over a loop (whole turns; not drawn yet)
 };
 
+// ---- AzaharFrame kiu140w: see-through parts ----
+//
+// A weapon's material may be see-through in the game: blended (source alpha, one minus it), added
+// (source alpha, one), or solid with an alpha test that cuts texels out. How see-through each spot
+// is comes out of its combiner's alpha: a channel of a mask texture, a texture's own alpha, a
+// constant, the vertex colour. MakeSeeThrough runs the combiner over the mask's texels, and what
+// it makes goes in a file of its own beside the part's model (w<id>.see, w<id>-<i>.see), so the
+// model files stay as they were and a build before this one draws them as it always did:
+//
+//   'MXFS', version 1, the model's vertex count, image width, height, SeeKind, flags (1 unlit,
+//   2 the game writes depth, 4 the image slides with the part's texture), wrap modes (across |
+//   down << 4, PICA's), the alpha test's reference (float, 0 to 1: under it a texel is cut out)
+//   per vertex 7 floats: the image's u, v (v as the model's), a factor of the alpha, the alpha's
+//   gain, the colour factor (unlit parts)
+//   width x height RGBA8: the colour's factor (unlit parts: what the combiner does to the base
+//   texture's colour; white for lit ones) and the alpha
+//
+// The alpha is at the mask's own size and UVs, so a texture pack's replacement of the base texture
+// (any size or format) keeps its colour and takes the game's alpha. Textures sampled at other
+// coordinates than the mask's, and environment maps, take their mean.
+
+enum class SeeKind : u8 {
+    Solid, ///< nothing of it is see-through: no file
+    Cut,   ///< solid, texels that fail the alpha test left out
+    Blend, ///< over what is behind, by its alpha
+    Add,   ///< its light added to what is behind
+};
+/// A blended or tested part whose surface (by area, where its triangles sample the mask) is
+/// see-through on less than this stays Solid.
+constexpr float kSeeSolidArea = 0.005f;
+/// See-through: an alpha under this.
+constexpr float kSeeOpaque = 0.9f;
+
+/// A corner of a part's triangles as the game has it.
+struct SeeVertex {
+    std::array<float, 3> position{};
+    std::array<float, 2> uv0{}, uv1{};
+    std::array<float, 4> colour{1.0f, 1.0f, 1.0f, 1.0f};
+};
+struct SeeThrough {
+    SeeKind kind = SeeKind::Solid;
+    bool unlit = false;       ///< drawn with the combiner's colour, not lit
+    bool depth_write = true;  ///< the game's own
+    bool slides = false;      ///< the image is at the base texture's coordinator
+    float reference = 0.0f;   ///< an alpha under it is cut out (0: no test)
+    u32 width = 1, height = 1;
+    u32 wrap_u = 2, wrap_v = 2;
+    std::vector<float> vertices; ///< 7 per vertex
+    std::vector<u8> rgba;
+    float cut_area = 0.0f;    ///< of the surface, cut out or (no test) clear
+    float middle_area = 0.0f; ///< and between that and kSeeOpaque
+};
+/// A material's see-through part (pure: tested with made-up materials). `textures`: its mappers'
+/// (null: not in the file), `base`: the mapper its colour is drawn from, `effect`: an effect
+/// material (WpnEfe ...).
+SeeThrough MakeSeeThrough(const FrameCgfx::Material& material,
+                          const std::array<const FrameCgfx::Texture*, 3>& textures, int base,
+                          bool effect, std::span<const SeeVertex> vertices,
+                          std::span<const u32> indices);
+/// Its file.
+std::vector<u8> WriteSeeThrough(const SeeThrough& see);
+
 struct Part {
     std::string file;     ///< in the weapon folder
     std::string material; ///< the game's material name
@@ -100,6 +162,8 @@ struct Part {
     std::string replaced;
     bool replaced_flip = true;
     UvMotion uv; ///< AzaharFrame kiumodels
+    SeeKind see = SeeKind::Solid; ///< AzaharFrame kiu140w
+    std::string see_file;         ///< its see-through file ("" for a solid part)
 };
 
 // ---- AzaharFrame kiuflash: the muzzle flashes ----
@@ -247,6 +311,9 @@ struct Weapon {
     FlashInfo flash; ///< AzaharFrame kiuflash
     BulletInfo bullets; ///< AzaharFrame kiuflash
     HoldInfo hold;      ///< AzaharFrame kiuweap2
+    /// AzaharFrame kiu140w: made by a build that makes the see-through parts (else the weapon is
+    /// made again once).
+    bool see_known = false;
 };
 
 // ---- AzaharFrame kiuarm: Pit's arm ----

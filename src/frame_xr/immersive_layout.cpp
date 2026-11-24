@@ -1609,7 +1609,7 @@ ScreenDecision Decide(const ScreenState& s) {
     d.show_bottom = s.bottom_focused || hidden_at_start == s.bottom_toggled;
     const bool head_locked = s.mode >= 2;
     d.immersive = s.mode != 0 && s.live && !s.bottom_focused &&
-                  (!head_locked || (!d.show_bottom && !s.menu_open && s.view_valid));
+                  (!head_locked || (!d.show_bottom && !s.menu_open && !s.cutscene && s.view_valid));
     return d;
 }
 

@@ -45,6 +45,8 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     xr_loader.h
     # Controller input (input): actions, mapping, bridge to input_common.
     input/actions.cpp
+    input/hand_joints.cpp # AzaharFrame kiu140
+    input/hand_joints.h
     input/actions.h
     input/controls.h
     input/default_bindings.h
@@ -101,6 +103,7 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     input/kiu_room.h # AzaharFrame kiuvr
     kiu_first_person.cpp
     kiu_first_person.h
+    kiu_cutscene.h # AzaharFrame kiu140
     kiu_pit_opacity.cpp # AzaharFrame kiu133
     kiu_pit_opacity.h
     input/screen_rig.cpp
@@ -154,6 +157,17 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     vis/model_shaders.h
     vis/weapon_fit.cpp # AzaharFrame kiuguns
     vis/weapon_fit.h
+    vis/pit_hand.cpp # AzaharFrame kiuhand
+    vis/pit_hand.h
+    vis/pit_hand_shader.h
+    vis/pit_model.cpp # AzaharFrame kiuhand
+    vis/pit_model.h
+    vis/hand_import.cpp # AzaharFrame kiuhand
+    vis/hand_import.h
+    vis/pit_hand_data.inc
+    vis/pit_arm.cpp # AzaharFrame kiuhand: the drawn arm (tools/kiu_hand/make_arm.py)
+    vis/pit_arm.h
+    vis/pit_arm_data.inc
     vis/muzzle_flash.cpp # AzaharFrame kiuflash
     vis/muzzle_flash.h
     vis/projectile.cpp # AzaharFrame kiuflash
@@ -164,6 +178,7 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     vis/panel_art.h
     vis/panels.cpp
     vis/panels.h
+    vis/panel_hold.h # AzaharFrame kiu140
     vis/stats_place.cpp # AzaharFrame statspos
     vis/stats_place.h
     vis/wrist_screen.cpp # AzaharFrame kiuwrist
@@ -200,6 +215,13 @@ target_include_directories(frame_xr PUBLIC ${PROJECT_SOURCE_DIR}/third_party/ope
 target_link_libraries(frame_xr PUBLIC citra_common citra_core video_core input_common vulkan-headers vma)
 target_link_libraries(frame_xr PRIVATE frame_xr_picker ${CMAKE_DL_LIBS} Threads::Threads)
 target_link_libraries(frame_xr PUBLIC frame_xr_menu) # AzaharFrame tabmenu
+target_link_libraries(frame_xr PRIVATE lodepng) # AzaharFrame kiuhand: hand_import.cpp unpacks and decodes with it
+
+# AzaharFrame kiuhand: the drawn arm's images
+include(${PROJECT_SOURCE_DIR}/CMakeModules/EmbedBytes.cmake)
+embed_bytes(frame_xr pit_arm_images.inc
+    kPitArmColourPng ${PROJECT_SOURCE_DIR}/src/frame_xr/vis/pit_arm_colour.png
+    kPitArmSurfacePng ${PROJECT_SOURCE_DIR}/src/frame_xr/vis/pit_arm_surface.png)
 # AzaharFrame menuux: Edit Controls' click plays through SDL's audio (ui_sound.cpp).
 if (ENABLE_SDL2)
     target_link_libraries(frame_xr PRIVATE SDL2::SDL2)

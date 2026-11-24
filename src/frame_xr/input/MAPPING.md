@@ -402,7 +402,8 @@ Aiming at Direct Aim when the mod is installed (`ControlsPreset::gyro_aim_with_m
   keep the beam (`Input::AimBeamFor`). Test switches (live): `AZAHARFRAME_KIU_FIT_<CLASS>` (BLADE, STAFF,
   CLAWS, BOW, PALM, CLUB, CANNON, ORBITARS, ARM) `=dx,dy,dz,yaw,pitch,roll,scale` (cm, degrees,
   a factor), `AZAHARFRAME_KIU_WEAPON=<id>` (0 to 107: show that weapon), and
-  `AZAHARFRAME_KIU_WEAPON_GLOW=1` (draw the effect cards too).
+  `AZAHARFRAME_KIU_WEAPON_GLOW=1` (draw the effect cards too, with the
+  game's own blend), `AZAHARFRAME_KIU_WEAPON_SEE_THROUGH=0` (see-through parts drawn solid).
 - **Trigger:** while Gyro Aim is on, the Bottom Screen Reticle steps aside (its setting is kept;
   the shelved C-Stick at Edge with it), so the trigger is ZL/ZR, which the mod fires with, and never a touch,
   which would stop the mod's aim. The controller keeps its beam; pointed at the bottom screen its

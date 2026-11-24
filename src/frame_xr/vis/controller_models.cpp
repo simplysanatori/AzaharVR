@@ -5,6 +5,9 @@
 // The pass follows Moonlight XR Native's xr/xr_model.c (renderControllerModels, modelRecord;
 // GPLv3, same author), as a Vulkan pass of its own.
 
+#include <mutex>
+#include <memory>
+#include <atomic>
 #include <algorithm>
 #include <filesystem>
 #include <cmath>
@@ -24,6 +27,9 @@
 #include "frame_xr/retired_swapchains.h" // AzaharFrame projdef
 #include "frame_xr/session.h"
 #include "frame_xr/vis/controller_models.h"
+#include "frame_xr/vis/hand_import.h"
+#include "frame_xr/vis/pit_arm.h"
+#include "frame_xr/vis/pit_hand_shader.h" // AzaharFrame kiu140
 #include "frame_xr/vis/see_through.h" // AzaharFrame kiuopacity
 #include "frame_xr/vis/model_shaders.h"
 #include "frame_xr/vis/proj_screen.h" // AzaharFrame projscreen
@@ -203,6 +209,48 @@ bool ReadControllerModels(std::array<ModelFile, 2>& files, std::string& error) {
     return true;
 }
 
+// AzaharFrame kiu140: the hand file the player has (pit_model.h): read once a run by the loader's
+// thread, again after an import. Absent: Pit's Arm is not drawn and nothing is logged.
+struct PitModelSource {
+    std::mutex m;
+    std::shared_ptr<const PitModel> model;
+    std::atomic<uint32_t> generation{0};
+};
+PitModelSource& PitSource() {
+    static PitModelSource source;
+    return source;
+}
+
+void ReadPitModel() {
+    auto model = std::make_shared<PitModel>();
+    std::string error;
+    const std::string path = FileUtil::GetUserPath(FileUtil::UserPath::UserDir) + kPitModelFile;
+    bool ok = LoadPitModel(path, *model, error);
+    const bool own = ok;
+    if (!ok) {
+        if (!error.empty()) {
+            LOG_ERROR(Frontend, "xr: Pit's arm: {} was refused: {}", path, error);
+        }
+        ok = BuiltInPitModel(*model, error); // the drawn arm
+        if (!ok) {
+            LOG_ERROR(Frontend, "xr: Pit's arm: the built-in arm was refused: {}", error);
+        }
+    }
+    if (ok) {
+        LOG_INFO(Frontend, "xr: Pit's arm: {}, {} + {} triangles, textures {}x{}",
+                 own ? "the player's hand file" : "the built-in arm", model->body_index_count / 3,
+                 model->plate_index_count / 3, model->texture_width, model->texture_height);
+    }
+    auto& source = PitSource();
+    const std::lock_guard lock{source.m};
+    if (ok) {
+        source.model = std::move(model);
+    } else {
+        source.model.reset();
+    }
+    source.generation.fetch_add(1, std::memory_order_release);
+}
+
 struct ControllerModels::Files {
     std::array<ModelFile, 2> hand;
     std::vector<uint32_t> vert_spv_linear, frag_spv_linear, vert_spv, frag_spv;
@@ -210,6 +258,7 @@ struct ControllerModels::Files {
     /// AzaharFrame ctrlfront: each hand's model inside a sphere (aim space centre, radius).
     std::array<ModelSphere, 2> sphere{};
     std::vector<uint32_t> screen_vert_spv, screen_frag_spv; ///< AzaharFrame projscreen
+    std::vector<uint32_t> pit_frag_spv, pit_frag_spv_linear; ///< AzaharFrame kiu140
 };
 
 struct ControllerModels::Gpu {
@@ -246,6 +295,8 @@ struct ControllerModels::Gpu {
     vk::Pipeline pipeline_depth, pipeline_fade;
     /// AzaharFrame kiuopacity: a see-through part's added light, its coverage held (MAX).
     vk::Pipeline pipeline_add_held;
+    /// AzaharFrame kiu140: Pit's arm: its own colours (pit_hand_shader.h), solid, and fading.
+    vk::Pipeline pipeline_pit, pipeline_pit_fade, pipeline_pit_depth;
     vk::Pipeline Of(Pipe p) const {
         switch (p) {
         case Pipe::Added:
@@ -531,6 +582,14 @@ struct ControllerModels::Gpu {
         bool bullet = false;
         FrameWeapons::UvMotion uv; ///< AzaharFrame kiumodels: how its texture moves
         bool arm = false; ///< AzaharFrame kiuarm: Pit's arm (core kArmFile), drawn on its own
+        /// AzaharFrame kiu140w: how see-through it is (see_through.h), with its own vertices and
+        /// descriptors (its image in the surface's place); none: solid, or a glow.
+        std::optional<SeeFileKind> see;
+        PartKind see_kind = PartKind::Lit;
+        bool see_unlit = false, see_slides = false;
+        float see_reference = 0.0f;
+        vk::Buffer see_vertices;
+        vk::DescriptorSet see_set;
     };
     struct Weapon {
         int id = -1;
@@ -568,6 +627,24 @@ struct ControllerModels::Gpu {
     std::string weapon_fit_logged;
     std::string weapon_draw_logged; ///< AzaharFrame kiuweapon
 
+    // ---- AzaharFrame kiu140: Pit's hand (pit_hand.h) ----
+    struct Pit {
+        int state = 0; ///< 0 not made, 1 made, 2 failed
+        vk::Buffer indices;
+        std::array<vk::Buffer, 2> vertices;  ///< each hand's own
+        std::array<float*, 2> map{};         ///< (written when that hand's pose changes)
+        uint32_t body_indices = 0, all_indices = 0;
+        bool see_through = false; ///< its surface image fades somewhere (the elbow's end)
+        vk::DescriptorPool pool;
+        vk::DescriptorSet set;
+        vk::Sampler sampler;
+        std::array<PitHandPose, 2> skinned;
+        std::array<PitVec3, 2> elbow{};
+        std::array<bool, 2> skinned_once{};
+    } pit;
+    std::vector<vk::DescriptorPool> old_pit_pools;
+    std::vector<vk::Sampler> old_pit_samplers;
+
     void FreeWeapon(Weapon& w) {
         if (!w.sets.empty()) {
             device.freeDescriptorSets(weapon_pool, w.sets);
@@ -595,6 +672,7 @@ struct ControllerModels::WeaponLoad { // AzaharFrame kiuguns
     FrameWeapons::Weapon info;
     std::vector<ModelFile> files;
     std::size_t part_files = 0; ///< AzaharFrame kiuflash: the parts' (the flash cards' after)
+    std::vector<std::optional<SeeFile>> see; ///< AzaharFrame kiu140w: the parts', as `files`
     std::size_t flash_end = 0;  ///< AzaharFrame kiuflash: then the bullets' files, to the end
     float flash_push = 0.0f;    ///< AzaharFrame kiuflash: FlashPush (metres, the class's fit)
     float flash_push_fist = 0.0f; ///< AzaharFrame kiuinteg: from the fist's front (AimSource::Fist)
@@ -743,6 +821,19 @@ void ControllerModels::DestroyXr() {
         for (auto& [key, sampler] : g.weapon_samplers) {
             g.device.destroySampler(sampler);
         }
+        // AzaharFrame kiu140: Pit's hand (its buffers and images are the owned ones)
+        if (g.pit.sampler) {
+            g.device.destroySampler(g.pit.sampler);
+        }
+        if (g.pit.pool) {
+            g.device.destroyDescriptorPool(g.pit.pool);
+        }
+        for (const vk::Sampler s : g.old_pit_samplers) {
+            g.device.destroySampler(s);
+        }
+        for (const vk::DescriptorPool p : g.old_pit_pools) {
+            g.device.destroyDescriptorPool(p);
+        }
         if (g.weapon_pool) {
             g.device.destroyDescriptorPool(g.weapon_pool);
         }
@@ -805,7 +896,8 @@ void ControllerModels::DestroyXr() {
         if (g.queries) {
             g.device.destroyQueryPool(g.queries);
         }
-        for (const vk::Pipeline p : {g.pipeline_depth, g.pipeline_fade, g.pipeline_add_held}) { // kiuopacity
+        for (const vk::Pipeline p : {g.pipeline_depth, g.pipeline_fade, g.pipeline_add_held,
+                                     g.pipeline_pit, g.pipeline_pit_fade, g.pipeline_pit_depth}) { // kiuopacity, kiu140
             if (p) {
                 g.device.destroyPipeline(p);
             }
@@ -979,6 +1071,17 @@ void ControllerModels::Frame(Runtime& rt, const ViewPose& views, const std::arra
                 load_state = 3;
                 return;
             }
+            // AzaharFrame kiu140: Pit's arm (the hand file's shader; without it, no arm).
+            ReadPitModel();
+            f.pit_frag_spv_linear = Vulkan::CompileGLSL(
+                std::string{"#version 450\n#define OUT_LINEAR true\n"} + Shaders::kPitHandFrag,
+                vk::ShaderStageFlagBits::eFragment);
+            f.pit_frag_spv = Vulkan::CompileGLSL(
+                std::string{"#version 450\n#define OUT_LINEAR false\n"} + Shaders::kPitHandFrag,
+                vk::ShaderStageFlagBits::eFragment);
+            if (f.pit_frag_spv.empty() || f.pit_frag_spv_linear.empty()) {
+                LOG_ERROR(Frontend, "xr: Pit's arm: the shader did not compile");
+            }
             // AzaharFrame ctrlfront: without it the models go over every screen and panel.
             f.occluder_vert_spv = Vulkan::CompileGLSL(
                 std::string{"#version 450\n"} + Shaders::kOccluderVert,
@@ -1013,7 +1116,7 @@ void ControllerModels::Frame(Runtime& rt, const ViewPose& views, const std::arra
     if (loader.joinable()) {
         loader.join();
     }
-
+    TakePit(); // AzaharFrame kiu140
     // ---- The GPU side, once a session ----
     if (!gpu) {
         if (!any) {
@@ -1847,7 +1950,7 @@ void ControllerModels::Setup(Runtime& rt) {
     if (!vert || !frag) {
         throw std::runtime_error("shader modules");
     }
-    const std::array<vk::PipelineShaderStageCreateInfo, 2> shader_stages{{
+    std::array<vk::PipelineShaderStageCreateInfo, 2> shader_stages{{
         {.stage = vk::ShaderStageFlagBits::eVertex, .module = vert, .pName = "main"},
         {.stage = vk::ShaderStageFlagBits::eFragment, .module = frag, .pName = "main"},
     }};
@@ -1995,6 +2098,29 @@ void ControllerModels::Setup(Runtime& rt) {
     const vk::PipelineColorBlendStateCreateInfo add_held_blend{.attachmentCount = 1,
                                                                .pAttachments = &add_held_att};
     const auto made_add_held = variant(&add_depth, &add_held_blend);
+    // AzaharFrame kiu140: Pit's arm, as the solid pipeline with its own fragment shader; fading
+    // (an arm's fade below 1) premultiplied over what is behind. None: no arm.
+    {
+        const vk::ShaderModule pit_frag = Vulkan::CompileSPV(
+            srgb ? f.pit_frag_spv_linear : f.pit_frag_spv, g.device);
+        if (pit_frag) {
+            shader_stages[1].module = pit_frag;
+            const auto made_pit = variant(&depth_state, &blend);
+            const auto made_pit_fade = variant(&depth_state, &fade_blend);
+            const auto made_pit_depth = variant(&depth_state, &depth_only_blend);
+            g.device.destroyShaderModule(pit_frag);
+            if (made_pit.result == vk::Result::eSuccess) {
+                g.pipeline_pit = made_pit.value;
+            }
+            if (made_pit_fade.result == vk::Result::eSuccess) {
+                g.pipeline_pit_fade = made_pit_fade.value;
+            }
+            if (made_pit_depth.result == vk::Result::eSuccess) {
+                g.pipeline_pit_depth = made_pit_depth.value;
+            }
+        }
+        shader_stages[1].module = frag;
+    }
     g.device.destroyShaderModule(vert);
     g.device.destroyShaderModule(frag);
     if (made.result != vk::Result::eSuccess || made_add.result != vk::Result::eSuccess ||
@@ -2160,10 +2286,11 @@ void ControllerModels::Setup(Runtime& rt) {
     g.upload_fence = g.device.createFence({});
     // AzaharFrame kiuguns: the weapon in hand: its own sets (freed one weapon at a time), command
     // buffer and fence.
-    const vk::DescriptorPoolSize weapon_size{vk::DescriptorType::eCombinedImageSampler, 64};
+    // AzaharFrame kiu140w: a see-through part has a set of its own.
+    const vk::DescriptorPoolSize weapon_size{vk::DescriptorType::eCombinedImageSampler, 128};
     g.weapon_pool = g.device.createDescriptorPool(
         {.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-         .maxSets = 32,
+         .maxSets = 64,
          .poolSizeCount = 1,
          .pPoolSizes = &weapon_size});
     g.weapon_cmd = g.device.allocateCommandBuffers(
@@ -2263,6 +2390,83 @@ void ControllerModels::Setup(Runtime& rt) {
 
 namespace {
 
+// AzaharFrame kiu140w: AZAHARFRAME_KIU_WEAPON_SEE_THROUGH=0 (live): a weapon's see-through parts
+// drawn solid (as before them).
+bool SeeThroughPartsOn() {
+    return Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_WEAPON_SEE_THROUGH").value_or("1") !=
+           "0";
+}
+
+template <typename WeaponT>
+bool HasSeeParts(const WeaponT& w, bool glow) {
+    return std::any_of(w.parts.begin(), w.parts.end(),
+                       [&](const auto& p) { return p.see && (glow || !p.glow); });
+}
+
+/// What a see-through file's part is drawn as (see_through.h).
+PartKind SeePartKind(const SeeFile& see) {
+    switch (see.kind) {
+    case SeeFileKind::Add:
+        return PartKind::Added;
+    case SeeFileKind::Blend:
+        return see.depth_write && !see.unlit ? PartKind::Blend : PartKind::BlendClear;
+    default:
+        return PartKind::Lit;
+    }
+}
+
+// AzaharFrame kiu140w: one see-through part in a stage, `pc` as for a solid one (its light, matrix
+// and fade): cut under the game's alpha test, its solid texels or (ClearStage) the rest; blended
+// with no depth: its back faces, then its front ones.
+template <typename GpuT, typename PartT>
+void DrawSeePart(vk::CommandBuffer& c, GpuT& g, const PartT& part, PushConstants pc,
+                 const char* side, DrawStage stage, PartKind kind, float w_flags, double now_s) {
+    const bool clear = ClearStage(stage);
+    const bool blend = kind == PartKind::Blend || kind == PartKind::BlendClear;
+    float flags = static_cast<float>(static_cast<int>(w_flags) & 3) + kSeeFlag; // mirror, forearm
+    pc.params[0] = blend && !clear ? std::max(part.see_reference, kSolidAlpha) : part.see_reference;
+    if (part.see_unlit) {
+        flags += 4.0f;
+        // Only as the game moves it (no flicker, no sway).
+        if (part.uv.source == FrameWeapons::UvSource::Game &&
+            (kind == PartKind::Added || part.see_slides)) {
+            const GlowMotion m = AnimateGlow(-1, static_cast<int>(part.uv.source), part.uv.frames,
+                                             part.uv.du, part.uv.dv, std::fmod(now_s, 3600.0),
+                                             FrameWeapons::kGameFps);
+            pc.key = {m.u, m.v, 1.0f, 0.0f};
+            pc.up = {};
+            flags += 8.0f + (part.see_slides ? kSeeSlidesFlag : 0.0f);
+        }
+    }
+    if (clear) {
+        flags += kSeeBlendFlag;
+    }
+    const bool both = stage == DrawStage::ClearColour && kind == PartKind::BlendClear;
+    bool bound = false;
+    for (const float face : {both ? kSeeBackFlag : 0.0f, kSeeFrontFlag}) {
+        if (face == kSeeFrontFlag && !both) {
+            break;
+        }
+        pc.params[3] = StageFlags(stage, flags + face);
+        for (const ModelComponent& comp : part.components) {
+            if (comp.name != side || comp.index_count == 0) {
+                continue;
+            }
+            if (!bound) {
+                c.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g.pipeline_layout, 0,
+                                     part.see_set, {});
+                c.bindVertexBuffers(0, part.see_vertices, vk::DeviceSize{0});
+                c.bindIndexBuffer(part.indices, 0, vk::IndexType::eUint32);
+                bound = true;
+            }
+            c.pushConstants(g.pipeline_layout,
+                            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                            0, sizeof(pc), &pc);
+            c.drawIndexed(comp.index_count, 1, comp.first_index, 0, 0);
+        }
+    }
+}
+
 // AzaharFrame kiuguns: a weapon's parts at the aim pose times each fit (weapon_fit.h).
 // AzaharFrame kiuopacity: in the stages of its Weapon Opacity (see_through.h): at 1 one stage,
 // the draws as before; under it the lit parts' depth, then their colour, then the glows.
@@ -2276,6 +2480,7 @@ void RecordWeapon(vk::CommandBuffer& c, GpuT& g, const WeaponT& w, const Mat& vi
     const Mat aim_m = FromPose(aim.orientation, aim.position);
     // The glow and effect parts (WpnEfe ...) are cards the game blends and animates; drawn plain
     // they float about, so only with AZAHARFRAME_KIU_WEAPON_GLOW=1 (live).
+    // AzaharFrame kiu140w: then with the game's own blend and alpha (but a palm's flames).
     // A palm's flames are its look: kept (in place: FitMotion; moving: AnimateGlow).
     const bool glow =
         w.info.cls == FrameWeapons::kPalm ||
@@ -2285,13 +2490,15 @@ void RecordWeapon(vk::CommandBuffer& c, GpuT& g, const WeaponT& w, const Mat& vi
     // AzaharFrame kiumodels: AZAHARFRAME_KIU_GLOW_MOTION=0 (live): the glows still (as before).
     const bool glow_motion =
         Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_GLOW_MOTION").value_or("1") != "0";
-    for (const DrawStage stage : StagesFor(opacity)) {
+    // AzaharFrame kiu140w: the weapon's own see-through parts (see_through.h).
+    const bool see_on = SeeThroughPartsOn();
+    const bool see_parts = see_on && HasSeeParts(w, glow);
+    for (const DrawStage stage : StagesFor(opacity, see_parts)) {
     for (const FitPart& fit : fits) {
       for (const bool glow_pass : {false, true}) {
-        if ((glow_pass && !glow) || !DrawnIn(stage, glow_pass)) {
+        if (glow_pass && !glow) {
             continue;
         }
-        c.bindPipeline(vk::PipelineBindPoint::eGraphics, g.Of(PipeFor(stage, glow_pass)));
         Mat fit_m{};
         std::copy(fit.transform.begin(), fit.transform.end(), fit_m.begin());
         // The orbitars' and detached parts' float (weapon_fit.h FitMotion), across the ray.
@@ -2335,6 +2542,18 @@ void RecordWeapon(vk::CommandBuffer& c, GpuT& g, const WeaponT& w, const Mat& vi
                                                        : "C";
         for (const auto& part : w.parts) {
             if (part.glow != glow_pass || part.flash || part.bullet || part.arm) {
+                continue;
+            }
+            const bool see = see_on && part.see.has_value();
+            const PartKind kind = see ? part.see_kind : glow_pass ? PartKind::Added : PartKind::Lit;
+            if (!DrawnIn(stage, kind) || (see && part.see_unlit && kind != PartKind::Added &&
+                                          !ClearStage(stage))) {
+                continue;
+            }
+            c.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                           g.Of(PipeFor(stage, kind == PartKind::Added)));
+            if (see) {
+                DrawSeePart(c, g, part, pc, side, stage, kind, w_flags, now_s);
                 continue;
             }
             // AzaharFrame kiumodels: a glow moves (its texture slides, it flickers, a palm's
@@ -2413,6 +2632,38 @@ void RecordArm(vk::CommandBuffer& c, GpuT& g, const PartT& part, const Mat& view
                         sizeof(pc), &pc);
         c.drawIndexed(comp.index_count, 1, comp.first_index, 0, 0);
     }
+}
+
+// AzaharFrame kiu140: Pit's arm on hand `h` (0 left, 1 right): lit and solid, at `model` (LOCAL).
+template <typename GpuT>
+void RecordPit(vk::CommandBuffer& c, GpuT& g, const Mat& model, const Mat& view_proj,
+               const XrVector3f& eye_pos, const Mat& head, float fade, bool mirrored, int h) {
+    const Mat to_model = InverseAffine(model);
+    PushConstants pc{};
+    const auto eye = Apply(to_model, eye_pos.x, eye_pos.y, eye_pos.z, 1.0f);
+    pc.eye = {eye[0], eye[1], eye[2], 0.0f}; // no cut
+    const auto back = Apply(head, 0.0f, 0.0f, 1.0f, 0.0f);
+    const auto key = Apply(to_model, back[0] * 0.6f, 1.0f + back[1] * 0.6f, back[2] * 0.6f, 0.0f);
+    pc.key = {key[0], key[1], key[2], 0.0f};
+    const auto up = Apply(to_model, 0.0f, 1.0f, 0.0f, 0.0f);
+    pc.up = {up[0], up[1], up[2], 0.0f};
+    pc.params = {0.0f, 1.0f, std::clamp(fade, 0.0f, 1.0f), mirrored ? 1.0f : 0.0f};
+    pc.mvp = Multiply(view_proj, model);
+    const bool faded = (fade < 0.999f || g.pit.see_through) && g.pipeline_pit_fade;
+    c.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g.pipeline_layout, 0, g.pit.set, {});
+    c.bindVertexBuffers(0, g.pit.vertices[static_cast<std::size_t>(h)], vk::DeviceSize{0});
+    c.bindIndexBuffer(g.pit.indices, 0, vk::IndexType::eUint32);
+    c.pushConstants(g.pipeline_layout,
+                    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0,
+                    sizeof(pc), &pc);
+    // The plate (the last indices) is on the left arm alone.
+    const uint32_t count = mirrored ? g.pit.body_indices : g.pit.all_indices;
+    if (faded && g.pipeline_pit_depth) { // only its nearest surface, or its inside shows through
+        c.bindPipeline(vk::PipelineBindPoint::eGraphics, g.pipeline_pit_depth);
+        c.drawIndexed(count, 1, 0, 0, 0);
+    }
+    c.bindPipeline(vk::PipelineBindPoint::eGraphics, faded ? g.pipeline_pit_fade : g.pipeline_pit);
+    c.drawIndexed(count, 1, 0, 0, 0);
 }
 
 // AzaharFrame kiuflash: the muzzle flash's cards of its kind (muzzle_flash.h), added to what is
@@ -2843,6 +3094,25 @@ void ControllerModels::FitWeapon(const ViewPose& views, const std::array<Hand, 2
     }
 }
 
+// AzaharFrame kiu140
+bool ControllerModels::PitForearm(int h, Input::Vec3f* wrist, Input::Vec3f* elbow,
+                                  float* radius) const {
+    const ArmDraw& d = arm_draws[static_cast<std::size_t>(h)];
+    if (!d.on || !d.pit) {
+        return false;
+    }
+    Mat fit_m{};
+    std::copy(d.fit.transform.begin(), d.fit.transform.end(), fit_m.begin());
+    const PitVec3 e = d.pit_elbow ? d.elbow : pit_model ? pit_model->elbow : PitVec3{};
+    const auto w = Apply(fit_m, 0.0f, 0.0f, 0.0f, 1.0f);
+    const auto o = Apply(fit_m, e[0], e[1], e[2], 1.0f);
+    *wrist = {w[0], w[1], w[2]};
+    *elbow = {o[0], o[1], o[2]};
+    const float scale = std::sqrt(fit_m[0] * fit_m[0] + fit_m[1] * fit_m[1] + fit_m[2] * fit_m[2]);
+    *radius = pit_model ? scale * std::max(pit_model->wrist_radius, pit_model->forearm_radius) : 0.0f;
+    return true;
+}
+
 // AzaharFrame kiuarm: Pit's arm on the hands this frame (weapon_fit.h): the off hand's while
 // AZAHARFRAME_KIU_ARM=1, the weapon hand's while AZAHARFRAME_KIU_ARM_WEAPON=1, both once the
 // weapon in hand is drawn with its arm read; the forearm turned toward the estimated elbow unless
@@ -2888,6 +3158,19 @@ void ControllerModels::FitArms(const ViewPose& views, const std::array<Hand, 2>&
             }
         }
     }
+    // AzaharFrame kiu140: Pit's hand of our own on the hand without the weapon (drawn or not: an
+    // idle weapon hand fades).
+    for (int h = 0; h < 2; h++) {
+        const Hand& hand = hands[static_cast<std::size_t>(h)];
+        ArmDraw& d = draws[static_cast<std::size_t>(h)];
+        if (!d.on && hand.shown && hand.pit_arm && hand.weapon < 0 && pit_model && gpu &&
+            gpu->pipeline_pit && gpu->pit.state != 2) {
+            const bool left = h == Input::HandIndex(Input::Hand::Left);
+            d.on = d.pit = true;
+            d.fit.transform = PitModelControllerFit(*pit_model, left, arm_tune.scale);
+            d.fit.mirrored = !left;
+        }
+    }
     const int64_t now = std::chrono::duration_cast<std::chrono::nanoseconds>(
                             std::chrono::steady_clock::now().time_since_epoch())
                             .count();
@@ -2908,7 +3191,11 @@ void ControllerModels::FitArms(const ViewPose& views, const std::array<Hand, 2>&
         std::copy(d.fit.transform.begin(), d.fit.transform.end(), fit_m.begin());
         const Mat world = Multiply(FromPose(aim.orientation, aim.position), fit_m);
         const auto wrist = Apply(world, 0.0f, 0.0f, 0.0f, 1.0f);
-        const auto& e = live->arm.elbow;
+        const PitVec3 arm_elbow = pit_model ? pit_model->elbow : PitVec3{};
+        const std::array<float, 3> e =
+            d.pit ? std::array<float, 3>{arm_elbow[0], arm_elbow[1], arm_elbow[2]}
+                  : std::array<float, 3>{live->arm.elbow[0], live->arm.elbow[1],
+                                         live->arm.elbow[2]};
         const auto far = Apply(world, e[0], e[1], e[2], 1.0f);
         const std::array<float, 3> w3{wrist[0], wrist[1], wrist[2]};
         const std::array<float, 3> along{far[0] - w3[0], far[1] - w3[1], far[2] - w3[2]};
@@ -2921,6 +3208,19 @@ void ControllerModels::FitArms(const ViewPose& views, const std::array<Hand, 2>&
         const float dt = time_ns ? static_cast<float>(now - time_ns) * 1e-9f : -1.0f;
         time_ns = now;
         dir = SmoothDirection(dir, target, dt);
+        if (d.pit) { // AzaharFrame kiu140: the forearm's bone, in arm space
+            const float reach = std::sqrt(along[0] * along[0] + along[1] * along[1] +
+                                          along[2] * along[2]);
+            const float len = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+            if (len > 1e-6f) {
+                const float k = reach / len;
+                const auto at = Apply(InverseAffine(world), w3[0] + dir[0] * k, w3[1] + dir[1] * k,
+                                      w3[2] + dir[2] * k, 1.0f);
+                d.elbow = {at[0], at[1], at[2]};
+                d.pit_elbow = true;
+            }
+            continue;
+        }
         d.turn = RotationBetween(w3, along, dir);
         d.turned = true;
     }
@@ -2942,6 +3242,153 @@ void ControllerModels::FitArms(const ViewPose& views, const std::array<Hand, 2>&
                  kArmScale * arm_tune.scale,
                  arm_value ? std::string{kArmFitSwitch} + "=" + *arm_value : std::string{"default"},
                  elbow ? "turned toward the elbow" : "straight");
+    }
+}
+
+// AzaharFrame kiu140: the player's hand file, read again after an import.
+void ReloadPitModel() {
+    ReadPitModel();
+}
+
+// The newest hand file (PitSource), taken on the frame thread; the GPU side is made again.
+void ControllerModels::TakePit() {
+    const uint32_t generation = PitSource().generation.load(std::memory_order_acquire);
+    if (generation == pit_generation) {
+        return;
+    }
+    {
+        const std::lock_guard lock{PitSource().m};
+        pit_model = PitSource().model;
+    }
+    pit_generation = generation;
+    if (gpu) {
+        Gpu::Pit& p = gpu->pit;
+        // A frame may still be using them: they go at the end, with the old buffers.
+        if (p.pool) {
+            gpu->old_pit_pools.push_back(p.pool);
+        }
+        if (p.sampler) {
+            gpu->old_pit_samplers.push_back(p.sampler);
+        }
+        p = Gpu::Pit{};
+        if (!pit_model) {
+            p.state = 2;
+        }
+    }
+    pit_posed = {};
+}
+
+// Each hand's vertices (host visible, written again when its pose changes: one image is drawn at a
+// time, and Record runs once the last one is done), the indices and the two images; the copies go
+// into this frame's commands.
+void ControllerModels::MakePit() {
+    Gpu& g = *gpu;
+    Gpu::Pit& p = g.pit;
+    p.state = 2;
+    if (!pit_model || !g.pipeline_pit) {
+        return;
+    }
+    try {
+        const PitModel& m = *pit_model;
+        const auto host = vk::MemoryPropertyFlagBits::eHostVisible |
+                          vk::MemoryPropertyFlagBits::eHostCoherent;
+        const auto make = [&](std::size_t size, vk::BufferUsageFlags usage, vk::Buffer& out) {
+            vk::DeviceMemory memory;
+            out = g.Buffer(size, usage, host, &memory);
+            g.buffers.emplace_back(out, memory);
+            return g.device.mapMemory(memory, 0, size);
+        };
+        const std::size_t floats = std::size_t{m.vertex_count} * kPitVertexFloats;
+        for (std::size_t h = 0; h < 2; h++) {
+            p.map[h] = static_cast<float*>(
+                make(floats * sizeof(float), vk::BufferUsageFlagBits::eVertexBuffer, p.vertices[h]));
+        }
+        auto* indices = static_cast<uint32_t*>(make(m.indices.size() * sizeof(uint32_t),
+                                                    vk::BufferUsageFlagBits::eIndexBuffer, p.indices));
+        std::copy(m.indices.begin(), m.indices.end(), indices);
+        p.body_indices = m.body_index_count;
+        for (std::size_t t = 2; t < m.surface.size() && !p.see_through; t += 4) {
+            p.see_through = m.surface[t] < 255;
+        }
+        p.all_indices = m.body_index_count + m.plate_index_count;
+
+        vk::Buffer staging;
+        auto* pixels = static_cast<uint8_t*>(make(m.colour.size() + m.surface.size(),
+                                                  vk::BufferUsageFlagBits::eTransferSrc, staging));
+        std::copy(m.colour.begin(), m.colour.end(), pixels);
+        std::copy(m.surface.begin(), m.surface.end(), pixels + m.colour.size());
+        g.staging_for_upload = staging;
+        const vk::ImageView colour_view =
+            g.UploadImage(g.cmd, 0, m.texture_width, m.texture_height, vk::Format::eR8G8B8A8Srgb,
+                          nullptr, nullptr);
+        const vk::ImageView surface_view =
+            g.UploadImage(g.cmd, m.colour.size(), m.texture_width, m.texture_height,
+                          vk::Format::eR8G8B8A8Unorm, nullptr, nullptr);
+        p.sampler = g.device.createSampler({
+            .magFilter = vk::Filter::eLinear,
+            .minFilter = vk::Filter::eLinear,
+            .mipmapMode = vk::SamplerMipmapMode::eNearest,
+            .addressModeU = vk::SamplerAddressMode::eClampToEdge,
+            .addressModeV = vk::SamplerAddressMode::eClampToEdge,
+            .addressModeW = vk::SamplerAddressMode::eClampToEdge,
+            .maxLod = 0.0f, // no smaller ones: they would mix materials
+        });
+        const vk::DescriptorPoolSize size{vk::DescriptorType::eCombinedImageSampler, 2};
+        p.pool = g.device.createDescriptorPool(
+            {.maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &size});
+        p.set = g.device.allocateDescriptorSets({.descriptorPool = p.pool,
+                                                 .descriptorSetCount = 1,
+                                                 .pSetLayouts = &g.set_layout})[0];
+        const std::array<vk::DescriptorImageInfo, 2> infos{{
+            {p.sampler, colour_view, vk::ImageLayout::eShaderReadOnlyOptimal},
+            {p.sampler, surface_view, vk::ImageLayout::eShaderReadOnlyOptimal},
+        }};
+        std::array<vk::WriteDescriptorSet, 2> writes{};
+        for (uint32_t k = 0; k < 2; ++k) {
+            writes[k] = {.dstSet = p.set,
+                         .dstBinding = k,
+                         .descriptorCount = 1,
+                         .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                         .pImageInfo = &infos[k]};
+        }
+        g.device.updateDescriptorSets(writes, {});
+        p.state = 1;
+    } catch (const std::exception& error) {
+        LOG_ERROR(Frontend, "xr: Pit's arm could not be made ({}): the controller shows",
+                  error.what());
+    }
+}
+
+void ControllerModels::SkinPit(const std::array<Hand, 2>& hands) {
+    Gpu::Pit& p = gpu->pit;
+    for (std::size_t h = 0; h < 2; h++) {
+        if (!arm_draws[h].pit || !pit_model) {
+            continue;
+        }
+        const int64_t now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                std::chrono::steady_clock::now().time_since_epoch())
+                                .count();
+        const float dt = pit_posed[h] && now > pit_time_ns[h]
+                             ? std::min(static_cast<float>(now - pit_time_ns[h]) * 1e-9f, 0.1f)
+                             : 0.0f;
+        pit_time_ns[h] = now;
+        const bool left = h == static_cast<std::size_t>(Input::HandIndex(Input::Hand::Left));
+        const PitHandPose target =
+            hands[h].pit_tracked
+                ? PitHandPoseFromJoints(hands[h].pit_joints, !left, 0.0f) // our palm's own shape
+                : PitHandPoseFromInputs(hands[h].pit, PitHandGrasp::Free);
+        pit_pose[h] = pit_posed[h] ? PitHandEase(pit_pose[h], target, dt) : target;
+        pit_posed[h] = true;
+        const PitVec3 elbow = arm_draws[h].pit_elbow ? arm_draws[h].elbow : pit_model->elbow;
+        const float moved = std::hypot(elbow[0] - p.elbow[h][0], elbow[1] - p.elbow[h][1],
+                                       elbow[2] - p.elbow[h][2]);
+        if (!p.skinned_once[h] || moved > 0.001f || PitHandPoseDiffers(pit_pose[h], p.skinned[h])) {
+            PitModelSkin(*pit_model, PitModelEvaluate(*pit_model, &pit_pose[h], &elbow),
+                         {p.map[h], std::size_t{pit_model->vertex_count} * kPitVertexFloats});
+            p.skinned[h] = pit_pose[h];
+            p.elbow[h] = elbow;
+            p.skinned_once[h] = true;
+        }
     }
 }
 
@@ -2975,6 +3422,19 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
     vk::CommandBuffer& c = g.cmd;
     c.reset();
     c.begin({.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+    // AzaharFrame kiu140: Pit's hand, made the first time it shows.
+    {
+        bool wanted = false;
+        for (std::size_t h = 0; h < 2; h++) {
+            wanted = wanted || arm_draws[h].pit;
+        }
+        if (wanted && g.pit.state == 0) {
+            MakePit();
+        }
+        if (g.pit.state == 1) {
+            SkinPit(hands);
+        }
+    }
     if (g.queries) { // AzaharFrame ctrlfront
         c.resetQueryPool(g.queries, 0, 2);
         c.writeTimestamp(vk::PipelineStageFlagBits::eTopOfPipe, g.queries, 0);
@@ -3064,9 +3524,12 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
     const auto weapon_drawn = [&](const Hand& hand) {
         return hand.shown && hand.weapon >= 0 && g.weapon_live && g.weapon_live->id == hand.weapon;
     };
-    const std::array<int, 2> order =
-        HandOrder(weapon_drawn(hands[0]) && SeeThrough(hands[0].weapon_opacity),
-                  weapon_drawn(hands[1]) && SeeThrough(hands[1].weapon_opacity));
+    // AzaharFrame kiu140w: or one with see-through parts of its own.
+    const auto weapon_clear = [&](const Hand& hand) {
+        return weapon_drawn(hand) && (SeeThrough(hand.weapon_opacity) ||
+                                      (SeeThroughPartsOn() && HasSeeParts(*g.weapon_live, true)));
+    };
+    const std::array<int, 2> order = HandOrder(weapon_clear(hands[0]), weapon_clear(hands[1]));
     // AzaharFrame kiuweapon: AZAHARFRAME_KIU_WEAPON_DRAW=0 (live): the weapon's model left out
     // (weapon_fit.h kWeaponDrawSwitch); its flash and shots as before.
     // AzaharFrame kiu130: and while the view is over the shoulder, where the game draws Pit with
@@ -3181,7 +3644,17 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
             // AzaharFrame kiuarm: Pit's arm: in place of the controller, or under the weapon (a
             // see-through weapon shows it through).
             const ArmDraw& arm = arm_draws[static_cast<std::size_t>(h)];
-            if (arm.on && g.weapon_live && g.weapon_live->arm_part >= 0) {
+            // AzaharFrame kiu140: Pit's own hand.
+            if (arm.pit && g.pit.state == 1) {
+                const XrPosef aim = ToXr(hand.aim);
+                Mat fit_m{};
+                std::copy(arm.fit.transform.begin(), arm.fit.transform.end(), fit_m.begin());
+                RecordPit(c, g, Multiply(FromPose(aim.orientation, aim.position), fit_m),
+                          view_proj, views.eye[e].position, head, hand.fade, arm.fit.mirrored, h);
+                c.bindPipeline(vk::PipelineBindPoint::eGraphics, g.pipeline);
+                continue;
+            }
+            if (arm.on && !arm.pit && g.weapon_live && g.weapon_live->arm_part >= 0) {
                 RecordArm(c, g,
                           g.weapon_live->parts[static_cast<std::size_t>(g.weapon_live->arm_part)],
                           view_proj, views.eye[e].position, head, hand, arm.fit,
@@ -3484,6 +3957,18 @@ void ControllerModels::UpdateWeapon(int id) {
                                  not_read);
                     }
                 }
+                // AzaharFrame kiu140w: how see-through it is (one that cannot be read: solid).
+                std::optional<SeeFile> see;
+                if (!part.see_file.empty()) {
+                    see.emplace();
+                    if (!LoadSeeFile(dir + part.see_file,
+                                     file.vertices.size() / kModelVertexFloats, *see, why)) {
+                        LOG_WARNING(Frontend, "xr: weapon in hand: {}: {} (drawn solid)",
+                                    part.see_file, why);
+                        see.reset();
+                    }
+                }
+                l.see.push_back(std::move(see));
                 l.files.push_back(std::move(file));
             }
             l.part_files = l.files.size();
@@ -3636,6 +4121,11 @@ void ControllerModels::UploadWeapon() {
     for (const ModelFile& m : l.files) {
         total += m.vertices.size() * 4 + m.indices.size() * 4 + m.colour.size() + m.surface.size();
     }
+    for (std::size_t i = 0; i < l.see.size() && i < l.files.size(); i++) { // AzaharFrame kiu140w
+        if (l.see[i]) {
+            total += l.files[i].vertices.size() * 4 + l.see[i]->image.size();
+        }
+    }
     g.weapon_staging = g.Buffer(total, vk::BufferUsageFlagBits::eTransferSrc,
                                 vk::MemoryPropertyFlagBits::eHostVisible |
                                     vk::MemoryPropertyFlagBits::eHostCoherent,
@@ -3679,8 +4169,8 @@ void ControllerModels::UploadWeapon() {
             g.UploadImage(u, put(m.surface.data(), m.surface.size()), m.SurfaceWidth(),
                           m.SurfaceHeight(), vk::Format::eR8G8B8A8Unorm, &w->images, &w->views);
         // The texture's own wrap modes (77 of the 108 weapons repeat their UVs).
-        const uint32_t key = ModelWrapU(m.flags) | ModelWrapV(m.flags) << 4;
-        vk::Sampler& sampler = g.weapon_samplers[key];
+        const auto sampler_for = [&g](uint32_t wrap_u, uint32_t wrap_v) {
+        vk::Sampler& sampler = g.weapon_samplers[wrap_u | wrap_v << 4];
         if (!sampler) {
             const auto mode = [](uint32_t pica) {
                 switch (pica) {
@@ -3696,32 +4186,61 @@ void ControllerModels::UploadWeapon() {
                 .magFilter = vk::Filter::eLinear,
                 .minFilter = vk::Filter::eLinear,
                 .mipmapMode = vk::SamplerMipmapMode::eLinear,
-                .addressModeU = mode(ModelWrapU(m.flags)),
-                .addressModeV = mode(ModelWrapV(m.flags)),
+                .addressModeU = mode(wrap_u),
+                .addressModeV = mode(wrap_v),
                 .addressModeW = vk::SamplerAddressMode::eClampToEdge,
                 .maxLod = VK_LOD_CLAMP_NONE,
             });
         }
-        part.set = g.device.allocateDescriptorSets(
-            {.descriptorPool = g.weapon_pool, .descriptorSetCount = 1, .pSetLayouts = &g.set_layout})[0];
-        w->sets.push_back(part.set);
-        const std::array<vk::DescriptorImageInfo, 2> infos{{
-            {sampler, colour, vk::ImageLayout::eShaderReadOnlyOptimal},
-            {sampler, surface, vk::ImageLayout::eShaderReadOnlyOptimal},
-        }};
-        const std::array<vk::WriteDescriptorSet, 2> writes{{
-            {.dstSet = part.set,
-             .dstBinding = 0,
-             .descriptorCount = 1,
-             .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-             .pImageInfo = &infos[0]},
-            {.dstSet = part.set,
-             .dstBinding = 1,
-             .descriptorCount = 1,
-             .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-             .pImageInfo = &infos[1]},
-        }};
-        g.device.updateDescriptorSets(writes, {});
+        return sampler;
+        };
+        const vk::Sampler sampler = sampler_for(ModelWrapU(m.flags), ModelWrapV(m.flags));
+        const auto set_of = [&](vk::Sampler second_sampler, vk::ImageView second) {
+            const vk::DescriptorSet set = g.device.allocateDescriptorSets(
+                {.descriptorPool = g.weapon_pool, .descriptorSetCount = 1, .pSetLayouts = &g.set_layout})[0];
+            w->sets.push_back(set);
+            const std::array<vk::DescriptorImageInfo, 2> infos{{
+                {sampler, colour, vk::ImageLayout::eShaderReadOnlyOptimal},
+                {second_sampler, second, vk::ImageLayout::eShaderReadOnlyOptimal},
+            }};
+            const std::array<vk::WriteDescriptorSet, 2> writes{{
+                {.dstSet = set,
+                 .dstBinding = 0,
+                 .descriptorCount = 1,
+                 .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                 .pImageInfo = &infos[0]},
+                {.dstSet = set,
+                 .dstBinding = 1,
+                 .descriptorCount = 1,
+                 .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                 .pImageInfo = &infos[1]},
+            }};
+            g.device.updateDescriptorSets(writes, {});
+            return set;
+        };
+        part.set = set_of(sampler, surface);
+        // AzaharFrame kiu140w: its see-through draw's vertices and image.
+        if (i < l.see.size() && l.see[i]) {
+            const SeeFile& see = *l.see[i];
+            const std::vector<float> verts = SeeVertices(m.vertices, see);
+            part.see_vertices = g.Buffer(verts.size() * 4,
+                                         vk::BufferUsageFlagBits::eVertexBuffer |
+                                             vk::BufferUsageFlagBits::eTransferDst,
+                                         local, &memory);
+            w->buffers.emplace_back(part.see_vertices, memory);
+            u.copyBuffer(g.weapon_staging, part.see_vertices,
+                         vk::BufferCopy{put(verts.data(), verts.size() * 4), 0, verts.size() * 4});
+            const vk::ImageView image =
+                g.UploadImage(u, put(see.image.data(), see.image.size()), see.width, see.height,
+                              vk::Format::eR8G8B8A8Unorm, &w->images, &w->views);
+            part.see_set = set_of(sampler_for(see.wrap_u, see.wrap_v), image);
+            part.see = see.kind;
+            part.see_kind = SeePartKind(see);
+            part.see_unlit = see.unlit;
+            part.see_slides = see.slides;
+            part.see_reference = see.reference;
+            w->gpu_bytes += verts.size() * 4 + see.image.size() * 4 / 3;
+        }
         part.components = m.components;
         part.glow = i < l.part_files && i < l.info.parts.size() && l.info.parts[i].glow;
         if (i < l.part_files && i < l.info.parts.size()) { // AzaharFrame kiumodels

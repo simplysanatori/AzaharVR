@@ -28,6 +28,8 @@
 #include "frame_xr/kiu_turn.h" // AzaharFrame kiufov
 #include "frame_xr/kiu_scan.h"
 #include "frame_xr/test_switches.h"
+#include "frame_xr/kiu_cutscene.h" // AzaharFrame kiu140
+#include "video_core/kiu_sheets.h" // AzaharFrame kiu140
 #include "video_core/kiu_view_tap.h" // AzaharFrame kiuvr: the view register's tap
 
 // AzaharFrame kiuhook (kiu_hooks.h)
@@ -57,6 +59,9 @@ constexpr const char* kSwitchNoPlayerShadow = "AZAHARFRAME_KIU_NO_PLAYER_SHADOW"
 constexpr const char* kSwitchFp2d = "AZAHARFRAME_KIU_FP_2D"; // AzaharFrame kiu2d
 constexpr const char* kSwitchReticleSize = "AZAHARFRAME_KIU_RETICLE_SIZE"; // AzaharFrame kiu131
 constexpr const char* kSwitchReticleTexture = "AZAHARFRAME_KIU_RETICLE_TEX";
+constexpr const char* kSwitchSheets = "AZAHARFRAME_KIU_SHEETS"; // AzaharFrame kiu140
+constexpr const char* kSwitchSheetsOut = "AZAHARFRAME_KIU_SHEETS_OUT"; // AzaharFrame kiu140
+constexpr const char* kSwitchSheetsSky = "AZAHARFRAME_KIU_SHEETS_SKY"; // AzaharFrame kiu140
 constexpr const char* kSwitchTrace = "AZAHARFRAME_KIU_HOOK_TRACE";
 // AzaharFrame kiuvr (kiu_first_person.h)
 constexpr const char* kSwitchFpTrace = "AZAHARFRAME_KIU_FP_TRACE";
@@ -162,6 +167,12 @@ struct State {
     int64_t poll_ns = 0;
     int64_t trace_ns = 0;
     int64_t fp_trace_ns = 0; ///< AzaharFrame kiuvr
+    /// AzaharFrame kiu140: cutscenes told by the angle drawn, and the trace's counts.
+    Kiu::CutsceneWatch cutscene_watch;
+    Kiu::EventWatch event_watch;
+    bool cutscene = false;
+    uint32_t angle_match = 0, angle_other = 0;
+    int64_t angle_ns = 0;
     /// AzaharFrame kiuwide: the scene camera's shape the app asked for last (0: none yet), and
     /// the game's own shape once known.
     uint32_t wide_asked_bits = 0;
@@ -440,6 +451,15 @@ void TraceFirstPerson(State& s, const KH::GameMemory& mem, const KH::Player& p,
     LOG_INFO(Frontend, "xr: Kid Icarus first person: {}", line);
 }
 
+/// AzaharFrame kiu140: no game of this kind, or nothing asked for: no cutscene and nothing counted.
+void CutsceneOff(State& s) {
+    s.cutscene_watch = {};
+    s.event_watch = {};
+    s.cutscene = false;
+    Kiu::FirstPerson::SetCutscene(false);
+    VideoCore::Immersive::g_drawn_angle.reg.store(0, std::memory_order_relaxed);
+}
+
 void Hook(int64_t ticks) {
     State& s = TheState();
     const int64_t host_now = NowNs();
@@ -447,8 +467,11 @@ void Hook(int64_t ticks) {
     Core::System& system = Core::System::GetInstance();
     if (!system.IsPoweredOn()) {
         s.process = nullptr;
+        CutsceneOff(s); // AzaharFrame kiu140
         VideoCore::Immersive::g_soft_draw_turn.store(false, std::memory_order_relaxed); // kiu2d
         VideoCore::Immersive::g_reticle_texture.store(0, std::memory_order_relaxed); // kiu131
+        VideoCore::KiuSheets::g_mode.store(VideoCore::KiuSheets::Mode::Off,
+                                           std::memory_order_relaxed); // kiu140
         return;
     }
     std::shared_ptr<Kernel::Process> process;
@@ -460,10 +483,13 @@ void Hook(int64_t ticks) {
     }
     if (!process) {
         s.process = nullptr;
+        CutsceneOff(s); // AzaharFrame kiu140
         Kiu::FirstPerson::SetGameCode(0, false); // AzaharFrame kiumode
         Kiu::FirstPerson::SupplyRegisters(false);
         VideoCore::Immersive::g_soft_draw_turn.store(false, std::memory_order_relaxed); // kiu2d
         VideoCore::Immersive::g_reticle_texture.store(0, std::memory_order_relaxed); // kiu131
+        VideoCore::KiuSheets::g_mode.store(VideoCore::KiuSheets::Mode::Off,
+                                           std::memory_order_relaxed); // kiu140
         return;
     }
     const uint64_t title = process->codeset->program_id;
@@ -559,6 +585,22 @@ void Hook(int64_t ticks) {
     VideoCore::Immersive::g_soft_draw_turn.store(
         KH::GroupWanted(first_person, fp2d_text ? fp2d_text->c_str() : nullptr),
         std::memory_order_relaxed);
+    // AzaharFrame kiu140: the cloud sheets' soft rim (video_core/kiu_sheets.h).
+    {
+        const auto sheets_text = Switch(kSwitchSheets);
+        VideoCore::KiuSheets::g_mode.store(
+            VideoCore::KiuSheets::ModeFor(first_person && mapped && s.code_ok, s.cutscene,
+                                          sheets_text ? sheets_text->c_str() : nullptr),
+            std::memory_order_relaxed);
+        const auto out_text = Switch(kSwitchSheetsOut);
+        const float out = out_text ? std::strtof(out_text->c_str(), nullptr) : 0.0f;
+        VideoCore::KiuSheets::g_out.store(
+            out >= 1.0f && out <= 4.0f ? out : VideoCore::KiuSheets::kOut,
+            std::memory_order_relaxed);
+        const auto sky_text = Switch(kSwitchSheetsSky);
+        VideoCore::KiuSheets::g_sky.Set(
+            VideoCore::KiuSheets::ParseSky(sky_text ? sky_text->c_str() : nullptr));
+    }
     // AzaharFrame kiu131: Reticle Size: the game's reticle's draws (its texture) scaled about
     // their middle, in first person (video_core/kiu_view_tap.h).
     {
@@ -594,6 +636,9 @@ void Hook(int64_t ticks) {
     const char* const as_other =
         fp_wanted && !first_person ? "; Angel's Aim plays as Full (6DoF): Other Games" : "";
 
+    if (!first_person) {
+        CutsceneOff(s); // AzaharFrame kiu140
+    }
     if (!mapped) {
         if (any) {
             Note(s, fmt::format("off: only {} are mapped, this is {:016X}{}",
@@ -626,7 +671,10 @@ void Hook(int64_t ticks) {
 
     const KH::Player p = KH::FindPlayer(mem, *s.build);
     KH::EyeRequest eye;
-    eye.on = want_eye;
+    // AzaharFrame kiu140: the game's own cutscene object (kiu_cutscene.h): its own camera, then.
+    const bool event_cutscene = s.event_watch.Update(
+        first_person && Kiu::FirstPerson::CutscenesOnScreen() && KH::CutsceneObject(mem) != 0);
+    eye.on = want_eye && !event_cutscene;
     if (first_person && !p.land) {
         eye.offset = kEyeOffsetAir; // AzaharFrame kiuvr
     }
@@ -691,7 +739,7 @@ void Hook(int64_t ticks) {
     // goes back to the game's own (the angle comes back with the game's next frame by itself).
     {
         KH::WideRequest wide;
-        if (first_person && p.actor != 0) {
+        if (first_person && p.actor != 0 && !event_cutscene) {
             wide.on = Kiu::FirstPerson::WideTarget(wide.fov_y, wide.aspect);
         }
         uint32_t node_aspect = 0;
@@ -738,6 +786,49 @@ void Hook(int64_t ticks) {
     LogChanges(s, r);
     if ((r.in_mask & KH::Bit(KH::Group::WideCamera)) != 0) {
         AutoShape::HoldWhileWide(); // AzaharFrame kiufix2: Screen Shape Automatic does not measure
+    }
+
+    // AzaharFrame kiu140: cutscenes (kiu_cutscene.h): while the wide camera is in, the angles drawn.
+    bool cutscene = false;
+    {
+        auto& drawn = VideoCore::Immersive::g_drawn_angle;
+        const bool wide_in = mailbox.wide_node != 0 &&
+                             r.state[static_cast<std::size_t>(KH::Group::WideCamera)] ==
+                                 KH::GroupState::In;
+        const bool wanted = wide_in && Kiu::FirstPerson::CutscenesOnScreen();
+        const uint32_t match = drawn.match.exchange(0, std::memory_order_relaxed);
+        const uint32_t other = drawn.other.exchange(0, std::memory_order_relaxed);
+        drawn.want.store(wide_in ? std::tan(0.5f * mailbox.wide_fov_y) : 0.0f,
+                         std::memory_order_relaxed);
+        drawn.reg.store(wide_in ? Kiu::FirstPerson::kViewRegister : 0u, std::memory_order_relaxed);
+        cutscene = s.cutscene_watch.Update(wanted, match, other) || event_cutscene;
+        if (cutscene != s.cutscene) {
+            LOG_INFO(Frontend,
+                     "xr: Kid Icarus hooks: cutscene {} ({}; the world drawn {:.1f} degrees high, "
+                     "the battle camera {:.1f}; {} of it, {} others)",
+                     cutscene ? "started" : "over",
+                     event_cutscene ? "the game's own flag" : "by the angle drawn",
+                     2.0f / kDegToRad * std::atan(drawn.last_other.load(std::memory_order_relaxed)),
+                     mailbox.wide_fov_y / kDegToRad, match, other);
+            s.cutscene = cutscene;
+        }
+        Kiu::FirstPerson::SetCutscene(cutscene);
+        s.angle_match += match;
+        s.angle_other += other;
+        if (SwitchIs("AZAHARFRAME_KIU_CUTSCENE_TRACE", "1") &&
+            host_now - s.angle_ns >= 500'000'000) {
+            s.angle_ns = host_now;
+            KH::Vec3 eye_at;
+            const bool have = KH::ReadVec3(mem, KH::kSceneEye, eye_at);
+            LOG_INFO(Frontend,
+                     "xr: Kid Icarus hooks: angles: {} at the battle camera's, {} others (last "
+                     "{:.1f} degrees high); guard {}, wide {}, flag {:08X}, eye {:.1f} from the player's",
+                     s.angle_match, s.angle_other,
+                     2.0f / kDegToRad * std::atan(drawn.last_other.load(std::memory_order_relaxed)),
+                     KH::PlayerGuardName(p.guard), wide_in, KH::CutsceneObject(mem),
+                     have && p.actor != 0 ? KR::Length(eye_at - p.world_p) : -1.0f);
+            s.angle_match = s.angle_other = 0;
+        }
     }
 
     // AzaharFrame kiuvr: first person's trace.
@@ -795,7 +886,8 @@ void Hook(int64_t ticks) {
         }
         if (model != 0 && mem.Read32(model + KH::kModelDrawnWord, word)) {
             const bool hide_draw = hide_by == KH::HideBy::Draw && !hide_text &&
-                                   KH::HideByDrawInFirstPerson(first_person, eye_moved) && p.Ok();
+                                   KH::HideByDrawInFirstPerson(first_person, eye_moved) && p.Ok() &&
+                                   !cutscene; // AzaharFrame kiu140
             // Ours to put back: the node this app cleared, or (once a run, playing) a cleared
             // byte a save state brought.
             const bool ours = s.model_hidden == model || (!s.model_looked && p.Ok());

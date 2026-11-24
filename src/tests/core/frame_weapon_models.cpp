@@ -288,6 +288,11 @@ struct MeshSpec {
 struct AddedLight {
     bool on = false;
     std::array<float, 4> constant{1, 1, 1, 1};
+    /// AzaharFrame kiu140w: the blend factors, the alpha test's command (register 0x104; 0 for
+    /// none) after a last stage that passes on, and no depth written.
+    u32 blend = (6u << 16) | (1u << 20);
+    u32 alpha_test = 0;
+    bool no_depth = false;
 };
 
 Bytes Cgfx(const std::vector<std::tuple<std::string, s32, std::array<float, 3>>>& bones,
@@ -338,8 +343,18 @@ Bytes Cgfx(const std::vector<std::tuple<std::string, s32, std::array<float, 3>>>
                 f.F(mo + 0x24 + 5 * 16 + 4 * k, added.constant[k]);
             }
             f.W32(mo + 0x140, 1u << 8);
-            f.W32(mo + 0x148, (6u << 16) | (1u << 20));
-            const std::size_t fs = f.Alloc(0x40);
+            f.W32(mo + 0x148, added.blend);
+            if (added.no_depth) {
+                f.W32(mo + 0x118, 1);
+                f.W32(mo + 0x120, 0x00010107u);
+            }
+            const std::size_t fs = f.Alloc(0x80);
+            if (added.alpha_test) {
+                f.W32(fs + 0x40, 0xFu | (0xFu << 16));
+                f.W32(fs + 0x44, (4u << 20) | 0xF8u);
+                f.W32(fs + 0x58, added.alpha_test);
+                f.W32(fs + 0x5C, 0x000F0104u);
+            }
             f.W32(fs + 0x10, 0);                       // the constant: 0
             f.W32(fs + 0x14, 0x3u | (0xEu << 4) | (0x3u << 16)); // sources: tex0, const; tex0
             f.W32(fs + 0x18, (4u << 20) | 0xC0u);      // stage 0's command, four more words
@@ -3021,4 +3036,397 @@ TEST_CASE("Pit's arm: once a game when asked, kept, made again when a file chang
     CHECK_FALSE(std::filesystem::exists(dir2 + FrameWeapons::kArmFile));
     std::filesystem::remove_all(dir);
     std::filesystem::remove_all(dir2);
+}
+
+// ---- AzaharFrame kiu140w: see-through parts (made-up materials and textures only) ----
+
+namespace {
+
+using FrameWeapons::MakeSeeThrough;
+using FrameWeapons::SeeKind;
+using FrameWeapons::SeeThrough;
+using FrameWeapons::SeeVertex;
+
+FrameCgfx::Texture SeeTexture(u32 w, u32 h, const std::function<std::array<u8, 4>(u32, u32)>& at) {
+    FrameCgfx::Texture t;
+    t.width = w;
+    t.height = h;
+    for (u32 y = 0; y < h; y++) {
+        for (u32 x = 0; x < w; x++) {
+            const auto p = at(x, y);
+            t.rgba.insert(t.rgba.end(), p.begin(), p.end());
+        }
+    }
+    return t;
+}
+
+/// A stage: colour from `colour` (three sources, 4 bits each), alpha from `alpha`, the alpha's
+/// operands (4 bits each) and combines (colour, alpha), and the alpha's scale (0 to 2: 1, 2, 4).
+FrameCgfx::Material::Stage SeeStage(u32 colour, u32 alpha, u32 alpha_operands, u32 colour_op,
+                                    u32 alpha_op, u32 alpha_scale = 0, u32 colour_scale = 0) {
+    return {colour | alpha << 16, alpha_operands << 12, colour_op | alpha_op << 16, 0,
+            alpha_scale << 16 | colour_scale};
+}
+
+/// Texture 0 the base, texture 1 a mask at the same coordinates, the alpha the mask's green.
+FrameCgfx::Material MaskMaterial() {
+    FrameCgfx::Material m;
+    m.coords.resize(2);
+    m.mappers[0].texture = "base";
+    m.mappers[1].texture = "mask";
+    m.mappers[1].wrap_u = 0;
+    m.mappers[1].wrap_v = 3;
+    m.blend = true;
+    m.blend_src = 6;
+    m.blend_dst = 7;
+    m.stages = {SeeStage(0x3, 0x4, 4, 0, 0)};
+    return m;
+}
+
+/// A square of two triangles over the whole texture.
+std::vector<SeeVertex> SeeSquare() {
+    std::vector<SeeVertex> v(4);
+    for (int i = 0; i < 4; i++) {
+        const float x = static_cast<float>(i % 2), y = static_cast<float>(i / 2);
+        v[i].position = {x, y, 0.0f};
+        v[i].uv0 = {x, y};
+        v[i].uv1 = {x * 0.5f, y * 0.25f};
+    }
+    return v;
+}
+const std::vector<u32> kSeeSquare{0, 1, 2, 2, 1, 3};
+
+u8 SeeAlphaAt(const SeeThrough& s, u32 x, u32 y) {
+    return s.rgba[(std::size_t{y} * s.width + x) * 4 + 3];
+}
+
+} // namespace
+
+TEST_CASE("See-through parts: the alpha from a mask's channel, its scale and the alpha test",
+          "[kiu140w]") {
+    const auto base = SeeTexture(32, 32, [](u32, u32) { return std::array<u8, 4>{90, 80, 70, 255}; });
+    // The mask: half the base's size, its green falling across.
+    const auto mask = SeeTexture(16, 16, [](u32 x, u32) {
+        return std::array<u8, 4>{255, static_cast<u8>(x * 17), 0, 255};
+    });
+    FrameCgfx::Material m = MaskMaterial();
+    const auto square = SeeSquare();
+    SeeThrough s = MakeSeeThrough(m, {&base, &mask, nullptr}, 0, false, square, kSeeSquare);
+    CHECK(s.kind == SeeKind::Blend);
+    CHECK_FALSE(s.unlit);
+    CHECK(s.depth_write);
+    CHECK(s.reference == 0.0f);
+    REQUIRE(s.width == 16); // the mask's own size and wrap modes
+    REQUIRE(s.height == 16);
+    CHECK(s.wrap_u == 0);
+    CHECK(s.wrap_v == 3);
+    CHECK_FALSE(s.slides); // its own coordinator
+    for (u32 x = 0; x < 16; x++) {
+        CHECK(SeeAlphaAt(s, x, 3) == x * 17);
+        CHECK(s.rgba[(3 * 16 + x) * 4] == 255); // a lit part's colour is its texture's
+    }
+    REQUIRE(s.vertices.size() == 4 * 7);
+    CHECK(s.vertices[7] == 1.0f);          // u of the second corner
+    CHECK(s.vertices[1] == Approx(1.0f)); // v: 1 - v, as the model's
+    CHECK(s.vertices[2] == 1.0f);          // no factor
+    CHECK(s.vertices[3] == 1.0f);          // no gain
+    CHECK(s.middle_area > 0.7f);
+
+    // The green times itself, times 4 (held at 1).
+    m.stages = {SeeStage(0x3, 0x44, 4 | 4 << 4, 0, 1, 2)};
+    s = MakeSeeThrough(m, {&base, &mask, nullptr}, 0, false, square, kSeeSquare);
+    for (u32 x = 0; x < 16; x++) {
+        const float g = static_cast<float>(x * 17) / 255.0f;
+        CHECK(SeeAlphaAt(s, x, 0) == std::lround(std::min(4.0f * g * g, 1.0f) * 255.0f));
+    }
+    // A stage after it that passes it on changes nothing.
+    m.stages.push_back(SeeStage(0xF, 0xF, 0, 0, 0));
+    const auto passed = MakeSeeThrough(m, {&base, &mask, nullptr}, 0, false, square, kSeeSquare);
+    CHECK(passed.rgba == s.rgba);
+
+    // The alpha test: greater than 77, and greater or equal.
+    m = MaskMaterial();
+    m.alpha_test = true;
+    m.alpha_func = 6;
+    m.alpha_ref = 77;
+    s = MakeSeeThrough(m, {&base, &mask, nullptr}, 0, false, square, kSeeSquare);
+    CHECK(s.kind == SeeKind::Blend);
+    CHECK((s.reference > 77.0f / 255.0f && s.reference < 78.0f / 255.0f));
+    CHECK(s.cut_area == Approx(0.3f).margin(0.05f));
+    m.alpha_func = 7;
+    s = MakeSeeThrough(m, {&base, &mask, nullptr}, 0, false, square, kSeeSquare);
+    CHECK((s.reference > 76.0f / 255.0f && s.reference < 77.0f / 255.0f));
+    m.alpha_func = 1; // always
+    CHECK(MakeSeeThrough(m, {&base, &mask, nullptr}, 0, false, square, kSeeSquare).reference == 0.0f);
+}
+
+TEST_CASE("See-through parts: solid, cut out, blended or added", "[kiu140w]") {
+    const auto base = SeeTexture(32, 32, [](u32, u32) { return std::array<u8, 4>{90, 80, 70, 255}; });
+    const auto holes = SeeTexture(32, 32, [](u32 x, u32) {
+        return std::array<u8, 4>{255, static_cast<u8>(x < 16 ? 0 : 255), 0, 255};
+    });
+    // One texel of a large one clear: under half a percent of the surface.
+    const auto speck = SeeTexture(64, 64, [](u32 x, u32 y) {
+        return std::array<u8, 4>{255, static_cast<u8>(x == 9 && y == 9 ? 0 : 255), 0, 255};
+    });
+    const auto square = SeeSquare();
+    const auto make = [&](const FrameCgfx::Material& m, const FrameCgfx::Texture& mask,
+                          bool effect = false) {
+        return MakeSeeThrough(m, {&base, &mask, nullptr}, 0, effect, square, kSeeSquare);
+    };
+    FrameCgfx::Material m = MaskMaterial();
+    CHECK(make(m, holes).kind == SeeKind::Blend);
+    CHECK(make(m, speck).kind == SeeKind::Solid);
+    // Only the part of the mask its triangles sample counts.
+    auto right = square;
+    for (auto& v : right) {
+        v.uv0[0] = 0.6f + 0.3f * v.uv0[0];
+    }
+    CHECK(MakeSeeThrough(m, {&base, &holes, nullptr}, 0, false, right, kSeeSquare).kind ==
+          SeeKind::Solid);
+    // Not blended: solid, or cut out by a test that cuts something.
+    for (const bool off : {false, true}) {
+        m = MaskMaterial();
+        m.blend = !off;
+        m.blend_src = 1;
+        m.blend_dst = 0;
+        CHECK(make(m, holes).kind == SeeKind::Solid);
+        m.alpha_test = true;
+        m.alpha_func = 6;
+        m.alpha_ref = 77;
+        CHECK(make(m, holes).kind == SeeKind::Cut);
+        CHECK(make(m, speck).kind == SeeKind::Solid);
+        // An effect material the game draws solid: as solid, with its holes.
+        const SeeThrough e = make(m, holes, true);
+        CHECK(e.kind == SeeKind::Blend);
+        CHECK(SeeAlphaAt(e, 20, 5) == 255);
+        CHECK(SeeAlphaAt(e, 5, 5) == 0);
+    }
+    // A blend no weapon has (multiplied): as it was.
+    m = MaskMaterial();
+    m.blend_src = 0;
+    m.blend_dst = 2;
+    CHECK(make(m, holes).kind == SeeKind::Solid);
+    // Added light: always, unlit; an effect material blended: unlit, its image its own.
+    m = MaskMaterial();
+    m.blend_dst = 1;
+    m.depth_write = false;
+    SeeThrough s = make(m, holes);
+    CHECK(s.kind == SeeKind::Add);
+    CHECK(s.unlit);
+    CHECK_FALSE(s.depth_write);
+    CHECK(SeeAlphaAt(s, 20, 5) == 255);
+    m.blend_src = 1; // one, one: whatever its alpha
+    CHECK(SeeAlphaAt(make(m, holes), 5, 5) == 255);
+    m = MaskMaterial();
+    CHECK(make(m, speck, true).kind == SeeKind::Blend);
+    CHECK(make(m, holes, true).unlit);
+    // Lit by the game (the fragment light in its colour): drawn lit.
+    m.stages = {SeeStage(0x23, 0x4, 4, 1, 0)};
+    CHECK_FALSE(make(m, holes, true).unlit);
+}
+
+TEST_CASE("See-through parts: vertex colours, other coordinates, an unlit part's colour",
+          "[kiu140w]") {
+    const auto base = SeeTexture(16, 16, [](u32, u32) { return std::array<u8, 4>{100, 50, 200, 255}; });
+    const auto mask = SeeTexture(8, 8, [](u32 x, u32) {
+        return std::array<u8, 4>{255, static_cast<u8>(x < 4 ? 64 : 128), 0, 255};
+    });
+    FrameCgfx::Material m = MaskMaterial();
+    // Alpha: the vertex alpha times the mask's green, times 4, held at 1 only at the end.
+    m.stages = {SeeStage(0x3, 0x40, 4 << 4, 0, 1, 2)};
+    auto square = SeeSquare();
+    square[1].colour[3] = 0.25f;
+    square[3].colour[3] = 0.25f;
+    SeeThrough s = MakeSeeThrough(m, {&base, &mask, nullptr}, 0, false, square, kSeeSquare);
+    REQUIRE(s.kind == SeeKind::Blend);
+    const float gain = s.vertices[3];
+    CHECK(gain == Approx(4.0f * 128.0f / 255.0f));
+    CHECK(s.vertices[2] == 1.0f);
+    CHECK(s.vertices[9] == 0.25f);
+    for (const float a : {1.0f, 0.25f}) {
+        const float at = std::min(SeeAlphaAt(s, 6, 2) / 255.0f * gain * a, 1.0f);
+        CHECK(at == Approx(std::min(4.0f * 128.0f / 255.0f * a, 1.0f)).margin(0.01f));
+    }
+    // The vertex alpha alone (no texture): one texel, the factor per vertex.
+    m.stages = {SeeStage(0x3, 0x0, 0, 0, 0)};
+    s = MakeSeeThrough(m, {&base, &mask, nullptr}, 0, false, square, kSeeSquare);
+    CHECK(s.kind == SeeKind::Blend);
+    CHECK(s.width == 1);
+    CHECK(s.vertices[9] == 0.25f);
+    // One for every vertex: 1 is solid; less is baked.
+    s = MakeSeeThrough(m, {&base, &mask, nullptr}, 0, false, SeeSquare(), kSeeSquare);
+    CHECK(s.kind == SeeKind::Solid);
+    auto half = SeeSquare();
+    for (auto& v : half) {
+        v.colour[3] = 0.5f;
+    }
+    s = MakeSeeThrough(m, {&base, &mask, nullptr}, 0, false, half, kSeeSquare);
+    CHECK(s.kind == SeeKind::Blend);
+    CHECK(SeeAlphaAt(s, 0, 0) == 128);
+    CHECK(s.vertices[2] == 1.0f);
+
+    // The mask at the second UV set, scaled and moved.
+    m = MaskMaterial();
+    m.coords[1].source = 1;
+    m.coords[1].scale_u = 2.0f;
+    m.coords[1].translate_v = 0.25f;
+    s = MakeSeeThrough(m, {&base, &mask, nullptr}, 0, false, SeeSquare(), kSeeSquare);
+    CHECK(s.vertices[7] == Approx(1.0f));             // 0.5 x 2
+    CHECK(s.vertices[2 * 7 + 1] == Approx(0.5f));    // 1 - (0.25 + 0.25)
+    CHECK_FALSE(s.slides);
+    // An environment map in the alpha gives its mean.
+    m = MaskMaterial();
+    m.coords[1].mapping = 2;
+    s = MakeSeeThrough(m, {&base, &mask, nullptr}, 0, false, SeeSquare(), kSeeSquare);
+    CHECK(s.width == 1);
+    CHECK(SeeAlphaAt(s, 0, 0) == 96);
+
+    // Added: the texture times a constant times 2 times the vertex colour: the colour's factor on
+    // the base texture, so a pack's replacement takes it too.
+    m = MaskMaterial();
+    m.blend_dst = 1;
+    m.constants[0] = {1.0f, 0.5f, 0.25f, 1.0f};
+    m.stages = {SeeStage(0xE3, 0x4, 4, 1, 0, 0, 1), SeeStage(0x0F, 0xF, 0, 1, 0)};
+    square = SeeSquare();
+    square[1].colour = {0.5f, 0.5f, 0.5f, 1.0f};
+    s = MakeSeeThrough(m, {&base, &mask, nullptr}, 0, false, square, kSeeSquare);
+    REQUIRE(s.kind == SeeKind::Add);
+    const float most = s.vertices[4];
+    CHECK(s.rgba[0] / 255.0f * most == Approx(2.0f).margin(0.02f));
+    CHECK(s.rgba[1] / 255.0f * most == Approx(1.0f).margin(0.02f));
+    CHECK(s.rgba[2] / 255.0f * most == Approx(0.5f).margin(0.02f));
+    CHECK(s.vertices[7 + 4] == Approx(0.5f * most));
+}
+
+TEST_CASE("See-through parts: their files, the cache, made again once", "[kiu140w]") {
+    const std::string dir = TestDir("frame_weapon_see_test");
+    const auto zrc = [](const AddedLight& added) {
+        const Tri claw{{{{0, 0, 0}, {1, 0, 0}, {0, 1, 0}}}, {0, 0, 1}};
+        const Bytes fmdl =
+            Cgfx({{"TopN", -1, {0, 0, 0}}, {"RHandN", 0, {-5, 0, 0}}, {"LHandN", 0, {5, 0, 0}}},
+                 {{"Wpn", "Tex"}}, {{"Wpn", {1}, 1, claw, -1}, {"Wpn", {2}, 1, claw, -1}}, {},
+                 "WpnTest", added);
+        return Darc({{"character/fmdl.arc", Darc({{"fmdl/00.bcres", fmdl}})}});
+    };
+    // The material's state from the file.
+    AddedLight added;
+    added.on = true;
+    added.alpha_test = 1u | 6u << 4 | 77u << 8;
+    added.no_depth = true;
+    {
+        Bytes bcres;
+        std::string error;
+        REQUIRE(FrameCgfx::DarcMember(zrc(added), "character/fmdl.arc!fmdl/00.bcres", bcres, error));
+        FrameCgfx::File file;
+        REQUIRE(FrameCgfx::ReadCgfx(bcres, file, error));
+        const auto& mat = file.models[0].materials[0];
+        CHECK(mat.alpha_test);
+        CHECK(mat.alpha_func == 6);
+        CHECK(mat.alpha_ref == 77);
+        CHECK_FALSE(mat.depth_write);
+        CHECK(mat.stages.size() == 2);
+        AddedLight plain;
+        plain.on = true;
+        REQUIRE(FrameCgfx::DarcMember(zrc(plain), "character/fmdl.arc!fmdl/00.bcres", bcres, error));
+        REQUIRE(FrameCgfx::ReadCgfx(bcres, file, error));
+        CHECK_FALSE(file.models[0].materials[0].alpha_test);
+        CHECK(file.models[0].materials[0].depth_write);
+    }
+    // Added light: a file beside the model; the model itself as it always was.
+    FrameWeapons::Converted c, solid;
+    std::string error;
+    REQUIRE(FrameWeapons::ConvertWeapon(24, zrc(added), c, error));
+    REQUIRE(FrameWeapons::ConvertWeapon(24, zrc({}), solid, error));
+    REQUIRE(c.info.parts.size() == 1);
+    CHECK(c.info.see_known);
+    CHECK(c.info.parts[0].see == SeeKind::Add);
+    CHECK(c.info.parts[0].see_file == "w024.see");
+    CHECK(solid.info.parts[0].see == SeeKind::Solid);
+    CHECK(solid.info.parts[0].see_file.empty());
+    REQUIRE(c.files.size() == 2);
+    REQUIRE(solid.files.size() == 1);
+    CHECK(c.files[0].second == solid.files[0].second);
+    const auto put = [&](const std::string& name, const std::vector<u8>& bytes) {
+        std::ofstream o(dir + name, std::ios::binary);
+        o.write(reinterpret_cast<const char*>(bytes.data()),
+                static_cast<std::streamsize>(bytes.size()));
+    };
+    put("w024.model", c.files[0].second);
+    put("w024.see", c.files[1].second);
+    namespace Vis = FrameXr::Vis;
+    Vis::ModelFile mf;
+    REQUIRE(Vis::LoadModelFile(dir + "w024.model", mf, error, Vis::kModelFlagWeaponSpace));
+    const std::size_t count = mf.vertices.size() / Vis::kModelVertexFloats;
+    Vis::SeeFile see;
+    REQUIRE(Vis::LoadSeeFile(dir + "w024.see", count, see, error));
+    CHECK(see.kind == Vis::SeeFileKind::Add);
+    CHECK(see.unlit);
+    CHECK_FALSE(see.depth_write);
+    CHECK(see.reference > 0.3f);
+    CHECK(see.wrap_u == 3);
+    CHECK(see.wrap_v == 0);
+    CHECK(see.image.size() == std::size_t{see.width} * see.height * 4);
+    const auto merged = Vis::SeeVertices(mf.vertices, see);
+    REQUIRE(merged.size() == mf.vertices.size());
+    for (std::size_t i = 0; i < count; i++) {
+        const float* from = &mf.vertices[i * 12];
+        const float* to = &merged[i * 12];
+        CHECK(std::equal(from, from + 3, to));           // the position
+        CHECK(std::equal(from + 10, from + 12, to + 10)); // the UVs
+        CHECK(to[6] == Approx(from[10]));                 // the image's, the same here
+        CHECK(to[7] == Approx(from[11]));
+        CHECK(to[8] == 1.0f);
+        CHECK(to[3] > 0.0f); // the colour's factor in the normal's place
+    }
+    // Any cut of it, another model's, a bad value: an error, never a crash.
+    CHECK_FALSE(Vis::LoadSeeFile(dir + "w024.see", count + 1, see, error));
+    CHECK_FALSE(Vis::LoadSeeFile(dir + "none.see", count, see, error));
+    for (std::size_t n = 0; n < c.files[1].second.size(); n += 5) {
+        put("cut.see", {c.files[1].second.begin(),
+                        c.files[1].second.begin() + static_cast<std::ptrdiff_t>(n)});
+        CHECK_FALSE(Vis::LoadSeeFile(dir + "cut.see", count, see, error));
+    }
+    auto bad = c.files[1].second;
+    bad[39] = 0x7F; // not a number, in a vertex
+    bad[38] = 0xC0;
+    put("bad.see", bad);
+    CHECK_FALSE(Vis::LoadSeeFile(dir + "bad.see", count, see, error));
+    CHECK_FALSE(Vis::LoadModelFile(dir + "w024.see", mf, error, Vis::kModelFlagWeaponSpace));
+
+    // A game's folder: kept; made again once when the manifest is an older build's (no line), and
+    // when the file is gone; the file goes with a weapon that no longer has it.
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    auto rom = std::make_shared<MemoryRomFS>(RomFS("us", {{"m200.zrc", zrc(added)}}));
+    const auto run = [&] { return FrameWeapons::ConvertGame(rom, 0x0004000000030100ull, dir); };
+    CHECK(run().made == 1);
+    CHECK(std::filesystem::exists(dir + "w024.see"));
+    CHECK(run().kept == 1);
+    FrameWeapons::Manifest manifest;
+    REQUIRE(FrameWeapons::ReadManifest(dir + "weapons.txt", manifest, error));
+    CHECK(manifest.Find(24)->see_known);
+    CHECK(manifest.Find(24)->parts[0].see == SeeKind::Add);
+    CHECK(manifest.Find(24)->parts[0].see_file == "w024.see");
+    std::string lines;
+    {
+        std::ifstream in(dir + "weapons.txt");
+        std::string line;
+        while (std::getline(in, line)) {
+            if (line.rfind("see", 0) != 0) {
+                lines += line + "\n";
+            }
+        }
+    }
+    put("weapons.txt", {lines.begin(), lines.end()});
+    CHECK(run().made == 1);
+    CHECK(run().kept == 1);
+    std::filesystem::remove(dir + "w024.see");
+    CHECK(run().made == 1);
+    CHECK(std::filesystem::exists(dir + "w024.see"));
+    rom = std::make_shared<MemoryRomFS>(RomFS("us", {{"m200.zrc", zrc({})}}));
+    CHECK(run().made == 1);
+    CHECK_FALSE(std::filesystem::exists(dir + "w024.see"));
+    CHECK(run().kept == 1);
+    std::filesystem::remove_all(dir);
 }

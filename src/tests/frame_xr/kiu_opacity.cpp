@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <map>
 #include <random>
 #include <string>
 #include <vector>
@@ -388,4 +389,68 @@ TEST_CASE("Muzzle Flash Size and the prompt's key: defaults, limits, a game's ow
     CHECK_FALSE(v.vr_angels_aim_intro_shown.GetValue());
     CHECK_FALSE(v.vr_angels_aim_intro_shown.GetDefault());
     CHECK(v.vr_angels_aim_intro_shown.GetLabel() == "vr_angels_aim_intro_shown");
+}
+
+// AzaharFrame kiu140w: a weapon's own see-through parts.
+TEST_CASE("See-through parts: the stages, the kinds, the pipelines", "[kiuopacity][kiu140w]") {
+    using Vis::PartKind;
+    // None: the stages as they were.
+    CHECK(Vis::StagesFor(1.0f, false).count == 1);
+    CHECK(Vis::StagesFor(0.5f, false).count == 3);
+    const auto kinds = {PartKind::Lit, PartKind::Blend, PartKind::BlendClear, PartKind::Added};
+    for (const float o : {1.0f, 0.5f}) {
+        // Every lit part before any see-through texel, the added light last; each kind's draws.
+        std::map<PartKind, std::vector<Pipe>> pipes;
+        int last = -1;
+        for (const DrawStage stage : Vis::StagesFor(o, true)) {
+            const int rank = Vis::DrawnIn(stage, PartKind::Added) ? 2 : Vis::ClearStage(stage) ? 1 : 0;
+            CHECK(rank >= last);
+            last = rank;
+            for (const PartKind k : kinds) {
+                if (Vis::DrawnIn(stage, k)) {
+                    pipes[k].push_back(Vis::PipeFor(stage, k == PartKind::Added));
+                }
+            }
+            CHECK(Vis::StageFade(stage, 1.0f, o) == Approx(o));
+            const int bits = static_cast<int>(
+                Vis::StageFlags(stage, Vis::kSeeFlag + Vis::kSeeBlendFlag + 1.0f) + 0.5f);
+            CHECK((bits & 1) == 1);
+            CHECK((bits & (4 | 8 | 16)) == 0);
+            CHECK(((bits & 32) != 0) == (Vis::PipeFor(stage, false) == Pipe::DepthOnly));
+        }
+        const std::vector<Pipe> lit = o < 1.0f ? std::vector<Pipe>{Pipe::DepthOnly, Pipe::Blended}
+                                               : std::vector<Pipe>{Pipe::Opaque};
+        CHECK(pipes[PartKind::Lit] == lit);
+        auto blend = lit;
+        blend.insert(blend.end(), {Pipe::DepthOnly, Pipe::Blended});
+        CHECK(pipes[PartKind::Blend] == blend);
+        auto clear = lit;
+        clear.push_back(Pipe::Blended);
+        CHECK(pipes[PartKind::BlendClear] == clear);
+        CHECK(pipes[PartKind::Added] ==
+              std::vector<Pipe>{o < 1.0f ? Pipe::AddedHeld : Pipe::Added});
+    }
+    // The pixel: a see-through texel (alpha a) alone covers a x o, over the weapon's own solid
+    // surface at most o (1 - o) more than it, and at opacity 1 shows exactly a of itself.
+    for (const float o : {1.0f, 0.6f, 0.2f}) {
+        for (const float a : {0.0f, 0.4f, 0.9f}) {
+            const std::array<float, 3> front{0.8f, 0.2f, 0.1f}, behind{0.1f, 0.3f, 0.5f};
+            const auto over = [](Pixel p, const std::array<float, 3>& c, float alpha) {
+                for (int i = 0; i < 3; i++) { // Pipe::Blended, premultiplied
+                    p.rgb[i] = c[i] * alpha + p.rgb[i] * (1.0f - alpha);
+                }
+                p.a = alpha + p.a * (1.0f - alpha);
+                return p;
+            };
+            const Pixel alone = over(Pixel{}, front, a * o);
+            CHECK(alone.a == Approx(a * o));
+            const Pixel both = over(over(Pixel{}, behind, o), front, a * o);
+            CHECK(both.a >= o - 1e-5f);
+            CHECK(both.a <= o + o * (1.0f - o) + 1e-5f);
+            if (o == 1.0f) {
+                CHECK(both.a == Approx(1.0f));
+                CHECK(both.rgb[0] == Approx(front[0] * a + behind[0] * (1.0f - a)));
+            }
+        }
+    }
 }

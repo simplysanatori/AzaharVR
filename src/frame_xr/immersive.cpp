@@ -38,6 +38,8 @@
 #include "frame_xr/presets.h" // AzaharFrame immersive: preset screen sizes
 #include "frame_xr/render_margin.h" // AzaharFrame fovaxis
 #include "frame_xr/test_switches.h" // AzaharFrame integ9
+#include "video_core/kiu_hud.h" // AzaharFrame kiu140
+#include "video_core/kiu_view_tap.h" // AzaharFrame kiu140
 #include "video_core/vr_immersive.h"
 
 namespace FrameXr::Immersive {
@@ -836,6 +838,7 @@ L::ScreenDecision Decision() {
     s.bottom_toggled = g.bottom_toggled;
     s.bottom_focused = g.focus_bottom;
     s.menu_open = g.menu_open;
+    s.cutscene = KiuFirstPerson() && Kiu::FirstPerson::Cutscene(); // AzaharFrame kiu140
     s.view_valid = g.view.valid;
     return L::Decide(s);
 }
@@ -1672,6 +1675,35 @@ void OnFrame(const FrameInfo& info) {
         UpdateNatural(mode);
     }
 
+    // AzaharFrame kiu140: HUD: In View (video_core/kiu_hud.h).
+    VideoCore::KiuHud::Place hud_place;
+    if (g.engaged && IsViewMode(mode) && KiuFirstPerson() && Kiu::FirstPerson::HudInView()) {
+        auto& v = Settings::values;
+        VideoCore::KiuHud::Wanted wanted;
+        wanted.size = static_cast<int>(v.vr_kiu_hud_size.GetValue());
+        wanted.linked = v.vr_kiu_hud_linked.GetValue() != 0;
+        wanted.across = static_cast<float>(v.vr_kiu_hud_across.GetValue());
+        wanted.height = static_cast<float>(v.vr_kiu_hud_height.GetValue());
+        wanted.bar_across = static_cast<float>(v.vr_kiu_bar_across.GetValue());
+        wanted.bar_height = static_cast<float>(v.vr_kiu_bar_height.GetValue());
+        wanted.score_across = static_cast<float>(v.vr_kiu_score_across.GetValue());
+        wanted.score_height = static_cast<float>(v.vr_kiu_score_height.GetValue());
+        wanted.subtitle_size = static_cast<int>(v.vr_kiu_subtitle_size.GetValue());
+        wanted.subtitle_height = static_cast<float>(v.vr_kiu_subtitle_height.GetValue());
+        hud_place = VideoCore::KiuHud::PlaceFor(wanted, g.solved.tan_half_y * g.solved.aspect,
+                                                g.solved.tan_half_y, g.solved.pitch_rad);
+        static bool logged = false;
+        if (!logged) {
+            logged = true;
+            LOG_INFO(Frontend,
+                     "xr: Kid Icarus first person: the HUD in view: {:.2f} x {:.2f} of the screen, "
+                     "the health bar and score {}",
+                     hud_place.half_across, hud_place.half_up,
+                     wanted.linked ? "linked" : "separate");
+        }
+    }
+    VideoCore::KiuHud::g_live.Set(hud_place);
+
     VideoCore::Immersive::VRData data; // CitraVR's "off" values
     data.ipd = g.ipd.Value(); // AzaharFrame ipd
     // AzaharFrame doubling: the pose the game camera is made from goes with it (the immersive
@@ -1701,6 +1733,9 @@ void OnFrame(const FrameInfo& info) {
                                                        g.menu_exact.Weight());
             const ImmersivePreset* preset = FindImmersivePreset(g.title_id);
             data.hud.far_plane = !data.hud.IsIdentity() && preset && preset->hud_far_plane;
+            if (hud_place.on) {
+                data.hud = {}; // AzaharFrame kiu140: its pieces are placed whole instead
+            }
             static int logged[2] = {VideoCore::HudSpacing::kDefaultSpacing,
                                     VideoCore::HudSpacing::kDefaultSpacing};
             if (spacing_x != logged[0] || spacing_y != logged[1]) {
@@ -2001,6 +2036,7 @@ void OnFrame(const FrameInfo& info) {
                      : !g.live      ? "no game on view"
                      : g.focus_bottom ? "bottom screen in focus"
                      : g.menu_open  ? "in-game menu"
+                     : Kiu::FirstPerson::Cutscene() ? "cutscene"
                                     : "bottom screen");
         }
     }
@@ -2112,6 +2148,7 @@ void Uninstall() {
     }
     // The XR thread has stopped: this thread is the only writer now.
     VideoCore::Immersive::Publish({});
+    VideoCore::KiuHud::g_live.Set({}); // AzaharFrame kiu140: flat, the HUD is the game's again
     VideoCore::Immersive::g_xr_active = false;
     VideoCore::Immersive::g_measure_camera = false; // AzaharFrame depth
 }
@@ -2202,6 +2239,7 @@ float AnchorFollowNow(bool follow_eye) {
 
 ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacement& placement) {
     ScreenLayers out;
+    bool bottom_as_drawn = false; // AzaharFrame kiu140
     out.top_space = local_space;
     out.top_pose[0] = out.top_pose[1] = placement.top_pose;
     out.top_size[0] = out.top_size[1] = placement.top_size;
@@ -2311,6 +2349,7 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
             out.bottom_persistent = true;
             out.bottom_alpha = bottom.alpha;
         }
+        bottom_as_drawn = bottom.mode != Kiu::FirstPerson::BottomScreen::Off; // kiu140
         out.head_driven = true; // AzaharFrame flash
         // AzaharFrame kiuwrist: Angel's Aim's Secondary Screen on the off hand's wrist, set for
         // this display frame (the controls ask for this frame's screens after setting it).
@@ -2328,6 +2367,7 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
                                    ? g.solved.distance
                                    : DistanceTo(out.top_pose[0]);
     out.bottom_first = DistanceTo(out.bottom_pose) > top_distance;
+    VideoCore::Immersive::g_bottom_as_drawn.store(bottom_as_drawn, std::memory_order_relaxed);
     return out;
 }
 

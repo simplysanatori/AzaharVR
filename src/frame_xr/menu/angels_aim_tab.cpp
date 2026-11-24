@@ -109,6 +109,11 @@ std::vector<int> AngelsAimModRows(const ModsListModel& m) {
 void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& view,
                             const Rect& area) {
     const AngelsAimModel& m = model.mods.angels_aim;
+    // AzaharFrame kiu140: Install from Zip's page, for a hand model, over the segment.
+    if (model.mods.zip.open && model.mods.zip.target == ZipTarget::Hand) {
+        DrawZip(kit, model.mods.zip, view, area, area.y1 - 8.0f);
+        return;
+    }
     const Rect c{area.x0 + kPad, area.y0 + kTop, area.x1 - kPad, area.y1 - kPad};
     const Rect shown{area.x0, area.y0, area.x1, area.y1 - 8.0f};
     const std::vector<int> rows = AngelsAimModRows(model.mods.mods);
@@ -135,6 +140,9 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
         content += OfferListHeight(kit, model.mods.mods, c, rows, opt);
     }
     content += kDividerH + kTitleH + kItemH + 16.0f;             // Suggested, the pack
+    if (m.mapped) { // AzaharFrame kiu140: the hand model's row
+        content += kItemH;
+    }
     const float max_scroll = std::max(0.0f, content - (shown.y1 - c.y0));
     const float scroll =
         std::clamp(view.scroll[static_cast<std::size_t>(view.tab)], 0.0f, max_scroll);
@@ -152,17 +160,18 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
         y += kDividerH;
     };
     // A one-line item: its name, and Installed / Not Installed at the end.
-    const auto status_item = [&](const char* name, bool installed) {
-        const float cy = y + kItemH * 0.5f;
-        const char* state = installed ? kAngelsAimInstalled : kAngelsAimNotInstalled;
+    const auto status_item = [&](const char* name, bool installed, float right = 0.0f,
+                                 const char* other = kAngelsAimNotInstalled) {
+        const float cy = y + kItemH * 0.5f, x1 = c.x1 - right;
+        const char* state = installed ? kAngelsAimInstalled : other;
         const float sw = kit.TextWidth(Type::Body, state);
         if (installed) {
-            kit.Icon(c.x1 - sw - 16.0f, cy, 20.0f, Sym::kCheck, false, Tok::kPrimary);
+            kit.Icon(x1 - sw - 16.0f, cy, 20.0f, Sym::kCheck, false, Tok::kPrimary);
         }
-        kit.TextMid(c.x1 - sw, cy, Type::Body, installed ? Tok::kPrimary : Tok::kOnSurfaceVariant,
+        kit.TextMid(x1 - sw, cy, Type::Body, installed ? Tok::kPrimary : Tok::kOnSurfaceVariant,
                     state);
         kit.TextMid(c.x0, cy, Type::Body, Tok::kOnSurface,
-                    kit.Fit(Type::Body, name, c.W() - sw - 48.0f));
+                    kit.Fit(Type::Body, name, x1 - c.x0 - sw - 48.0f));
         y += kItemH;
     };
 
@@ -234,6 +243,18 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
     // ---- Suggested: the catalog's weapons and effects texture pack, one row ----
     title(kAngelsAimSuggested);
     status_item(kAngelsAimTexturesPack, m.textures_pack);
+    if (m.mapped) { // AzaharFrame kiu140: a hand model from the player's own zip
+        const bool found = !m.hand_installed && !m.hand_zip.empty();
+        const std::string zip = found ? std::string(kAngelsAimHandInstall) : LabelFor(Id::InstallFromZip);
+        const Target zt{Id::InstallFromZip,
+                        found ? kAngelsAimHandFoundIndex : static_cast<int>(ZipTarget::Hand)};
+        const float w = kit.TextWidth(Type::Label, zip) + 8.0f + 18.0f + 48.0f;
+        const Rect b{c.x1 - w, y + (kItemH - kButtonH) * 0.5f, c.x1, y + (kItemH + kButtonH) * 0.5f};
+        kit.Button(b, ButtonStyle::Tonal, Sym::kFolderOpen, zip, StateOf(view, zt));
+        AddHit({b.x0, y, b.x1, y + kItemH}, zt, shown);
+        status_item(kAngelsAimHandModel, m.hand_installed, w + 16.0f,
+                    found ? kAngelsAimHandFound : kAngelsAimNotInstalled);
+    }
     y += 16.0f;
     // (AzaharFrame kiu132: Aiming Settings, the Controls tab at Aiming, is the Aiming group's
     // last row now.)

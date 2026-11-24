@@ -1485,6 +1485,7 @@ struct ScreenState {
     bool bottom_toggled = false; ///< the bumper chord flipped the bottom screen
     bool bottom_focused = false; ///< the bottom screen is the screen in focus
     bool menu_open = false;     ///< the in-game menu shows
+    bool cutscene = false;      ///< AzaharFrame kiu140: Angel's Aim's game plays a cutscene
     bool view_valid = false;    ///< the head pose is known
 };
 

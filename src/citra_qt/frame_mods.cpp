@@ -31,6 +31,7 @@
 #include <QUrl>
 #include <fmt/format.h>
 
+#include "common/file_util.h" // AzaharFrame kiu140
 #include "common/logging/log.h"
 #include "core/cheats/gateway_cheat.h" // AzaharFrame ui2
 #include "core/cheats/online.h"
@@ -54,6 +55,7 @@
 #include "frame_xr/menu/cheat_entry.h" // AzaharFrame ui2
 #include "frame_xr/menu/ctgp7_tab.h"   // AzaharFrame ctgp7
 #include "frame_xr/mem_guard.h" // AzaharFrame modfix
+#include "frame_xr/vis/hand_import.h" // AzaharFrame kiu140
 
 namespace Menu = FrameXr::Menu;
 
@@ -529,6 +531,10 @@ void FrameMods::Command(const FrameXr::MenuRequest& r) {
     }
     // AzaharFrame zipinstall: Install from Zip
     case C::InstallFromZip:
+        if (!r.text.empty() && r.value == static_cast<int>(Menu::ZipTarget::Hand)) {
+            ZipHandFound(r.text); // AzaharFrame kiu140
+            return;
+        }
         ZipStart(r.value);
         return;
     case C::ZipBrowse:
@@ -689,13 +695,19 @@ void FrameMods::RefreshAngelsAim() {
     game += g.version ? " " + Mods::Compat::VersionText(*g.version) : std::string(" version unknown");
     OffThread(
         this,
-        [tid, game] {
+        [tid, game,
+         downloads = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation).toStdString()] {
             Menu::AngelsAimModel m;
             m.shown = true;
             m.recommended = FrameXr::Kiu::IsAngelsAimTitle(tid); // kiufix2: Europe only
             m.mapped = m.recommended; // AzaharFrame kiu132: first person's rows (Europe only)
             m.mod_installed = FrameXr::CStickModInstalled(tid);
             m.textures_pack = AngelsAimPackOn(tid);
+            m.hand_installed = FrameXr::Vis::HandFileExists(
+                FileUtil::GetUserPath(FileUtil::UserPath::UserDir)); // AzaharFrame kiu140
+            if (m.mapped && !m.hand_installed) {
+                m.hand_zip = FrameXr::Vis::FindHandZip(downloads);
+            }
             m.report_url = Menu::AngelsAimReportUrl(AppVersion(), game, m.mod_installed);
             return m;
         },
@@ -704,6 +716,7 @@ void FrameMods::RefreshAngelsAim() {
                 return;
             }
             angels_aim_report_url = m.report_url;
+            angels_aim_hand_zip = m.hand_zip;
             LOG_INFO(Frontend, "xr: Angel's Aim: the mod {}, the weapons and effects pack {}",
                      m.mod_installed ? "installed" : "not installed",
                      m.textures_pack ? "on" : "not on");
@@ -1946,8 +1959,8 @@ struct Listing {
 };
 
 /// The folder's subfolders and archives (hidden ones left out), folders first, by name;
-/// AzaharFrame ui2: with `cheat_files`, .txt files too.
-Listing ListFolder(const std::string& folder, bool cheat_files) {
+/// AzaharFrame ui2: with `cheat_files`, .txt files too; kiu140: with `zip_only`, zips alone.
+Listing ListFolder(const std::string& folder, bool cheat_files, bool zip_only) {
     namespace fs = std::filesystem;
     constexpr std::size_t kMax = 1000;
     Listing out;
@@ -1968,7 +1981,8 @@ Listing ListFolder(const std::string& folder, bool cheat_files) {
         if (it->is_directory(e2)) {
             folders.push_back({name, true, {}});
         } else if (it->is_regular_file(e2) &&
-                   (IsArchiveName(name) || (cheat_files && IsCheatFileName(name)))) {
+                   ((zip_only ? EndsWithNoCase(name, ".zip") : IsArchiveName(name)) ||
+                    (cheat_files && IsCheatFileName(name)))) {
             const auto size = it->file_size(e2);
             files.push_back({name, false, e2 ? std::string{} : Menu::SizeText(size)});
         }
@@ -2002,7 +2016,7 @@ void FrameMods::ZipCloseJob() {
 }
 
 void FrameMods::ZipStart(int target) {
-    if (zip.working || target < 0 || target > 2) { // AzaharFrame ui2: 2 Cheats
+    if (zip.working || target < 0 || target > 3) { // AzaharFrame ui2: 2 Cheats; kiu140: 3 Hand
         return;
     }
     ZipCloseJob();
@@ -2039,10 +2053,12 @@ void FrameMods::ZipStart(int target) {
         }
         QWidget* owner = qobject_cast<QWidget*>(guard->parent());
         const bool cheats = guard->zip.target == Menu::ZipTarget::Cheats; // AzaharFrame ui2
+        const bool hand = guard->zip.target == Menu::ZipTarget::Hand;     // AzaharFrame kiu140
         const QString path = QFileDialog::getOpenFileName(
             owner, cheats ? QStringLiteral("Install from File") : QStringLiteral("Install from Zip"),
             QString::fromStdString(start),
             cheats ? QStringLiteral("Cheat File or Zip (*.txt *.zip *.7z *.TXT *.ZIP *.7Z)")
+            : hand ? QStringLiteral("Zip (*.zip *.ZIP)")
                    : QStringLiteral("Zip or 7z (*.zip *.7z *.ZIP *.7Z)"),
             nullptr, QFileDialog::DontUseNativeDialog);
         if (!guard || guard->title_id != tid || path.isEmpty()) {
@@ -2067,9 +2083,9 @@ void FrameMods::ZipBrowse(const std::string& folder_in) {
     zip.error.clear();
     PublishZip();
     OffThread(
-        this, [folder, cheats = zip.target == Menu::ZipTarget::Cheats] {
-            return ListFolder(folder, cheats);
-        },
+        this,
+        [folder, cheats = zip.target == Menu::ZipTarget::Cheats,
+         hand = zip.target == Menu::ZipTarget::Hand] { return ListFolder(folder, cheats, hand); },
         [this, folder](const Listing& listing) {
             if (zip.folder != folder) {
                 return; // another folder was asked for meanwhile
@@ -2091,6 +2107,9 @@ void FrameMods::ZipPick(const std::string& path) {
     }
     if (zip.target == Menu::ZipTarget::Cheats) { // AzaharFrame ui2
         return ZipCheats(path);
+    }
+    if (zip.target == Menu::ZipTarget::Hand) { // AzaharFrame kiu140
+        return ZipHand(path);
     }
     ZipCloseJob();
     zip.working = true;
@@ -2280,6 +2299,55 @@ void FrameMods::ZipFail(const std::string& error) {
     zip.working = false;
     zip.error = error;
     PublishZip();
+}
+
+// AzaharFrame kiu140: a hand model for Pit's arm, from the player's own zip: made into the hand file
+// in the user directory (hand_import.h) and shown at once.
+void FrameMods::ZipHandFound(const std::string& path) {
+    if (zip.working || path != angels_aim_hand_zip) { // only the one that was found
+        return;
+    }
+    ZipCloseJob();
+    zip.target = Menu::ZipTarget::Hand;
+    zip.choices.clear();
+    zip.dialog = {};
+    zip_choices.clear();
+    zip_question = ZipQuestion::None;
+    zip.chips = QuickFolders();
+    zip.browse = false;
+    zip.open = true;
+    ZipHand(path);
+}
+
+void FrameMods::ZipHand(const std::string& path) {
+    zip.working = true;
+    zip.phase = "Installing";
+    zip.file = std::filesystem::path(path).filename().string();
+    zip.error.clear();
+    PublishZip();
+    LOG_INFO(Frontend, "xr: zip: hand model {}", zip.file);
+    OffThread(
+        this,
+        [path] {
+            std::string error = FrameXr::Vis::ImportHandFile(
+                path, FileUtil::GetUserPath(FileUtil::UserPath::UserDir));
+            if (error.empty()) {
+                FrameXr::Vis::ReloadPitModel();
+            }
+            return error;
+        },
+        [this](const std::string& error) {
+            if (!error.empty()) {
+                LOG_WARNING(Frontend, "xr: zip: hand model not installed: {}", error);
+                return ZipFail(error);
+            }
+            zip.working = false;
+            zip.open = false;
+            zip.file.clear();
+            PublishZip();
+            FrameXr::ShowToastText(Menu::kAngelsAimHandToast, FrameXr::ToastTime::Long);
+            RefreshAngelsAim();
+        });
 }
 
 // AzaharFrame ui2: Install from File in the Cheats segment. A .txt is read as it is; an archive is

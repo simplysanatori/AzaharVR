@@ -12,6 +12,8 @@
 #include "video_core/pica/pica_core.h"
 #include "video_core/rasterizer_accelerated.h"
 #include "video_core/vr_auto_shape.h" // AzaharFrame fixes7
+#include "video_core/kiu_hud.h" // AzaharFrame kiu140
+#include "video_core/kiu_sheets.h" // AzaharFrame kiu140
 #include "video_core/kiu_view_tap.h" // AzaharFrame kiu2d
 #include "video_core/vr_immersive.h" // AzaharFrame depth
 #include "video_core/vr_content_repeat.h" // AzaharFrame bfikit
@@ -178,6 +180,23 @@ void RasterizerAccelerated::SyncHudSpacing() {
         vs_data.vr_hud_far_plane = far_plane;
         vs_data_dirty = true;
     }
+    // AzaharFrame kiu140: the bottom screen on view in immersive mode keeps its own size.
+    const bool bottom = VideoCore::Immersive::g_bottom_as_drawn.load(std::memory_order_relaxed) &&
+                        HudSpacing::IsBottomViewport(width, height);
+    if (bottom != vr_bottom_draw) {
+        vr_bottom_draw = bottom;
+        if (vr_immersive_mode > 1) {
+            pica.vs_setup.uniforms_dirty = true; // the camera in them is patched or not
+        }
+    }
+    const float factor = bottom ? 1.0f : vr_factor;
+    const float factor_y = bottom ? 1.0f : vr_factor_y;
+    if (vs_data.vr_immersive_mode_factor != factor ||
+        vs_data.vr_immersive_mode_factor_y != factor_y) {
+        vs_data.vr_immersive_mode_factor = factor;
+        vs_data.vr_immersive_mode_factor_y = factor_y;
+        vs_data_dirty = true;
+    }
 }
 
 void RasterizerAccelerated::SyncDrawUniforms() {
@@ -312,11 +331,7 @@ void RasterizerAccelerated::SyncDrawUniforms() {
 
 void RasterizerAccelerated::SetVRData(const int32_t &vrImmersiveMode, const float& immersiveModeFactor, int uoffset, const float& gamePosScaler, const float inv_view[16])
 {
-    if (vs_data.vr_immersive_mode_factor != immersiveModeFactor)
-    {
-        vs_data.vr_immersive_mode_factor = immersiveModeFactor;
-        vs_data_dirty = true;
-    }
+    vr_factor = immersiveModeFactor; // AzaharFrame kiu140: each draw takes it (SyncHudSpacing)
 
     // AzaharFrame: the view matrix register is patched while the PICA uniforms are uploaded,
     // so upload them again with the new pose (and once more after leaving a view mode).
@@ -352,10 +367,7 @@ void RasterizerAccelerated::SetVRIpd(float ipd_m) {
 
 // AzaharFrame immersive: see shader_uniforms.h.
 void RasterizerAccelerated::SetVRFactorY(float factor_y) {
-    if (vs_data.vr_immersive_mode_factor_y != factor_y) {
-        vs_data.vr_immersive_mode_factor_y = factor_y;
-        vs_data_dirty = true;
-    }
+    vr_factor_y = factor_y; // AzaharFrame kiu140: each draw takes it (SyncHudSpacing)
 }
 
 bool RasterizerAccelerated::ReticleDraw() const {
@@ -363,7 +375,159 @@ bool RasterizerAccelerated::ReticleDraw() const {
            VideoCore::Immersive::ReticleScaled(regs.texturing.texture0.GetPhysicalAddress());
 }
 
+bool RasterizerAccelerated::HudDraw(bool* subtitle) const {
+    if (!VideoCore::KiuHud::g_live.on.load(std::memory_order_relaxed) || vr_immersive_mode < 2 ||
+        regs.pipeline.use_gs != Pica::PipelineRegs::UseGS::No) {
+        return false;
+    }
+    using F = Pica::FramebufferRegs::BlendFactor;
+    const auto& om = regs.framebuffer.output_merger;
+    VideoCore::KiuHud::Draw d;
+    d.top_viewport = f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f == 240.0f &&
+                     f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f == 400.0f;
+    d.depth_test = om.depth_test_enable != 0;
+    // The HUD's own two blends (over, and its bars masked by the picture's alpha); added light isn't.
+    const F from = om.alpha_blending.factor_source_rgb, to = om.alpha_blending.factor_dest_rgb;
+    d.blended = om.alphablend_enable != 0 &&
+                ((from == F::SourceAlpha && to == F::OneMinusSourceAlpha) ||
+                 (from == F::DestAlpha && to == F::OneMinusDestAlpha));
+    d.textured = regs.texturing.main_config.texture0_enable != 0;
+    d.texture = regs.texturing.texture0.GetPhysicalAddress();
+    d.vertices = regs.pipeline.num_vertices;
+    d.width = regs.texturing.texture0.width;
+    d.height = regs.texturing.texture0.height;
+    d.format = static_cast<u32>(regs.texturing.texture0_format.Value());
+    if (subtitle) {
+        *subtitle = VideoCore::KiuHud::IsSubtitle(d);
+    }
+    // The reticle is the hand's, not the HUD's.
+    const u32 reticle = VideoCore::Immersive::g_reticle_texture.load(std::memory_order_relaxed);
+    return VideoCore::KiuHud::IsSubtitle(d) ||
+           (VideoCore::KiuHud::MayBeHud(d) && !(reticle != 0 && d.texture == reticle));
+}
+
+bool RasterizerAccelerated::SheetDraw() const {
+    if (VideoCore::KiuSheets::g_mode.load(std::memory_order_relaxed) ==
+            VideoCore::KiuSheets::Mode::Off ||
+        regs.pipeline.use_gs != Pica::PipelineRegs::UseGS::No) {
+        return false;
+    }
+    using F = Pica::FramebufferRegs::BlendFactor;
+    const auto& om = regs.framebuffer.output_merger;
+    const auto& va = regs.pipeline.vertex_attributes;
+    const auto& loader = va.attribute_loaders[0];
+    const auto& index = regs.pipeline.index_array;
+    VideoCore::KiuSheets::Draw d;
+    d.indices = regs.pipeline.num_vertices;
+    d.stride = loader.byte_count;
+    d.depth_test = om.depth_test_enable != 0;
+    d.added = om.alphablend_enable != 0 && om.alpha_blending.factor_source_rgb == F::SourceAlpha &&
+              om.alpha_blending.factor_dest_rgb == F::One;
+    d.textured = regs.texturing.main_config.texture0_enable != 0;
+    d.indexed_u8 = index.format == 0;
+    d.top_viewport = f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f == 240.0f &&
+                     f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f == 400.0f;
+    const VideoCore::KiuSheets::Sheet* const sheet = VideoCore::KiuSheets::MayBeSheet(d);
+    if (!sheet) {
+        return false;
+    }
+    // Without the turn its vertices would stay where the game's camera puts them: the GPU's then.
+    if (!VideoCore::Immersive::g_soft_draw_turn.load(std::memory_order_relaxed)) {
+        return false;
+    }
+    const u32 buffer = regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress();
+    if (std::none_of(vr_soft_clip.begin(), vr_soft_clip.end(),
+                     [&](const SoftClip& c) { return c.valid && c.buffer == buffer; })) {
+        return false;
+    }
+    const PAddr base = va.GetPhysicalBaseAddress();
+    const auto bytes = [&](PAddr at, u32 size) -> const u8* {
+        const u8* const first = memory.GetPhysicalPointer(at);
+        return first && memory.GetPhysicalPointer(at + size - 1) == first + size - 1 ? first : nullptr;
+    };
+    return VideoCore::KiuSheets::IsSheet(
+        *sheet, bytes(base + loader.data_offset, sheet->vertices * sheet->stride),
+        bytes(base + index.offset, sheet->indices));
+}
+
+void RasterizerAccelerated::AddSheetRim() {
+    std::vector<VideoCore::KiuSheets::Vertex> in(vertex_batch.size());
+    for (std::size_t i = 0; i < in.size(); ++i) {
+        const HardwareVertex& v = vertex_batch[i];
+        in[i].pos = {v.position.x, v.position.y, v.position.z, v.position.w};
+        in[i].color = {v.color.x, v.color.y, v.color.z, v.color.w};
+        in[i].more = {v.tex_coord0.x, v.tex_coord0.y, v.tex_coord1.x, v.tex_coord1.y,
+                      v.tex_coord2.x, v.tex_coord2.y, v.tex_coord0_w, v.view.x,
+                      v.view.y,       v.view.z};
+    }
+    const VideoCore::KiuSheets::Sky sky = VideoCore::KiuSheets::g_sky.Get();
+    const auto rim =
+        sky.on ? VideoCore::KiuSheets::SkyStrips(in, sky)
+               : VideoCore::KiuSheets::Rim(
+                     in, VideoCore::KiuSheets::g_out.load(std::memory_order_relaxed));
+    vertex_batch.reserve(vertex_batch.size() + rim.size());
+    for (const VideoCore::KiuSheets::Added& a : rim) {
+        HardwareVertex v = vertex_batch[a.from];
+        const auto& p = a.v.pos;
+        const auto& c = a.v.color;
+        const auto& m = a.v.more;
+        v.position = {p[0], p[1], p[2], p[3]};
+        v.color = {c[0], c[1], c[2], c[3]};
+        v.tex_coord0 = {m[0], m[1]};
+        v.tex_coord1 = {m[2], m[3]};
+        v.tex_coord2 = {m[4], m[5]};
+        v.tex_coord0_w = m[6];
+        v.view = {m[7], m[8], m[9]};
+        vertex_batch.push_back(v);
+    }
+}
+
 void RasterizerAccelerated::TurnSoftwareVertices() {
+    // AzaharFrame kiu140: a cloud sheet's soft rim; the turn below takes it with the sheet.
+    if (!vertex_batch.empty() &&
+        VideoCore::KiuSheets::g_mode.load(std::memory_order_relaxed) ==
+            VideoCore::KiuSheets::Mode::Rim &&
+        SheetDraw()) {
+        AddSheetRim();
+    }
+    // AzaharFrame kiu140: a piece of the HUD, moved into the view (kiu_hud.h); never with the world.
+    bool subtitle = false;
+    if (vertex_batch.size() >= 3 && HudDraw(&subtitle)) {
+        std::vector<VideoCore::KiuHud::Vertex> flat(vertex_batch.size());
+        for (std::size_t i = 0; i < flat.size(); ++i) {
+            const auto& q = vertex_batch[i].position;
+            flat[i] = {q.x, q.y, q.z, q.w};
+        }
+        const VideoCore::KiuHud::Place place = VideoCore::KiuHud::g_live.Get();
+        if (VideoCore::Immersive::g_draw_log.load(std::memory_order_relaxed)) { // test aid
+            std::string at;
+            for (std::size_t k = 0; k < std::min<std::size_t>(flat.size(), 18); ++k) {
+                at += fmt::format(" {:.2f},{:.2f},{:.2f},{:.2f}", flat[k].x, flat[k].y, flat[k].z,
+                                  flat[k].w);
+            }
+            LOG_INFO(Render, "kiu hud: texture {:08X} {}:{}",
+                     regs.texturing.texture0.GetPhysicalAddress(),
+                     subtitle ? "the subtitles" : "a piece", at);
+        }
+        const auto put = [&] {
+            for (std::size_t i = 0; i < flat.size(); ++i) {
+                vertex_batch[i].position = {flat[i].x, flat[i].y, flat[i].z, flat[i].w};
+            }
+        };
+        if (subtitle && VideoCore::KiuHud::MoveSubtitle(flat.data(), flat.size(), place, vr_factor,
+                                                        vr_factor_y)) {
+            put();
+            return;
+        }
+        if (VideoCore::KiuHud::Movable(flat.data(), flat.size())) {
+            const std::size_t step = flat.size() % 6 == 0 ? 6 : 3; // quads
+            for (std::size_t i = 0; i + step <= flat.size(); i += step) {
+                VideoCore::KiuHud::Move(flat.data() + i, step, place, vr_factor, vr_factor_y);
+            }
+            put();
+            return;
+        }
+    }
     // AzaharFrame kiu131: Reticle Size: the reticle's draw about its middle on the screen.
     if (!vertex_batch.empty() && ReticleDraw()) {
         const float k = VideoCore::Immersive::g_reticle_scale.load(std::memory_order_relaxed);
@@ -429,6 +593,29 @@ void RasterizerAccelerated::ApplyVRDataToPicaVSUniforms(Pica::Shader::Generator:
 {
     // AzaharFrame oot: whether the draws with these uniforms go through the patched world camera.
     vr_world_uniforms = false;
+    // AzaharFrame kiu140: the angle the world is drawn with (kiu_view_tap.h DrawnAngle).
+    if (const u32 r = VideoCore::Immersive::g_drawn_angle.reg.load(std::memory_order_relaxed);
+        r >= 4 && !VideoCore::Immersive::g_drawn_angle.Enough() && r + 2 < vs_uniforms.f.size() &&
+        f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f == 240.0f &&
+        f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f == 400.0f) {
+        float m[3][3], rows[4][4];
+        for (u32 i = 0; i < 4; ++i) {
+            for (u32 j = 0; j < 4; ++j) {
+                rows[i][j] = vs_uniforms.f[r - 4 + i][j];
+                if (i < 3 && j < 3) {
+                    m[i][j] = vs_uniforms.f[r + i][j];
+                }
+            }
+        }
+        VideoCore::Immersive::Projection drawn;
+        if (VideoCore::Immersive::LooksLikeWorldView(m) &&
+            VideoCore::Immersive::ProjectionFromRows(rows, drawn)) {
+            VideoCore::Immersive::g_drawn_angle.Count(drawn.tan_half_y);
+        }
+    }
+    if (vr_bottom_draw) {
+        return; // AzaharFrame kiu140: the bottom screen's own camera
+    }
     // AzaharFrame fixes7: Screen Shape: Automatic samples the game camera's projection here, in
     // any view, before immersive mode patches anything (vr_auto_shape.h).
     if (VideoCore::Immersive::g_measure_shape.load(std::memory_order_relaxed)) {

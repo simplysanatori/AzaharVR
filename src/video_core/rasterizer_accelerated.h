@@ -37,6 +37,8 @@ protected:
     void SyncDrawUniforms();
     /// AzaharFrame hudmove: HUD Spacing's scales for this draw into the vertex uniforms
     /// (vr_hud_spacing.h ForDraw: none in the bottom screen's viewport).
+    /// AzaharFrame kiu140: and the periphery factors; a bottom screen's draw shown while immersive
+    /// mode is engaged gets none, nor the head's camera (vr_bottom_draw).
     void SyncHudSpacing();
 
     void SetVRData(const int32_t  &vrImmersiveMode, const float& immersiveModeFactor, int uoffset, const float& gamePosScaler, const float inv_view[16]) override;
@@ -105,6 +107,9 @@ protected:
     u32 vr_uoffset = 0;
     u32 vr_immersive_mode = 0;
     float vr_game_pos_scaler = 0.f;
+    float vr_factor = 1.0f;       ///< AzaharFrame kiu140: the factor set (SetVRData), across
+    float vr_factor_y = 1.0f;     ///< and up and down (SetVRFactorY)
+    bool vr_bottom_draw = false;  ///< this draw is the bottom screen's, kept as the game draws it
     float vr_ipd = 0.065f;        ///< AzaharFrame ipd: the headset's IPD (SetVRIpd)
     float vr_ipd_logged = 0.0f;   ///< the separation last logged (0: none yet)
     HudSpacing::Scales hud_spacing{}; ///< AzaharFrame hudmove: the scales set (SetVRHudSpacing)
@@ -147,6 +152,13 @@ public:
     /// AzaharFrame kiu131: whether this draw is the reticle Reticle Size scales (kiu_view_tap.h):
     /// such a draw is not accelerated, so its vertices can be scaled on the CPU.
     bool ReticleDraw() const;
+    /// AzaharFrame kiu140: whether this draw may be a piece of Kid Icarus: Uprising's HUD, moved
+    /// into the view on the CPU (kiu_hud.h).
+    bool HudDraw(bool* subtitle = nullptr) const;
+    /// AzaharFrame kiu140: whether this draw is one of Kid Icarus: Uprising's known cloud sheets,
+    /// given a soft rim on the CPU (kiu_sheets.h), and the world's turn for it is known.
+    bool SheetDraw() const;
+    void AddSheetRim();
 };
 
 } // namespace VideoCore

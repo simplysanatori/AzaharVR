@@ -22,6 +22,7 @@
 #include "frame_xr/frame_xr.h"
 #include "frame_xr/immersive_layout.h" // 1.2.0 fix lane B: Layout::ScaleChord
 #include "frame_xr/input/actions.h"
+#include "frame_xr/input/hand_joints.h"
 #include "frame_xr/kiu_first_person.h" // AzaharFrame kiupanel: Hand
 #include "frame_xr/input/chord_latch.h"
 #include "frame_xr/input/flat_vr_hold.h" // AzaharFrame flat
@@ -39,6 +40,7 @@
 #include "frame_xr/qt_mirror/mirror_panel.h"
 #include "frame_xr/startup_escape.h" // AzaharFrame memguard
 #include "frame_xr/vis/visuals.h" // AzaharFrame vrvis
+#include "frame_xr/vis/panel_hold.h" // AzaharFrame kiu140
 #include "frame_xr/vis/wrist_screen.h" // AzaharFrame kiuwrist
 
 namespace frame_xr::picker {
@@ -299,12 +301,15 @@ private:
     /// AzaharFrame kiupanel: the switch on in Angel's Aim this frame; the aim held while the
     /// beam is on the wrist screen, and the ray it holds (the last one published unheld).
     bool wrist_wanted = false;
+    Input::HandJoints hand_joints; ///< AzaharFrame kiu140
+    int pit_arm_hand = -1; ///< AzaharFrame kiu140: the hand Pit's Arm was last drawn on (-1: none)
     Vis::WristAimHold wrist_aim_hold;
     Kiu::FirstPerson::Hand wrist_held_hand;
-    /// AzaharFrame kiu131: Bottom Screen: Persistent held by a grip (the hand, or -1), the grab's
-    /// offsets, the grips' hysteresis and the place while held (saved when let go).
+    /// AzaharFrame kiu131: Bottom Screen: Persistent held by a grip (the hand, or -1), the hold
+    /// (AzaharFrame kiu140: place and size), the grips' hysteresis and the place while held (saved
+    /// when let go).
     int bottom_grab_hand = -1;
-    Vis::StatsGrab bottom_grab;
+    Vis::PanelHold bottom_hold;
     bool bottom_grip_down[2]{};
     float bottom_grab_right = 0.0f, bottom_grab_down = 0.0f;
     Input::Recoil recoil;          ///< AzaharFrame kiugyro: Light Gun's recoil

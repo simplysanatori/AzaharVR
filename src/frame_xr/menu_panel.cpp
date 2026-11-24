@@ -359,6 +359,36 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::KiuBottomSize;
     case Id::KiuBottomOpacity:
         return MenuSetting::KiuBottomOpacity;
+    case Id::KiuWristAngle: // AzaharFrame kiu140
+        return MenuSetting::KiuWristAngle;
+    case Id::KiuWristAlong: // AzaharFrame kiu140
+        return MenuSetting::KiuWristAlong;
+    case Id::KiuCutscenes: // AzaharFrame kiu140
+        return MenuSetting::KiuCutscenes;
+    case Id::KiuHud: // AzaharFrame kiu140
+        return MenuSetting::KiuHud;
+    case Id::KiuHudSize: // AzaharFrame kiu140
+        return MenuSetting::KiuHudSize;
+    case Id::KiuArm: // AzaharFrame kiu140
+        return MenuSetting::KiuArm;
+    case Id::KiuHudLinked: // AzaharFrame kiu140
+        return MenuSetting::KiuHudLinked;
+    case Id::KiuHudAcross: // AzaharFrame kiu140
+        return MenuSetting::KiuHudAcross;
+    case Id::KiuHudHeight: // AzaharFrame kiu140
+        return MenuSetting::KiuHudHeight;
+    case Id::KiuBarAcross: // AzaharFrame kiu140
+        return MenuSetting::KiuBarAcross;
+    case Id::KiuBarHeight: // AzaharFrame kiu140
+        return MenuSetting::KiuBarHeight;
+    case Id::KiuScoreAcross: // AzaharFrame kiu140
+        return MenuSetting::KiuScoreAcross;
+    case Id::KiuScoreHeight: // AzaharFrame kiu140
+        return MenuSetting::KiuScoreHeight;
+    case Id::KiuSubtitleHeight: // AzaharFrame kiu140
+        return MenuSetting::KiuSubtitleHeight;
+    case Id::KiuSubtitleSize: // AzaharFrame kiu140
+        return MenuSetting::KiuSubtitleSize;
     case Id::WristSide:
         return MenuSetting::WristSide;
     case Id::KiuReticleSize:
@@ -403,6 +433,9 @@ bool ZipShown(const Menu::MenuModel& model, const Menu::MenuView& view) {
     }
     if (zip.target == Menu::ZipTarget::Cheats) { // AzaharFrame ui2
         return view.mods_segment == Menu::ModsSegment::Cheats;
+    }
+    if (zip.target == Menu::ZipTarget::Hand) { // AzaharFrame kiu140
+        return view.mods_segment == Menu::ModsSegment::AngelsAim;
     }
     if (zip.target == Menu::ZipTarget::Textures) {
         return view.mods_segment == Menu::ModsSegment::Textures && // AzaharFrame ui2
@@ -1125,6 +1158,21 @@ void MenuPanel::BuildModel(const Host& host) {
     m.kiu_bottom_opacity =
         static_cast<int>(std::clamp<u32>(v.vr_kiu_bottom_opacity.GetValue(), 20, 100));
     m.kiu_bottom_moved = v.vr_kiu_bottom_x.GetValue() != 0.0f || v.vr_kiu_bottom_y.GetValue() != 0.0f;
+    m.kiu_wrist_angle = static_cast<int>(v.vr_kiu_wrist_angle.GetValue()); // AzaharFrame kiu140
+    m.kiu_wrist_along = static_cast<int>(v.vr_kiu_wrist_along.GetValue()); // AzaharFrame kiu140
+    m.kiu_cutscenes = static_cast<int>(v.vr_kiu_cutscenes.GetValue()); // AzaharFrame kiu140
+    m.kiu_hud = static_cast<int>(v.vr_kiu_hud.GetValue()); // AzaharFrame kiu140
+    m.kiu_hud_size = static_cast<int>(v.vr_kiu_hud_size.GetValue()); // AzaharFrame kiu140
+    m.kiu_arm = static_cast<int>(v.vr_kiu_arm.GetValue()); // AzaharFrame kiu140
+    m.kiu_hud_linked = static_cast<int>(v.vr_kiu_hud_linked.GetValue()); // AzaharFrame kiu140
+    m.kiu_hud_across = static_cast<int>(v.vr_kiu_hud_across.GetValue()); // AzaharFrame kiu140
+    m.kiu_hud_height = static_cast<int>(v.vr_kiu_hud_height.GetValue()); // AzaharFrame kiu140
+    m.kiu_bar_across = static_cast<int>(v.vr_kiu_bar_across.GetValue()); // AzaharFrame kiu140
+    m.kiu_bar_height = static_cast<int>(v.vr_kiu_bar_height.GetValue()); // AzaharFrame kiu140
+    m.kiu_score_across = static_cast<int>(v.vr_kiu_score_across.GetValue()); // AzaharFrame kiu140
+    m.kiu_score_height = static_cast<int>(v.vr_kiu_score_height.GetValue()); // AzaharFrame kiu140
+    m.kiu_subtitle_height = static_cast<int>(v.vr_kiu_subtitle_height.GetValue()); // AzaharFrame kiu140
+    m.kiu_subtitle_size = static_cast<int>(v.vr_kiu_subtitle_size.GetValue()); // AzaharFrame kiu140
     m.wrist_side = static_cast<int>(std::min<u32>(v.vr_wrist_side.GetValue(), 1));
     m.kiu_reticle_size =
         static_cast<int>(std::clamp<u32>(v.vr_kiu_reticle_size.GetValue(), 30, 150));
@@ -1686,6 +1734,81 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.setting = MenuSetting::KiuBottomY;
         break;
     }
+    case Id::KiuWristAngle: // AzaharFrame kiu140
+        r.value = std::clamp(value, 0, 360);
+        Apply(v.vr_kiu_wrist_angle, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuWristAngle;
+        break;
+    case Id::KiuWristAlong: // AzaharFrame kiu140
+        r.value = std::clamp(value, -12, 25);
+        Apply(v.vr_kiu_wrist_along, r.value, per_game);
+        r.setting = MenuSetting::KiuWristAlong;
+        break;
+    case Id::KiuCutscenes: // AzaharFrame kiu140
+        r.value = std::clamp(value, 0, 1);
+        Apply(v.vr_kiu_cutscenes, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuCutscenes;
+        break;
+    case Id::KiuHud: // AzaharFrame kiu140
+        r.value = std::clamp(value, 0, 1);
+        Apply(v.vr_kiu_hud, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuHud;
+        break;
+    case Id::KiuHudSize: // AzaharFrame kiu140
+        r.value = std::clamp(value, 40, 200);
+        Apply(v.vr_kiu_hud_size, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuHudSize;
+        break;
+    case Id::KiuArm: // AzaharFrame kiu140
+        r.value = std::clamp(value, 0, 1);
+        Apply(v.vr_kiu_arm, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuArm;
+        break;
+    case Id::KiuHudLinked: // AzaharFrame kiu140
+        r.value = std::clamp(value, 0, 1);
+        Apply(v.vr_kiu_hud_linked, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuHudLinked;
+        break;
+    case Id::KiuHudAcross: // AzaharFrame kiu140
+        r.value = std::clamp(value, -40, 40);
+        Apply(v.vr_kiu_hud_across, r.value, per_game);
+        r.setting = MenuSetting::KiuHudAcross;
+        break;
+    case Id::KiuHudHeight: // AzaharFrame kiu140
+        r.value = std::clamp(value, -40, 40);
+        Apply(v.vr_kiu_hud_height, r.value, per_game);
+        r.setting = MenuSetting::KiuHudHeight;
+        break;
+    case Id::KiuBarAcross: // AzaharFrame kiu140
+        r.value = std::clamp(value, -40, 40);
+        Apply(v.vr_kiu_bar_across, r.value, per_game);
+        r.setting = MenuSetting::KiuBarAcross;
+        break;
+    case Id::KiuBarHeight: // AzaharFrame kiu140
+        r.value = std::clamp(value, -40, 40);
+        Apply(v.vr_kiu_bar_height, r.value, per_game);
+        r.setting = MenuSetting::KiuBarHeight;
+        break;
+    case Id::KiuScoreAcross: // AzaharFrame kiu140
+        r.value = std::clamp(value, -40, 40);
+        Apply(v.vr_kiu_score_across, r.value, per_game);
+        r.setting = MenuSetting::KiuScoreAcross;
+        break;
+    case Id::KiuScoreHeight: // AzaharFrame kiu140
+        r.value = std::clamp(value, -40, 40);
+        Apply(v.vr_kiu_score_height, r.value, per_game);
+        r.setting = MenuSetting::KiuScoreHeight;
+        break;
+    case Id::KiuSubtitleHeight: // AzaharFrame kiu140
+        r.value = std::clamp(value, -40, 40);
+        Apply(v.vr_kiu_subtitle_height, r.value, per_game);
+        r.setting = MenuSetting::KiuSubtitleHeight;
+        break;
+    case Id::KiuSubtitleSize: // AzaharFrame kiu140
+        r.value = std::clamp(value, 50, 250);
+        Apply(v.vr_kiu_subtitle_size, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuSubtitleSize;
+        break;
     case Id::KiuReticleSize:
         r.value = std::clamp(value, 30, 150);
         Apply(v.vr_kiu_reticle_size, static_cast<u32>(r.value), per_game);
@@ -2287,9 +2410,16 @@ void MenuPanel::Click(Target t, Host& host) {
         break;
     // AzaharFrame zipinstall: Install from Zip (citra_qt/frame_mods.cpp)
     case Id::InstallFromZip:
+        if (t.index == Menu::kAngelsAimHandFoundIndex) { // AzaharFrame kiu140: the zip in Downloads
+            view.scroll[static_cast<std::size_t>(view.tab)] = 0.0f;
+            ask_text(MenuCommand::InstallFromZip, model.mods.angels_aim.hand_zip,
+                     static_cast<int>(Menu::ZipTarget::Hand));
+            break;
+        }
         if (t.index == static_cast<int>(Menu::ZipTarget::Textures) ||
             t.index == static_cast<int>(Menu::ZipTarget::Mods) ||
-            t.index == static_cast<int>(Menu::ZipTarget::Cheats)) { // AzaharFrame ui2
+            t.index == static_cast<int>(Menu::ZipTarget::Cheats) || // AzaharFrame ui2
+            t.index == static_cast<int>(Menu::ZipTarget::Hand)) {   // AzaharFrame kiu140
             view.scroll[static_cast<std::size_t>(view.tab)] = 0.0f;
             ask(MenuCommand::InstallFromZip, t.index);
         }
@@ -2713,6 +2843,10 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::KiuSnapTurn:   // AzaharFrame kiutoggles: Turning (Smooth, 30 to 90 degrees)
     case Id::KiuBottomScreen: // AzaharFrame kiu131: Off, Persistent, Wrist
     case Id::KiuOverShoulder: // AzaharFrame kiu133: Camera
+    case Id::KiuCutscenes: // AzaharFrame kiu140
+    case Id::KiuHud: // AzaharFrame kiu140
+    case Id::KiuArm: // AzaharFrame kiu140
+    case Id::KiuHudLinked: // AzaharFrame kiu140
     case Id::WristSide:       // Back, Inside
     case Id::WindowScale:
     case Id::MarginX: // AzaharFrame fovaxis

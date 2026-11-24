@@ -5,6 +5,7 @@
 // The reader and the posing are a C++ port of Moonlight XR Native's rooms/room_gpu.c
 // (mlxr_model_file_parse, openTextured, mlxr_model_pose; GPLv3, same author).
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -222,6 +223,77 @@ bool LoadModelFile(const std::string& path, ModelFile& out, std::string& error, 
     }
     out = std::move(m);
     return true;
+}
+
+bool LoadSeeFile(const std::string& path, std::size_t vertex_count, SeeFile& out, // kiu140w
+                 std::string& error) {
+    constexpr std::size_t kHead = 36;
+    constexpr uint32_t kSide = 2048; // the game's textures are at most 1024 a side
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    if (!f) {
+        error = "cannot be read";
+        return false;
+    }
+    const auto size = static_cast<uint64_t>(f.tellg());
+    f.seekg(0);
+    uint8_t head[kHead];
+    if (size < kHead || !f.read(reinterpret_cast<char*>(head), kHead) ||
+        std::memcmp(head, "MXFS", 4) != 0 || U32(head + 4) != 1) {
+        error = "not a see-through file";
+        return false;
+    }
+    SeeFile s;
+    const uint32_t vertices = U32(head + 8);
+    s.width = U32(head + 12);
+    s.height = U32(head + 16);
+    const uint32_t kind = U32(head + 20), flags = U32(head + 24), wrap = U32(head + 28);
+    std::memcpy(&s.reference, head + 32, 4);
+    if (vertices != vertex_count || s.width == 0 || s.height == 0 || s.width > kSide ||
+        s.height > kSide || kind < 1 || kind > 3 || (wrap & ~0x33u) != 0 ||
+        !(s.reference >= 0.0f && s.reference <= 1.0f) ||
+        size != kHead + uint64_t{vertices} * kSeeVertexFloats * 4 +
+                    uint64_t{s.width} * s.height * 4) {
+        error = "not this model's";
+        return false;
+    }
+    s.kind = static_cast<SeeFileKind>(kind);
+    s.unlit = (flags & 1) != 0;
+    s.depth_write = (flags & 2) != 0;
+    s.slides = (flags & 4) != 0;
+    s.wrap_u = wrap & 3;
+    s.wrap_v = wrap >> 4 & 3;
+    s.vertices.resize(std::size_t{vertices} * kSeeVertexFloats);
+    s.image.resize(std::size_t{s.width} * s.height * 4);
+    if (!f.read(reinterpret_cast<char*>(s.vertices.data()),
+                static_cast<std::streamsize>(s.vertices.size() * 4)) ||
+        !f.read(reinterpret_cast<char*>(s.image.data()),
+                static_cast<std::streamsize>(s.image.size()))) {
+        error = "short read";
+        return false;
+    }
+    for (const float v : s.vertices) {
+        if (!std::isfinite(v)) {
+            error = "a bad value";
+            return false;
+        }
+    }
+    out = std::move(s);
+    return true;
+}
+
+std::vector<float> SeeVertices(const std::vector<float>& model_vertices, const SeeFile& see) {
+    std::vector<float> v = model_vertices;
+    const std::size_t n = std::min(v.size() / kModelVertexFloats,
+                                   see.vertices.size() / kSeeVertexFloats);
+    for (std::size_t i = 0; i < n; i++) {
+        const float* s = &see.vertices[i * kSeeVertexFloats];
+        float* m = &v[i * kModelVertexFloats];
+        std::copy(s, s + 4, m + 6);
+        if (see.unlit) {
+            std::copy(s + 4, s + 7, m + 3);
+        }
+    }
+    return v;
 }
 
 std::vector<ModelPart> PoseModel(const ModelFile& model, const ModelInputs& in) {

@@ -42,6 +42,8 @@
 
 #include "frame_xr/frame_xr.h"
 #include "frame_xr/input/types.h"
+#include "frame_xr/vis/pit_hand.h" // AzaharFrame kiu140
+#include "frame_xr/vis/pit_model.h"
 #include "frame_xr/vis/model_file.h"
 #include "frame_xr/vis/model_plane.h"  // AzaharFrame ctrlfront
 #include "frame_xr/vis/muzzle_flash.h" // AzaharFrame kiuflash
@@ -89,6 +91,12 @@ public:
         /// AzaharFrame kiuflash: the projectiles' signal (projectile.h): a new shot flies from the
         /// muzzle to its target.
         ShotSignal shots;
+        /// AzaharFrame kiu140: Pit's hand and forearm (pit_hand.h) in place of this controller,
+        /// its fingers from what the controller feels; drawn while the weapon is in the other.
+        bool pit_arm = false;
+        PitHandInputs pit;
+        bool pit_tracked = false; ///< the runtime has the fingers' joints: `pit_joints`, not `pit`
+        std::array<PitJointPose, kPitXrJoints> pit_joints{};
     };
 
     /// XR thread, each frame while models are wanted (anything shown or not): reads the files
@@ -147,6 +155,10 @@ public:
         gap_layer_dropped = gap_layer_dropped || layer;
         pair_no_room = pair_no_room || pair;
     }
+
+    /// AzaharFrame kiu140: Pit's forearm as last drawn on `h`, wrist to elbow, in that hand's aim
+    /// space, and how thick (none drawn: false).
+    bool PitForearm(int h, Input::Vec3f* wrist, Input::Vec3f* elbow, float* radius) const;
 
 private:
     void Setup(Runtime& rt);
@@ -211,8 +223,20 @@ private:
         FitPart fit;
         bool turned = false;
         FitMat turn{};
+        /// AzaharFrame kiu140: Pit's hand of our own, and where its elbow is (arm space).
+        bool pit = false;
+        bool pit_elbow = false;
+        PitVec3 elbow{};
     };
     std::array<ArmDraw, 2> arm_draws{};
+    std::shared_ptr<const PitModel> pit_model; ///< the player's hand file (null: none)
+    uint32_t pit_generation = 0;               ///< PitModelSource's, when pit_model was taken
+    std::array<int64_t, 2> pit_time_ns{};
+    std::array<PitHandPose, 2> pit_pose;       ///< eased toward each controller's
+    std::array<bool, 2> pit_posed{};
+    void TakePit();            ///< the newest hand file, if it changed
+    void MakePit();            ///< the GPU side, recorded into the frame's commands (once)
+    void SkinPit(const std::array<Hand, 2>& hands);
     std::array<std::array<float, 3>, 2> arm_dir{}; ///< the smoothed forearm directions (LOCAL)
     std::array<int64_t, 2> arm_time_ns{};
     std::string arm_logged;

@@ -109,6 +109,39 @@ std::string SliderText(Id id, float value) {
         id == Id::KiuPitOpacity) { // AzaharFrame kiugyro: "10%" (kiufix: the strengths, the scale; kiuopacity: the opacities; kiuweap2: the flash's size)
         return Format("%.0f%%", value);
     }
+    if (id == Id::KiuWristAngle) { // AzaharFrame kiu140
+        return Format("%.0f\u00B0", value);
+    }
+    if (id == Id::KiuWristAlong) { // AzaharFrame kiu140
+        return Format("%.0f cm", value);
+    }
+    if (id == Id::KiuHudSize) { // AzaharFrame kiu140
+        return Format("%.0f%%", value);
+    }
+    if (id == Id::KiuHudAcross) { // AzaharFrame kiu140
+        return Format("%.0f\u00B0", value);
+    }
+    if (id == Id::KiuHudHeight) { // AzaharFrame kiu140
+        return Format("%.0f\u00B0", value);
+    }
+    if (id == Id::KiuBarAcross) { // AzaharFrame kiu140
+        return Format("%.0f\u00B0", value);
+    }
+    if (id == Id::KiuBarHeight) { // AzaharFrame kiu140
+        return Format("%.0f\u00B0", value);
+    }
+    if (id == Id::KiuScoreAcross) { // AzaharFrame kiu140
+        return Format("%.0f\u00B0", value);
+    }
+    if (id == Id::KiuScoreHeight) { // AzaharFrame kiu140
+        return Format("%.0f\u00B0", value);
+    }
+    if (id == Id::KiuSubtitleHeight) { // AzaharFrame kiu140
+        return Format("%.0f\u00B0", value);
+    }
+    if (id == Id::KiuSubtitleSize) { // AzaharFrame kiu140
+        return Format("%.0f%%", value);
+    }
     if (id == Id::AutosaveEvery) { // AzaharFrame autosave: the stop's minutes
         const int i = std::clamp(static_cast<int>(std::lround(value)), 0,
                                  static_cast<int>(kAutosaveEvery.size()) - 1);
@@ -235,6 +268,51 @@ Row RowFor(Id id, const MenuModel& m) {
         break;
     case Id::KiuSnapTurn:
         segmented(std::clamp(m.kiu_snap_turn, 0, static_cast<int>(kSnapTurnDegrees.size()) - 1));
+        break;
+    case Id::KiuWristAngle: // AzaharFrame kiu140
+        slider(m.kiu_wrist_angle);
+        break;
+    case Id::KiuWristAlong: // AzaharFrame kiu140
+        slider(m.kiu_wrist_along);
+        break;
+    case Id::KiuCutscenes: // AzaharFrame kiu140
+        segmented(std::clamp(m.kiu_cutscenes, 0, 1));
+        break;
+    case Id::KiuHud: // AzaharFrame kiu140
+        segmented(std::clamp(m.kiu_hud, 0, 1));
+        break;
+    case Id::KiuHudSize: // AzaharFrame kiu140
+        slider(m.kiu_hud_size);
+        break;
+    case Id::KiuArm: // AzaharFrame kiu140
+        segmented(std::clamp(m.kiu_arm, 0, 1));
+        break;
+    case Id::KiuHudLinked: // AzaharFrame kiu140
+        segmented(std::clamp(m.kiu_hud_linked, 0, 1));
+        break;
+    case Id::KiuHudAcross: // AzaharFrame kiu140
+        slider(m.kiu_hud_across);
+        break;
+    case Id::KiuHudHeight: // AzaharFrame kiu140
+        slider(m.kiu_hud_height);
+        break;
+    case Id::KiuBarAcross: // AzaharFrame kiu140
+        slider(m.kiu_bar_across);
+        break;
+    case Id::KiuBarHeight: // AzaharFrame kiu140
+        slider(m.kiu_bar_height);
+        break;
+    case Id::KiuScoreAcross: // AzaharFrame kiu140
+        slider(m.kiu_score_across);
+        break;
+    case Id::KiuScoreHeight: // AzaharFrame kiu140
+        slider(m.kiu_score_height);
+        break;
+    case Id::KiuSubtitleHeight: // AzaharFrame kiu140
+        slider(m.kiu_subtitle_height);
+        break;
+    case Id::KiuSubtitleSize: // AzaharFrame kiu140
+        slider(m.kiu_subtitle_size);
         break;
     case Id::KiuReticleSize:
         slider(m.kiu_reticle_size);
@@ -433,9 +511,16 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
         rows.push_back(full(row(Id::FillView, RowKind::Button)));
         // AzaharFrame hudmove: HUD Spacing, 0 to 150 %, 100 the game's own (Experimental chip, never
         // locked: outside the Full modes it does nothing, and its tooltip says so).
+        const bool spacing = HudSpacingRowsShown(
+            AngelsAimRowsShown(m.mods.angels_aim.shown && m.mods.angels_aim.mapped,
+                               m.immersive_mode),
+            m.kiu_hud); // AzaharFrame kiu140
         for (const auto& [id, value] :
              {std::pair{Id::HudSpacingX, m.hud_spacing_x},
               std::pair{Id::HudSpacingY, m.hud_spacing_y}}) {
+            if (!spacing) {
+                continue;
+            }
             Row r = row(id, RowKind::Slider);
             const SliderRange hr = SliderFor(id);
             const float v = std::clamp(static_cast<float>(value), hr.min, hr.max);
@@ -532,6 +617,21 @@ SettingsSection SectionOf(Id id) {
     case Id::KiuBottomSize:
     case Id::KiuBottomOpacity:
     case Id::KiuBottomReset:
+    case Id::KiuWristAngle: // AzaharFrame kiu140
+    case Id::KiuWristAlong: // AzaharFrame kiu140
+    case Id::KiuCutscenes: // AzaharFrame kiu140
+    case Id::KiuHud: // AzaharFrame kiu140
+    case Id::KiuHudSize: // AzaharFrame kiu140
+    case Id::KiuArm: // AzaharFrame kiu140
+    case Id::KiuHudLinked: // AzaharFrame kiu140
+    case Id::KiuHudAcross: // AzaharFrame kiu140
+    case Id::KiuHudHeight: // AzaharFrame kiu140
+    case Id::KiuBarAcross: // AzaharFrame kiu140
+    case Id::KiuBarHeight: // AzaharFrame kiu140
+    case Id::KiuScoreAcross: // AzaharFrame kiu140
+    case Id::KiuScoreHeight: // AzaharFrame kiu140
+    case Id::KiuSubtitleHeight: // AzaharFrame kiu140
+    case Id::KiuSubtitleSize: // AzaharFrame kiu140
     case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
@@ -608,6 +708,21 @@ bool PerGameSetting(Id id) {
     case Id::KiuBottomScreen: // AzaharFrame kiutoggles, kiu131
     case Id::KiuBottomSize:
     case Id::KiuBottomOpacity:
+    case Id::KiuWristAngle: // AzaharFrame kiu140
+    case Id::KiuWristAlong: // AzaharFrame kiu140
+    case Id::KiuCutscenes: // AzaharFrame kiu140
+    case Id::KiuHud: // AzaharFrame kiu140
+    case Id::KiuHudSize: // AzaharFrame kiu140
+    case Id::KiuArm: // AzaharFrame kiu140
+    case Id::KiuHudLinked: // AzaharFrame kiu140
+    case Id::KiuHudAcross: // AzaharFrame kiu140
+    case Id::KiuHudHeight: // AzaharFrame kiu140
+    case Id::KiuBarAcross: // AzaharFrame kiu140
+    case Id::KiuBarHeight: // AzaharFrame kiu140
+    case Id::KiuScoreAcross: // AzaharFrame kiu140
+    case Id::KiuScoreHeight: // AzaharFrame kiu140
+    case Id::KiuSubtitleHeight: // AzaharFrame kiu140
+    case Id::KiuSubtitleSize: // AzaharFrame kiu140
     case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
@@ -762,6 +877,45 @@ std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& m) {
         rows.push_back(Id::KiuPitOpacity);
     }
     rows.push_back(Id::KiuSnapTurn);
+    if (m.kiu_bottom_screen == 2) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuWristAngle);
+    }
+    if (m.kiu_bottom_screen == 2) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuWristAlong);
+    }
+    rows.push_back(Id::KiuCutscenes);
+    rows.push_back(Id::KiuHud);
+    if (m.kiu_hud != 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuHudSize);
+    }
+    rows.push_back(Id::KiuArm);
+    if (m.kiu_hud != 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuHudLinked);
+    }
+    if (m.kiu_hud != 0 && m.kiu_hud_linked != 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuHudAcross);
+    }
+    if (m.kiu_hud != 0 && m.kiu_hud_linked != 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuHudHeight);
+    }
+    if (m.kiu_hud != 0 && m.kiu_hud_linked == 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuBarAcross);
+    }
+    if (m.kiu_hud != 0 && m.kiu_hud_linked == 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuBarHeight);
+    }
+    if (m.kiu_hud != 0 && m.kiu_hud_linked == 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuScoreAcross);
+    }
+    if (m.kiu_hud != 0 && m.kiu_hud_linked == 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuScoreHeight);
+    }
+    if (m.kiu_hud != 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuSubtitleHeight);
+    }
+    if (m.kiu_hud != 0) { // AzaharFrame kiu140
+        rows.push_back(Id::KiuSubtitleSize);
+    }
     rows.push_back(Id::KiuReticleSize);
     return rows;
 }
@@ -794,17 +948,20 @@ std::vector<AngelsAimRowGroup> AngelsAimGroups(const MenuModel& model) {
     }
     aiming.rows.push_back(Id::AngelsAimSettings); // the Controls tab at Aiming, as before
     AngelsAimRowGroup view{AngelsAimGroupKind::View, {Id::ImmersiveMode}};
-    for (const Id id : {Id::KiuOverShoulder, Id::KiuPitOpacity, Id::KiuSnapTurn}) {
+    for (const Id id : {Id::KiuOverShoulder, Id::KiuPitOpacity, Id::KiuSnapTurn, Id::KiuCutscenes, Id::KiuHud, Id::KiuHudSize, Id::KiuHudLinked, Id::KiuHudAcross, Id::KiuHudHeight, Id::KiuBarAcross, Id::KiuBarHeight, Id::KiuScoreAcross, Id::KiuScoreHeight, Id::KiuSubtitleHeight, Id::KiuSubtitleSize}) {
         if (has(fp, id)) {
             view.rows.push_back(id);
         }
     }
     AngelsAimRowGroup bottom{AngelsAimGroupKind::BottomScreen, {}};
     for (const Id id : {Id::KiuBottomScreen, Id::KiuBottomSize, Id::KiuBottomOpacity,
-                        Id::KiuBottomReset}) {
+                        Id::KiuWristAngle, Id::KiuWristAlong, Id::KiuBottomReset}) {
         if (has(fp, id)) {
             bottom.rows.push_back(id);
         }
+    }
+    if (has(fp, Id::KiuArm)) { // AzaharFrame kiu140
+        weapons.rows.push_back(Id::KiuArm);
     }
     bottom.rows.push_back(Id::WristSide); // global: every wrist display (the Stats tab's too)
     for (AngelsAimRowGroup* g : {&aiming, &view, &bottom, &weapons}) {
@@ -999,6 +1156,22 @@ const std::vector<std::string>& OptionsFor(Id id) {
         static const std::vector<std::string> kBottom{kBottomScreenOff, kBottomScreenPersistent,
                                                       kBottomScreenWrist};
         return kBottom;
+    }
+    case Id::KiuCutscenes: { // AzaharFrame kiu140: the stored order
+        static const std::vector<std::string> kChoices{"In View", "Primary Screen"};
+        return kChoices;
+    }
+    case Id::KiuHud: { // AzaharFrame kiu140: the stored order
+        static const std::vector<std::string> kChoices{"Game's Own", "In View"};
+        return kChoices;
+    }
+    case Id::KiuArm: { // AzaharFrame kiu140: the stored order
+        static const std::vector<std::string> kChoices{"Off", "On"};
+        return kChoices;
+    }
+    case Id::KiuHudLinked: { // AzaharFrame kiu140: the stored order
+        static const std::vector<std::string> kChoices{"Separate", "Linked"};
+        return kChoices;
     }
     case Id::WristSide: { // AzaharFrame kiu131: the stored order
         static const std::vector<std::string> kSide{kWristSideBack, kWristSideInside};
@@ -1214,6 +1387,36 @@ std::string LabelFor(Id id) {
         return kBottomScreenResetRow;
     case Id::WristSide:
         return kWristSideRow;
+    case Id::KiuWristAngle: // AzaharFrame kiu140
+        return kKiuWristAngleRow;
+    case Id::KiuWristAlong: // AzaharFrame kiu140
+        return kKiuWristAlongRow;
+    case Id::KiuCutscenes: // AzaharFrame kiu140
+        return kKiuCutscenesRow;
+    case Id::KiuHud: // AzaharFrame kiu140
+        return kKiuHudRow;
+    case Id::KiuHudSize: // AzaharFrame kiu140
+        return kKiuHudSizeRow;
+    case Id::KiuArm: // AzaharFrame kiu140
+        return kKiuArmRow;
+    case Id::KiuHudLinked: // AzaharFrame kiu140
+        return kKiuHudLinkedRow;
+    case Id::KiuHudAcross: // AzaharFrame kiu140
+        return kKiuHudAcrossRow;
+    case Id::KiuHudHeight: // AzaharFrame kiu140
+        return kKiuHudHeightRow;
+    case Id::KiuBarAcross: // AzaharFrame kiu140
+        return kKiuBarAcrossRow;
+    case Id::KiuBarHeight: // AzaharFrame kiu140
+        return kKiuBarHeightRow;
+    case Id::KiuScoreAcross: // AzaharFrame kiu140
+        return kKiuScoreAcrossRow;
+    case Id::KiuScoreHeight: // AzaharFrame kiu140
+        return kKiuScoreHeightRow;
+    case Id::KiuSubtitleHeight: // AzaharFrame kiu140
+        return kKiuSubtitleHeightRow;
+    case Id::KiuSubtitleSize: // AzaharFrame kiu140
+        return kKiuSubtitleSizeRow;
     case Id::KiuReticleSize:
         return kReticleSizeRow;
     case Id::KiuOverShoulder: // AzaharFrame kiu133
@@ -1624,6 +1827,36 @@ std::string ExplainFor(Id id) {
         return kBottomScreenResetTip;
     case Id::WristSide:
         return kWristSideTip;
+    case Id::KiuWristAngle: // AzaharFrame kiu140
+        return kKiuWristAngleTip;
+    case Id::KiuWristAlong: // AzaharFrame kiu140
+        return kKiuWristAlongTip;
+    case Id::KiuCutscenes: // AzaharFrame kiu140
+        return kKiuCutscenesTip;
+    case Id::KiuHud: // AzaharFrame kiu140
+        return kKiuHudTip;
+    case Id::KiuHudSize: // AzaharFrame kiu140
+        return kKiuHudSizeTip;
+    case Id::KiuArm: // AzaharFrame kiu140
+        return kKiuArmTip;
+    case Id::KiuHudLinked: // AzaharFrame kiu140
+        return kKiuHudLinkedTip;
+    case Id::KiuHudAcross: // AzaharFrame kiu140
+        return kKiuHudAcrossTip;
+    case Id::KiuHudHeight: // AzaharFrame kiu140
+        return kKiuHudHeightTip;
+    case Id::KiuBarAcross: // AzaharFrame kiu140
+        return kKiuBarAcrossTip;
+    case Id::KiuBarHeight: // AzaharFrame kiu140
+        return kKiuBarHeightTip;
+    case Id::KiuScoreAcross: // AzaharFrame kiu140
+        return kKiuScoreAcrossTip;
+    case Id::KiuScoreHeight: // AzaharFrame kiu140
+        return kKiuScoreHeightTip;
+    case Id::KiuSubtitleHeight: // AzaharFrame kiu140
+        return kKiuSubtitleHeightTip;
+    case Id::KiuSubtitleSize: // AzaharFrame kiu140
+        return kKiuSubtitleSizeTip;
     case Id::KiuReticleSize:
         return kReticleSizeTip;
     case Id::KiuOverShoulder: // AzaharFrame kiu133
@@ -1764,6 +1997,39 @@ SliderRange SliderFor(Id id) {
     }
     if (id == Id::KiuPitOpacity) { // AzaharFrame kiu133: 20 to 100 %, as the other opacities
         return {20.0f, 100.0f, 10.0f};
+    }
+    if (id == Id::KiuWristAngle) { // AzaharFrame kiu140
+        return {0.0f, 360.0f, 5.0f};
+    }
+    if (id == Id::KiuWristAlong) { // AzaharFrame kiu140
+        return {-12.0f, 25.0f, 1.0f};
+    }
+    if (id == Id::KiuHudSize) { // AzaharFrame kiu140
+        return {40.0f, 200.0f, 10.0f};
+    }
+    if (id == Id::KiuHudAcross) { // AzaharFrame kiu140
+        return {-40.0f, 40.0f, 1.0f};
+    }
+    if (id == Id::KiuHudHeight) { // AzaharFrame kiu140
+        return {-40.0f, 40.0f, 1.0f};
+    }
+    if (id == Id::KiuBarAcross) { // AzaharFrame kiu140
+        return {-40.0f, 40.0f, 1.0f};
+    }
+    if (id == Id::KiuBarHeight) { // AzaharFrame kiu140
+        return {-40.0f, 40.0f, 1.0f};
+    }
+    if (id == Id::KiuScoreAcross) { // AzaharFrame kiu140
+        return {-40.0f, 40.0f, 1.0f};
+    }
+    if (id == Id::KiuScoreHeight) { // AzaharFrame kiu140
+        return {-40.0f, 40.0f, 1.0f};
+    }
+    if (id == Id::KiuSubtitleHeight) { // AzaharFrame kiu140
+        return {-40.0f, 40.0f, 1.0f};
+    }
+    if (id == Id::KiuSubtitleSize) { // AzaharFrame kiu140
+        return {50.0f, 250.0f, 1.0f};
     }
     if (id == Id::KiuReticleSize) { // 30 to 150 %
         return {30.0f, 150.0f, 10.0f};

@@ -469,7 +469,8 @@ bool RasterizerOpenGL::SetupGeometryShader() {
 }
 
 bool RasterizerOpenGL::AccelerateDrawBatch(bool is_indexed) {
-    if (ReticleDraw()) { // AzaharFrame kiu131: Reticle Size scales it on the CPU
+    // AzaharFrame kiu131: Reticle Size scales it on the CPU; kiu140: the HUD, the cloud sheets
+    if (ReticleDraw() || HudDraw() || (is_indexed && SheetDraw())) {
         return false;
     }
     if (regs.pipeline.use_gs != Pica::PipelineRegs::UseGS::No) {

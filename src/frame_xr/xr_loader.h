@@ -72,7 +72,10 @@ namespace FrameXr {
     X(xrCreateVulkanDeviceKHR)                                                                     \
     X(xrEnumerateDisplayRefreshRatesFB)                                                            \
     X(xrRequestDisplayRefreshRateFB)                                                               \
-    X(xrGetDisplayRefreshRateFB)
+    X(xrGetDisplayRefreshRateFB)                                                                   \
+    X(xrCreateHandTrackerEXT)                                                                      \
+    X(xrDestroyHandTrackerEXT)                                                                     \
+    X(xrLocateHandJointsEXT)
 
 struct XrFunctions {
     PFN_xrGetInstanceProcAddr xrGetInstanceProcAddr = nullptr;

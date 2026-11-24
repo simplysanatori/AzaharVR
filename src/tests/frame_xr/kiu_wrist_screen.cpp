@@ -326,3 +326,113 @@ TEST_CASE("FrameXr kiu131: Wrist Side, Back and Inside, each in its own pose",
     REQUIRE_FALSE(Vis::WristShown(
         Vis::WristFacingDeg(Vis::WristStatsPose(palm, WristSide::Back), kEye), false));
 }
+
+// AzaharFrame kiu140: the place round the wrist and along the arm.
+TEST_CASE("FrameXr kiu140: the wrist screen's place round the wrist and up the arm",
+          "[frame_xr][kiuwrist][kiu140]") {
+    using Vis::WristSide;
+    const auto at = [](int deg, int cm, Hand hand = Hand::Left, WristSide side = WristSide::Back) {
+        return Vis::WristScreenLocalPose(hand, false, side, Vis::kWristScreenWidth,
+                                         Vis::WristAtFor(deg, cm));
+    };
+    for (const WristSide side : {WristSide::Back, WristSide::Inside}) {
+        // 0 is where it always was, and 360 the same place.
+        const Posef was = Vis::WristScreenLocalPose(Hand::Left, false, side);
+        const Posef zero = at(0, 0, Hand::Left, side), full = at(360, 0, Hand::Left, side);
+        REQUIRE(Input::Length(zero.position - was.position) == Approx(0.0f));
+        REQUIRE(Input::Length(full.position - was.position) < 1e-4f);
+        const Vec3f axis = Axis(was, {1, 0, 0});
+        const Vec3f middle{Vis::kWristMiddleX, was.position.y, was.position.z};
+        for (int deg = 0; deg <= 360; deg += 5) {
+            const Posef p = at(deg, 0, Hand::Left, side);
+            INFO(deg);
+            // The same way round the wrist's line: as far from it, at the same place along it,
+            // reading along the forearm and facing out.
+            REQUIRE(Input::Length(p.position - middle) ==
+                    Approx(Input::Length(was.position - middle)).margin(1e-4));
+            REQUIRE(std::abs(Input::Dot(p.position - middle, axis)) < 1e-4f);
+            REQUIRE(Input::Dot(Axis(p, {1, 0, 0}), axis) > 0.9999f);
+            REQUIRE(Input::Dot(Axis(p, {0, 0, 1}), Input::Normalized(p.position - middle)) > 0.95f);
+        }
+    }
+    // A quarter from the back is over the wrist, on the thumb's side, facing up.
+    REQUIRE(Axis(at(90, 0), {0, 0, 1}).y > 0.7f);
+    // The right wrist: the mirror image, whatever the place.
+    for (int deg = 0; deg < 360; deg += 30) {
+        const Posef l = at(deg, 7), r = at(deg, 7, Hand::Right);
+        REQUIRE(r.position.x == Approx(-l.position.x).margin(1e-5));
+        REQUIRE(r.position.y == Approx(l.position.y).margin(1e-5));
+        REQUIRE(Axis(r, {0, 0, 1}).x == Approx(-Axis(l, {0, 0, 1}).x).margin(1e-4));
+        REQUIRE(Axis(r, {0, 0, 1}).y == Approx(Axis(l, {0, 0, 1}).y).margin(1e-4));
+    }
+    // Along the arm: toward the elbow, or the hand below 0.
+    const Vec3f toward_hand = Axis(at(0, 0), {1, 0, 0});
+    REQUIRE(Input::Dot(at(0, 10).position - at(0, 0).position, toward_hand) == Approx(-0.10f));
+    REQUIRE(Input::Dot(at(0, -5).position - at(0, 0).position, toward_hand) == Approx(0.05f));
+    REQUIRE(Vis::WristAtFor(999, 99).angle_deg == 360.0f);
+    REQUIRE(Vis::WristAtFor(-3, -99).up_arm_m == Approx(-0.12f));
+    // Round a drawn arm's own line: clear of it at every angle and tilt, reading along it, upright
+    // the way it was, and the mirror image on the right.
+    for (const Vec3f& dir : {Vec3f{0.0f, -0.6f, 0.8f}, Vec3f{0.3f, -0.7f, 0.6f}, Vec3f{-0.3f, -0.4f, 0.9f},
+                             Vec3f{0.0f, -0.9f, 0.4f}}) {
+        const Vec3f wrist{-0.01f, -0.05f, 0.08f};
+        const Vec3f elbow = wrist + Input::Normalized(dir) * 0.26f;
+        for (int deg = 0; deg < 360; deg += 15) {
+            auto a = Vis::WristAtFor(deg, 2);
+            a.arm = true;
+            a.wrist = wrist;
+            a.elbow = elbow;
+            a.out_m = Vis::WristOutFor(0.06f);
+            for (const Hand hand : {Hand::Left, Hand::Right}) {
+                auto here = a;
+                if (hand == Hand::Right) {
+                    here.wrist.x = -wrist.x;
+                    here.elbow.x = -elbow.x;
+                }
+                const Posef p = Vis::WristScreenLocalPose(hand, false, WristSide::Back,
+                                                          Vis::kWristScreenWidth, here);
+                const Vec3f w = here.wrist, along = Input::Normalized(here.elbow - here.wrist);
+                INFO(deg << " " << (hand == Hand::Right));
+                // Its middle is the panel's gap outside a 6 cm arm.
+                const Vec3f rel = p.position - w;
+                const Vec3f across = rel - along * Input::Dot(rel, along);
+                REQUIRE(Input::Length(across) > 0.06f + 0.9f * Vis::kWristScreenGap);
+                // Reading along the arm, facing away from it.
+                REQUIRE(std::abs(Input::Dot(Axis(p, {1, 0, 0}), along)) > 0.999f);
+                REQUIRE(Input::Dot(Axis(p, {0, 0, 1}), Input::Normalized(across)) > 0.9f);
+            }
+        }
+    }
+    // Out to clear an arm: straight away from the wrist's line, nothing without one.
+    REQUIRE(Vis::WristOutFor(0.0f) == 0.0f);
+    REQUIRE(Vis::WristOutFor(0.03f) == 0.0f);
+    REQUIRE(Vis::WristOutFor(0.06f) == Approx(0.0285f));
+    for (int deg = 0; deg < 360; deg += 15) {
+        auto a = Vis::WristAtFor(deg, 6);
+        const Posef near = Vis::WristScreenLocalPose(Hand::Left, false, WristSide::Back,
+                                                     Vis::kWristScreenWidth, a);
+        a.out_m = 0.02f;
+        const Posef far = Vis::WristScreenLocalPose(Hand::Left, false, WristSide::Back,
+                                                    Vis::kWristScreenWidth, a);
+        const Vec3f moved = far.position - near.position;
+        REQUIRE(Input::Length(moved) == Approx(0.02f).margin(1e-5));
+        REQUIRE(std::abs(Input::Dot(moved, Axis(near, {1, 0, 0}))) < 1e-4f);
+        REQUIRE(Input::Dot(Input::Normalized(moved), Axis(near, {0, 0, 1})) > 0.95f);
+        REQUIRE(Input::Dot(Axis(far, {0, 0, 1}), Axis(near, {0, 0, 1})) > 0.9999f);
+    }
+
+    // Upright in quarter turns, with hysteresis.
+    const Posef flat{{}, {0, 0, 0}}; // its top up, its front +z
+    for (int k = 0; k < 4; ++k) {
+        const Vec3f up = Axis(Vis::TurnedQuarters(flat, k), {0, 1, 0});
+        REQUIRE(Vis::UprightTurns(flat, up, (k + 2) % 4) == k);
+    }
+    const auto up_at = [](float deg) {
+        return Vec3f{-std::sin(deg * 0.0174533f), std::cos(deg * 0.0174533f), 0.0f};
+    };
+    REQUIRE(Vis::UprightTurns(flat, up_at(55), 0) == 0);
+    REQUIRE(Vis::UprightTurns(flat, up_at(65), 0) == 1);
+    REQUIRE(Vis::UprightTurns(flat, up_at(35), 1) == 1);
+    REQUIRE(Vis::UprightTurns(flat, up_at(25), 1) == 0);
+    REQUIRE(Vis::UprightTurns(flat, {0, 0, 1}, 2) == 2); // edge on: kept
+}

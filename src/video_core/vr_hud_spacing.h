@@ -113,10 +113,15 @@ inline Scales ForFrame(bool engaged, unsigned mode, int spacing_x, int spacing_y
     return {eased(spacing_x), eased(spacing_y)};
 }
 
+/// Whether a draw into this viewport is the bottom screen's (240 x 320, drawn turned).
+inline bool IsBottomViewport(float viewport_width, float viewport_height) {
+    return viewport_width == 240.0f && viewport_height == 320.0f;
+}
+
 /// The scales one draw uses (emulation thread, per draw): none for a draw into the bottom
 /// screen's viewport (240 x 320, drawn turned), `s` for everything else.
 inline Scales ForDraw(Scales s, float viewport_width, float viewport_height) {
-    if (viewport_width == 240.0f && viewport_height == 320.0f) {
+    if (IsBottomViewport(viewport_width, viewport_height)) {
         return {};
     }
     return s;
