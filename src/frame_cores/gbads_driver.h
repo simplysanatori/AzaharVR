@@ -53,7 +53,7 @@ public:
     /// The Secondary Screen's next page, or its other view. Not bound to anything. Any thread; from
     /// the next frame. With a profile's `views` or `onPress` it is the only way there; other pages
     /// turn by themselves, and go on doing so.
-    void TurnPage() {
+    void TurnPage() override {
         page_asked.store(true, std::memory_order_relaxed);
     }
 
