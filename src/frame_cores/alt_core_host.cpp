@@ -149,10 +149,6 @@ struct AltCoreHost::Impl {
             .string();
     }
 
-    std::string AutosavePath() const {
-        return (std::filesystem::path(paths.state_dir) / (rom_stem + ".autosave.state")).string();
-    }
-
     void ExecuteSingleFrameLocked(double& frame_time_ms_out) {
         Common::AltCore::InputState in{};
         {
@@ -416,11 +412,9 @@ void AltCoreHost::Stop() {
     }
 
     if (was_running) {
-        // Persist autosave state and flush battery SRAM before tearing down the core
         {
             std::lock_guard lock(impl->core_mutex);
             if (impl->core) {
-                impl->core->SaveStateToFile(impl->AutosavePath());
                 impl->core->FlushBatterySave();
             }
         }
@@ -564,26 +558,6 @@ bool AltCoreHost::LoadSlot(int slot) {
         return false;
     }
     const bool ok = impl->core->LoadStateFromFile(impl->SlotPath(slot));
-    if (ok) {
-        impl->audio.Flush();
-    }
-    return ok;
-}
-
-bool AltCoreHost::SaveAutosave() {
-    std::lock_guard lock(impl->core_mutex);
-    if (!impl->core) {
-        return false;
-    }
-    return impl->core->SaveStateToFile(impl->AutosavePath());
-}
-
-bool AltCoreHost::LoadAutosave() {
-    std::lock_guard lock(impl->core_mutex);
-    if (!impl->core) {
-        return false;
-    }
-    const bool ok = impl->core->LoadStateFromFile(impl->AutosavePath());
     if (ok) {
         impl->audio.Flush();
     }
@@ -802,8 +776,6 @@ bool AltCoreHost::HandleMenuCommand(AltMenuCommand command, int value, const std
         return ImportSave(text);
     case AltMenuCommand::SetGbaSlotRom:
         return SetGbaSlotRom(text);
-    case AltMenuCommand::LoadAutosave:
-        return LoadAutosave();
     case AltMenuCommand::RewindStep:
         return RewindStep();
     }

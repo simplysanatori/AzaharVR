@@ -67,8 +67,7 @@ enum class AltMenuCommand : int {
     AddCheat = 8,      ///< `text`: "name\ncode" or raw code
     ImportSave = 9,    ///< `text`: path to .sav file
     SetGbaSlotRom = 10,///< `text`: path to .gba ROM (empty to eject)
-    LoadAutosave = 11,
-    RewindStep = 12,   ///< Step back one rewind snapshot (GBA/GB/GBC)
+    RewindStep = 11,   ///< Step back one rewind snapshot (GBA/GB/GBC)
 };
 
 /**
@@ -76,7 +75,7 @@ enum class AltMenuCommand : int {
  * during active play or constructed standalone in headless unit tests.
  *
  * Manages core selection, XR frame pacing, Vulkan::AltXrRenderer presentation,
- * AudioResampler output, controller/touch input delivery, save states, autosaves,
+ * AudioResampler output, controller/touch input delivery, save states,
  * rewind, cheats, and clean teardown back to 3DS defaults.
  */
 class AltCoreHost {
@@ -100,8 +99,8 @@ public:
     bool Boot(const std::string& rom_path, const std::string& data_dir,
               bool headless_for_test = false, const CoreBootOptions& opts = {});
 
-    /// Stops emulation cleanly, writes an autosave state, flushes battery SRAM,
-    /// tears down audio/renderer/core, and resets XrPacer & capabilities to N3DS.
+    /// Stops emulation cleanly, flushes battery SRAM, tears down audio/renderer/core, and
+    /// resets XrPacer & capabilities to N3DS.
     void Stop();
 
     bool IsRunning() const;
@@ -132,8 +131,6 @@ public:
     bool QuickLoad();
     bool SaveSlot(int slot);
     bool LoadSlot(int slot);
-    bool SaveAutosave();
-    bool LoadAutosave();
     std::vector<SaveSlotInfo> ListSaveSlots() const;
     bool ImportSave(const std::string& sav_path);
 

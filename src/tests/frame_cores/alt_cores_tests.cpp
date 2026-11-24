@@ -503,6 +503,35 @@ TEST_CASE("A game does not start without its renderer", "[frame_cores]") {
     host.Stop();
 }
 
+TEST_CASE("Stopping a game gives the 3DS its state back and writes no state", "[frame_cores]") {
+    TempDir tmp("stop");
+    const fs::path rom_path = tmp.path / "hb.nds";
+    WriteFile(rom_path, MakeHomebrewNdsRom(false));
+
+    Common::AltCore::Capabilities caps = Common::AltCore::Capabilities::ForN3DS();
+    bool sink = false, running = false;
+    FrameCores::HostCallbacks cb{};
+    cb.on_capabilities = [&](const Common::AltCore::Capabilities& c) { caps = c; };
+    cb.on_input_sink = [&](Common::AltCore::InputSink s) { sink = static_cast<bool>(s); };
+    cb.on_game_running = [&](bool on) { running = on; };
+    FrameCores::AltCoreHost host;
+    host.SetCallbacks(cb);
+    REQUIRE(host.Boot(rom_path.string(), (tmp.path / "data").string(), /*headless_for_test=*/true));
+    CHECK(caps.kind == Common::AltCore::CoreKind::NDS);
+    CHECK(sink);
+    CHECK(running);
+    host.SetTouchEnabled(false);
+    REQUIRE(host.StepFrames(5));
+    host.Stop();
+
+    CHECK(caps.kind == Common::AltCore::CoreKind::N3DS);
+    CHECK(caps.screens.top_stereo);
+    CHECK(!sink);
+    CHECK(!running);
+    CHECK(Common::XrPacer::Get().emu_frame_us.load() == Common::XrPacer::kEmuFrameUs);
+    CHECK(fs::is_empty(tmp.path / "data" / "ds" / "states"));
+}
+
 TEST_CASE("Touch Screen Input off is the DS's only", "[frame_cores]") {
     using Common::AltCore::Capabilities;
     using Common::AltCore::TouchEnabled;
