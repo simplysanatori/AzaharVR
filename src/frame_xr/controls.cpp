@@ -315,6 +315,11 @@ bool VrUi::Create(Runtime& rt) {
     if (!actions_ok) {
         LOG_ERROR(Frontend, "xr: controller actions unavailable; no VR input");
     }
+    if (rt.HasExtension(XR_EXT_HAND_TRACKING_EXTENSION_NAME)) { // AzaharFrame kiu140
+        hand_joints.Create(rt.instance, rt.system, rt.session,
+                           rt.HasExtension(XR_EXT_HAND_TRACKING_DATA_SOURCE_EXTENSION_NAME),
+                           rt.HasExtension(XR_EXT_HAND_JOINTS_MOTION_RANGE_EXTENSION_NAME));
+    }
 
     uploader.Init(rt.vulkan->Device(), rt.vulkan->PhysicalDevice(), rt.vulkan->QueueFamily(),
                   rt.queue_lock);
@@ -371,6 +376,7 @@ void VrUi::DestroyXr() {
     mouse_pointer.Reset();
     InputCommon::FrameXr::SetVrMouseOwned(false);
     uploader.Shutdown();
+    hand_joints.Destroy(); // AzaharFrame kiu140: before the session goes
     actions.Destroy();
     actions_ok = false;
     picker_shown = false;
@@ -1498,6 +1504,10 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
     const bool have_input = focused && actions_ok &&
                             actions.Sync(info.session, info.local_space, info.display_time, in, true,
                                          info.display_period); // AzaharFrame ctrlglitch
+    if (have_input && pit_arm_hand >= 0) { // AzaharFrame kiu140: the arm's fingers
+        hand_joints.Locate(pit_arm_hand, info.local_space, info.display_time,
+                           in.joints[static_cast<std::size_t>(pit_arm_hand)]);
+    }
     // AzaharVR: the controller scheme of the profile in use, looked up when it changes (PC
     // builds; the Frame's build keeps the Frame's scheme whatever the profile).
     if (rt.profile_changes != profile_changes_seen) {

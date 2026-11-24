@@ -95,6 +95,8 @@ public:
         /// its fingers from what the controller feels; drawn while the weapon is in the other.
         bool pit_arm = false;
         PitHandInputs pit;
+        bool pit_tracked = false; ///< the runtime has the fingers' joints: `pit_joints`, not `pit`
+        std::array<PitJointPose, kPitXrJoints> pit_joints{};
     };
 
     /// XR thread, each frame while models are wanted (anything shown or not): reads the files

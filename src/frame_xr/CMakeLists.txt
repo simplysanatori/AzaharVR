@@ -45,6 +45,8 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     xr_loader.h
     # Controller input (input): actions, mapping, bridge to input_common.
     input/actions.cpp
+    input/hand_joints.cpp # AzaharFrame kiu140
+    input/hand_joints.h
     input/actions.h
     input/controls.h
     input/default_bindings.h

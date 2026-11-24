@@ -1116,6 +1116,14 @@ void Visuals::Frame(Runtime& rt, const FrameInfo& info, Where where, const Windo
                        .thumb_stick = std::hypot(held.stick.x, held.stick.y) > 0.1f ||
                                       held.stick_click,
                        .thumb_rest = held.thumb_touch};
+            // The runtime's own finger joints go before them.
+            const Input::TrackedJoints& joints = in.joints[static_cast<std::size_t>(h)];
+            out.pit_tracked = out.pit_arm && joints.active;
+            for (std::size_t j = 0; out.pit_tracked && j < joints.joint.size(); j++) {
+                const Input::Posef& p = joints.joint[j];
+                out.pit_joints[j] = {{p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w},
+                                     {p.position.x, p.position.y, p.position.z}};
+            }
         }
     } else if (ControllerModelsWanted(Settings::values.vr_show_controllers.GetValue(),
                                       passthrough_shown)) {

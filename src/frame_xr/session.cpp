@@ -18,6 +18,7 @@
 #include "common/frame_flat.h"
 #include "common/frame_test_switches.h" // AzaharFrame integ9
 #include "common/stall_telemetry.h"     // AzaharFrame bfidr
+#include "frame_xr/input/hand_joints.h"
 #include "frame_xr/controls.h"
 #include "frame_xr/screen_handover.h" // AzaharFrame flash3
 #include "frame_xr/session.h"
@@ -203,6 +204,12 @@ bool Runtime::CreateXrInstance(bool renew) {
         enabled_extensions = {XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME};
         for (const auto& name : start_options.optional_extensions) {
             if (offers(name) && !HasExtension(name.c_str())) {
+                enabled_extensions.push_back(name);
+            }
+        }
+        // AzaharFrame kiu140: the finger joints' extensions, with their test switch alone.
+        for (const char* name : Input::HandJoints::kExtensions) {
+            if (Input::HandJoints::Wanted() && offers(name) && !HasExtension(name)) {
                 enabled_extensions.push_back(name);
             }
         }

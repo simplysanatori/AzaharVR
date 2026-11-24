@@ -53,12 +53,20 @@ struct HandInput {
     bool aim_locked = false;
 };
 
+/// AzaharFrame kiu140: one hand's finger joints (OpenXR's 26, in its order), in the base space.
+struct TrackedJoints {
+    static constexpr int kCount = 26;
+    bool active = false;
+    std::array<Posef, kCount> joint;
+};
+
 /// Everything the controllers report in one display frame. A and B and X and Y and Menu are on the
 /// right controller; the D-pad and View are on the left one.
 struct InputFrame {
     /// Predicted display time in nanoseconds (XrTime). Only differences are used.
     int64_t time_ns = 0;
     std::array<HandInput, kNumHands> hand;
+    std::array<TrackedJoints, kNumHands> joints; ///< AzaharFrame kiu140: the arm's hand only
     /// The head (view space) pose in the base (LOCAL) space, when it is located this frame. Only
     /// the Headset choice of Motion Controls reads it.
     bool head_active = false;

@@ -634,6 +634,7 @@ struct ControllerModels::Gpu {
         std::array<vk::Buffer, 2> vertices;  ///< each hand's own
         std::array<float*, 2> map{};         ///< (written when that hand's pose changes)
         uint32_t body_indices = 0, all_indices = 0;
+        bool see_through = false; ///< its surface image fades somewhere (the elbow's end)
         vk::DescriptorPool pool;
         vk::DescriptorSet set;
         vk::Sampler sampler;
@@ -2645,7 +2646,8 @@ void RecordPit(vk::CommandBuffer& c, GpuT& g, const Mat& model, const Mat& view_
     pc.params = {0.0f, 1.0f, std::clamp(fade, 0.0f, 1.0f), mirrored ? 1.0f : 0.0f};
     pc.mvp = Multiply(view_proj, model);
     c.bindPipeline(vk::PipelineBindPoint::eGraphics,
-                   fade < 0.999f && g.pipeline_pit_fade ? g.pipeline_pit_fade : g.pipeline_pit);
+                   (fade < 0.999f || g.pit.see_through) && g.pipeline_pit_fade ? g.pipeline_pit_fade
+                                                                               : g.pipeline_pit);
     c.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g.pipeline_layout, 0, g.pit.set, {});
     c.bindVertexBuffers(0, g.pit.vertices[static_cast<std::size_t>(h)], vk::DeviceSize{0});
     c.bindIndexBuffer(g.pit.indices, 0, vk::IndexType::eUint32);
@@ -3297,6 +3299,9 @@ void ControllerModels::MakePit() {
                                                     vk::BufferUsageFlagBits::eIndexBuffer, p.indices));
         std::copy(m.indices.begin(), m.indices.end(), indices);
         p.body_indices = m.body_index_count;
+        for (std::size_t t = 2; t < m.surface.size() && !p.see_through; t += 4) {
+            p.see_through = m.surface[t] < 255;
+        }
         p.all_indices = m.body_index_count + m.plate_index_count;
 
         vk::Buffer staging;
@@ -3359,7 +3364,11 @@ void ControllerModels::SkinPit(const std::array<Hand, 2>& hands) {
                              ? std::min(static_cast<float>(now - pit_time_ns[h]) * 1e-9f, 0.1f)
                              : 0.0f;
         pit_time_ns[h] = now;
-        const PitHandPose target = PitHandPoseFromInputs(hands[h].pit, PitHandGrasp::Free);
+        const bool left = h == static_cast<std::size_t>(Input::HandIndex(Input::Hand::Left));
+        const PitHandPose target =
+            hands[h].pit_tracked
+                ? PitHandPoseFromJoints(hands[h].pit_joints, !left, 0.0f) // our palm's own shape
+                : PitHandPoseFromInputs(hands[h].pit, PitHandGrasp::Free);
         pit_pose[h] = pit_posed[h] ? PitHandEase(pit_pose[h], target, dt) : target;
         pit_posed[h] = true;
         const PitVec3 elbow = arm_draws[h].pit_elbow ? arm_draws[h].elbow : pit_model->elbow;

@@ -22,6 +22,7 @@
 #include "frame_xr/frame_xr.h"
 #include "frame_xr/immersive_layout.h" // 1.2.0 fix lane B: Layout::ScaleChord
 #include "frame_xr/input/actions.h"
+#include "frame_xr/input/hand_joints.h"
 #include "frame_xr/kiu_first_person.h" // AzaharFrame kiupanel: Hand
 #include "frame_xr/input/chord_latch.h"
 #include "frame_xr/input/flat_vr_hold.h" // AzaharFrame flat
@@ -300,6 +301,7 @@ private:
     /// AzaharFrame kiupanel: the switch on in Angel's Aim this frame; the aim held while the
     /// beam is on the wrist screen, and the ray it holds (the last one published unheld).
     bool wrist_wanted = false;
+    Input::HandJoints hand_joints; ///< AzaharFrame kiu140
     int pit_arm_hand = -1; ///< AzaharFrame kiu140: the hand Pit's Arm was last drawn on (-1: none)
     Vis::WristAimHold wrist_aim_hold;
     Kiu::FirstPerson::Hand wrist_held_hand;
