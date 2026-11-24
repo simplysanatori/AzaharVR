@@ -50,7 +50,7 @@ public:
         return false;
     }
 
-    /// The Secondary Screen's next page, or its other view. Not bound to anything. Any thread; from
+    /// The Secondary Screen's next page, or its other view (BtnTurnPage). Any thread; from
     /// the next frame. With a profile's `views` or `onPress` it is the only way there; other pages
     /// turn by themselves, and go on doing so.
     void TurnPage() override {
