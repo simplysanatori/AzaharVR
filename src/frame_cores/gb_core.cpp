@@ -447,31 +447,6 @@ bool GbCore::LoadStateFromMemory(const uint8_t* data, std::size_t size) {
     return false;
 }
 
-bool GbCore::SaveStateToFile(const std::string& path) {
-    std::vector<uint8_t> buf;
-    if (!SaveStateToMemory(buf)) {
-        return false;
-    }
-    return AtomicWriteBytes(path, buf.data(), buf.size());
-}
-
-bool GbCore::LoadStateFromFile(const std::string& path) {
-    std::ifstream in(path, std::ios::binary | std::ios::ate);
-    if (!in) {
-        return false;
-    }
-    const auto sz = static_cast<std::size_t>(in.tellg());
-    if (sz == 0) {
-        return false;
-    }
-    std::vector<uint8_t> buf(sz);
-    in.seekg(0, std::ios::beg);
-    if (!in.read(reinterpret_cast<char*>(buf.data()), static_cast<std::streamsize>(sz))) {
-        return false;
-    }
-    return LoadStateFromMemory(buf.data(), buf.size());
-}
-
 std::vector<CheatEntry> GbCore::ListCheats() const {
     return impl->custom_cheats;
 }

@@ -69,8 +69,6 @@ public:
 
     virtual bool SaveStateToMemory(std::vector<uint8_t>& out) = 0;
     virtual bool LoadStateFromMemory(const uint8_t* data, std::size_t size) = 0;
-    virtual bool SaveStateToFile(const std::string& path) = 0;
-    virtual bool LoadStateFromFile(const std::string& path) = 0;
 
     virtual bool ImportBatterySave(const std::string& /*sav_path*/) {
         return false;

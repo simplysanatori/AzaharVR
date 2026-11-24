@@ -41,8 +41,6 @@ public:
 
     bool SaveStateToMemory(std::vector<uint8_t>& out) override;
     bool LoadStateFromMemory(const uint8_t* data, std::size_t size) override;
-    bool SaveStateToFile(const std::string& path) override;
-    bool LoadStateFromFile(const std::string& path) override;
 
     bool ImportBatterySave(const std::string& sav_path) override;
 

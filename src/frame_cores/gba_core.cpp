@@ -464,45 +464,6 @@ bool GbaCore::LoadStateFromMemory(const uint8_t* data, std::size_t size) {
     return ok;
 }
 
-bool GbaCore::SaveStateToFile(const std::string& path) {
-    if (!impl->loaded || path.empty()) {
-        return false;
-    }
-    EnsureDir(std::filesystem::path(path).parent_path().string());
-    const std::string tmp = path + ".tmp";
-    if (!emu_state_save_file(&impl->emu, tmp.c_str())) {
-        std::error_code ec;
-        std::filesystem::remove(tmp, ec);
-        return false;
-    }
-    std::error_code ec;
-    if (std::filesystem::exists(path, ec)) {
-        std::filesystem::rename(path, path + ".bak", ec);
-        ec.clear();
-    }
-    std::filesystem::rename(tmp, path, ec);
-    if (ec) {
-        std::filesystem::remove(tmp, ec);
-        return false;
-    }
-    return true;
-}
-
-bool GbaCore::LoadStateFromFile(const std::string& path) {
-    if (!impl->loaded || path.empty()) {
-        return false;
-    }
-    if (impl->mapcap) {
-        mapcap_cancel(impl->mapcap);
-    }
-    const bool ok = emu_state_load_file(&impl->emu, path.c_str());
-    if (ok) {
-        impl->last_room_key = 0;
-        impl->last_map_req_frame = 0;
-    }
-    return ok;
-}
-
 bool GbaCore::ImportBatterySave(const std::string& sav_path) {
     if (!impl->loaded || sav_path.empty() || impl->save_path.empty()) {
         return false;

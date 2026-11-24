@@ -713,22 +713,6 @@ bool NdsCore::LoadStateFromMemory(const uint8_t* data, std::size_t size) {
     return ok;
 }
 
-bool NdsCore::SaveStateToFile(const std::string& path) {
-    std::vector<uint8_t> buf;
-    if (!SaveStateToMemory(buf)) {
-        return false;
-    }
-    return AtomicWriteFile(path, buf.data(), buf.size(), true);
-}
-
-bool NdsCore::LoadStateFromFile(const std::string& path) {
-    std::vector<uint8_t> buf;
-    if (!ReadWholeFile(path, buf)) {
-        return false;
-    }
-    return LoadStateFromMemory(buf.data(), buf.size());
-}
-
 bool NdsCore::ImportBatterySave(const std::string& sav_path) {
     if (!impl->loaded || !impl->nds || sav_path.empty()) {
         return false;
