@@ -231,6 +231,10 @@ enum Values {
 
     // AzaharVR: not on a 3DS: DS games' Microphone Blow.
     MicBlow,
+    // AzaharVR: PokeDaisy's quick menu (GBA and Game Boy games).
+    QuickMenu,
+    // AzaharVR: Turn Secondary Screen Page (GBA games).
+    TurnPage,
 
     NumButtons,
 };
@@ -267,6 +271,8 @@ static const std::array<const char*, NumButtons> mapping = {{
     "button_home",
     "button_power",
     "button_mic_blow",
+    "button_quick_menu",
+    "button_turn_page",
 }};
 
 } // namespace NativeButton

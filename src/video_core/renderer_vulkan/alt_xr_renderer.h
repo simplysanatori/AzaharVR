@@ -19,6 +19,10 @@ struct AltScreenImage {
     uint32_t height = 0;
     uint32_t stride_pixels = 0;       ///< 0 means tightly packed (= width)
     bool bgra = false;                ///< True for melonDS BGRA8888 buffers
+
+    bool HasPicture() const {
+        return pixels != nullptr && width > 0 && height > 0;
+    }
 };
 
 /**
@@ -50,10 +54,11 @@ public:
     bool NeedsPresent() const;
 
     /// Uploads and submits one frame. `secondary` may have pixels == nullptr when no secondary
-    /// screen is active. With `skippable` (fast forward) the window may miss frames its display
-    /// could not show anyway.
+    /// screen is active. `overlay` (premultiplied alpha, RGBA) covers the whole Primary Screen as
+    /// it is shown, whatever its size; without a picture nothing is drawn for it. With `skippable`
+    /// (fast forward) the window may miss frames its display could not show anyway.
     bool Present(const AltScreenImage& primary, const AltScreenImage& secondary,
-                 bool skippable = false);
+                 const AltScreenImage& overlay = {}, bool skippable = false);
 
     bool IsReady() const;
 

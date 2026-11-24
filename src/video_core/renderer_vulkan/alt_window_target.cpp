@@ -6,11 +6,11 @@
 #include <cstring>
 #include <string_view>
 
-#include "common/assert.h"
 #include "common/frame_flat.h"
 #include "common/settings.h"
 #include "core/frontend/emu_window.h"
 #include "video_core/host_shaders/vulkan_present_frag.h"
+#include "video_core/renderer_vulkan/alt_pipeline.h"
 #include "video_core/renderer_vulkan/alt_present.h"
 #include "video_core/renderer_vulkan/alt_window_target.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
@@ -27,12 +27,12 @@ constexpr int kSecondary = 2;
 } // Anonymous namespace
 
 AltWindowTarget::AltWindowTarget(Frontend::EmuWindow& window_, const Instance& instance_,
-                                 Scheduler& scheduler_, vk::ShaderModule vertex_shader,
+                                 Scheduler& scheduler_, vk::ShaderModule vertex_shader_,
                                  vk::PipelineLayout pipeline_layout_)
-    : window{window_}, instance{instance_}, scheduler{scheduler_},
+    : window{window_}, instance{instance_}, scheduler{scheduler_}, vertex_shader{vertex_shader_},
       pipeline_layout{pipeline_layout_}, present_window{window, instance, scheduler,
                                                         IsLowRefreshRate()} {
-    BuildPipeline(vertex_shader);
+    BuildPipeline();
 }
 
 AltWindowTarget::~AltWindowTarget() {
@@ -46,116 +46,34 @@ AltWindowTarget::~AltWindowTarget() {
     }
     device.destroyPipeline(pipeline);
     device.destroyShaderModule(fragment_shader);
+    device.destroyPipeline(overlay_pipeline); // null: none was made
+    device.destroyShaderModule(overlay_shader);
 }
 
-void AltWindowTarget::BuildPipeline(vk::ShaderModule vertex_shader) {
+void AltWindowTarget::BuildPipeline() {
     const vk::Device device = instance.GetDevice();
     const std::string_view preamble =
         instance.IsImageArrayDynamicIndexSupported() ? "#define ARRAY_DYNAMIC_INDEX" : "";
     fragment_shader = Compile(HostShaders::VULKAN_PRESENT_FRAG, vk::ShaderStageFlagBits::eFragment,
                               device, preamble);
 
-    const vk::VertexInputBindingDescription binding = {
-        .binding = 0,
-        .stride = sizeof(AltScreenVertex),
-        .inputRate = vk::VertexInputRate::eVertex,
-    };
-    const std::array attributes = {
-        vk::VertexInputAttributeDescription{
-            .location = 0,
-            .binding = 0,
-            .format = vk::Format::eR32G32Sfloat,
-            .offset = offsetof(AltScreenVertex, x),
-        },
-        vk::VertexInputAttributeDescription{
-            .location = 1,
-            .binding = 0,
-            .format = vk::Format::eR32G32Sfloat,
-            .offset = offsetof(AltScreenVertex, u),
-        },
-    };
-    const vk::PipelineVertexInputStateCreateInfo vertex_input = {
-        .vertexBindingDescriptionCount = 1,
-        .pVertexBindingDescriptions = &binding,
-        .vertexAttributeDescriptionCount = static_cast<u32>(attributes.size()),
-        .pVertexAttributeDescriptions = attributes.data(),
-    };
-    const vk::PipelineInputAssemblyStateCreateInfo input_assembly = {
-        .topology = vk::PrimitiveTopology::eTriangleStrip,
-    };
-    const vk::PipelineRasterizationStateCreateInfo raster_state = {
-        .cullMode = vk::CullModeFlagBits::eNone,
-        .frontFace = vk::FrontFace::eClockwise,
-        .lineWidth = 1.0f,
-    };
-    const vk::PipelineMultisampleStateCreateInfo multisampling = {
-        .rasterizationSamples = vk::SampleCountFlagBits::e1,
-    };
-    // The second screen's opacity (Custom Layout) is the blend constant.
-    const vk::PipelineColorBlendAttachmentState blend = {
-        .blendEnable = true,
-        .srcColorBlendFactor = vk::BlendFactor::eConstantAlpha,
-        .dstColorBlendFactor = vk::BlendFactor::eOneMinusConstantAlpha,
-        .colorBlendOp = vk::BlendOp::eAdd,
-        .srcAlphaBlendFactor = vk::BlendFactor::eConstantAlpha,
-        .dstAlphaBlendFactor = vk::BlendFactor::eOneMinusConstantAlpha,
-        .alphaBlendOp = vk::BlendOp::eAdd,
-        .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-                          vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
-    };
-    const vk::PipelineColorBlendStateCreateInfo color_blending = {
-        .attachmentCount = 1,
-        .pAttachments = &blend,
-    };
-    const vk::PipelineViewportStateCreateInfo viewport_info = {
-        .viewportCount = 1,
-        .scissorCount = 1,
-    };
-    const std::array dynamic_states = {
-        vk::DynamicState::eBlendConstants,
-        vk::DynamicState::eViewport,
-        vk::DynamicState::eScissor,
-    };
-    const vk::PipelineDynamicStateCreateInfo dynamic_info = {
-        .dynamicStateCount = static_cast<u32>(dynamic_states.size()),
-        .pDynamicStates = dynamic_states.data(),
-    };
-    const vk::PipelineDepthStencilStateCreateInfo depth_info = {
-        .depthCompareOp = vk::CompareOp::eAlways,
-    };
-    const std::array stages = {
-        vk::PipelineShaderStageCreateInfo{
-            .stage = vk::ShaderStageFlagBits::eVertex,
-            .module = vertex_shader,
-            .pName = "main",
-        },
-        vk::PipelineShaderStageCreateInfo{
-            .stage = vk::ShaderStageFlagBits::eFragment,
-            .module = fragment_shader,
-            .pName = "main",
-        },
-    };
-    const vk::GraphicsPipelineCreateInfo pipeline_info = {
-        .stageCount = static_cast<u32>(stages.size()),
-        .pStages = stages.data(),
-        .pVertexInputState = &vertex_input,
-        .pInputAssemblyState = &input_assembly,
-        .pViewportState = &viewport_info,
-        .pRasterizationState = &raster_state,
-        .pMultisampleState = &multisampling,
-        .pDepthStencilState = &depth_info,
-        .pColorBlendState = &color_blending,
-        .pDynamicState = &dynamic_info,
-        .layout = pipeline_layout,
-        .renderPass = present_window.Renderpass(),
-    };
-    const auto [result, built] = device.createGraphicsPipeline({}, pipeline_info);
-    ASSERT_MSG(result == vk::Result::eSuccess, "Unable to build the window's pipeline");
-    pipeline = built;
+    pipeline = BuildAltPipeline(device, vertex_shader, fragment_shader, pipeline_layout,
+                                present_window.Renderpass(), true);
 }
 
-void AltWindowTarget::Draw(StreamBuffer& vertex_buffer, vk::DescriptorSet screens) {
-    DrawLayout(window.GetFramebufferLayout(), vertex_buffer, screens);
+void AltWindowTarget::BuildOverlayPipeline() {
+    const vk::Device device = instance.GetDevice();
+    overlay_shader = Compile(kAltOverlayFrag, vk::ShaderStageFlagBits::eFragment, device);
+    overlay_pipeline = BuildAltPipeline(device, vertex_shader, overlay_shader, pipeline_layout,
+                                        present_window.Renderpass(), true);
+}
+
+void AltWindowTarget::Draw(StreamBuffer& vertex_buffer, vk::DescriptorSet screens,
+                           bool overlay) {
+    if (overlay && !overlay_pipeline) {
+        BuildOverlayPipeline();
+    }
+    DrawLayout(window.GetFramebufferLayout(), vertex_buffer, screens, overlay);
 }
 
 void AltWindowTarget::Clear(StreamBuffer& vertex_buffer, vk::DescriptorSet screens) {
@@ -163,7 +81,7 @@ void AltWindowTarget::Clear(StreamBuffer& vertex_buffer, vk::DescriptorSet scree
     layout.top_screen_enabled = false;
     layout.bottom_screen_enabled = false;
     layout.additional_screen_enabled = false;
-    DrawLayout(layout, vertex_buffer, screens);
+    DrawLayout(layout, vertex_buffer, screens, false);
 }
 
 bool AltWindowTarget::Resized() const {
@@ -172,7 +90,8 @@ bool AltWindowTarget::Resized() const {
 }
 
 void AltWindowTarget::DrawLayout(const Layout::FramebufferLayout& layout,
-                                 StreamBuffer& vertex_buffer, vk::DescriptorSet screens) {
+                                 StreamBuffer& vertex_buffer, vk::DescriptorSet screens,
+                                 bool overlay) {
     drawn_width = layout.width;
     drawn_height = layout.height;
     Frame* const frame = present_window.GetRenderFrame();
@@ -214,7 +133,18 @@ void AltWindowTarget::DrawLayout(const Layout::FramebufferLayout& layout,
 
     const auto top = [&](const Common::Rectangle<u32>& rect) {
         if (layout.top_screen_enabled) {
+            const auto bind = [this](vk::Pipeline to) {
+                scheduler.Record([to](vk::CommandBuffer cmdbuf) {
+                    cmdbuf.bindPipeline(vk::PipelineBindPoint::eGraphics, to);
+                });
+            };
+            if (overlay) {
+                bind(overlay_pipeline);
+            }
             DrawScreen(layout, vertex_buffer, kPrimary, rect, layout.top_opacity);
+            if (overlay) {
+                bind(pipeline);
+            }
         }
     };
     const auto bottom = [&](const Common::Rectangle<u32>& rect) {
@@ -266,20 +196,7 @@ void AltWindowTarget::DrawScreen(const Layout::FramebufferLayout& layout,
     info.screen_id_r = screen_id;
 
     for (int eye = 0; eye < (both_halves ? 2 : 1); eye++, x += half) {
-        // Upright (not is_rotated): turned 90 degrees anticlockwise, as the 3DS's screens.
-        const std::array<AltScreenVertex, 4> vertices =
-            layout.is_rotated ? std::array<AltScreenVertex, 4>{{
-                                    {x, y, 0.0f, 0.0f},
-                                    {x + w, y, 1.0f, 0.0f},
-                                    {x, y + h, 0.0f, 1.0f},
-                                    {x + w, y + h, 1.0f, 1.0f},
-                                }}
-                              : std::array<AltScreenVertex, 4>{{
-                                    {x, y, 1.0f, 0.0f},
-                                    {x + w, y, 1.0f, 1.0f},
-                                    {x, y + h, 0.0f, 0.0f},
-                                    {x + w, y + h, 0.0f, 1.0f},
-                                }};
+        const auto vertices = AltScreenQuad(x, y, w, h, layout.is_rotated);
         const u32 size = static_cast<u32>(sizeof(vertices));
         auto [data, offset, invalidate] = vertex_buffer.Map(size, 16);
         static_cast<void>(invalidate);

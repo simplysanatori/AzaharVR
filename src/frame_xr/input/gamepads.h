@@ -335,7 +335,7 @@ std::array<bool, kNumPadInputs> FrameAsPad(const InputFrame& frame);
 // ---- Mapping file -----------------------------------------------------------------------
 
 /// user/controller-mappings.txt: one line per gamepad model with a mapping of its own,
-///   <key> buttons=<18 values> analogs=<2 values> vendor=<hex> product=<hex> name=<name>
+///   <key> buttons=<21 values> analogs=<2 values> vendor=<hex> product=<hex> name=<name>
 /// values comma separated (PadInput / PadStick numbers), -1 for none; the name runs to the end
 /// of the line. Lines starting with # are comments. AzaharFrame padsui: the mouse is the line
 /// "mouse" (MouseInputs), with touch=, menu=, mode=, speed= (Cursor Speed, 0 to 4); recentre=0

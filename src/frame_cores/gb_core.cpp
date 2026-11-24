@@ -454,6 +454,10 @@ void GbCore::SetEditing(bool on) {
     impl->driver.SetEditing(on);
 }
 
+void GbCore::TurnPage() {
+    impl->driver.TurnPage();
+}
+
 std::vector<CheatEntry> GbCore::ListCheats() const {
     return impl->custom_cheats;
 }

@@ -53,8 +53,10 @@ public:
     void AfterStateLoad();
     /// Off until told; a driver made again (Import Save) goes on with it.
     void SetEditing(bool on);
+    void TurnPage();
 
-    /// Calls of RunFrame that did not step exactly once (a step outside RunFrame is one too).
+    /// Calls of RunFrame that did not step exactly once, or in a held frame did (a step outside
+    /// RunFrame is one too).
     uint64_t Missteps() const {
         return missteps;
     }

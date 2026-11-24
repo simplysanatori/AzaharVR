@@ -43,6 +43,8 @@ const std::array<int, Settings::NativeButton::NumButtons> QtConfig::default_butt
     Qt::Key_F, Qt::Key_H, Qt::Key_Q, Qt::Key_W, Qt::Key_M, Qt::Key_N,
     Qt::Key_O, Qt::Key_P, Qt::Key_1, Qt::Key_2, Qt::Key_B, Qt::Key_V,
     0, // AzaharVR: Microphone Blow is unbound
+    0, // AzaharVR: so are PokeDaisy's quick menu
+    0, // and Turn Secondary Screen Page
 };
 
 std::string QtConfig::DefaultButtonParam(int button) {

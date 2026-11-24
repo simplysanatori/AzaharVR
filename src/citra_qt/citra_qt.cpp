@@ -9259,7 +9259,7 @@ Core::Autosave::Gates GMainWindow::FrameAutosaveGates() const {
 #ifdef ENABLE_ALT_CORES
     if (AltGameRunning()) { // no shaders to wait for
         g.game = emulation_running;
-        g.paused = AltGamePaused();
+        g.paused = AltGamePaused() || alt_core_host->IsHeld();
         g.playing = !g.paused;
         g.frames_recent = alt_core_host->FramesRecent();
         g.loading_state = alt_core_host->StatesBusy();

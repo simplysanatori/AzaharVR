@@ -293,9 +293,9 @@ void DrawDs(Kit& kit, const DsDrawing& d, int lit) {
 
     // The chosen input: a ring in the primary colour.
     // padsui: the mouse's own targets are not on the 3DS (keys: nor the keyboard's modifier)
-    // (AzaharVR: nor Microphone Blow)
+    // (AzaharVR: nor Microphone Blow, PokeDaisy's quick menu and Turn Secondary Screen Page)
     if (lit >= 0 && !Remap::IsExtra(lit) && lit != DsButton::Modifier &&
-        lit != DsButton::MicBlow) {
+        lit != DsButton::MicBlow && lit != DsButton::QuickMenu && lit != DsButton::TurnPage) {
         const DsPoint c = d.Anchor(lit);
         const float r = d.Radius(lit) + 4.0f;
         kit.Stroke({c.x - r, c.y - r, c.x + r, c.y + r}, r, 2.0f, Tok::kPrimary);
@@ -411,6 +411,27 @@ void DrawDsGlyph(Kit& kit, const Rect& b, int target, uint32_t fg, uint32_t bg) 
         kit.Fill({cx - w, cy - r * 0.62f, cx + w, cy + r * 0.14f}, w, fg);
         kit.Line(cx, cy + r * 0.14f, cx, cy + r * 0.56f, 1.6f, fg);
         kit.Line(cx - r * 0.34f, cy + r * 0.56f, cx + r * 0.34f, cy + r * 0.56f, 1.6f, fg);
+        break;
+    }
+    case DsButton::QuickMenu: {
+        // AzaharVR: a ring of dots, as the menu's items.
+        kit.Dot(cx, cy, r, bg);
+        const float out = r * 0.56f, side = r * 0.49f, down = r * 0.28f, dot = r * 0.17f;
+        kit.Dot(cx, cy - out, dot, fg);
+        kit.Dot(cx, cy + out, dot, fg);
+        for (const float dx : {-side, side}) {
+            kit.Dot(cx + dx, cy - down, dot, fg);
+            kit.Dot(cx + dx, cy + down, dot, fg);
+        }
+        break;
+    }
+    case DsButton::TurnPage: {
+        // AzaharVR: a page, an arrow to the next on it.
+        kit.Dot(cx, cy, r, bg);
+        const float w = r * 0.42f, h = r * 0.54f, a = r * 0.22f;
+        kit.Stroke({cx - w, cy - h, cx + w, cy + h}, r * 0.12f, 1.4f, fg);
+        kit.Line(cx - a * 0.5f, cy - a, cx + a * 0.5f, cy, 1.4f, fg);
+        kit.Line(cx + a * 0.5f, cy, cx - a * 0.5f, cy + a, 1.4f, fg);
         break;
     }
     default:

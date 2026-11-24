@@ -36,6 +36,7 @@ struct DriverInput {
     bool touching = false;
     uint16_t touch_x = 0; ///< in the Secondary Screen's pixels
     uint16_t touch_y = 0;
+    bool quick_menu = false; ///< BtnQuickMenu, as held
 };
 
 /// A picture the driver owns, valid until its next RunFrame. RGBA8888, alpha set.
@@ -49,9 +50,13 @@ struct DriverPicture {
 struct DriverFrame {
     DriverPicture primary;   ///< the game
     DriverPicture secondary; ///< none: no Secondary Screen now
-    DriverPicture overlay;   ///< drawn over the Primary Screen on its own layer, with alpha
+    /// Over the whole Primary Screen, at any size; its alpha is premultiplied. None: no layer.
+    DriverPicture overlay;
     std::vector<int16_t> audio_pcm; ///< interleaved stereo
     float rumble = 0.0f;
+    /// No frame was run, on purpose (a menu of the driver's holds the game): services.step was not
+    /// called, the game stands still.
+    bool held = false;
 };
 
 /// What the core gives a driver. Never used by two threads at once: from the thread that calls
@@ -61,7 +66,8 @@ struct DriverServices {
     mCore* core = nullptr;
     Emu* emu = nullptr; ///< GBA: gba-ds's wrapper of `core`
     /// One emulated frame with these keys, as the core's own path runs it. A driver calls this
-    /// exactly once in RunFrame; the core counts the frames and logs anything else. It calls
+    /// exactly once in RunFrame (never in one that is DriverFrame::held); the core counts the
+    /// frames and logs anything else. It calls
     /// core->runFrame: a driver that hooks that puts the core's own back around this.
     std::function<void(uint32_t keys)> step;
     /// The sound made since the last call.
@@ -104,10 +110,17 @@ public:
     /// Allow Game Editing. Off (as a driver starts), the driver never writes to the game. Between
     /// frames.
     virtual void SetEditing(bool /*on*/) {}
+    /// The Secondary Screen's next page, for a driver that has some. Any thread; from the next
+    /// frame.
+    virtual void TurnPage() {}
     /// The size of the Secondary Screen the driver draws, {0, 0} for none.
     virtual std::pair<uint32_t, uint32_t> SecondarySize() const = 0;
     /// Read when the game is loaded.
     virtual bool HasTouch() const = 0;
+    /// DriverInput::quick_menu means something. Read when the game is loaded.
+    virtual bool HasQuickMenu() const {
+        return false;
+    }
 };
 
 /// Which of the driver and the second screen a game uses, from the player's choice. A choice the

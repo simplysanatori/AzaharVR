@@ -22,8 +22,9 @@ public:
     AltWindowTarget& operator=(const AltWindowTarget&) = delete;
 
     /// Draws and queues one frame. `screens` has the Primary Screen at 0 and the Secondary Screen
-    /// at 2, as the 3DS's have them.
-    void Draw(StreamBuffer& vertex_buffer, vk::DescriptorSet screens);
+    /// at 2, as the 3DS's have them. `overlay`: the Primary Screen has an overlay over it, at
+    /// kAltOverlaySlot.
+    void Draw(StreamBuffer& vertex_buffer, vk::DescriptorSet screens, bool overlay);
 
     /// Queues an empty frame: the window while the headset shows the screens.
     void Clear(StreamBuffer& vertex_buffer, vk::DescriptorSet screens);
@@ -33,18 +34,22 @@ public:
 
 private:
     void DrawLayout(const Layout::FramebufferLayout& layout, StreamBuffer& vertex_buffer,
-                    vk::DescriptorSet screens);
+                    vk::DescriptorSet screens, bool overlay);
     void DrawScreen(const Layout::FramebufferLayout& layout, StreamBuffer& vertex_buffer,
                     int screen_id, const Common::Rectangle<u32>& rect, float opacity);
-    void BuildPipeline(vk::ShaderModule vertex_shader);
+    void BuildPipeline();
+    void BuildOverlayPipeline();
 
     Frontend::EmuWindow& window;
     const Instance& instance;
     Scheduler& scheduler;
+    vk::ShaderModule vertex_shader; ///< outlives this
     vk::PipelineLayout pipeline_layout;
     PresentWindow present_window;
     vk::ShaderModule fragment_shader{};
     vk::Pipeline pipeline{};
+    vk::ShaderModule overlay_shader{}; ///< both made with the first overlay
+    vk::Pipeline overlay_pipeline{};
     u32 drawn_width = 0;
     u32 drawn_height = 0;
 };

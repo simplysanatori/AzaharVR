@@ -145,6 +145,9 @@ public:
 
     void Pause(bool paused);
     bool IsPaused() const;
+    /// The game stands still behind a menu of its driver's (FrameOutput::held): as paused, but the
+    /// frames go on being shown.
+    bool IsHeld() const;
 
     /// Draws the last frame again, for a paused game whose window or layout changed.
     void Redraw();
@@ -212,6 +215,8 @@ public:
 
     void SetSolarLevel(int level);
     void SetEditing(bool on);
+    /// The Secondary Screen's next page, from the next frame. BtnTurnPage does it too.
+    void TurnPage();
     void SetMicBlow(bool on);
     void SetLidClosed(bool closed);
     void SetTouchEnabled(bool on);

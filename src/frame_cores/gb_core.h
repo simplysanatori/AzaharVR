@@ -45,6 +45,7 @@ public:
     bool StateSafeNow() const override;
     void AfterStateLoad() override;
     void SetEditing(bool on) override;
+    void TurnPage() override;
 
     bool ImportBatterySave(const std::string& sav_path) override;
 

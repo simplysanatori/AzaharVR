@@ -17,6 +17,7 @@
 #include "core/frontend/alt_screens.h"
 #include "core/frontend/emu_window.h"
 #include "video_core/host_shaders/vulkan_present_vert.h"
+#include "video_core/renderer_vulkan/alt_pipeline.h"
 #include "video_core/renderer_vulkan/alt_present.h"
 #include "video_core/renderer_vulkan/alt_window_target.h"
 #include "video_core/renderer_vulkan/alt_xr_renderer.h"
@@ -47,6 +48,10 @@ public:
 constexpr std::array<vk::DescriptorSetLayoutBinding, 1> kPresentBindings = {{
     {0, vk::DescriptorType::eCombinedImageSampler, 3, vk::ShaderStageFlagBits::eFragment},
 }};
+
+bool EncodesSrgb(vk::Format format) {
+    return format == vk::Format::eR8G8B8A8Srgb || format == vk::Format::eB8G8R8A8Srgb;
+}
 
 constexpr u32 kVertexBufferSize = sizeof(AltScreenVertex) * 1024;
 constexpr u64 kUploadBufferSize = 16ULL * 1024 * 1024;
@@ -88,9 +93,12 @@ struct AltXrRenderer::Impl {
     std::array<vk::Sampler, 2> samplers{};
     ScreenTexture primary_tex{};
     ScreenTexture secondary_tex{};
+    ScreenTexture overlay_tex{};
     ScreenTexture dummy_tex{};
     std::unique_ptr<XrPresentTarget> xr_target;
     u64 xr_target_generation = 0;
+    vk::ShaderModule overlay_shader{}; ///< both made for xr_target with the first overlay
+    vk::Pipeline overlay_pipeline{};
     Frontend::EmuWindow* window = nullptr;
     Frontend::EmuWindow* secondary_window = nullptr;
     std::unique_ptr<AltWindowTarget> window_target;
@@ -105,24 +113,28 @@ struct AltXrRenderer::Impl {
     }
 
     /// Both screens' newest pictures, for the present shader. A screen that has none is black; one
-    /// that stops being sent keeps its last.
-    vk::DescriptorSet CommitScreens(vk::ImageView secondary_view) {
+    /// that stops being sent keeps its last. `overlay`: the overlay is at kAltOverlaySlot, always
+    /// smooth (its pixels are no multiple of the screen's).
+    vk::DescriptorSet CommitScreens(vk::ImageView secondary_view, bool overlay) {
         const vk::Sampler sampler = samplers[!Settings::values.filter_mode.GetValue()];
         const vk::DescriptorSet set = present_heap->Commit();
         const std::array views = {primary_tex.view, primary_tex.view, secondary_view};
         for (u32 i = 0; i < views.size(); i++) {
+            const bool over = overlay && i == kAltOverlaySlot;
+            const vk::ImageView view = over ? overlay_tex.view : views[i];
             update_queue->AddImageSampler(set, 0, static_cast<u8>(i),
-                                          views[i] ? views[i] : dummy_tex.view, sampler,
+                                          view ? view : dummy_tex.view,
+                                          over ? samplers[0] : sampler,
                                           vk::ImageLayout::eShaderReadOnlyOptimal);
         }
         update_queue->Flush();
         return set;
     }
 
-    void PresentToWindow() {
+    void PresentToWindow(bool overlay) {
         const auto start = std::chrono::steady_clock::now();
-        const vk::DescriptorSet screens = CommitScreens(secondary_tex.view);
-        window_target->Draw(*vertex_buffer, screens);
+        const vk::DescriptorSet screens = CommitScreens(secondary_tex.view, overlay);
+        window_target->Draw(*vertex_buffer, screens, overlay);
         const auto game = Layout::GetAltScreens();
         if (secondary_window && !sink && game && game->HasBottom() &&
             Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows) {
@@ -131,7 +143,7 @@ struct AltXrRenderer::Impl {
                     *secondary_window, *instance, *scheduler, present_vertex_shader,
                     *present_pipeline_layout);
             }
-            secondary_target->Draw(*vertex_buffer, screens);
+            secondary_target->Draw(*vertex_buffer, screens, overlay);
         }
         window_presented = std::chrono::steady_clock::now();
         if (sink) {
@@ -150,7 +162,7 @@ struct AltXrRenderer::Impl {
             return;
         }
         window_presented = now;
-        window_target->Clear(*vertex_buffer, CommitScreens(secondary_tex.view));
+        window_target->Clear(*vertex_buffer, CommitScreens(secondary_tex.view, false));
     }
 
     void LimitFramesAheadOfGpu() {
@@ -228,7 +240,8 @@ struct AltXrRenderer::Impl {
         return true;
     }
 
-    bool UploadImage(ScreenTexture& tex, const AltScreenImage& img) {
+    /// `see_through`: with the picture's own alpha (RGBA), else opaque.
+    bool UploadImage(ScreenTexture& tex, const AltScreenImage& img, bool see_through = false) {
         if (!EnsureTexture(tex, img.width, img.height)) {
             return false;
         }
@@ -251,6 +264,8 @@ struct AltXrRenderer::Impl {
                     row[x] = ((p & 0x00FF0000u) >> 16) | (p & 0x0000FF00u) |
                              ((p & 0x000000FFu) << 16) | 0xFF000000u;
                 }
+            } else if (see_through) {
+                std::memcpy(row, src, img.width * sizeof(u32));
             } else {
                 for (u32 x = 0; x < img.width; ++x) {
                     row[x] = src[x] | 0xFF000000u;
@@ -312,16 +327,41 @@ struct AltXrRenderer::Impl {
         return true;
     }
 
+    bool UploadOverlay(const AltScreenImage& overlay) {
+        return overlay.HasPicture() && UploadImage(overlay_tex, overlay, true);
+    }
+
+    /// The overlay's pipeline for xr_target's images.
+    vk::Pipeline OverlayPipeline() {
+        if (!overlay_pipeline) {
+            const vk::Device device = instance->GetDevice();
+            const bool srgb = EncodesSrgb(static_cast<vk::Format>(sink->SwapchainFormat()));
+            overlay_shader = Compile(kAltOverlayFrag, vk::ShaderStageFlagBits::eFragment, device,
+                                     srgb ? "#define OVERLAY_SRGB_TARGET\n" : "");
+            overlay_pipeline =
+                BuildAltPipeline(device, present_vertex_shader, overlay_shader,
+                                 *present_pipeline_layout, xr_target->RenderPass(), false);
+        }
+        return overlay_pipeline;
+    }
+
+    /// With what was made for it; its destructor waits for the GPU.
+    void DropXrTarget() {
+        xr_target.reset();
+        if (overlay_pipeline) {
+            const vk::Device device = instance->GetDevice();
+            device.destroyPipeline(overlay_pipeline);
+            device.destroyShaderModule(overlay_shader);
+            overlay_pipeline = nullptr;
+            overlay_shader = nullptr;
+        }
+    }
+
     void DrawQuad(const XrPresentTarget::Target& target, vk::DescriptorSet present_set,
-                  u32 screen_id, u32 src_w, u32 src_h, int layer_flags) {
+                  vk::Pipeline pipe, u32 screen_id, u32 src_w, u32 src_h, int layer_flags) {
         const float w = static_cast<float>(target.width);
         const float h = static_cast<float>(target.height);
-        const std::array<AltScreenVertex, 4> vertices = {{
-            {0.0f, 0.0f, 0.0f, 0.0f},
-            {w, 0.0f, 1.0f, 0.0f},
-            {0.0f, h, 0.0f, 1.0f},
-            {w, h, 1.0f, 1.0f},
-        }};
+        const auto vertices = AltScreenQuad(0.0f, 0.0f, w, h, true);
         const u32 size = static_cast<u32>(sizeof(AltScreenVertex) * vertices.size());
         auto [data, offset, invalidate] = vertex_buffer->Map(size, 16);
         static_cast<void>(invalidate);
@@ -340,7 +380,6 @@ struct AltXrRenderer::Impl {
         info.layer = layer_flags;
 
         const vk::RenderPass rp = xr_target->RenderPass();
-        const vk::Pipeline pipe = xr_target->Pipeline();
         const vk::PipelineLayout layout = *present_pipeline_layout;
         const vk::Buffer vbuf = vertex_buffer->Handle();
 
@@ -404,7 +443,7 @@ struct AltXrRenderer::Impl {
 
     void Shutdown() {
         ready = false;
-        xr_target.reset();
+        DropXrTarget();
         window_target.reset();
         secondary_target.reset();
         previous_frame_tick = 0;
@@ -417,6 +456,7 @@ struct AltXrRenderer::Impl {
         }
         DestroyTexture(primary_tex);
         DestroyTexture(secondary_tex);
+        DestroyTexture(overlay_tex);
         DestroyTexture(dummy_tex);
         if (instance) {
             const vk::Device device = instance->GetDevice();
@@ -582,7 +622,7 @@ bool AltXrRenderer::NeedsPresent() const {
 }
 
 bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage& secondary,
-                            bool skippable) {
+                            const AltScreenImage& overlay, bool skippable) {
     if (!impl || !impl->ready || !primary.pixels || primary.width == 0 || primary.height == 0) {
         return false;
     }
@@ -599,12 +639,12 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
             (secondary.pixels && !impl->UploadImage(impl->secondary_tex, secondary))) {
             return false;
         }
-        impl->PresentToWindow();
+        impl->PresentToWindow(impl->UploadOverlay(overlay));
         return true;
     }
     VideoCore::XrScreenSink* const sink = impl->sink;
     if (impl->xr_target && impl->xr_target_generation != sink->SwapchainGeneration()) {
-        impl->xr_target.reset();
+        impl->DropXrTarget();
     }
     if (!impl->xr_target) {
         sink->SetTopStereo(false);
@@ -639,8 +679,11 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
         return false;
     }
 
-    const vk::DescriptorSet present_set =
-        impl->CommitScreens(has_secondary ? impl->secondary_tex.view : vk::ImageView{});
+    const bool has_overlay = impl->UploadOverlay(overlay);
+    const vk::Pipeline plain = impl->xr_target->Pipeline();
+    const vk::Pipeline top = has_overlay ? impl->OverlayPipeline() : plain;
+    const vk::DescriptorSet present_set = impl->CommitScreens(
+        has_secondary ? impl->secondary_tex.view : vk::ImageView{}, has_overlay);
 
     Common::XrPacer::Get().game_swaps.fetch_add(1, std::memory_order_relaxed);
 
@@ -650,8 +693,8 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
         return false;
     }
 
-    impl->DrawQuad(targets[static_cast<std::size_t>(VideoCore::XrScreen::TopLeft)], present_set, 0,
-                   primary.width, primary.height, 0);
+    impl->DrawQuad(targets[static_cast<std::size_t>(VideoCore::XrScreen::TopLeft)], present_set,
+                   top, 0, primary.width, primary.height, 0);
     impl->ClearTarget(targets[static_cast<std::size_t>(VideoCore::XrScreen::TopRight)]);
     if (has_secondary) {
         const float dim = sink->ScreenDim(VideoCore::XrScreen::Bottom);
@@ -660,7 +703,7 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
             (dim < 1.0f ? std::clamp(static_cast<int>(dim * 1000.0f + 0.5f), 1, 999) : 0) +
             1000 * (alpha < 1.0f ? std::clamp(static_cast<int>(alpha * 1000.0f + 0.5f), 1, 999) : 0);
         impl->DrawQuad(targets[static_cast<std::size_t>(VideoCore::XrScreen::Bottom)], present_set,
-                       2, secondary.width, secondary.height, layer_flags);
+                       plain, 2, secondary.width, secondary.height, layer_flags);
     } else {
         impl->ClearTarget(targets[static_cast<std::size_t>(VideoCore::XrScreen::Bottom)]);
     }

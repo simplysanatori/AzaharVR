@@ -655,6 +655,31 @@ TEST_CASE("Gamepads: stick routes", "[frame_xr]") {
     old.Parse("o buttons=-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 analogs=1,0 "
               "vendor=0 product=0 name=x\n");
     REQUIRE(old.Find("o", 0, 0, "")->mapping.analogs == AnalogTable{1, 0});
+    // AzaharVR: from before the quick menu and Turn Secondary Screen Page (19 values): both are
+    // on nothing.
+    MappingFile before;
+    before.Parse("b buttons=1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4 analogs=1,0 "
+                 "vendor=0 product=0 name=x\n");
+    const ButtonTable kept = before.Find("b", 0, 0, "")->mapping.buttons;
+    REQUIRE(kept[NB::A] == 1);
+    REQUIRE(kept[NB::MicBlow] == 4);
+    REQUIRE(kept[NB::QuickMenu] == -1);
+    REQUIRE(kept[NB::TurnPage] == -1);
+    REQUIRE(kept.size() == 21);
+    // A pad's own press of it reaches the game without a Frame control.
+    ThreeDsPadState quick{};
+    quick.buttons[NB::QuickMenu] = true;
+    ControlState pressed;
+    MergeIntoFrame(quick, routes, pressed); // none to a control
+    REQUIRE(pressed.quick_menu);
+    REQUIRE_FALSE(pressed.mic_blow);
+    REQUIRE_FALSE(pressed.turn_page);
+    ThreeDsPadState turn{};
+    turn.buttons[NB::TurnPage] = true;
+    ControlState turned;
+    MergeIntoFrame(turn, routes, turned);
+    REQUIRE(turned.turn_page);
+    REQUIRE_FALSE(turned.quick_menu);
     MappingFile third;
     third.Parse("t buttons=-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 analogs=2,0 "
                 "vendor=0 product=0 name=x\n");

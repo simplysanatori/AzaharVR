@@ -191,6 +191,8 @@ void PadState::SetControls(const ControlState& controls) {
                                                    std::memory_order_relaxed);
     }
     mic_blow_.store(controls.mic_blow, std::memory_order_relaxed);
+    quick_menu_.store(controls.quick_menu, std::memory_order_relaxed);
+    turn_page_.store(controls.turn_page, std::memory_order_relaxed);
 }
 
 void PadState::ReleaseAll() {
@@ -215,6 +217,8 @@ ControlState PadState::Snapshot() const {
         state.sticks[static_cast<std::size_t>(i)] = {x, y};
     }
     state.mic_blow = mic_blow_.load(std::memory_order_relaxed);
+    state.quick_menu = quick_menu_.load(std::memory_order_relaxed);
+    state.turn_page = turn_page_.load(std::memory_order_relaxed);
     return state;
 }
 

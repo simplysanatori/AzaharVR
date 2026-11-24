@@ -107,6 +107,8 @@ struct ControlState {
     std::array<Vec2f, kNumAnalogControls> sticks{};
     /// AzaharVR: another device's Microphone Blow, which no control here drives.
     bool mic_blow = false;
+    bool quick_menu = false; ///< AzaharVR: the same of PokeDaisy's quick menu
+    bool turn_page = false;  ///< AzaharVR: and of Turn Secondary Screen Page
 
     bool Get(Control control) const {
         return buttons[static_cast<std::size_t>(control)];

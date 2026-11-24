@@ -150,12 +150,13 @@ TEST_CASE("Remap: a gamepad's triggers, paddles and stick clicks can be used", "
 
 TEST_CASE("Remap: only the 3DS's own buttons can listen", "[frame_xr]") {
     Remap r = Started();
-    for (const int b : std::initializer_list<int>{12, 13, 17, -1, 19, 31, 34}) { // Debug, GPIO14, Power
+    for (const int b : std::initializer_list<int>{12, 13, 17, -1, 21, 31, 34}) { // Debug, GPIO14, Power
         REQUIRE_FALSE(Remap::Editable(b));
         REQUIRE(r.Choose(b) == Remap::Event::None);
         REQUIRE(r.Listening() == -1);
     }
-    for (const int b : {B::A, B::Up, B::L, B::ZR, B::Start, B::Select, B::Home, B::MicBlow}) {
+    for (const int b : {B::A, B::Up, B::L, B::ZR, B::Start, B::Select, B::Home, B::MicBlow,
+                        B::QuickMenu, B::TurnPage}) {
         REQUIRE(Remap::Editable(b));
     }
     // A press while nothing listens does nothing.

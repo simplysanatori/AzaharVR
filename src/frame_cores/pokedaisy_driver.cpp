@@ -39,6 +39,7 @@
 // PokeDaisy's headers have no extern "C" of their own.
 extern "C" {
 #include "3ds/core/pd_canvas.h"
+#include "3ds/core/pd_font.h"
 #include "3ds/core/pd_game.h"
 #include "3ds/core/pd_romart.h"
 #include "3ds/core/pd_settings.h"
@@ -54,6 +55,8 @@ extern "C" {
 #include "linux/field_items.h"
 #include "linux/fly.h"
 #include "linux/gb_field.h"
+#include "linux/hud.h"
+#include "linux/quick_menu.h"
 }
 
 namespace FrameCores {
@@ -126,6 +129,21 @@ bool StateSafe(const Pending& p) {
     return !(p.asked || p.step || p.job || p.keys || p.flight || p.closing);
 }
 
+bool HoldsFrame(bool menu_open, const Pending& p) {
+    return menu_open && !(p.asked || p.step || p.job || p.keys || p.closing);
+}
+
+std::vector<int> MenuItems(const std::vector<Quick>& all, bool editing) {
+    std::vector<int> items;
+    for (std::size_t i = 0; i < all.size(); ++i) {
+        const Need need = NeedOf(AskOfItem(all[i]));
+        if (need == Need::Nothing || (need == Need::Editing && editing)) {
+            items.push_back(static_cast<int>(i));
+        }
+    }
+    return items;
+}
+
 bool TouchEdges::Next(bool touching, int x, int y, Event& event) {
     if (touching) {
         held = true;
@@ -156,6 +174,23 @@ constexpr uint32_t kHeight = 160;
 /// How long Closing waits for a Game Boy game's encounters to be put back. Past it they come back
 /// with the next map.
 constexpr int kGbWildWait = 600;
+/// pd_session.c's HUD_AFTER_FRAMES.
+constexpr int kHudAfterFrames = 20;
+
+static_assert(static_cast<int>(Quick::Pc) == QUICK_PC && static_cast<int>(Quick::Fly) == QUICK_FLY &&
+              static_cast<int>(Quick::Repel) == QUICK_REPEL &&
+              static_cast<int>(Quick::Bike) == QUICK_BIKE &&
+              static_cast<int>(Quick::Wild) == QUICK_WILD &&
+              static_cast<int>(Quick::SaveState) == QUICK_SAVE_STATE &&
+              static_cast<int>(Quick::LoadState) == QUICK_LOAD_STATE &&
+              static_cast<int>(Quick::Ff) == QUICK_FF &&
+              static_cast<int>(Quick::Companion) == QUICK_COMPANION &&
+              static_cast<int>(Quick::Hud) == QUICK_HUD &&
+              static_cast<int>(Quick::Flash) == QUICK_FLASH &&
+              static_cast<int>(Quick::Flight) == QUICK_FLIGHT &&
+              static_cast<int>(Quick::Land) == QUICK_LAND &&
+              static_cast<int>(Quick::Count) == QUICK_COUNT);
+static_assert(PD_TOP_W == 400 && PD_TOP_H == 240); // OverlayWidth
 
 class Driver;
 
@@ -185,7 +220,6 @@ void HoldSettings(pd_settings& s) {
     s.gameSpeed = 0;
     std::fill(std::begin(s.sceneSpeed), std::end(s.sceneSpeed), 0);
     s.flyClassic = true; // the scenic FLY runs at double speed
-    s.hud = false;
     s.showPerf = false;
     s.cheats = false;
     s.rewind = false;
@@ -395,7 +429,8 @@ public:
 
         s.host.hasStates = false;
         s.host.hasExpand = s.host.expandGame = false;
-        s.host.hasHud = s.host.hasPerf = false;
+        s.host.hasPerf = false;
+        s.host.hasQuickMenu = true; // RING or GRID
         s.host.hasFlightArea = false; // it would show FLY STYLE
         s.host.fullSettings = false;
         s.host.frontendOwnsPlayback = true;
@@ -438,6 +473,7 @@ public:
         pk_field_wild(0, false);
         pk_field_configure(0);
         pk_rest_reset();
+        quick_set_grid(false);
         pd_mixer_release(core);
         pd_mixer_mixes = 0;
         pd_items_setup(nullptr, nullptr, 0);
@@ -462,7 +498,11 @@ public:
         input.stickAngle = -1;
         keys_before = in.keys;
         s.ffToggled = false;
-        Tick(input);
+        Menu(in.quick_menu && !quick_before, input);
+        quick_before = in.quick_menu;
+        // PokeDaisy's own hosts let the game run on behind the menu.
+        out.held = HoldsFrame(s.quickOpen || input.quickMenu, Underway());
+        Tick(input, out.held);
 
         if (gate.Closing() && !StepOut()) {
             gate.StepsDone();
@@ -484,10 +524,14 @@ public:
             std::transform(canvas_px.begin(), canvas_px.end(), secondary.begin(), CanvasToRgba);
         }
         out.secondary = {secondary.data(), PD_UI_WIDTH, PD_UI_HEIGHT, PD_UI_WIDTH};
-        out.overlay = {}; // quick menu, HUD and notices: a later lane, from pd_session_overlay
+        Overlay(out);
 
         Drain(out.audio_pcm);
         out.rumble = services.rumble ? services.rumble() : 0.0f;
+        if (out.held) {
+            out.audio_pcm.clear(); // calls into the game make some
+            out.rumble = 0.0f;
+        }
     }
 
     void Reset() override {
@@ -497,15 +541,7 @@ public:
     }
 
     bool StateSafeNow() const override {
-        Pending p;
-        p.asked = s.flyAsk || s.flashAsk || s.flightAsk || s.scenicAsk || s.itemAsk || s.boxAsk ||
-                  s.swapAsk || s.evolveAsk || s.ui.action != PD_ACTION_NONE;
-        p.step = s.flyStage || s.tmStage;
-        p.job = s.job != PD_JOB_NONE;
-        p.keys = s.gameKeyFrames > 0;
-        p.flight = InFlight();
-        p.closing = gate.Closing();
-        return StateSafe(p);
+        return StateSafe(Underway());
     }
 
     void AfterStateLoad() override {
@@ -541,6 +577,10 @@ public:
     }
 
     bool HasTouch() const override {
+        return true;
+    }
+
+    bool HasQuickMenu() const override {
         return true;
     }
 
@@ -703,8 +743,24 @@ private:
 
     // The frame
 
-    void Tick(const pd_input& input) {
-        stepped = false;
+    Pending Underway() const {
+        Pending p;
+        p.asked = s.flyAsk || s.flashAsk || s.flightAsk || s.scenicAsk || s.itemAsk || s.boxAsk ||
+                  s.swapAsk || s.evolveAsk || s.ui.action != PD_ACTION_NONE;
+        p.step = s.flyStage || s.tmStage;
+        p.job = s.job != PD_JOB_NONE;
+        p.keys = s.gameKeyFrames > 0;
+        p.flight = InFlight();
+        p.closing = gate.Closing();
+        return p;
+    }
+
+    /// `hold`: a tick without a frame.
+    void Tick(const pd_input& input, bool hold) {
+        stepped = hold; // the hook's step and the one below are taken
+        if (hold) {
+            s.speedDebt = -4; // a frame's worth: the session runs none
+        }
         run_frame = core->runFrame;
         core->runFrame = &Hook;
         const bool seal = !gate.Open();
@@ -716,6 +772,9 @@ private:
             Unseal();
         }
         core->runFrame = run_frame;
+        if (hold) {
+            s.speedDebt = 0;
+        }
         if (!stepped) {
             LOG_ERROR(Core, "PokeDaisy: a tick without a frame");
             stepped = true;
@@ -798,6 +857,216 @@ private:
         }
         const unsigned rate = core->audioSampleRate(core);
         pcm.resize(AudioKept(total, rate ? rate : 32768u) * 2);
+    }
+
+    // The quick menu. The session runs it; what it takes is the gate's, and this is where that is
+    // decided, before its tick. Open, editing is on and the save backed up.
+
+    void Menu(bool pressed, pd_input& input) {
+        if (s.quickOpen && !gate.Editing()) {
+            CloseMenu();
+        }
+        if (pressed) {
+            if (!s.quickOpen) {
+                if (!gate.Admit()) { // all of it edits
+                    pd_session_show(&s, item_reason(ITEM_FAILED));
+                    return;
+                }
+                ApplyGate();
+            }
+            input.quickMenu = true;
+            return;
+        }
+        if (!s.quickOpen) {
+            return;
+        }
+        if (s.flyList || s.repelList) {
+            if (s.repelList && s.repelSel >= RepelKinds()) {
+                s.repelList = false; // used up behind it
+            }
+            if ((input.down & PD_KEY_A) && !MayRun(s.flyList ? Ask::FlyTo : Ask::Repel)) {
+                input.down &= ~static_cast<uint32_t>(PD_KEY_A);
+            }
+            return;
+        }
+        // The session would step over the items it has and the menu has not.
+        const std::vector<int> items = Items();
+        const int dx = ((input.down & PD_KEY_RIGHT) ? 1 : 0) - ((input.down & PD_KEY_LEFT) ? 1 : 0);
+        const int dy = ((input.down & PD_KEY_DOWN) ? 1 : 0) - ((input.down & PD_KEY_UP) ? 1 : 0);
+        input.down &=
+            ~static_cast<uint32_t>(PD_KEY_UP | PD_KEY_DOWN | PD_KEY_LEFT | PD_KEY_RIGHT);
+        if (items.empty()) {
+            input.down &= ~static_cast<uint32_t>(PD_KEY_A);
+            return;
+        }
+        int at = Selected(items);
+        if (dx || dy) {
+            quick_set_grid(live.quickGrid);
+            at = quick_step(static_cast<int>(items.size()), at, dx, dy, OverlayWidth(width, height),
+                            PD_TOP_H);
+        }
+        s.quickSel = items[static_cast<std::size_t>(at)];
+        const quick_item& item = s.quick[s.quickSel];
+        if ((input.down & PD_KEY_A) && !item.why &&
+            !MayRun(AskOfItem(static_cast<Quick>(item.action)))) {
+            input.down &= ~static_cast<uint32_t>(PD_KEY_A);
+        }
+    }
+
+    bool MayRun(Ask ask) {
+        if (ask != Ask::Toggle &&
+            (s.job != PD_JOB_NONE || s.flyAsk || s.flyStage || s.tmStage)) {
+            pd_session_show(&s, item_reason(ITEM_NOT_NOW)); // one at a time, as in Do
+            return false;
+        }
+        return gate.Allows(ask);
+    }
+
+    int RepelKinds() const {
+        return static_cast<int>(
+            std::count_if(std::begin(repel_kinds), std::end(repel_kinds),
+                          [this](const auto& kind) { return bag_count(&s.shown, kind[0]) > 0; }));
+    }
+
+    std::vector<int> Items() const {
+        std::vector<Quick> all;
+        for (int i = 0; i < s.quickCount; ++i) {
+            all.push_back(static_cast<Quick>(s.quick[i].action));
+        }
+        return MenuItems(all, gate.Editing());
+    }
+
+    /// The session's selection among `items`.
+    int Selected(const std::vector<int>& items) const {
+        const auto it = std::find(items.begin(), items.end(), s.quickSel);
+        return it == items.end() ? 0 : static_cast<int>(it - items.begin());
+    }
+
+    void CloseMenu() {
+        if (s.quickOpen) {
+            s.quickHeld |= keys_before; // pressed for the menu, kept from the game until let go
+        }
+        s.quickOpen = s.flyList = s.repelList = false;
+    }
+
+    /// The menu, the HUD and notices: what pd_session's own overlay has, on a canvas as wide as the
+    /// game's picture. The session's is 400 wide for a screen that is, and puts the notices, the
+    /// lists and two of the HUD's layouts beside the picture too.
+    void Overlay(DriverFrame& out) {
+        const bool menu = s.quickOpen;
+        const bool in_air = s.hudFieldFrames == 0 && s.flightState != PK_FLIGHT_IDLE &&
+                            !(live.hudHidden & (1 << PD_HUD_MAP));
+        const bool hud =
+            !menu && live.hud && s.game.cfg && (s.hudFieldFrames >= kHudAfterFrames || in_air);
+        const bool notice = s.noticeFrames > 0;
+        if (!menu && !hud && !notice) {
+            overlay_drawn = false;
+            return;
+        }
+        const int w = OverlayWidth(width, height);
+        pd_settings hud_settings{};
+        hud_state state{};
+        uint32_t key = static_cast<uint32_t>(w);
+        if (hud) {
+            hud_settings = live;
+            if (in_air) {
+                hud_settings.hudHidden = ~(1 << PD_HUD_MAP);
+            }
+            state = s.hud;
+            state.compact = state.noButtons = true;
+            state.wild = state.focus = -1;
+            state.left = 0;
+            state.right = w;
+            key = key * 31 + hud_key(&s.game, &s.shown, &state, &hud_settings) + (in_air ? 2u : 1u);
+        }
+        for (const char* p = notice ? s.notice : ""; *p; ++p) {
+            key = key * 33 + static_cast<uint8_t>(*p);
+        }
+        if (!overlay_drawn || menu || key != overlay_key) {
+            overlay_shown = DrawOverlay(w, menu, hud ? &state : nullptr, hud_settings, notice);
+            overlay_drawn = !menu;
+            overlay_key = key;
+        }
+        if (overlay_shown) {
+            out.overlay = {overlay.data(), static_cast<uint32_t>(w), PD_TOP_H,
+                           static_cast<uint32_t>(w)};
+        }
+    }
+
+    bool DrawOverlay(int w, bool menu, const hud_state* hud, const pd_settings& hud_settings,
+                     bool notice) {
+        pd_canvas c{};
+        pd_canvas_init(&c, w, PD_TOP_H, overlay_px.data());
+        std::fill(overlay_px.begin(), overlay_px.end(), QUICK_CLEAR);
+        bool any = menu || notice;
+        // As the session: the menu and the HUD in PokeDaisy's font, notices in the game's.
+        const pd_glyph* game_font = nullptr;
+        int game_font_count = 0;
+        pd_font_get(&game_font, &game_font_count);
+        pd_font_set(nullptr, 0);
+        pd_font_size_set(1);
+        if (menu && s.flyList) {
+            quick_list_draw(&c, quick_label(QUICK_FLY), s.flyNames, s.flyTargets.count, s.flySel,
+                            live.hudLook);
+        } else if (menu && s.repelList) {
+            quick_list_draw(&c, quick_label(QUICK_REPEL), s.repelNames, s.repelKindCount,
+                            s.repelSel, live.hudLook);
+        } else if (menu) {
+            const std::vector<int> items = Items();
+            std::array<quick_item, QUICK_COUNT> tiles{};
+            for (std::size_t i = 0; i < items.size(); ++i) {
+                tiles[i] = s.quick[items[i]];
+            }
+            quick_set_grid(live.quickGrid);
+            quick_draw(&c, &s.game, tiles.data(), static_cast<int>(items.size()), Selected(items),
+                       live.hudLook);
+        } else if (hud) {
+            any |= hud_draw(&c, &s.game, &s.shown, hud, &hud_settings, nullptr);
+        }
+        pd_font_set(game_font, game_font_count);
+        if (notice) {
+            Notice(c);
+        }
+        quick_finish(&c);
+        if (any) {
+            std::transform(overlay_px.begin(), overlay_px.begin() + w * PD_TOP_H, overlay.begin(),
+                           [menu](uint32_t px) { return OverlayPixel(px, menu); });
+        }
+        return any;
+    }
+
+    /// Top right, as the session's; on two lines where the picture is too narrow for it.
+    void Notice(pd_canvas& c) const {
+        constexpr int kPad = 12;
+        constexpr int kMargin = 4;
+        constexpr int kLine = 16;
+        std::array<std::string, 2> lines{s.notice, ""};
+        int count = 1;
+        if (pd_text_width(s.notice) + kPad > c.w - 2 * kMargin) {
+            const std::string all = lines[0];
+            std::size_t cut = std::string::npos;
+            for (std::size_t i = all.find(' '); i != std::string::npos; i = all.find(' ', i + 1)) {
+                const auto off = [&all](std::size_t at) {
+                    return std::abs(static_cast<int>(at * 2) - static_cast<int>(all.size()));
+                };
+                if (cut == std::string::npos || off(i) < off(cut)) {
+                    cut = i;
+                }
+            }
+            if (cut != std::string::npos) {
+                lines = {all.substr(0, cut), all.substr(cut + 1)};
+                count = 2;
+            }
+        }
+        int w = 0;
+        for (int i = 0; i < count; ++i) {
+            w = std::max(w, pd_text_width(lines[i].c_str()) + kPad);
+        }
+        const int x = c.w - w - kMargin;
+        pd_round_rect(&c, x, kMargin, w, 18 + (count - 1) * kLine, 2, 0xB8121620u);
+        for (int i = 0; i < count; ++i) {
+            pd_text(&c, x + kPad / 2, kMargin + i * kLine, lines[i].c_str(), 0xF8F8F8, 0x303840);
+        }
     }
 
     // What the player does
@@ -956,6 +1225,7 @@ private:
 
     /// Asks and jobs that have not touched the game yet.
     void DropQueued() {
+        CloseMenu();
         s.flyAsk = s.flashAsk = s.flightAsk = s.scenicAsk = s.itemAsk = s.boxAsk = 0;
         s.flyFromMap = s.swapAsk = s.evolveAsk = false;
         if (s.flyStage == 1) {
@@ -1067,12 +1337,18 @@ private:
 
     TouchEdges touch;
     uint32_t keys_before = 0;
+    bool quick_before = false;
     uint32_t width = kWidth;
     uint32_t height = kHeight;
     std::array<uint32_t, kWidth * kHeight> video{};
     pd_canvas canvas{};
     std::array<uint32_t, PD_UI_WIDTH * PD_UI_HEIGHT> canvas_px{};
     std::array<uint32_t, PD_UI_WIDTH * PD_UI_HEIGHT> secondary{};
+    std::array<uint32_t, PD_TOP_W * PD_TOP_H> overlay_px{}; ///< PokeDaisy's, then `overlay`
+    std::array<uint32_t, PD_TOP_W * PD_TOP_H> overlay{};
+    uint32_t overlay_key = 0;
+    bool overlay_drawn = false; ///< `overlay` is what overlay_key names
+    bool overlay_shown = false; ///< with something on it
     std::array<int16_t, 4096 * 2> audio_scratch{};
 };
 
