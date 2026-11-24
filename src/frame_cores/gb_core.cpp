@@ -17,6 +17,7 @@
 
 #include "common/logging/log.h"
 #include "frame_cores/cheat_store.h"
+#include "frame_cores/driver_runner.h"
 #include "frame_cores/rom_info.h"
 
 extern "C" {
@@ -117,13 +118,37 @@ struct GbCore::Impl {
 
     uint32_t width = kGbWidth;
     uint32_t height = kGbHeight;
+    uint32_t stride = kGbWidth; ///< `fb`'s: what the driver wants
     uint32_t audio_rate = 32768;
-    uint32_t keys = 0;
 
     std::vector<mColor> fb;
-    std::vector<uint32_t> rgba_fb;
-    std::vector<int16_t> audio_scratch;
     GbRumbleWrapper rumble{};
+    Common::AltCore::InputState input{};
+    DriverRunner driver;
+
+    void StartDriver(DriverKind kind) {
+        DriverServices services;
+        services.core = core;
+        services.step = [this](uint32_t keys) {
+            // Bits 0..7 match GB_KEY_A..GB_KEY_DOWN 1:1; the GBA's R and L are none of them.
+            core->setKeys(core, keys & 0xFFu);
+            core->runFrame(core);
+        };
+        services.drain_audio = [this](int16_t* out, std::size_t max_frames) -> std::size_t {
+            mAudioBuffer* buffer = core->getAudioBuffer(core);
+            return buffer ? mAudioBufferRead(buffer, out, max_frames) : 0;
+        };
+        services.rumble = [this] { return rumble.level.load(std::memory_order_relaxed); };
+        services.picture = [this] {
+            return DriverPicture{fb.data(), width, height, stride}; // XBGR8888
+        };
+        services.rom_path = rom_path;
+        services.game_dir = paths.game_dir;
+
+        RomInfo info;
+        info.kind = Common::AltCore::CoreKind::GB;
+        driver.Start(kind, std::move(services), info, opts, save_path, caps);
+    }
 
     std::vector<CheatEntry> custom_cheats; ///< the cheats the player added (kept beside the save)
     std::string custom_cheats_path;
@@ -236,13 +261,13 @@ bool GbCore::Load(const std::string& rom_path, const CorePaths& paths,
     unsigned base_w = kGbWidth;
     unsigned base_h = kGbHeight;
     core->baseVideoSize(core, &base_w, &base_h);
-    const uint32_t alloc_w = std::max<uint32_t>(base_w, kGbWidth);
+    const DriverKind driver_kind = DriverRunner::Choose(opts, rom_path, /*gbads_known=*/false);
+    const uint32_t alloc_w =
+        DriverBufferWidth(driver_kind, std::max<uint32_t>(base_w, kGbWidth));
     const uint32_t alloc_h = std::max<uint32_t>(base_h, kGbHeight);
     impl->width = kGbWidth;
     impl->height = kGbHeight;
     impl->fb.assign(static_cast<std::size_t>(alloc_w) * alloc_h, 0);
-    impl->rgba_fb.assign(static_cast<std::size_t>(alloc_w) * alloc_h, 0xFF000000u);
-    impl->audio_scratch.resize(4096u * 2u, 0);
 
     core->setVideoBuffer(core, impl->fb.data(), alloc_w);
     core->setAudioBufferSize(core, 2048);
@@ -292,10 +317,11 @@ bool GbCore::Load(const std::string& rom_path, const CorePaths& paths,
     core->currentVideoSize(core, &cur_w, &cur_h);
     impl->width = cur_w > 0 ? cur_w : kGbWidth;
     impl->height = cur_h > 0 ? cur_h : kGbHeight;
-    core->setVideoBuffer(core, impl->fb.data(), impl->width);
+    impl->stride = DriverBufferWidth(driver_kind, impl->width);
+    core->setVideoBuffer(core, impl->fb.data(), impl->stride);
 
     impl->core = core;
-    impl->keys = 0;
+    impl->input = {};
     impl->caps.has_alt_cheats = true;
     impl->custom_cheats_path =
         (std::filesystem::path(paths.game_dir) / (stem + ".custom.cheats")).string();
@@ -308,6 +334,7 @@ bool GbCore::Load(const std::string& rom_path, const CorePaths& paths,
         static_cast<float>(impl->width) / static_cast<float>(impl->height);
     impl->caps.screens.touch_width = impl->width;
     impl->caps.screens.touch_height = impl->height;
+    impl->StartDriver(driver_kind);
 
     LOG_INFO(Core, "GbCore: loaded {} ({}x{}, rate={} Hz)", rom_path, impl->width, impl->height,
              impl->audio_rate);
@@ -318,6 +345,7 @@ void GbCore::Unload() {
     if (!impl) {
         return;
     }
+    impl->driver.Stop();
     if (impl->core) {
         impl->core->unloadROM(impl->core);
         mCoreConfigDeinit(&impl->core->config);
@@ -326,7 +354,6 @@ void GbCore::Unload() {
     }
     impl->custom_cheats.clear();
     impl->fb.clear();
-    impl->rgba_fb.clear();
     impl->rumble.level.store(0.0f, std::memory_order_relaxed);
 }
 
@@ -337,48 +364,15 @@ void GbCore::Reset() {
     impl->core->reset(impl->core);
     impl->rumble.level.store(0.0f, std::memory_order_relaxed);
     impl->ApplyCheats();
+    impl->driver.Reset();
 }
 
 void GbCore::SetInput(const Common::AltCore::InputState& input) {
-    // Common::AltCore::ButtonBit bits 0..7 match GB_KEY_A..GB_KEY_DOWN 1:1.
-    impl->keys = input.buttons & 0xFFu;
+    impl->input = input;
 }
 
 void GbCore::RunFrame(FrameOutput& out) {
-    out.primary = {};
-    out.secondary = {};
-    out.audio_pcm.clear();
-    out.rumble = 0.0f;
-    out.metrics_changed = false;
-
-    if (!impl->core) {
-        return;
-    }
-
-    impl->core->setKeys(impl->core, impl->keys);
-    impl->core->runFrame(impl->core);
-
-    const std::size_t n_pixels = static_cast<std::size_t>(impl->width) * impl->height;
-    for (std::size_t i = 0; i < n_pixels; ++i) {
-        impl->rgba_fb[i] = static_cast<uint32_t>(impl->fb[i]) | 0xFF000000u;
-    }
-
-    out.primary.pixels = impl->rgba_fb.data();
-    out.primary.width = impl->width;
-    out.primary.height = impl->height;
-    out.primary.stride_pixels = impl->width;
-    out.primary.bgra = false;
-
-    if (mAudioBuffer* ab = impl->core->getAudioBuffer(impl->core)) {
-        const std::size_t max_frames = impl->audio_scratch.size() / 2u;
-        const std::size_t got = mAudioBufferRead(ab, impl->audio_scratch.data(), max_frames);
-        if (got > 0) {
-            out.audio_pcm.assign(impl->audio_scratch.data(),
-                                 impl->audio_scratch.data() + got * 2u);
-        }
-    }
-
-    out.rumble = impl->rumble.level.load(std::memory_order_relaxed);
+    impl->driver.RunFrame(impl->input, out, impl->caps);
 }
 
 uint32_t GbCore::AudioSampleRate() const {
@@ -445,6 +439,14 @@ bool GbCore::LoadStateFromMemory(const uint8_t* data, std::size_t size) {
         return impl->core->loadState(impl->core, data);
     }
     return false;
+}
+
+bool GbCore::StateSafeNow() const {
+    return impl->driver.StateSafeNow();
+}
+
+void GbCore::AfterStateLoad() {
+    impl->driver.AfterStateLoad();
 }
 
 std::vector<CheatEntry> GbCore::ListCheats() const {

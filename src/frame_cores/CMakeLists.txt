@@ -5,6 +5,10 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     audio_resampler.h
     cheat_store.h
     core_backend.h
+    driver_runner.cpp
+    driver_runner.h
+    frame_driver.cpp
+    frame_driver.h
     gb_core.cpp
     gb_core.h
     gba_core.cpp

@@ -28,6 +28,7 @@
 #include "frame_cores/alt_core_host.h"
 #include "frame_cores/audio_resampler.h"
 #include "frame_cores/cheat_store.h"
+#include "frame_cores/frame_driver.h"
 #include "frame_cores/nds_core.h"
 #include "frame_cores/rom_info.h"
 
@@ -339,6 +340,88 @@ std::vector<uint8_t> ReadFile(const fs::path& p) {
                                 std::istreambuf_iterator<char>{});
 }
 
+/// What the Plain driver gives a game with one screen.
+void CheckPlain(const FrameCores::AltCoreHost& host, uint32_t width, uint32_t height) {
+    const auto& frame = host.LastFrame();
+    REQUIRE(frame.primary.pixels != nullptr);
+    CHECK(frame.primary.width == width);
+    CHECK(frame.primary.height == height);
+    CHECK(frame.primary.stride_pixels == width);
+    CHECK(!frame.primary.bgra);
+    CHECK(std::all_of(frame.primary.pixels, frame.primary.pixels + width * height,
+                      [](uint32_t p) { return (p >> 24) == 0xFFu; }));
+    CHECK(frame.secondary.pixels == nullptr);
+    CHECK(!frame.audio_pcm.empty());
+    CHECK(frame.audio_pcm.size() % 2 == 0);
+    CHECK(frame.rumble == 0.0f);
+    CHECK(!frame.metrics_changed);
+    const auto caps = host.GetCapabilities();
+    CHECK(!caps.has_touch);
+    CHECK(!caps.screens.has_bottom);
+    CHECK(caps.screens.touch_width == width);
+    CHECK(caps.screens.touch_height == height);
+}
+
+/// A driver that runs the core's own frame and is unsafe for states for some frames.
+struct Job {
+    int frames = 0; ///< left until a state is safe
+    int made = 0;
+    int resets = 0;
+    int loads = 0;
+    FrameCores::DriverPicture picture;
+};
+
+class JobDriver final : public FrameCores::FrameDriver {
+public:
+    JobDriver(const FrameCores::DriverServices& services_, Job& job_)
+        : services(services_), job(job_) {
+        ++job.made;
+    }
+    void RunFrame(const FrameCores::DriverInput& in, FrameCores::DriverFrame& out) override {
+        services.step(in.keys);
+        job.picture = services.picture();
+        pixels.resize(static_cast<size_t>(job.picture.width) * job.picture.height);
+        for (uint32_t y = 0; y < job.picture.height; ++y) {
+            for (uint32_t x = 0; x < job.picture.width; ++x) {
+                pixels[y * job.picture.width + x] =
+                    job.picture.pixels[y * job.picture.stride + x] | 0xFF000000u;
+            }
+        }
+        out.primary = {pixels.data(), job.picture.width, job.picture.height, job.picture.width};
+        if (job.frames > 0) {
+            --job.frames;
+        }
+    }
+    void Reset() override {
+        ++job.resets;
+    }
+    bool StateSafeNow() const override {
+        return job.frames == 0;
+    }
+    void AfterStateLoad() override {
+        ++job.loads;
+    }
+    std::pair<uint32_t, uint32_t> SecondarySize() const override {
+        return {};
+    }
+    bool HasTouch() const override {
+        return false;
+    }
+
+private:
+    const FrameCores::DriverServices services;
+    Job& job;
+    std::vector<uint32_t> pixels;
+};
+
+FrameCores::CoreBootOptions WithJob(Job& job) {
+    FrameCores::CoreBootOptions opts;
+    opts.driver.make = [&job](const FrameCores::DriverServices& services) {
+        return std::make_unique<JobDriver>(services, job);
+    };
+    return opts;
+}
+
 #ifndef _WIN32
 thread_local sigjmp_buf g_test_jmp;
 thread_local std::atomic<bool> g_test_jmp_armed{false};
@@ -424,10 +507,8 @@ TEST_CASE("GBA adapter boots homebrew ROM, renders, saves/loads state",
     host.PushInput(in);
     REQUIRE(host.StepFrames(20));
 
+    CheckPlain(host, 240, 160);
     const auto& frame = host.LastFrame();
-    REQUIRE(frame.primary.pixels != nullptr);
-    CHECK(frame.primary.width == 240);
-    CHECK(frame.primary.height == 160);
 
     // Check that our Mode 3 red fill rendered non-zero pixels
     bool any_red = false;
@@ -464,11 +545,7 @@ TEST_CASE("GB adapter boots homebrew ROM, renders 160x144, and saves/loads state
     REQUIRE(host.Boot(rom_path.string(), (tmp.path / "data").string(), /*headless_for_test=*/true));
     CHECK(host.GetCapabilities().kind == Common::AltCore::CoreKind::GB);
     REQUIRE(host.StepFrames(10));
-
-    const auto& frame = host.LastFrame();
-    REQUIRE(frame.primary.pixels != nullptr);
-    CHECK(frame.primary.width == 160);
-    CHECK(frame.primary.height == 144);
+    CheckPlain(host, 160, 144);
 
     REQUIRE(host.SaveSlot(1));
     REQUIRE(host.StepFrames(5));
@@ -946,6 +1023,162 @@ TEST_CASE("A load that fails changes nothing", "[frame_cores]") {
     CHECK(loads.back().result == LoadResult::Ok);
     CHECK(PixelSoon(host) == pixel);
     host.Stop();
+}
+
+TEST_CASE("A state waits for a driver's job, an autosave is dropped", "[frame_cores]") {
+    namespace A = Core::Autosave;
+    using FrameCores::LoadDone;
+    using FrameCores::LoadResult;
+    TempDir tmp("job");
+    const fs::path rom_path = tmp.path / "hb.gb";
+    WriteFile(rom_path, MakeBatteryGbRom());
+    Job job;
+    std::vector<LoadDone> loads;
+    std::vector<A::Writer::Done> written;
+    FrameCores::AltCoreHost host;
+    FrameCores::HostFrontend frontend;
+    frontend.on_loaded = [&loads](const LoadDone& done) { loads.push_back(done); };
+    frontend.on_written = [&written](const A::Writer::Done& done) { written.push_back(done); };
+    host.SetFrontend(std::move(frontend));
+    REQUIRE(host.Boot(rom_path.string(), (tmp.path / "data").string(),
+                      /*headless_for_test=*/true, WithJob(job)));
+    CHECK(job.made == 1);
+    const uint64_t key = host.GetRomInfo().title_id;
+    const auto slot = [&](u32 n) { return Core::StatePathIn(host.StatesDir(), key, 0, n); };
+    Press(host, Common::AltCore::BtnA);
+    const uint32_t pixel_a = PixelSoon(host);
+
+    // Save: waits, also behind one that waits; the autosaves are dropped
+    job.frames = 5;
+    REQUIRE(host.SaveSlot(1));
+    for (const auto reason : {A::Reason::Timer, A::Reason::MenuOpen, A::Reason::Quit}) {
+        CHECK(!host.MakeAutosave(reason, 2));
+    }
+    CHECK(host.StatesBusy());
+    REQUIRE(host.StepFrames(5));
+    CHECK(!fs::exists(slot(1)));
+    CHECK(host.StatesBusy());
+    CHECK(written.empty());
+    REQUIRE(host.StepFrames(1));
+    CHECK(fs::exists(slot(1)));
+    CHECK(!host.StatesBusy());
+    REQUIRE(written.size() == 1);
+    CHECK(written[0].ok);
+    CHECK(A::List(A::Dir(host.StatesDir()), key, 0).empty());
+    REQUIRE(host.MakeAutosave(A::Reason::Timer, 2)); // its next turn
+
+    // Load, then Undo Load: in their order
+    Press(host, Common::AltCore::BtnB);
+    const uint32_t pixel_b = PixelSoon(host);
+    REQUIRE(pixel_b != pixel_a);
+    job.frames = 3;
+    REQUIRE(host.LoadSlot(1));
+    REQUIRE(host.StepFrames(3));
+    CHECK(loads.empty());
+    CHECK(PixelSoon(host) == pixel_a);
+    REQUIRE(loads.size() == 1);
+    CHECK(loads[0].result == LoadResult::Ok);
+    CHECK(job.loads == 1);
+    job.frames = 3;
+    REQUIRE(host.UndoLoad());
+    REQUIRE(host.LoadSlot(1));
+    REQUIRE(host.StepFrames(4));
+    REQUIRE(loads.size() == 3);
+    CHECK(loads[1].what == LoadDone::What::Undo);
+    CHECK(loads[2].what == LoadDone::What::Slot);
+    CHECK(job.loads == 3);
+    CHECK(PixelSoon(host) == pixel_a);
+
+    // A load that fails puts the moment before back: the driver hears of both
+    Core::WriteStateFileFrom(slot(5), Core::CurrentStateHeader(key, NowSeconds()),
+                             std::vector<uint8_t>(64, 0xAB));
+    CHECK(!host.LoadSlot(5));
+    CHECK(job.loads == 5);
+    CHECK(PixelSoon(host) == pixel_a);
+
+    // Import Save: the game starts again, with a driver of its own
+    std::vector<uint8_t> imported(0x2000, 0);
+    imported[0] = 0x22;
+    WriteFile(tmp.path / "import.sav", imported);
+    job.frames = 2;
+    REQUIRE(host.ImportSave((tmp.path / "import.sav").string()));
+    REQUIRE(host.StepFrames(2));
+    CHECK(job.made == 1);
+    REQUIRE(host.StepFrames(1));
+    CHECK(job.made == 2);
+    CHECK(job.loads == 6);
+    CHECK(loads.back().what == LoadDone::What::Import);
+    REQUIRE(host.StepFrames(120));
+    CHECK(PixelSoon(host) == pixel_b);
+    REQUIRE(host.UndoLoad());
+    CHECK(job.made == 3);
+    CHECK(job.loads == 7);
+    CHECK(!host.ImportSave((tmp.path / "missing.sav").string()));
+    CHECK(job.loads == 8);
+    CHECK(PixelSoon(host) == pixel_a);
+
+    // Restart: the save that waited would be of another moment
+    written.clear();
+    job.frames = 2;
+    REQUIRE(host.SaveSlot(2));
+    host.Reset();
+    CHECK(job.resets == 1);
+    REQUIRE(host.StepFrames(4));
+    CHECK(!fs::exists(slot(2)));
+    REQUIRE(written.size() == 1);
+    CHECK(!written[0].ok);
+    CHECK(written[0].slot == 2);
+    CHECK(!host.StatesBusy());
+    host.Stop();
+}
+
+TEST_CASE("A Game Boy driver's wider buffer shows the same picture", "[frame_cores]") {
+    TempDir tmp("wide");
+    const fs::path rom_path = tmp.path / "hb.gb";
+    WriteFile(rom_path, MakeBatteryGbRom());
+    const auto picture = [&](const char* data, const FrameCores::CoreBootOptions& opts) {
+        FrameCores::AltCoreHost host;
+        REQUIRE(host.Boot(rom_path.string(), (tmp.path / data).string(),
+                          /*headless_for_test=*/true, opts));
+        Press(host, Common::AltCore::BtnA);
+        const auto& frame = host.LastFrame();
+        REQUIRE(frame.primary.pixels != nullptr);
+        CHECK(frame.primary.width == 160);
+        CHECK(frame.primary.height == 144);
+        const std::vector<uint32_t> pixels(frame.primary.pixels,
+                                           frame.primary.pixels + 160 * 144);
+        host.Stop();
+        return pixels;
+    };
+    const auto plain = picture("plain", {});
+    Job job;
+    CHECK(picture("narrow", WithJob(job)) == plain);
+    CHECK(job.picture.stride == 160);
+    auto opts = WithJob(job);
+    opts.driver.kind = FrameCores::DriverKind::PokeDaisy;
+    CHECK(picture("wide", opts) == plain);
+    CHECK(job.picture.width == 160);
+    CHECK(job.picture.stride == 240);
+}
+
+TEST_CASE("Second Screen Off: no GBA map", "[frame_cores]") {
+    TempDir tmp("mapoff");
+    std::vector<uint8_t> rom = MakeHomebrewGbaRom();
+    std::memcpy(&rom[0xAC], "B8KE", 4); // a map profile's
+    const fs::path rom_path = tmp.path / "hb.gba";
+    WriteFile(rom_path, rom);
+    for (const uint32_t choice : {0u, 1u, 2u}) {
+        FrameCores::CoreBootOptions opts;
+        opts.second_screen = choice;
+        FrameCores::AltCoreHost host;
+        REQUIRE(host.Boot(rom_path.string(), (tmp.path / "data").string(),
+                          /*headless_for_test=*/true, opts));
+        CHECK(host.GetCapabilities().screens.has_bottom == (choice != 2));
+        CHECK(!host.GetCapabilities().has_touch);
+        REQUIRE(host.StepFrames(5));
+        CHECK(host.LastFrame().secondary.pixels == nullptr); // none captured yet
+        host.Stop();
+    }
 }
 
 TEST_CASE("AudioResampler caps latency after pause and fast-forward bursts", "[frame_cores]") {

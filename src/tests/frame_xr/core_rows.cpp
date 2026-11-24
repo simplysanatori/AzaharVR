@@ -53,11 +53,12 @@ std::set<Id> Table(const CoreCaps& core) {
     return ids;
 }
 
-const std::set<Id> kDs = With(
-    kTwoScreens, {Id::DsConsoleMode, Id::DsTouchEnabled, Id::DsMicBlow, Id::DsLidToggle,
-                  Id::DsScreenRotation, Id::TouchpadTouch, Id::BottomScreenReticle,
-                  Id::ReticleSpeed, Id::ReticleAtEdge, Id::ReticleCenter, Id::ReticleStick,
-                  Id::ReticleEdgeCStick});
+const std::set<Id> kTouch{Id::TouchpadTouch, Id::BottomScreenReticle, Id::ReticleSpeed,
+                          Id::ReticleAtEdge, Id::ReticleCenter, Id::ReticleStick,
+                          Id::ReticleEdgeCStick};
+const std::set<Id> kDs =
+    With(With(kTwoScreens, kTouch), {Id::DsConsoleMode, Id::DsTouchEnabled, Id::DsMicBlow,
+                                     Id::DsLidToggle, Id::DsScreenRotation});
 
 std::vector<CoreCaps> OtherConsoles() {
     return {CoreCaps::ForGBA(), CoreCaps::ForGB(), CoreCaps::ForNDS(), CoreCaps::ForNDS(true)};
@@ -123,6 +124,17 @@ TEST_CASE("Core rows: the table for each other console", "[frame_xr][tabmenu]") 
     map.has_solar_sensor = false;
     map.screens.has_bottom = true;
     CHECK(Table(map) == Expected(kTwoScreens));
+    // GBA and Game Boy games with a Secondary Screen to touch: how to touch it, none of the DS's
+    for (CoreCaps touch : {CoreCaps::ForGBA(), CoreCaps::ForGB()}) {
+        touch.has_solar_sensor = false;
+        touch.screens.has_bottom = true;
+        touch.has_touch = true;
+        CHECK(Table(touch) == Expected(With(kTwoScreens, kTouch)));
+        const auto general = Drawn(Game(touch), SettingsView(SettingsSection::General));
+        CHECK(!general.contains(Id::DsTouchEnabled));
+        touch.has_save_import = false;
+        CHECK(!RowApplies(Id::CoreHeader, touch));
+    }
     // Black Frame Insertion brings its rows and Graphics back.
     map.has_bfi = true;
     CHECK(RowApplies(Id::MotionClarityNormal, map));
@@ -238,4 +250,7 @@ TEST_CASE("DS settings: degrees and consoles", "[frame_xr]") {
     CHECK(!TouchEnabled(CoreCaps::ForNDS(), false));
     CHECK(TouchEnabled(CoreCaps::ForNDS(), true));
     CHECK(!TouchEnabled(CoreCaps::ForGBA(), true));
+    CoreCaps touch = CoreCaps::ForGBA();
+    touch.has_touch = true;
+    CHECK(TouchEnabled(touch, false)); // the DS's switch is not a GBA game's
 }

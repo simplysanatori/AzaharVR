@@ -6,10 +6,13 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "common/alt_core_types.h"
+#include "frame_cores/frame_driver.h"
 #include "frame_cores/microphone.h"
 #include "video_core/renderer_vulkan/alt_xr_renderer.h"
 
@@ -20,6 +23,12 @@ struct CorePaths {
     std::string game_dir;  ///< The running game's own folder (GameFolder): save, states, cheats
     std::string bios_dir;  ///< BIOS / firmware / DSi NAND directory
     std::string cheat_dir; ///< Shared cheat files the player adds (.cht, .mch)
+};
+
+/// Tests: the driver of a GBA or Game Boy game, instead of the one chosen for it.
+struct DriverOverride {
+    DriverKind kind = DriverKind::Plain;
+    std::function<std::unique_ptr<FrameDriver>(const DriverServices&)> make;
 };
 
 struct CoreBootOptions {
@@ -33,6 +42,8 @@ struct CoreBootOptions {
     bool enable_mapcap = true;     ///< Enable gba-ds secondary-screen map capture
     std::string gba_slot_rom;      ///< Optional Slot-2 GBA ROM path (DS mode)
     bool rumble_pak = false;       ///< Insert DS Rumble Pak in Slot-2 when no GBA ROM
+    uint32_t second_screen = 0;    ///< SecondScreen (GBA and Game Boy games)
+    DriverOverride driver;
 };
 
 struct CheatEntry {
@@ -69,6 +80,13 @@ public:
 
     virtual bool SaveStateToMemory(std::vector<uint8_t>& out) = 0;
     virtual bool LoadStateFromMemory(const uint8_t* data, std::size_t size) = 0;
+
+    /// False: a state made or loaded now would catch the game half changed.
+    virtual bool StateSafeNow() const {
+        return true;
+    }
+    /// After LoadStateFromMemory, whether it could load it or not.
+    virtual void AfterStateLoad() {}
 
     virtual bool ImportBatterySave(const std::string& /*sav_path*/) {
         return false;

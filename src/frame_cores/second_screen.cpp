@@ -20,6 +20,12 @@ bool MapScreenAvailable(const MapScreenFacts& facts) {
     return w > 0 && h > 0;
 }
 
+bool MapCaptureDue(bool has_image, bool room_changed, uint64_t frame, uint64_t since,
+                   uint64_t interval) {
+    return (!has_image && frame >= 30 && since >= 30) || (room_changed && since >= 15) ||
+           since >= (interval > 0 ? interval : 120);
+}
+
 bool HasTwoScreens(Common::AltCore::CoreKind kind, const std::string& game_code) {
     switch (kind) {
     case Common::AltCore::CoreKind::GBA: {

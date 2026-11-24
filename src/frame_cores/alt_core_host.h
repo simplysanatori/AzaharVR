@@ -174,8 +174,10 @@ public:
     // with its key as the program ID. Any thread may ask; nothing here waits for the state.
     //   Emulation thread: makes and loads states between two frames, also while paused.
     //   Writer's thread (Core::Autosave::Writer): compresses, writes atomically, prunes.
+    // While the game is being changed (CoreBackend::StateSafeNow) an autosave is dropped, and the
+    // rest wait for a frame after which it is not.
     // True: asked for; HostFrontend::on_written and on_loaded tell how it went. Headless there is
-    // no emulation thread: done here, true when it went well.
+    // no emulation thread: done here, true when it went well; what waits is done by StepFrames.
     bool QuickSave();
     bool QuickLoad();
     bool SaveSlot(int slot);

@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 #include "common/alt_core_types.h"
@@ -21,6 +22,11 @@ struct MapScreenFacts {
 /// The gba-ds rule, as GbaCore::Load applies it: a profile, not logo-only, and a picture
 /// (tight size, else crop size) that is not empty.
 bool MapScreenAvailable(const MapScreenFacts& facts);
+
+/// Whether a game's map is captured now. `frame`: frames run since the start or a reset; `since`:
+/// those since the last capture was asked for; `interval`: the profile's, 0 for the usual.
+bool MapCaptureDue(bool has_image, bool room_changed, uint64_t frame, uint64_t since,
+                   uint64_t interval);
 
 /// Whether the list shows the Two Screens badge for a game: it has a second screen picture.
 /// `game_code` is the header's four letters. Safe on the scan thread.
