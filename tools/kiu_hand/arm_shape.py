@@ -86,7 +86,7 @@ def thumb_field(p):
     return d, ((p - k) @ norm(l - k)) / np.linalg.norm(l - k)
 
 
-WRIST_HALF = (0.0245, 0.0300)   # the wrist's half thickness (y) and half width (z)
+WRIST_HALF = (0.0235, 0.0288)   # the wrist's half thickness (y) and half width (z)
 PALM_SY = 0.84
 
 
@@ -100,7 +100,7 @@ def palm_field(p):
         d = c if d is None else smin(d, c, 0.010)
     for chain in S.FINGERS:   # soft knuckles on the back
         k = P[chain[1]]
-        d = smin(d, ball(p, k + np.array([-0.0020, 0.0030, 0.0]), S.FINGER_R[chain][0] * 0.92), 0.008)
+        d = smin(d, ball(p, k + np.array([-0.0020, 0.0030, 0.0]), S.FINGER_R[chain][0] * 0.86), 0.010)
     sy = WRIST_HALF[0] / WRIST_HALF[1]
     wrist = flat_cone(p, np.array([-0.090, 0.0, 0.0]), np.array([0.004, 0.0, 0.0]), WRIST_HALF[1], WRIST_HALF[1], sy)
     d = smin(d, wrist, 0.016)
@@ -108,12 +108,12 @@ def palm_field(p):
                     S.rot_y(np.radians(-10)))
     d = smin(d, hyp, 0.010)
     c, k = P[S.THUMB[0]], P[S.THUMB[1]]
-    d = smin(d, cone(p, c + np.array([-0.006, 0.001, -0.004]), k, 0.0185, S.THUMB_R[0]), 0.012)
+    d = smin(d, cone(p, c + np.array([-0.006, 0.001, -0.004]), k, 0.0185, S.THUMB_R[0]), 0.016)
     # the web toward the index finger
     ik = P[S.INDEX[1]]
-    web_a = k + (ik - k) * 0.30 + np.array([-0.008, 0.001, 0.0])
-    web_b = P[S.INDEX[0]] + (ik - P[S.INDEX[0]]) * 0.60 + np.array([0, -0.002, 0.004])
-    d = smin(d, flat_cone(p, web_a, web_b, 0.0090, 0.0110, 0.8), 0.010)
+    web_a = k + (ik - k) * 0.42 + np.array([-0.006, 0.000, 0.0])
+    web_b = P[S.INDEX[0]] + (ik - P[S.INDEX[0]]) * 0.55 + np.array([0, -0.002, 0.006])
+    d = smin(d, flat_cone(p, web_a, web_b, 0.0125, 0.0135, 0.75), 0.016)
     return d
 
 
@@ -123,7 +123,7 @@ def hand_field(p):
         f, t = finger_field(p, chain)
         d = smin(d, f, 0.0005 + 0.0080 * (1.0 - smoothstep(0.22, 0.80, t)))
     f, t = thumb_field(p)
-    d = smin(d, f, 0.0005 + 0.0090 * (1.0 - smoothstep(0.15, 0.80, t)))
+    d = smin(d, f, 0.0005 + 0.0170 * (1.0 - smoothstep(0.10, 0.95, t)))
     return d
 
 
@@ -140,10 +140,10 @@ def gradient(field, p, e=2e-4):
 TUBE, THUMB_T, CAP_T = 0, 1, 9          # face tags: the tube, digits 1..5 (thumb, index..little)
 END_X = -0.046                           # the skin's hidden end, inside the vambrace
 #          x       z centre  half width  top     bottom
-STATIONS = [(END_X, 0.000, 0.0300, 0.0245, -0.0245),
-            (-0.016, 0.000, 0.0300, 0.0245, -0.0245),
-            (0.012, 0.002, 0.0350, 0.0230, -0.0260),
-            (0.042, 0.001, 0.0470, 0.0200, -0.0250),
+STATIONS = [(END_X, 0.000, 0.0288, 0.0235, -0.0235),
+            (-0.016, 0.000, 0.0288, 0.0235, -0.0235),
+            (0.020, 0.002, 0.0380, 0.0225, -0.0260),
+            (0.052, 0.001, 0.0490, 0.0190, -0.0240),
             (0.070, -0.001, 0.0530, 0.0170, -0.0190)]
 WEB_T = 0.42    # how far along a finger's first bone the webs are
 
@@ -237,11 +237,13 @@ def build_cage():
     f = side[(2, 4)]
     cm, k, l, t = [P[j] for j in S.THUMB]
     r0, r1, r2, r3 = S.THUMB_R
-    c.extrude(f, ring_corners(cm + (k - cm) * 0.62, R[S.THUMB[0]], r0 * 1.05), THUMB_T)
-    c.extrude(f, ring_corners(k + (l - k) * 0.30, R[S.THUMB[1]], r1 * 0.95), THUMB_T)
-    c.extrude(f, ring_corners(l - (l - k) * 0.22, R[S.THUMB[1]], r2 * 0.95), THUMB_T)
-    c.extrude(f, ring_corners(l + (t - l) * 0.25, R[S.THUMB[2]], r2 * 0.95), THUMB_T)
-    c.extrude(f, ring_corners(t - norm(t - l) * r3 * 0.40, R[S.THUMB[2]], r3 * 0.66), THUMB_T)
+    # (the cage's rings stand square to the side face, not turned as the thumb's nail is)
+    f0, f1, f2 = (S.frame(b - a, [0.0, 1.0, 0.0]) for a, b in ((cm, k), (k, l), (l, t)))
+    c.extrude(f, ring_corners(cm + (k - cm) * 0.62, f0, r0 * 1.05), THUMB_T)
+    c.extrude(f, ring_corners(k + (l - k) * 0.30, f1, r1 * 0.95), THUMB_T)
+    c.extrude(f, ring_corners(l - (l - k) * 0.22, f1, r2 * 0.95), THUMB_T)
+    c.extrude(f, ring_corners(l + (t - l) * 0.25, f2, r2 * 0.95), THUMB_T)
+    c.extrude(f, ring_corners(t - norm(t - l) * r3 * 0.40, f2, r3 * 0.66), THUMB_T)
     return np.array(c.v), np.array(c.f), np.array(c.tag)
 
 
@@ -282,7 +284,7 @@ def neighbours(nv, f):
     return e
 
 
-def lay_on(field, v, f, rounds=2, smooth=0.4, fixed=None):
+def lay_on(field, v, f, rounds=2, smooth=0.4, fixed=None, skip=None):
     """Lays the vertices on the field's surface, evening them out along it."""
     e = neighbours(len(v), f)
     deg = np.bincount(e.reshape(-1), minlength=len(v)).astype(float)[:, None]
@@ -307,6 +309,25 @@ def lay_on(field, v, f, rounds=2, smooth=0.4, fixed=None):
         if fixed is not None:
             move[fixed] = 0
         v = project(v + move * smooth, 2)
+    # unfold: where a face looks the wrong way (the cage crossed a hollow, such as the web
+    # beside the thumb), its corners and their neighbours are drawn together and laid again
+    for _ in range(40):
+        fn = norm(np.cross(v[f[:, 2]] - v[f[:, 0]], v[f[:, 3]] - v[f[:, 1]]))
+        g = norm(gradient(field, v[f].mean(1)))
+        bad = (fn * g).sum(1) < 0.35
+        if skip is not None:
+            bad &= ~skip
+        if not bad.any():
+            break
+        pick = np.zeros(len(v), bool)
+        pick[np.unique(f[bad])] = True
+        near = pick[e[:, 0]] | pick[e[:, 1]]
+        pick[np.unique(e[near])] = True
+        s = np.zeros_like(v)
+        np.add.at(s, e[:, 0], v[e[:, 1]])
+        np.add.at(s, e[:, 1], v[e[:, 0]])
+        v[pick] = 0.5 * v[pick] + 0.5 * (s / deg)[pick]
+        v = project(v, 3)
     return v
 
 
@@ -320,10 +341,10 @@ def vertex_normals(v, tris):
 
 
 # ---- the glove (cloth): where it is on the hand, as a signed distance along the skin ----
-GLOVE_T = 0.0011            # its thickness over the skin
+GLOVE_T = 0.0009            # its thickness over the skin
 GLOVE_BACK_X = 0.040        # its edge across the back of the hand
 GLOVE_PALM_X = 0.060        # and across the palm
-LOOP_AT = (0.36, 0.0036)    # the finger loop: where along the index finger's first bone, its width
+LOOP_AT = (0.33, 0.0034)    # the finger loop: where along the index finger's first bone, its width
 
 
 def glove_sd(p):
@@ -338,19 +359,20 @@ def glove_sd(p):
     ik, im = P[S.INDEX[1]], P[S.INDEX[2]]
     mk, mm = P[S.MIDDLE[1]], P[S.MIDDLE[2]]
     apex = 0.5 * (ik + (im - ik) * WEB_T + mk + (mm - mk) * WEB_T)
-    a2 = np.array([apex[0] + 0.004, apex[2]])
-    b2 = np.array([GLOVE_BACK_X - 0.004, apex[2] - 0.004])
+    a2 = np.array([apex[0] + 0.010, apex[2]])
+    b2 = np.array([GLOVE_BACK_X - 0.006, apex[2] - 0.006])
     q = np.stack([x, z], 1)
     t = np.clip(((q - a2) @ (b2 - a2)) / ((b2 - a2) @ (b2 - a2)), 0, 1)
-    half = 0.0030 + 0.0170 * t ** 1.3
+    half = 0.0045 + 0.0180 * t ** 1.5
     tongue = np.linalg.norm(q - a2 - t[:, None] * (b2 - a2), axis=1) - half
-    tongue = np.where(y > -0.004, tongue, 1.0)
-    d = smin(d, tongue, 0.006)
-    # the thumb and its ball stay bare
+    tongue = -smin(-tongue, y - 0.003, 0.006)     # on the back of the hand only, ending softly
+    d = smin(d, tongue, 0.012)
+    # the thumb and its ball stay bare: one round cut
     c, k, l, tt = [P[j] for j in S.THUMB]
-    free = cone(p, c + (k - c) * 0.30, tt, 0.0235, 0.0200)
-    free = np.minimum(free, cone(p, c + (k - c) * 0.30 + np.array([0.0, -0.012, 0.0]), k + np.array([0.004, -0.012, -0.004]), 0.0210, 0.0160))
-    d = np.maximum(d, -free)
+    free = cone(p, c + (k - c) * 0.42 + np.array([0.004, -0.004, 0.004]), tt, 0.0300, 0.0270)
+    web = cone(p, k + np.array([0.0, 0.004, -0.004]), ik + np.array([-0.012, -0.004, 0.006]), 0.0230, 0.0170)
+    free = smin(free, web, 0.010)
+    d = -smin(-d, free, 0.010)
     # the loop round the index finger
     s = ((p - ik) @ norm(im - ik)) / np.linalg.norm(im - ik)
     near = cone(p, ik, im, S.FINGER_R[S.INDEX][0] + 0.004, S.FINGER_R[S.INDEX][1] + 0.004)
@@ -440,7 +462,9 @@ def build_hand(levels=2, log=print):
     cap = tag == CAP_T
     fixed = np.zeros(len(v), bool)
     fixed[np.unique(f[cap])] = True
-    v = lay_on(hand_field, v, f, fixed=None)
+    v = lay_on(hand_field, v, f, skip=cap)
+    fn = norm(np.cross(v[f[:, 2]] - v[f[:, 0]], v[f[:, 3]] - v[f[:, 1]]))
+    log(f'hand: {int(((fn * norm(gradient(hand_field, v[f].mean(1)))).sum(1) < 0.35)[~cap].sum())} faces still turned')
     v[fixed, 0] = np.minimum(v[fixed, 0], END_X)
     f, tag = f[~cap], tag[~cap]
     # vertex tags: a digit's own, or 0 on the tube and on any border
@@ -461,7 +485,7 @@ def build_hand(levels=2, log=print):
     ttag = np.repeat(tag, 2)
     # the glove stands a little off the skin
     n = vertex_normals(v, tris)
-    g = smoothstep(0.0012, -0.0012, glove_sd(v))
+    g = smoothstep(0.0045, -0.0045, glove_sd(v))   # a wide ramp: the mesh is too coarse for the edge itself
     v = v + n * (GLOVE_T * g)[:, None]
     n = vertex_normals(v, tris)
     log(f'hand: {len(v)} vertices, {len(tris)} triangles')

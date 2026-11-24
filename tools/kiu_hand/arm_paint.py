@@ -27,12 +27,12 @@ def rgb(h):
     return np.array([int(h[i:i + 2], 16) for i in (0, 2, 4)], float) / 255.0
 
 
-SKIN = rgb('F3DDBA')          # in the light the shader lifts it to the pictures' pale peach
-SKIN_ROSY = rgb('F0B79E')     # tips, knuckles, the heel of the hand
+SKIN = rgb('F3D5A8')          # in the light the shader lifts it to the pictures' pale peach
+SKIN_ROSY = rgb('F0AC8C')     # tips, knuckles, the heel of the hand
 SKIN_CREASE = rgb('D9916F')   # warm folds
 GLOVE = rgb('4C6072')
 GLOVE_DARK = rgb('36475A')
-GOLD = rgb('DDBE56')
+GOLD = rgb('D6B64C')
 GOLD_LIGHT = rgb('F0DC7C')
 GOLD_DEEP = rgb('B8913C')
 LEATHER = rgb('8A5632')
@@ -40,7 +40,7 @@ LEATHER_DARK = rgb('5A3620')
 LEATHER_LIGHT = rgb('A06A40')
 RED = rgb('84302C')
 RED_DEEP = rgb('611E22')
-INSIDE = rgb('1B1D24')
+INSIDE = rgb('3A2619')
 
 
 # ---- noise: a lattice of hashed values, no random generator ----
@@ -182,7 +182,7 @@ def hand_height(p):
     g = A.glove_sd(p)
     _, crease, nail = digit_marks(p)
     cloth = g < 0
-    h = 0.00045 * smoothstep(0.00035, -0.00035, g)
+    h = 0.00060 * smoothstep(0.00035, -0.00035, g)
     h += 0.00018 * np.exp(-(((g + 0.0016) / 0.0005) ** 2))          # the hem's stitch line
     h -= np.where(cloth, 0.0, 0.00035 * crease)
     h += np.where(cloth, 0.0, 0.00022 * nail)
@@ -200,13 +200,15 @@ def hand_colour(p):
     weave = fbm(p, 0.0012, 3, 2)
     cloth = GLOVE + (GLOVE_DARK - GLOVE) * (0.35 * weave + 0.5 * np.exp(-(((g + 0.0016) / 0.0006) ** 2)))[:, None]
     cloth = cloth * (1.0 - 0.25 * smoothstep(-0.0008, 0.0, g))[:, None]
-    is_cloth = g < 0
     # a thin warm shadow on the skin along the glove's edge
     skin = skin + (SKIN_CREASE - skin) * (0.55 * (1 - smoothstep(0.0, 0.0012, g)))[:, None]
-    return np.where(is_cloth[:, None], cloth, skin), is_cloth
+    # the edge itself over about a texel and a half, so it does not stair-step when magnified
+    frac = smoothstep(EDGE_SOFT, -EDGE_SOFT, g)
+    return skin + (cloth - skin) * frac[:, None], frac
 
 
 # ---- the leather: grain and the tooled scroll beside each band ----
+EDGE_SOFT = 0.00060     # half the width the glove's edge is blended over
 SCROLL_W = 0.0105      # the scroll band's width
 SCROLL_GAP = 0.0030    # from a gold band's edge to the scroll band
 SCROLL_N = 18          # scrolls round the arm
@@ -325,9 +327,8 @@ def paint(mesh, size=B.TEX, log=print):
     log(f'  hand texels: {m.sum()}')
     c, cloth = hand_colour(p[m])
     col[m] = c
-    mm = mat[m]
-    mm[cloth] = G.CLOTH
-    mat[m] = mm
+    band = np.array([MATERIAL_ALPHA[int(k)] for k in range(6)])[mat]
+    band[m] = MATERIAL_ALPHA[G.SKIN] + (MATERIAL_ALPHA[G.CLOTH] - MATERIAL_ALPHA[G.SKIN]) * cloth
     relief(m, hand_height)
     ao[m] = occlusion(p[m], n[m])
     # inside the wrist band it is dark
@@ -352,7 +353,7 @@ def paint(mesh, size=B.TEX, log=print):
     for pid in (B.FLOOR_W, B.FLOOR_E):
         m = part == pid
         col[m] = INSIDE
-        ao[m] = 0.30
+        ao[m] = 0.45
 
     m = part == B.STUB
     col[m] = SKIN * (0.985 + 0.03 * fbm(p[m], 0.012, 11))[:, None]
@@ -376,7 +377,7 @@ def paint(mesh, size=B.TEX, log=print):
     nx = slope / np.sqrt(1 + (slope ** 2).sum(1, keepdims=True))
     surface[ys, xs, 0:2] = 128.0 / 255.0 + nx * (127.0 / 255.0)
     surface[ys, xs, 2] = opacity
-    surface[ys, xs, 3] = np.array([MATERIAL_ALPHA[int(k)] for k in range(6)])[mat]
+    surface[ys, xs, 3] = band
     colour, _ = dilate(colour, known, 8)
     surface, known2 = dilate(surface, known, 8)
     # what no triangle is near: flat, solid, skin (never sampled)

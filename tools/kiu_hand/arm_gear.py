@@ -15,14 +15,14 @@ from arm_skel import norm
 GOLD, ENAMEL, LEATHER, SKIN, CLOTH, DARK = 0, 1, 2, 3, 4, 5   # DARK: cloth, nearly black
 
 SIDES = 40
-BAND_RI, BAND_RO, BAND_HALF, BAND_BEVEL = 0.0430, 0.0570, 0.0120, 0.0030
+BAND_RI, BAND_RO, BAND_HALF, BAND_BEVEL = 0.0450, 0.0610, 0.0130, 0.0032
 BAND_WRIST_X, BAND_ELBOW_X = -0.0300, -0.1380
 LEATHER_X = (BAND_ELBOW_X - 0.008, BAND_WRIST_X + 0.008)
-LEATHER_R = (0.0418, 0.0472)     # at the bands, in the middle: a barrel
+LEATHER_R = (0.0436, 0.0492)     # at the bands, in the middle: a barrel
 FLOOR_IN = 0.0070                # how far inside a band its dark floor is
 STUB_X = (-0.1480, -0.2000)      # the bare forearm past the elbow band, and where it ends
 STUB_FADE = (-0.1560, -0.1960)   # solid before, gone after
-ARM_HALF = (0.0245, 0.0300)      # the forearm's half thickness and half width at the wrist
+ARM_HALF = (0.0235, 0.0288)      # the forearm's half thickness and half width at the wrist
 ELBOW_HALF = (0.0290, 0.0335)    # and past the elbow band
 
 
@@ -91,7 +91,7 @@ def band(xc):
 
 
 def leather():
-    xs = np.linspace(LEATHER_X[0], LEATHER_X[1], 9)
+    xs = np.linspace(LEATHER_X[0], LEATHER_X[1], 7)
     return lathe([(x, leather_radius(x)) for x in xs], smooth=True)
 
 
@@ -110,31 +110,31 @@ def stub():
     """The bare forearm past the elbow band: closed and rounded at its far end."""
     x0, x1 = STUB_X
     prof = []
-    for t in np.linspace(0, 1, 5):
+    for t in np.linspace(0, 1, 4):
         prof.append((x0 + (x1 + 0.016 - x0) * t, 1.0))
     for a in np.radians([30, 60, 85]):
         prof.append((x1 + 0.016 - 0.016 * np.sin(a), np.cos(a)))
     prof = [(x, r * 0.0320) for x, r in prof][::-1]
-    v, n, t, uv = lathe(prof, smooth=True, sides=20, squash=(ELBOW_HALF[0] / 0.0320, ELBOW_HALF[1] / 0.0320))
+    v, n, t, uv = lathe(prof, smooth=True, sides=16, squash=(ELBOW_HALF[0] / 0.0320, ELBOW_HALF[1] / 0.0320))
     # close the tip
     tip = np.array([[x1 - 0.0002, 0, 0]])
-    first = np.arange(20)
+    first = np.arange(16)
     v = np.concatenate([v, tip])
     n = np.concatenate([n, [[-1.0, 0, 0]]])
     uv = np.concatenate([uv, [[0.5, uv[:, 1].min() - 0.002]]])
-    cap = np.stack([first, first + 1, np.full(20, len(v) - 1)], 1)
+    cap = np.stack([first, first + 1, np.full(16, len(v) - 1)], 1)
     t = np.concatenate([t, cap])
     return v, n, orient(v, n, t), uv
 
 
 # ---- the plate ----
-PLATE_X = (-0.0340, 0.0240, 0.0560)   # its root under the wrist band, its shoulders, its point
-PLATE_W = (0.0270, 0.0255)            # half width at the root, at the shoulders
-PLATE_Y = (0.0335, 0.0300)            # its underside's height at the root, at the point
-PLATE_ARCH = 0.0062                   # how far its sides fall
-PLATE_T = 0.0030                      # thickness
-PLATE_BORDER = 0.0052                 # the gold border's width
-PLATE_INSET = 0.0014                  # how far the red is set in
+PLATE_X = (-0.0360, 0.0120, 0.0380)   # its root under the wrist band, its shoulders, its point
+PLATE_W = (0.0350, 0.0360)            # half width at the root, at the shoulders
+PLATE_Y = (0.0330, 0.0335)            # its underside's height at the root, at the point
+PLATE_ARCH = 0.0125                   # how far its sides fall
+PLATE_T = 0.0036                      # thickness
+PLATE_BORDER = 0.0078                 # the gold border's width
+PLATE_INSET = 0.0017                  # how far the red is set in
 PLATE_Z = 0.0010
 
 

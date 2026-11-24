@@ -23,12 +23,13 @@ PART_NAMES = ['hand', 'band_wrist', 'band_elbow', 'leather', 'floor_wrist', 'flo
 RECTS = {
     'tube': (0, 0, 560, 400), 'digit1': (560, 0, 190, 300), 'plate_top': (750, 0, 150, 250),
     'stub': (900, 0, 124, 200), 'floor_wrist': (900, 200, 62, 62), 'floor_elbow': (962, 200, 62, 62),
-    'plate_under': (750, 250, 60, 50),
+    'plate_under': (750, 250, 60, 50), 'side': (812, 264, 212, 136),
     'digit2': (0, 400, 256, 240), 'digit3': (256, 400, 256, 240), 'digit4': (512, 400, 256, 240),
     'digit5': (768, 400, 256, 240),
     'leather': (0, 640, 1024, 200), 'band_wrist': (0, 840, 1024, 92), 'band_elbow': (0, 932, 1024, 92),
 }
 TUBE_R = 0.034
+SIDE_CHART = 6
 
 
 def digit_chain(tag):
@@ -41,6 +42,8 @@ def digit_chain(tag):
 def hand_chart_coords(p, tag):
     """(turn round, length along) of points on chart `tag` (0 the tube, 1..5 a digit): the turn
     in radians (0 on the back, +-pi under), the length in metres."""
+    if tag == SIDE_CHART:
+        return p[:, 1] / TUBE_R, p[:, 0], np.ones(len(p))
     if tag == 0:
         return np.arctan2(p[:, 2], (p[:, 1] + 0.002) * 2.0), p[:, 0], np.ones(len(p))
     joints, frames, _ = digit_chain(tag)
@@ -70,7 +73,7 @@ def hand_chart_coords(p, tag):
 def unwrap_hand(v, tris, ttag):
     """Per corner chart coordinates (T, 3, 2) in metres, the seam under the hand."""
     uv = np.zeros((len(tris), 3, 2))
-    for tag in range(6):
+    for tag in range(7):
         m = ttag == tag
         if not m.any():
             continue
@@ -79,7 +82,7 @@ def unwrap_hand(v, tris, ttag):
         turn = turn.reshape(-1, 3)
         wrap = (turn.max(1) - turn.min(1)) > np.pi
         turn = np.where(wrap[:, None] & (turn < 0), turn + 2 * np.pi, turn)
-        r = TUBE_R if tag == 0 else digit_chain(tag)[2]
+        r = TUBE_R if tag in (0, SIDE_CHART) else digit_chain(tag)[2]
         uv[m] = np.stack([turn * r * narrow.reshape(-1, 3), along.reshape(-1, 3)], 2)   # a tip closes to a point
     return uv
 
@@ -130,8 +133,13 @@ PLATE_BONES = [(S.WRIST, 0.6), (S.FOREARM, 0.4)]   # goes with the hand, held by
 def assemble(log=print):
     hv, htris, httag, hvt, hn = A.build_hand(log=log)
     # the hand: weld per corner chart coordinates into vertices
+    # the tube's faces that look toward the thumb's side (its root, the web beside it) fold
+    # over in the tube's chart, which turns round the arm: they get a flat chart of their own
+    fn = norm(np.cross(hv[htris[:, 1]] - hv[htris[:, 0]], hv[htris[:, 2]] - hv[htris[:, 0]]))
+    mid = hv[htris].mean(1)
+    httag = np.where((httag == 0) & (fn[:, 2] > 0.50) & (mid[:, 0] > 0.004), SIDE_CHART, httag)
     cuv = unwrap_hand(hv, htris, httag)
-    names = ['tube'] + [f'digit{i}' for i in range(1, 6)]
+    names = ['tube'] + [f'digit{i}' for i in range(1, 6)] + ['side']
     key = np.stack([htris.reshape(-1), np.repeat(httag, 3), np.round(cuv[:, :, 0].reshape(-1) * 2e6),
                     np.round(cuv[:, :, 1].reshape(-1) * 2e6)], 1).astype(np.int64)
     uniq, first, inv = np.unique(key, axis=0, return_index=True, return_inverse=True)
@@ -139,7 +147,7 @@ def assemble(log=print):
     chart = uniq[:, 1]
     raw = cuv.reshape(-1, 2)[first]
     uv = np.zeros((len(uniq), 2))
-    for tag in range(6):
+    for tag in range(7):
         m = chart == tag
         uv[m] = to_rect(raw[m], names[tag])
     w = A.hand_weights(hv, hvt)

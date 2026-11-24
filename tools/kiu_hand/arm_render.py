@@ -118,7 +118,7 @@ def downsample(img, ss):
 def default_key(eye, target, up=(0, 1, 0)):
     """The key light: from the camera's side, raised and to the left."""
     rot, _ = look_at(eye, target, up)
-    return norm(rot[2] * 0.75 + rot[1] * 0.75 - rot[0] * 0.45)
+    return norm(rot[2] * 0.55 + rot[1] * 0.80 - rot[0] * 0.65)
 
 
 def clay(mesh, eye, target, up=(0, 1, 0), fov=35.0, size=(800, 800), ss=2, bg=(1.0, 1.0, 1.0), key=None):
