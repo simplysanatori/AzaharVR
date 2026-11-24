@@ -119,6 +119,12 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::GbaSolarLevel:
         f(v.gba_solar_level);
         return true;
+    case Id::SecondScreen:
+        f(v.gba_second_screen);
+        return true;
+    case Id::AllowGameEditing:
+        f(v.gba_allow_editing);
+        return true;
     case Id::TouchpadTouch: // AzaharFrame reticle: the Controls tab's rows
         f(v.vr_touchpad_touch);
         return true;

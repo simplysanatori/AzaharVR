@@ -315,6 +315,8 @@ enum class Id : int {
     DsLidToggle,
     DsScreenRotation,
     ImportSave,
+    SecondScreen,     ///< GBA and Game Boy games: index of SecondScreenOptions (gba_second_screen)
+    AllowGameEditing, ///< GBA and Game Boy games: a switch (gba_allow_editing)
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -542,6 +544,8 @@ struct MenuModel {
     CoreCaps core; ///< the running game's console (a 3DS by default)
     int gba_solar_level = 0;      ///< 0..10
     int ds_console_mode = 0;      ///< 0 Automatic, 1 DS, 2 DSi
+    int gba_second_screen = 0;    ///< 0 PokeDaisy, 1 GBA DS, 2 Off
+    bool gba_allow_editing = false;
     bool ds_touch_enabled = true; ///< DS touch input switch
     int ds_screen_rotation = 0;   ///< 0 = 0°, 1 = 90°, 2 = 270°
     bool ds_lid_closed = false;   ///< DS lid closed toggle
@@ -680,6 +684,12 @@ void DrawAutosavedLabel(Kit& kit, const Rect& r);
 
 /// The option lists (Azahar for Frame's own strings).
 const std::vector<std::string>& OptionsFor(Id id);
+/// Second Screen: the game's choices only (core.second_screen_choices), in OptionsFor's order;
+/// the row's index counts these. The setting's value of an index, and the index of a value (one
+/// the game has not falls to the next it has).
+std::vector<std::string> SecondScreenOptions(const CoreCaps& core);
+int SecondScreenValue(const CoreCaps& core, int index);
+int SecondScreenIndex(const CoreCaps& core, int value);
 /// The label of an item, as on the menu.
 std::string LabelFor(Id id);
 /// One short sentence about a setting (the tooltip), or "".

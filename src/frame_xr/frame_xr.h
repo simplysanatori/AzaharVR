@@ -414,6 +414,10 @@ enum class MenuSetting {
     DsConsoleMode,    ///< `value`: 0 Automatic, 1 DS, 2 DSi (ds_console_mode)
     DsTouchEnabled,   ///< `value`: 0 Off, 1 On (ds_touch_enabled)
     DsScreenRotation, ///< `value`: 0 (0°), 1 (90°), 2 (270°) (ds_screen_rotation)
+    SecondScreen,     ///< `value`: 0 PokeDaisy, 1 GBA DS, 2 Off (gba_second_screen), per game too
+    /// `value`: 0 Off, 1 On (gba_allow_editing), per game too. The menu leaves it off on a 1: the
+    /// Qt side asks once (game_editing_warning) and then sets it.
+    AllowGameEditing,
 };
 struct MenuRequest {
     MenuCommand command = MenuCommand::Continue;
