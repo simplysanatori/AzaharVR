@@ -14,6 +14,7 @@
 #include <fstream>
 
 #include "common/logging/log.h"
+#include "frame_cores/cheat_store.h"
 
 extern "C" {
 #include "cheats.h"
@@ -104,6 +105,7 @@ struct GbaCore::Impl {
     // Cheats state (gba-ds .cht loader + runtime user-added cheats)
     Cheats cheats{};
     std::vector<CheatEntry> custom_cheats;
+    std::string custom_cheats_path; ///< where custom_cheats are kept
 
     Common::AltCore::Capabilities caps = Common::AltCore::Capabilities::ForGBA();
 
@@ -238,6 +240,9 @@ bool GbaCore::Load(const std::string& rom_path, const CorePaths& paths,
         (std::filesystem::path(paths.game_dir) / (stem + ".cheats")).string();
     cheats_load(&impl->cheats, &cheat_cfg, rom_path.c_str(), impl->emu.gameCode,
                 prefs_path.c_str());
+    impl->custom_cheats_path =
+        (std::filesystem::path(paths.game_dir) / (stem + ".custom.cheats")).string();
+    impl->custom_cheats = LoadCustomCheats(impl->custom_cheats_path);
     impl->ApplyAllCheats();
 
     LOG_INFO(Core, "GbaCore: loaded {} (code={}, rate={} Hz)", rom_path, impl->emu.gameCode,
@@ -531,6 +536,7 @@ bool GbaCore::SetCheatEnabled(std::size_t idx, bool on) {
     const std::size_t custom_idx = idx - file_count;
     if (custom_idx < impl->custom_cheats.size()) {
         impl->custom_cheats[custom_idx].enabled = on;
+        SaveCustomCheats(impl->custom_cheats_path, impl->custom_cheats);
         impl->ApplyAllCheats();
         return true;
     }
@@ -546,6 +552,7 @@ bool GbaCore::AddCheat(const std::string& name, const std::string& code) {
         code,
         true,
     });
+    SaveCustomCheats(impl->custom_cheats_path, impl->custom_cheats);
     impl->ApplyAllCheats();
     return true;
 }

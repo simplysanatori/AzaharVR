@@ -17,6 +17,7 @@
 #include <mutex>
 #include <optional>
 #include <sstream>
+#include <variant>
 #include <vector>
 
 #include "ARCodeFile.h"
@@ -290,9 +291,9 @@ struct NdsCore::Impl {
             if (const auto gba = ProbeRom(gba_path)) { // the save this GBA game has on its own
                 const auto alt =
                     std::filesystem::path(GameFolder(paths.data_dir, *gba)) / (gba_stem + ".sav");
-                if (std::filesystem::exists(alt)) {
-                    sav_candidate = alt;
-                }
+                // A new save goes in the game's folder, not beside the player's ROM.
+                EnsureDir(alt.parent_path().string());
+                sav_candidate = alt;
             }
         }
         gba_save_path = sav_candidate.string();
@@ -578,6 +579,7 @@ void NdsCore::Reset() {
     if (!impl->loaded || !impl->nds) {
         return;
     }
+    impl->stop_signalled.store(false, std::memory_order_relaxed);
     impl->FlushPendingSaves(true);
     impl->nds->Reset();
     SetSystemRtc(*impl->nds);
@@ -593,6 +595,15 @@ void NdsCore::SetInput(const Common::AltCore::InputState& input) {
 }
 
 void NdsCore::RunFrame(FrameOutput& out) {
+    // The game powered the console off: its last picture stays until a reset.
+    if (impl->loaded && impl->stop_signalled.load(std::memory_order_relaxed)) {
+        out.audio_pcm.clear();
+        out.rumble = 0.0f;
+        out.metrics_changed = false;
+        impl->FlushPendingSaves(false);
+        return;
+    }
+
     out.primary = {};
     out.secondary = {};
     out.audio_pcm.clear();
@@ -749,6 +760,28 @@ bool NdsCore::SetCheatEnabled(std::size_t idx, bool on) {
         return false;
     }
     impl->nds->AREngine.Cheats[idx].Enabled = on;
+
+    // Mirror the flag into the file's copy (same order as GetCodes) and save it.
+    if (impl->ar_file) {
+        std::size_t n = 0;
+        const auto mark = [&](melonDS::ARCode& code) {
+            if (n++ == idx) {
+                code.Enabled = on;
+            }
+        };
+        for (auto& item : impl->ar_file->RootCat.Children) {
+            if (auto* cat = std::get_if<melonDS::ARCodeCat>(&item)) {
+                for (auto& child : cat->Children) {
+                    if (auto* code = std::get_if<melonDS::ARCode>(&child)) {
+                        mark(*code);
+                    }
+                }
+            } else if (auto* code = std::get_if<melonDS::ARCode>(&item)) {
+                mark(*code);
+            }
+        }
+        impl->ar_file->Save();
+    }
     return true;
 }
 

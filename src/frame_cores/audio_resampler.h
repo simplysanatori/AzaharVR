@@ -42,8 +42,16 @@ public:
     /// Updates the core's nominal input sample rate.
     void SetCoreSampleRate(uint32_t rate);
 
-    /// Toggles fast-forward mode (tighter latency cap; muted if mode == Muted).
-    void SetFastForward(bool on, Settings::FastForwardAudio mode = Settings::FastForwardAudio::NormalPitch);
+    /// Toggles fast-forward mode: Muted plays nothing, Sped Up reads `speed` times faster,
+    /// Normal Pitch and Normal Speed keep the pitch and drop backlog (tight and loose caps).
+    void SetFastForward(bool on, Settings::FastForwardAudio mode = Settings::FastForwardAudio::NormalPitch,
+                        double speed = 1.0);
+
+    /// How many times faster the FIFO is read (1 unless fast-forwarding in Sped Up).
+    static double ReadSpeed(bool fast_forward, Settings::FastForwardAudio mode, double speed);
+
+    /// The most audio, in ms, kept queued before the oldest is dropped.
+    static uint32_t LatencyCapMs(bool fast_forward, Settings::FastForwardAudio mode);
 
     /// Pauses or resumes audio output. Flushing prevents stale audio on resume.
     void SetPaused(bool paused);
@@ -68,6 +76,7 @@ private:
     static constexpr std::size_t kRingCapacityFrames = 16384; // ~500 ms at 32768 Hz
     static constexpr std::size_t kRingMask = kRingCapacityFrames - 1;
 
+    double ReadSpeedNow() const;
     void ResampleLocked(int16_t* out, std::size_t out_frames);
 
     std::unique_ptr<AudioCore::Sink> sink;
@@ -87,6 +96,7 @@ private:
     std::atomic<uint32_t> output_rate{AudioCore::native_sample_rate};
     std::atomic<bool> fast_forward{false};
     std::atomic<Settings::FastForwardAudio> ff_mode{Settings::FastForwardAudio::NormalPitch};
+    std::atomic<double> ff_speed{1.0};
     std::atomic<bool> paused{false};
 };
 

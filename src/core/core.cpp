@@ -1233,9 +1233,7 @@ void System::Reset() {
 }
 
 void System::ApplySettings() {
-    if (settings_callback) {
-        settings_callback();
-    }
+    CallSettingsCallback();
 #ifdef ENABLE_GDBSTUB
     if (override_gdb_port != -1) {
         GDBStub::SetServerPort(override_gdb_port);
@@ -1295,9 +1293,7 @@ void System::ApplySettings() {
 
 // AzaharFrame menuux
 void System::ReloadInputDevices() {
-    if (settings_callback) {
-        settings_callback();
-    }
+    CallSettingsCallback();
     if (!IsPoweredOn()) {
         return;
     }
