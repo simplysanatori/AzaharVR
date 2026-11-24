@@ -1572,7 +1572,7 @@ std::string ExplainFor(Id id) {
     case Id::TextureFilter:
         return "Smooths the game's textures. Some filters cost frames.";
     case Id::AsyncShaders:
-        return "Fewer stutters while new effects load. From the next start.";
+        return "Fewer stutters while new effects load.";
     case Id::AccurateImageCopies: // AzaharFrame accxfer
         return "Fixes flickering, shimmering or glow glitches in some games.";
     case Id::FastForwardSpeed:
