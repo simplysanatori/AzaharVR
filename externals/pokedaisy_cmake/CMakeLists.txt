@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 # PokeDaisy's shared C code (companion pages, quick menu, field editing), built as a static library against
-# our mGBA. Needs gbads_cmake's `mgba` target, so add that directory first. Nothing links this yet.
+# our mGBA. Needs gbads_cmake's `mgba` target, so add that directory first. frame_cores links it.
 # PokeDaisy is GPL-3.0 with section 7(b) terms: see README.md here.
 
 set(PD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../pokedaisy")
@@ -115,6 +115,16 @@ target_include_directories(pokedaisy
         "${PD_DIR}/linux"
         "${PD_CPP}"
 )
+
+# For consumers: not our warnings to fix.
+target_include_directories(pokedaisy SYSTEM INTERFACE
+    "${PD_DIR}"
+    "${PD_DIR}/3ds/core"
+    "${PD_DIR}/3ds/host"
+    "${PD_DIR}/linux"
+    "${PD_CPP}"
+)
+target_compile_definitions(pokedaisy PUBLIC HAVE_POKEDAISY)
 
 # mGBA's headers and its INTERFACE feature defines (USE_PTHREADS etc.), which decide struct layouts and so
 # must match the mgba target exactly. Taken from the target rather than retyped.

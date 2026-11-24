@@ -1,6 +1,7 @@
 # pokedaisy_cmake
 
-Builds PokeDaisy's shared C code as the static library `pokedaisy` (EXCLUDE_FROM_ALL, nothing links it yet).
+Builds PokeDaisy's shared C code as the static library `pokedaisy` (EXCLUDE_FROM_ALL). `frame_cores`
+links it for `pokedaisy_driver.cpp`, with `HAVE_POKEDAISY` defined.
 Only configured when `ENABLE_ALT_CORES` is on and `externals/pokedaisy/` holds PokeDaisy's sources; otherwise
 it prints a status line and is skipped. PokeDaisy's own files are not modified.
 
