@@ -158,6 +158,7 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     vis/pit_hand.cpp # AzaharFrame kiuhand
     vis/pit_hand.h
     vis/pit_hand_data.inc
+    vis/pit_arm_data.inc # AzaharFrame kiuhand: the drawn arm (tools/kiu_hand/make_arm.py)
     vis/laurel_frame.cpp # AzaharFrame kiuhand
     vis/laurel_frame.h
     vis/laurel_frame_data.inc
