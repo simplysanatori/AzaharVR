@@ -744,6 +744,15 @@ PitHandSeat PitHandPanelSeat(bool inside) {
             kPitSeatRadius, kPitSeatWidth, kPitSeatBands};
 }
 
+PitMat4 PitHandUnmirrored(const PitMat4& mirroring_fit) {
+    // The fit times arm space's own mirror (x turned over): its first column negated.
+    PitMat4 o = mirroring_fit;
+    for (std::size_t row = 0; row < 4; row++) {
+        o[row] = -o[row];
+    }
+    return o;
+}
+
 PitMat4 PitHandControllerFit(bool left_hand, float scale) {
     // aim = R (arm metres) + T for the left controller; a scale keeps the handle's centre.
     const float s = kPitHandUnit * scale;

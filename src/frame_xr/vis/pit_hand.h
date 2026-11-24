@@ -188,8 +188,7 @@ PitHandPose PitHandPoseFromJoints(std::span<const PitJointPose, kPitXrJoints> jo
                                   bool right_hand, float metacarpal_follow = 1.0f);
 /// Where to draw the hand for a tracked wrist: arm space to the joints' space (the wrist on
 /// the tracked wrist, turned as it is; `scale` on kPitHandUnit). For a right hand the matrix
-/// mirrors (draw the left mesh with it, culling turned over, or the mirrored mesh without the
-/// mirror).
+/// mirrors: see "Right hands" below.
 PitMat4 PitHandTrackedFit(const PitJointPose& wrist, bool right_hand, float scale = 1.0f);
 
 /// The joints of a pose, placed.
@@ -320,10 +319,20 @@ struct PitHandSeat {
 };
 PitHandSeat PitHandPanelSeat(bool inside);
 
+/// Right hands. Our hand is a left one, and a right hand is drawn one of two ways, never both:
+///   - the left vertices (PitHandSkin's `mirrored` false, PitHandIndices(false)) with a fit that
+///     mirrors (PitHandControllerFit(false), PitHandTrackedFit(..., true), weapon_fit.h's
+///     FitOffArm and FitHoldingArm for the right hand) and the culling turned over (FitPart's
+///     `mirrored`): how the game's arm is drawn today; or
+///   - the mirrored vertices (`mirrored` true, PitHandIndices(true)) with that fit's mirror
+///     taken out (PitHandUnmirrored), nothing turned over.
+/// Both put every vertex in the same place.
+PitMat4 PitHandUnmirrored(const PitMat4& mirroring_fit);
+
 /// The hand on the Steam Frame controller for the Held poses: arm space to the controller's
 /// OpenXR aim space (metres; `scale` on kPitHandUnit, about the handle's centre): the
 /// handle's cylinder through the fist, the back of the hand outward, the trigger under the
-/// index finger. For the right hand it mirrors (as FitOffArm's does).
+/// index finger. For the right hand it mirrors (as FitOffArm's does: Right hands, above).
 PitMat4 PitHandControllerFit(bool left_hand, float scale = 1.0f);
 
 } // namespace FrameXr::Vis

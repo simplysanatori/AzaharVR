@@ -224,7 +224,7 @@ def main():
         R.grid(ims, 2).save(os.path.join(a.out, 'laurel.png'))
     if want('extras'):
         fit_r = inf['fit_right']
-        rows = [('right hand (mirrored)', [hand('grip_right', fit_r, -CTRL_L)]),
+        rows = [('right hand (the left mesh, the mirroring fit)', [hand('grip_elbow', fit_r, -CTRL_L, flip=True)]),
                 ('forearm turned to the elbow', [hand('grip_elbow')]),
                 ('hand tracking: relaxed fed back', [hand('tracked_relaxed')]),
                 ('free, inputs half', [hand('free_half')]),

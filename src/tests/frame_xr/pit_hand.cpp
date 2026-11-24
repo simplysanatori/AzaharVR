@@ -447,6 +447,10 @@ TEST_CASE("Pit's hand: the controller's touches and pulls curl the fingers as th
     CHECK(PitHandPoseDiffers(PitHandEase(a, b, 1.0f / 90.0f), a));
 }
 
+static float det3(const PitMat4& m) {
+    return Dot(Cross(Dir4(m, {1, 0, 0}), Dir4(m, {0, 1, 0})), Dir4(m, {0, 0, 1}));
+}
+
 TEST_CASE("Pit's hand: the right hand is the left one's mirror", "[kiuhand]") {
     const PitHandSkeleton s = PitHandEvaluate(PitHandNamedPose(PitHandNamed::Grip));
     const std::vector<float> left = Skinned(s, false);
@@ -487,6 +491,26 @@ TEST_CASE("Pit's hand: the right hand is the left one's mirror", "[kiuhand]") {
     CHECK(b[0] == Approx(-a[0]).margin(1e-6));
     CHECK(b[1] == Approx(a[1]).margin(1e-6));
     CHECK(b[2] == Approx(a[2]).margin(1e-6));
+    // The two ways to draw a right hand land on the same points: the left vertices through a
+    // mirroring fit, the mirrored vertices through that fit with its mirror taken out.
+    PitJointPose wrist;
+    wrist.orientation = {0.2705981f, 0.6532815f, -0.2705981f, 0.6532815f};
+    wrist.position = {0.2f, 1.1f, -0.3f};
+    for (const PitMat4& fit : {rf, PitHandTrackedFit(wrist, true)}) {
+        const PitMat4 plain = PitHandUnmirrored(fit);
+        // the mirroring fit turns space over, the other does not
+        const auto det = [](const PitMat4& m) {
+            return Dot(Cross(Dir4(m, {1, 0, 0}), Dir4(m, {0, 1, 0})), Dir4(m, {0, 0, 1}));
+        };
+        CHECK(det(fit) < 0.0f);
+        CHECK(det(plain) > 0.0f);
+        for (std::size_t v = 0; v < left.size(); v += kPitVertexFloats * 37) {
+            const V3 one = Apply4(fit, {left[v], left[v + 1], left[v + 2]});
+            const V3 other = Apply4(plain, {right[v], right[v + 1], right[v + 2]});
+            REQUIRE(Len(Sub(one, other)) < 1e-6f);
+        }
+    }
+    CHECK(det3(lf) > 0.0f);
 }
 
 TEST_CASE("Pit's hand: the grip closes round the handle without passing through it or the palm", "[kiuhand]") {
