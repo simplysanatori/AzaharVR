@@ -109,6 +109,15 @@ ConfigureInput::ConfigureInput(Core::System& _system, QWidget* parent)
     };
     // clang-format on
 
+#ifndef ENABLE_ALT_CORES // only DS, GBA and Game Boy games have these
+    for (QWidget* widget : {static_cast<QWidget*>(ui->labelMicBlow),
+                            static_cast<QWidget*>(ui->buttonMicBlow),
+                            static_cast<QWidget*>(ui->labelRewind),
+                            static_cast<QWidget*>(ui->buttonRewind)}) {
+        widget->hide();
+    }
+#endif
+
     /// A group of five QPushButtons represent one analog input. The buttons each represent up,
     /// down, left, right, and modifier, respectively.
     analog_map_buttons = {{
