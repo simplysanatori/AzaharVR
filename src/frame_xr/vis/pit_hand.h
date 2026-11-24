@@ -120,6 +120,8 @@ enum class PitHandNamed : uint8_t {
     Count,
 };
 const PitHandPose& PitHandNamedPose(PitHandNamed name);
+/// The flat hand: every finger straight (what a pose's turns are counted from: pit_model.h).
+const PitHandPose& PitHandFlatPose();
 std::string_view PitHandNamedLabel(PitHandNamed name);
 
 /// What the Steam Frame controller tells of the hand on it.

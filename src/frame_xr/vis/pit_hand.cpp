@@ -333,6 +333,11 @@ const PitHandPose& PitHandNamedPose(PitHandNamed name) {
     return poses[i < poses.size() ? i : 0];
 }
 
+const PitHandPose& PitHandFlatPose() {
+    static const PitHandPose flat = FlatPose();
+    return flat;
+}
+
 std::string_view PitHandNamedLabel(PitHandNamed name) {
     constexpr std::array<std::string_view, static_cast<std::size_t>(PitHandNamed::Count)> labels{
         "bind", "open", "relaxed", "fist", "point", "thumb_up", "grip", "trigger", "grip_thumb_up",

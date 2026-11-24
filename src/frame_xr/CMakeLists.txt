@@ -157,6 +157,9 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     vis/weapon_fit.h
     vis/pit_hand.cpp # AzaharFrame kiuhand
     vis/pit_hand.h
+    vis/pit_hand_shader.h
+    vis/pit_model.cpp # AzaharFrame kiuhand
+    vis/pit_model.h
     vis/pit_hand_data.inc
     vis/laurel_frame.cpp # AzaharFrame kiuhand
     vis/laurel_frame.h
