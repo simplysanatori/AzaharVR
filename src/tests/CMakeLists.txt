@@ -37,6 +37,10 @@ add_executable(tests
     ../frame_xr/vis/pit_hand.cpp # AzaharFrame kiuhand
     ../frame_xr/vis/laurel_frame.cpp # AzaharFrame kiuhand
     frame_xr/pit_hand.cpp # AzaharFrame kiuhand
+    ../frame_xr/vis/pit_model.cpp # AzaharFrame kiuhand
+    frame_xr/pit_model.cpp # AzaharFrame kiuhand
+    ../frame_xr/vis/hand_import.cpp # AzaharFrame kiuhand
+    frame_xr/hand_import.cpp # AzaharFrame kiuhand
     ../frame_xr/vis/muzzle_flash.cpp # AzaharFrame kiuflash
     ../frame_xr/vis/projectile.cpp # AzaharFrame kiuflash
     frame_xr/kiu_flash.cpp # AzaharFrame kiuflash
@@ -194,6 +198,7 @@ endif()
 target_link_libraries(tests PRIVATE citra_common citra_core video_core audio_core)
 target_link_libraries(tests PRIVATE input_common) # AzaharFrame
 target_link_libraries(tests PRIVATE httplib) # AzaharFrame crashreport: Send Report to 127.0.0.1
+target_link_libraries(tests PRIVATE lodepng) # AzaharFrame kiuhand: hand_import.cpp and its test's zips
 target_link_libraries(tests PRIVATE json-headers) # AzaharFrame jsoncrash: pack_config.h; emfallback: the recipe parser header
 target_link_libraries(tests PRIVATE tsl::robin_map) # AzaharFrame savemem: rasterizer_cache_clear.cpp
 target_link_libraries(tests PRIVATE ${PLATFORM_LIBRARIES} catch2 nihstro-headers Threads::Threads)

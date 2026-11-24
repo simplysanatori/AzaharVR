@@ -90,19 +90,20 @@ void main() {
     // and held back where the surface is hidden from the open air.
     float d = ndl * 0.85 + (sky - 0.5) * 0.3 - (1.0 - ao) * 0.35;
     float soft = 0.22 * skin + 0.30 * (cloth + leather) + 0.10 * (gold + enamel);
-    float lit = smoothstep(0.08 - soft, 0.08 + soft, d);
+    float edge_at = 0.08 + 0.10 * skin;
+    float lit = smoothstep(edge_at - soft, edge_at + soft, d);
 
     // Each material's shade (times its colour), and what its lit side gains.
-    vec3 shade = skin * vec3(0.90, 0.63, 0.52) + cloth * vec3(0.46, 0.50, 0.62) +
-                 leather * vec3(0.50, 0.42, 0.42) + gold * vec3(0.50, 0.43, 0.16) +
+    vec3 shade = skin * vec3(0.90, 0.58, 0.47) + cloth * vec3(0.46, 0.50, 0.62) +
+                 leather * vec3(0.50, 0.42, 0.42) + gold * vec3(0.52, 0.47, 0.18) +
                  enamel * vec3(0.48, 0.30, 0.34);
-    vec3 gain = skin * vec3(1.10, 1.02, 0.93) + cloth * vec3(1.02) + leather * vec3(1.06, 1.0, 0.96) +
-                gold * vec3(1.06, 1.0, 0.82) + enamel * vec3(1.05);
+    vec3 gain = skin * vec3(1.06, 0.99, 0.92) + cloth * vec3(1.02) + leather * vec3(1.06, 1.0, 0.96) +
+                gold * vec3(1.06, 1.02, 0.86) + enamel * vec3(1.05);
     vec3 colour = albedo * mix(shade, gain, lit);
 
     // Skin: a rosy edge where light turns to shade, as light through flesh.
     float edge = lit * (1.0 - lit) * 4.0;
-    colour += skin * edge * albedo * vec3(0.16, 0.02, -0.03);
+    colour += skin * edge * albedo * vec3(0.20, 0.03, -0.04);
 
     // Hidden places stay warm on skin, plainly darker elsewhere.
     float hidden = 1.0 - smoothstep(0.25, 0.95, ao);
@@ -113,10 +114,10 @@ void main() {
     vec3 R = reflect(-V, n);
     float above = 0.5 + 0.5 * dot(R, U);
     float glance = max(dot(R, L), 0.0);
-    vec3 metal = albedo * mix(vec3(0.42, 0.37, 0.13), vec3(1.30, 1.18, 0.78), smoothstep(0.25, 0.80, above)) +
-                 albedo * vec3(0.55, 0.50, 0.30) * pow(glance, 6.0) +
-                 vec3(1.0, 0.95, 0.75) * pow(glance, 90.0) * 0.9;
-    colour = mix(colour, metal * mix(0.55, 1.0, smoothstep(0.2, 0.9, ao)), gold * 0.75);
+    vec3 metal = albedo * mix(vec3(0.50, 0.46, 0.18), vec3(1.12, 1.08, 0.92), smoothstep(0.30, 0.70, above)) +
+                 vec3(1.0, 0.96, 0.70) * (0.35 * smoothstep(0.80, 0.95, above) + 0.25 * pow(glance, 8.0)) +
+                 vec3(1.0, 0.98, 0.88) * pow(glance, 120.0) * 1.2;
+    colour = mix(colour, metal * mix(0.55, 1.0, smoothstep(0.2, 0.9, ao)), gold * 0.8);
 
     // Gloss: enamel sharp, leather faint and wide, skin a breath; cloth none.
     vec3 H = normalize(L + V);

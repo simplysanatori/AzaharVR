@@ -25,6 +25,12 @@
 //            are the file's. The forearm turns about the wrist toward the elbow. The
 //            controller's handle lies in the palm: no finger closes through it.
 //
+//   Two hands  One PitModel serves both arms in the same frame: nothing here keeps state
+//            between calls. Each hand has its own pose and elbow (PitModelEvaluate) and its
+//            own vertex buffer of vertex_count x kPitVertexFloats floats (PitModelSkin); the
+//            left is drawn with all the indices, the right with the first body_index_count
+//            through the mirroring fit. The index buffer and the two images are shared.
+//
 // ---- The hand file (version 1), little endian, no padding ----
 //
 //   bytes     what

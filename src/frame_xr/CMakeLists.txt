@@ -160,6 +160,8 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     vis/pit_hand_shader.h
     vis/pit_model.cpp # AzaharFrame kiuhand
     vis/pit_model.h
+    vis/hand_import.cpp # AzaharFrame kiuhand
+    vis/hand_import.h
     vis/pit_hand_data.inc
     vis/laurel_frame.cpp # AzaharFrame kiuhand
     vis/laurel_frame.h
@@ -211,6 +213,7 @@ target_include_directories(frame_xr PUBLIC ${PROJECT_SOURCE_DIR}/third_party/ope
 target_link_libraries(frame_xr PUBLIC citra_common citra_core video_core input_common vulkan-headers vma)
 target_link_libraries(frame_xr PRIVATE frame_xr_picker ${CMAKE_DL_LIBS} Threads::Threads)
 target_link_libraries(frame_xr PUBLIC frame_xr_menu) # AzaharFrame tabmenu
+target_link_libraries(frame_xr PRIVATE lodepng) # AzaharFrame kiuhand: hand_import.cpp unpacks and decodes with it
 # AzaharFrame menuux: Edit Controls' click plays through SDL's audio (ui_sound.cpp).
 if (ENABLE_SDL2)
     target_link_libraries(frame_xr PRIVATE SDL2::SDL2)
