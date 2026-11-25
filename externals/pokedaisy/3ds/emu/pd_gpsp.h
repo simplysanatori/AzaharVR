@@ -128,7 +128,7 @@ enum pd_gpsp_state {
     PD_GPSP_STATE_BAD,        // gpSP's, but it didn't load
 };
 // States are gpSP's own under a header naming the game; a load keeps the cartridge's save memory as it is now (a
-// state must never put an old save back: CLAUDE.md's "save files are sacred").
+// state must never put an old save back: the project's rule, "save files are sacred").
 bool pd_gpsp_save_state(const char* path);
 enum pd_gpsp_state pd_gpsp_load_state(const char* path);
 

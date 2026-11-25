@@ -36,7 +36,7 @@
 #include "../core/pd_style.h"
 
 // What a save state keeps: the RTC, never the save data - loading one must not write an old copy over the save file
-// (CLAUDE.md: save files are sacred).
+// (the project's rule: save files are sacred).
 #define STATE_FLAGS SAVESTATE_RTC
 #define NOTICE_FRAMES 150
 #define HUD_AFTER_FRAMES 20 // the HUD comes on after this much plain field (FieldHud's rule), off at once

@@ -1,7 +1,7 @@
 // A small software canvas the companion draws into: 0xRRGGBB pixels, row
 // major. Each host converts it for its screen (the 3DS's rotated BGR
 // framebuffer, an SDL texture, a PNG). Corners step in whole pixels and text
-// is the 1-bit Pixel Operator, so it all stays pixel art (CLAUDE.md: corners
+// is the 1-bit Pixel Operator, so it all stays pixel art (the project's rule: corners
 // are pixel art, never smooth arcs).
 #ifndef PD_CANVAS_H
 #define PD_CANVAS_H

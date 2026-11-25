@@ -88,7 +88,7 @@ enum pd_armgba_state {
     PD_ARMGBA_STATE_BAD,        // armGBA's, but it didn't load (another version of the core)
 };
 // States are armGBA's own under a header naming the game; a load keeps the cartridge's save memory as it is now (a
-// state must never put an old save back: CLAUDE.md's "save files are sacred").
+// state must never put an old save back: the project's rule, "save files are sacred").
 bool pd_armgba_save_state(const char* path);
 enum pd_armgba_state pd_armgba_load_state(const char* path);
 // Writes the save file now if the game wrote to its save memory since the last time.
