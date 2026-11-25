@@ -105,6 +105,179 @@ TEST_CASE("FrameXr screen rig: the bottom screen follows the bigger top screen",
     REQUIRE(rel.z == Approx(0.5f));
 }
 
+namespace {
+
+struct Seen {
+    float top, bottom; ///< its edges' middles, degrees above straight ahead
+    float width;       ///< degrees, across its middle
+};
+
+/// A flat screen, seen from the origin.
+Seen SeenFrom(const Posef& p, float w, float h) {
+    const auto at = [&](float x, float y) { return Transform(p, {x * w, y * h, 0.0f}); };
+    const float across = Dot(Normalized(at(-0.5f, 0.0f)), Normalized(at(0.5f, 0.0f)));
+    return {Elevation(at(0.0f, 0.5f)), Elevation(at(0.0f, -0.5f)), std::acos(across) / kDeg};
+}
+
+} // namespace
+
+TEST_CASE("FrameXr screen rig: a DS game's screens do not overlap and look the same size",
+          "[frame_xr]") {
+    constexpr float kW = 4.0f / 3.0f; // 256 x 192
+    SECTION("stacked") {
+        const float f = LinkedScale(true, kLayoutStacked);
+        const Seen main = SeenFrom(Ahead(2.0f), kW, 1.0f);
+        const Posef pose =
+            SecondFromMain(Ahead(2.0f), 1.0f, kW, kW * f, kLayoutStacked, 1.0f, f);
+        const Seen second = SeenFrom(pose, kW * f, f);
+        REQUIRE(main.bottom - second.top == Approx(3.9f).margin(0.1f)); // the 3DS's gap
+        REQUIRE(second.width == Approx(main.width).epsilon(0.01));
+        REQUIRE((second.top - second.bottom) == Approx(main.top - main.bottom).epsilon(0.04));
+        // As it was: 1.0 x, and over the main screen
+        const Seen before = SeenFrom(BottomFromTop(Ahead(2.0f), 1.0f), kW, 1.0f);
+        REQUIRE(before.top > main.bottom + 1.5f);
+        REQUIRE(before.width > main.width * 1.15f);
+        // Bigger and smaller main screens
+        for (const float s : {kMinScale, 1.7f, kMaxScale}) {
+            const Seen m = SeenFrom(Ahead(2.0f), kW * s, s);
+            const Posef p = SecondFromMain(Ahead(2.0f), s, kW * s, kW * f, kLayoutStacked, 1.0f, f);
+            INFO("scale " << s);
+            REQUIRE(SeenFrom(p, kW * f, f).top < m.bottom);
+        }
+    }
+    SECTION("stacked, turned on their sides") {
+        const float f = LinkedScale(true, kLayoutStacked);
+        const Seen main = SeenFrom(Ahead(2.0f), 1.0f, kW);
+        const Posef pose =
+            SecondFromMain(Ahead(2.0f), 1.0f, 1.0f, f, kLayoutStacked, kW, kW * f);
+        REQUIRE(SeenFrom(pose, f, kW * f).top < main.bottom - 2.0f);
+    }
+    SECTION("side by side: as large, with a gap") {
+        REQUIRE(LinkedScale(true, kLayoutSideBySide) == 1.0f);
+        for (const float w : {kW, 1.0f}) {
+            const Posef pose = SecondFromMain(Ahead(2.0f), 1.0f, w, w, kLayoutSideBySide);
+            REQUIRE(Length(pose.position) == Approx(2.0f));
+            REQUIRE(Azimuth(Transform(pose, {-w * 0.5f, 0.0f, 0.0f})) >
+                    Azimuth({w * 0.5f, 0.0f, -2.0f}));
+        }
+    }
+    SECTION("every other game's screens") {
+        REQUIRE(LinkedScale(false, kLayoutStacked) == 1.0f);
+        REQUIRE(LinkedScale(false, kLayoutSideBySide) == 1.0f);
+        for (const float s : {kMinScale, 1.0f, kMaxScale}) {
+            const Vec3f off = BottomOffset(s, 1.0f, kBottomHeight);
+            REQUIRE(off.y == Approx(-(0.5f * s + 0.25f)));
+            REQUIRE(off.z == Approx(0.5f));
+        }
+    }
+    SECTION("detached, it keeps the size it had") {
+        Slots s;
+        REQUIRE(Detach(s, kDetachOther, Ahead(1.5f), LinkedScale(true, kLayoutStacked)));
+        REQUIRE(s.second_scale == Approx(kEqualStackedScale));
+    }
+}
+
+namespace {
+
+/// The main screen, as drawn (flat or bent) for a pose and size.
+PanelQuad MainQuad(const Posef& pose, float w, float h, uint32_t curve_deg) {
+    PanelQuad q;
+    q.pose = pose;
+    q.width_m = w;
+    q.height_m = h;
+    q.visible = true;
+    q.curve_radius = CurveRadius(w, curve_deg);
+    return q;
+}
+
+/// Whether the second screen (flat, `w` x `h` at `pose`) covers part of the main one seen from
+/// `eye`, or comes nearer to it than `margin_deg`: every point of a 17 x 17 grid over it, looked
+/// at from the eye and again `margin_deg` towards the main screen's middle.
+bool Overlaps(const PanelQuad& main, const Posef& pose, float w, float h, const Vec3f& eye,
+              float margin_deg) {
+    const Vec3f to_main = Normalized(main.pose.position - eye);
+    for (int i = 0; i <= 16; ++i) {
+        for (int j = 0; j <= 16; ++j) {
+            const Vec3f p = Transform(pose, {(i / 16.0f - 0.5f) * w, (0.5f - j / 16.0f) * h, 0.0f});
+            const Vec3f d = Normalized(p - eye);
+            const Vec3f n = Normalized(to_main - d * Dot(d, to_main));
+            const float m = margin_deg * kDeg;
+            for (const Vec3f& dir : {d, Normalized(d * std::cos(m) + n * std::sin(m))}) {
+                if (IntersectQuad({eye, dir}, main).in_bounds) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+struct Placed {
+    Vec3f at;
+    float scale;
+};
+
+} // namespace
+
+TEST_CASE("FrameXr screen rig: a DS game's screens do not overlap as the player sees them",
+          "[frame_xr]") {
+    constexpr float kW = 4.0f / 3.0f; // 256 x 192, 1 m high at scale 1
+    constexpr float kApart = 0.4f; // the nearest is 0.6 degrees: side by side, bent 90, at 2.35
+    // The default, the ends of the scale, and the places in the owner's log (2026-11-24)
+    const Placed places[] = {{{0.0f, 0.0f, -2.0f}, 1.0f},   {{0.0f, 0.0f, -2.0f}, kMinScale},
+                             {{0.0f, 0.0f, -2.0f}, kMaxScale}, {{0.0f, 0.19f, -2.69f}, 1.61f},
+                             {{0.0f, 0.45f, -2.66f}, 1.61f}, {{0.0f, 0.48f, -2.65f}, 1.70f},
+                             {{0.0f, 0.43f, -2.66f}, 1.92f}, {{0.0f, 0.46f, -2.91f}, 2.35f},
+                             {{-0.04f, 0.0f, -2.53f}, 1.58f}};
+    // Between the eyes, each eye, and the head a little higher or lower than where it started
+    const Vec3f eyes[] = {{0.0f, 0.0f, 0.0f},    {-0.032f, 0.0f, 0.0f}, {0.032f, 0.0f, 0.0f},
+                          {0.0f, 0.1f, 0.0f},    {0.0f, -0.1f, 0.0f}};
+    for (const Placed& at : places) {
+        const Posef main{FaceViewer(at.at, {}, {0.0f, 1.0f, 0.0f}), at.at};
+        for (const bool turned : {false, true}) {     // Screen Rotation 90 or 270 degrees
+            for (const uint32_t curve : {0u, 15u, 30u, 45u, 60u, 75u, 90u}) {
+                if (turned && curve != 0) {
+                    continue; // turned screens are never bent (VrUi::CurveFor)
+                }
+                for (const uint32_t layout : {kLayoutStacked, kLayoutSideBySide}) {
+                    {
+                        const float f = LinkedScale(true, layout);
+                        // As WithSecondSlot (app.cpp): the sizes as the screens stand
+                        float mw = kW * at.scale, mh = at.scale, sw = kW * f, sh = f;
+                        if (turned) {
+                            std::swap(mw, mh);
+                            std::swap(sw, sh);
+                        }
+                        const Posef pose = SecondFromMain(main, at.scale, mw, sw, layout,
+                                                          mh / at.scale, sh);
+                        const PanelQuad m = MainQuad(main, mw, mh, curve);
+                        INFO("main at " << at.at.y << ", " << at.at.z << " scale " << at.scale
+                                        << (turned ? " turned" : "") << " curve " << curve
+                                        << " layout " << layout);
+                        for (const Vec3f& eye : eyes) {
+                            INFO("eye " << eye.x << ", " << eye.y);
+                            REQUIRE_FALSE(Overlaps(m, pose, sw, sh, eye, kApart));
+                        }
+                        // Detached, it stays where it was drawn, at that size (Detach)
+                        Slots s;
+                        REQUIRE(Detach(s, kDetachOther, pose, f));
+                        REQUIRE_FALSE(Overlaps(m, s.second, sw * s.second_scale / f,
+                                               sh * s.second_scale / f, {}, kApart));
+                    }
+                }
+            }
+        }
+    }
+    SECTION("before, the second screen covered the main one's lower edge") {
+        // 1.0 x, by the 3DS rule: the owner's Dragon Quest IX, 2026-11-24 (main at 0.46, -2.91)
+        for (const Placed& at : {places[0], places[7]}) {
+            const Posef main{FaceViewer(at.at, {}, {0.0f, 1.0f, 0.0f}), at.at};
+            const Posef old = BottomFromTop(main, at.scale);
+            REQUIRE(Overlaps(MainQuad(main, kW * at.scale, at.scale, 0), old, kW, 1.0f, {}, 0.0f));
+        }
+    }
+}
+
 TEST_CASE("FrameXr screen rig: the D-pad turns the screens about the head", "[frame_xr]") {
     const Posef start = Ahead(2.0f);
     SECTION("one step right keeps the distance and faces the viewer") {

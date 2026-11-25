@@ -2603,7 +2603,10 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         // Detached: from the first grab the second slot stays where it is drawn now and no
         // longer follows the main one.
         Rig::Slots slots = SlotsOf(place);
-        if (Rig::Detach(slots, detach, ToInput(place.bottom_pose))) {
+        const float linked_scale =
+            Rig::LinkedScale(GetCoreCapabilities().screens.equal_screens,
+                             Settings::values.vr_screen_layout.GetValue());
+        if (Rig::Detach(slots, detach, ToInput(place.bottom_pose), linked_scale)) {
             PutSlots(place, slots);
             SetScreenPlacement(place);
             place = GetScreenPlacement();

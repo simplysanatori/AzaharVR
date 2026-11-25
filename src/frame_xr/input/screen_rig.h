@@ -39,8 +39,13 @@ inline constexpr float kNearestTopZ = -1.0f;
 inline constexpr float kBottomBelow = 0.75f;
 inline constexpr float kBottomNearer = 0.5f;
 inline constexpr float kBottomPitch = -0.785398163f;
+/// Its height (a 3DS game's, and a GBA or Game Boy game's map).
+inline constexpr float kBottomHeight = 0.5625f;
 /// The top screen's half height at scale 1.
 inline constexpr float kTopHalfHeight = 0.5f;
+/// A DS game's screens are the same size. The second one is nearer when they are stacked: at this
+/// scale it looks as large as the main one does.
+inline constexpr float kEqualStackedScale = 0.82f;
 /// One D-pad press turns the pair this far about the head (degrees).
 inline constexpr float kNudgeStepDeg = 0.5f;
 /// A nudge never takes the top screen further than this from straight ahead, either axis.
@@ -58,9 +63,12 @@ float DepthScale(float scale);
 /// Where the bottom screen goes for the top screen's pose and scale, in the top screen's frame:
 /// its top edge keeps its place just under the top screen's bottom edge, so a bigger top screen
 /// never covers it, and it is 0.5 m nearer. Its own size does not change (it stays a touch
-/// screen in reach of the beam).
-Vec3f BottomOffset(float scale);
-Posef BottomFromTop(const Posef& top, float scale);
+/// screen in reach of the beam). Heights as they stand (a turned DS screen's is its width):
+/// `main_height` at scale 1. A taller second screen keeps the same top edge and reaches lower.
+Vec3f BottomOffset(float scale, float main_height = 2.0f * kTopHalfHeight,
+                   float second_height = kBottomHeight);
+Posef BottomFromTop(const Posef& top, float scale, float main_height = 2.0f * kTopHalfHeight,
+                    float second_height = kBottomHeight);
 
 // ---- AzaharFrame layout: Screen Layout --------------------------------------------------------
 //
@@ -83,9 +91,12 @@ std::string LayoutToast(uint32_t layout);
 /// The other layout (two of them: the cycle is a switch).
 uint32_t NextLayout(uint32_t layout);
 /// The second slot's pose for the main slot's pose, scale and width and the second screen's
-/// width.
+/// width (and their heights, as BottomOffset).
 Posef SecondFromMain(const Posef& main, float scale, float main_width, float second_width,
-                     uint32_t layout);
+                     uint32_t layout, float main_height = 2.0f * kTopHalfHeight,
+                     float second_height = kBottomHeight);
+/// The second screen's scale while it follows the main one (`equal`: ScreenMetrics::equal_screens).
+float LinkedScale(bool equal, uint32_t layout);
 
 /// The top screen turned about the viewer (the LOCAL origin) by `right_steps` and `up_steps`
 /// presses: its distance does not change and it faces the viewer. Nothing (no move) when that
@@ -181,9 +192,9 @@ struct Slots {
 /// The second slot follows the main one again, at 1.0x.
 void Relink(Slots& s);
 /// A grab starts in `mode`: in Secondary and Both the second slot stops following the main one and
-/// keeps `linked_second`, where it is drawn now. Nothing in Off or when it already is free.
-/// True when it changed.
-bool Detach(Slots& s, uint32_t mode, const Posef& linked_second);
+/// keeps `linked_second` and `linked_scale`, as it is drawn now. Nothing in Off or when it already
+/// is free. True when it changed.
+bool Detach(Slots& s, uint32_t mode, const Posef& linked_second, float linked_scale = 1.0f);
 /// The slots as they may be in `mode`: in Off the second one follows the main one; outside Both
 /// a main slot that the Off grip cannot move (nearer than kNearestTopZ ahead: moved round you in
 /// Both) goes back to its default place, at its own scale. Scales clamped.
