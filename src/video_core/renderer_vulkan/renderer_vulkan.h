@@ -109,6 +109,9 @@ private:
     bool RenderToXr(); // AzaharFrame: renderer_vulkan_xr.cpp; true: drew and submitted
     /// AzaharFrame kiupowers: the power bar's sprites into the strip (in the bottom screen's pass).
     void DrawKiuPowers(u32 width, u32 height, float alpha);
+    /// AzaharFrame kiutalk: renderer_vulkan_kiu_talk.cpp.
+    void PrepareKiuTalk();
+    void DrawKiuTalk(u32 width, u32 height, float dim, float alpha, vk::DescriptorSet picture);
     bool XrShowsScreens() const; // AzaharFrame: the headset shows the screens (no window)
 #endif
 
@@ -172,6 +175,12 @@ private:
     bool screenRendered;
     u64 previous_frame_tick{};
 #ifndef HAVE_LIBRETRO
+    // AzaharFrame kiutalk
+    std::unique_ptr<KiuTalkPass> kiu_talk_pass;
+    u64 kiu_talk_generation = 0;
+    std::vector<vk::DescriptorSet> kiu_talk_sets; ///< by texture
+    VideoCore::KiuTalk::Choice kiu_talk_choice;
+    bool kiu_talk_card = false;
     std::unique_ptr<XrPresentTarget> xr_target; // AzaharFrame
     u64 xr_target_generation = 0;               // AzaharFrame: of the swapchains it uses
     std::chrono::steady_clock::time_point xr_window_alive{}; // AzaharFrame: last window present in VR

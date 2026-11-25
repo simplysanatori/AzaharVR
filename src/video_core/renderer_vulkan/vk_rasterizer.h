@@ -5,6 +5,7 @@
 #pragma once
 
 #include "video_core/kiu_powers.h" // AzaharFrame kiupowers
+#include "video_core/renderer_vulkan/vk_kiu_talk.h" // AzaharFrame kiutalk
 #include "video_core/rasterizer_accelerated.h"
 #include "video_core/renderer_vulkan/vk_descriptor_update_queue.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
@@ -85,6 +86,22 @@ public:
             return;
         }
         for (const auto& texture : powers_textures) {
+            Surface& surface = res_cache.GetTextureSurface(texture);
+            each(surface.ImageView(), res_cache.GetSampler(texture.config).Handle());
+        }
+    }
+
+    /// AzaharFrame kiutalk: the talk's portraits and illustrations, and their textures in the order
+    /// the sprites name them.
+    const KiuTalkDraws& KiuTalk() const {
+        return kiu_talk;
+    }
+    template <typename F>
+    void KiuTalkTextures(F&& each) {
+        if (!kiu_talk.Fresh()) {
+            return;
+        }
+        for (const auto& texture : kiu_talk.Textures()) {
             Surface& surface = res_cache.GetTextureSurface(texture);
             each(surface.ImageView(), res_cache.GetSampler(texture.config).Handle());
         }
@@ -176,6 +193,7 @@ private:
     u64 powers_tick = 0, powers_drawn = 0; ///< TickFrames; the one of the sprites' last draw
     u32 powers_offset = UINT32_MAX;        ///< the last draw's place in the batch's indices
     static constexpr std::size_t kMostPowersSprites = 64; ///< the bar has 25
+    KiuTalkDraws kiu_talk; ///< AzaharFrame kiutalk
 };
 
 } // namespace Vulkan

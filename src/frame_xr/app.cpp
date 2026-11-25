@@ -57,6 +57,7 @@
 #include "frame_xr/watchdog.h"
 #include "frame_xr/xr_loader.h"
 #include "video_core/kiu_powers.h" // AzaharFrame kiupowers
+#include "video_core/kiu_talk.h" // AzaharFrame kiutalk
 #include "video_core/vr_content_repeat.h" // AzaharFrame bfikit
 #include "video_core/vr_dynamic_resolution.h" // AzaharFrame menuux
 #include "input_common/main.h" // AzaharFrame flat: SDL pump count
@@ -1470,6 +1471,10 @@ void Runtime::FrameLoop() {
                             half + static_cast<int32_t>(VideoCore::kXrPackedGap);
                     }
                 }
+                const VideoCore::KiuTalk::PixelRect talk = // AzaharFrame kiutalk
+                    !top && shown.bottom_talk
+                        ? VideoCore::KiuTalk::StripIn(chain.width, chain.height)
+                        : VideoCore::KiuTalk::PixelRect{};
                 if (!top && !shown.bottom_cut.Whole()) { // AzaharFrame kiu1s
                     const Kiu::FirstPerson::CutRect r =
                         Kiu::FirstPerson::CutIn(shown.bottom_cut, static_cast<int>(chain.width),
@@ -1482,9 +1487,18 @@ void Runtime::FrameLoop() {
                     q.size = {size.width * MotionClarity::kCollapse,
                               size.height * MotionClarity::kCollapse};
                 }
+                if (talk.width != 0) { // AzaharFrame kiutalk: the characters alone, all their rows
+                    const auto grown = VideoCore::KiuTalk::GrownFrom(size.height);
+                    q.image_rect = {{static_cast<int32_t>(talk.x), static_cast<int32_t>(talk.y)},
+                                    {static_cast<int32_t>(talk.width),
+                                     static_cast<int32_t>(talk.height)}};
+                    q.pose = Vis::ComposePose(pose, {{0.0f, 0.0f, 0.0f, 1.0f},
+                                                     {0.0f, grown.up, 0.0f}});
+                    q.size.height = grown.height;
+                }
                 q.eye = eye;
                 // AzaharFrame kiu131: Bottom Screen Opacity: blended by the picture's alpha.
-                if (!top && shown.bottom_alpha < 1.0f) {
+                if (!top && (shown.bottom_alpha < 1.0f || talk.width != 0)) {
                     q.flags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
                 }
                 if (to_proj) {
@@ -1543,6 +1557,7 @@ void Runtime::FrameLoop() {
                     quad_layers.push_back(layer);
                 }
             };
+            VideoCore::KiuTalk::g_live.shown.store(shown.bottom_talk, std::memory_order_relaxed);
             { // AzaharFrame kiupowers
                 powers_in.playing = !draw.swapped && shown.head_driven && shown.show_top;
                 powers_in.bottom_shown = shown.show_bottom && draw.bottom_visible;

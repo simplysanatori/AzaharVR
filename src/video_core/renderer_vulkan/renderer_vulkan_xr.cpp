@@ -187,7 +187,10 @@ bool RendererVulkan::RenderToXr() {
                             : kScreenHeight * scale},
         packed ? vk::Extent2D{} : vk::Extent2D{kTopWidth * scale, kScreenHeight * scale},
         // AzaharFrame kiupowers: with the strip under the picture.
-        vk::Extent2D{kBottomWidth * scale, VideoCore::KiuPowers::ImageHeight(scale, powers_strip)},
+        vk::Extent2D{kBottomWidth * scale,
+                     VideoCore::KiuTalk::ImageHeight( // AzaharFrame kiutalk: and the talk's
+                         VideoCore::KiuPowers::ImageHeight(scale, powers_strip), scale,
+                         VideoCore::KiuTalk::g_live.strip.load(std::memory_order_relaxed))},
     };
     if (!xr_target->Prepare(sizes)) {
         return false;
@@ -210,6 +213,7 @@ bool RendererVulkan::RenderToXr() {
             xr_sprite_sets.push_back(set);
         });
     }
+    PrepareKiuTalk(); // AzaharFrame kiutalk
     renderpass_cache.EndRendering();
 
     std::array<XrPresentTarget::Target, XrPresentTarget::kScreens> targets{};
@@ -273,6 +277,9 @@ bool RendererVulkan::RenderToXr() {
                          Layout::DisplayOrientation::Landscape);
         if (powers_strip && screen_id == static_cast<u32>(VideoCore::XrScreen::Bottom)) {
             DrawKiuPowers(target.fb_width, target.fb_height, powers_alpha);
+        }
+        if (screen_id == static_cast<u32>(VideoCore::XrScreen::Bottom)) { // AzaharFrame kiutalk
+            DrawKiuTalk(target.fb_width, target.fb_height, dim, alpha, present_set);
         }
         if (target.end_pass) {
             scheduler.Record([](vk::CommandBuffer cmdbuf) { cmdbuf.endRenderPass(); });

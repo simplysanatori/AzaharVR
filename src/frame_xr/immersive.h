@@ -86,6 +86,9 @@ struct ScreenLayers {
     /// AzaharFrame kiu1s: the part of the bottom screen's picture that is shown (Angel's Aim's
     /// portraits), in its 320 x 240 pixels.
     Kiu::FirstPerson::Cut bottom_cut;
+    /// AzaharFrame kiutalk: the characters alone instead, when the image has their strip
+    /// (video_core/kiu_talk.h).
+    bool bottom_talk = false;
     /// AzaharFrame kiu1s: the bottom screen is Angel's Aim's pause panel, in front, to point at.
     bool pause_panel = false;
     /// AzaharFrame kiu1s: both screens are where the game's menu puts them (Angel's Aim's menu

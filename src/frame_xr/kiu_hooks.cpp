@@ -31,6 +31,7 @@
 #include "frame_xr/kiu_cutscene.h" // AzaharFrame kiu140
 #include "frame_xr/kiu_ui.h" // AzaharFrame kiu1s
 #include "frame_xr/kiu_powers_live.h" // AzaharFrame kiupowers
+#include "frame_xr/kiu_talk.h" // AzaharFrame kiutalk
 #include "video_core/kiu_hud.h" // AzaharFrame kiu1s
 #include "video_core/kiu_powers.h" // AzaharFrame kiupowers
 #include "video_core/kiu_sheets.h" // AzaharFrame kiu140
@@ -189,6 +190,7 @@ struct State {
     Ui::SteadyMenu ui_weapon_menu; ///< the same, read whatever the switches say (the weapon)
     int menu_up = Ui::kNoMenu; ///< as said to the view
     int powers_code = -1; ///< AzaharFrame kiupowers: as ui_code
+    int talk_code = -1;   ///< AzaharFrame kiutalk: as ui_code
     bool powers_told = false;
     Kiu::EventWatch event_watch;
     bool cutscene = false;
@@ -576,6 +578,7 @@ void PowersOff(State& s) {
 /// The strip in the bottom screen's image: by the switch alone while the game runs, so the image
 /// is not remade as battles, cutscenes and menus come and go.
 void PowersStrip(bool game) {
+    Kiu::Talk::Strip(game); // AzaharFrame kiutalk: the talk's the same way
     const bool on = game && Kiu::Powers::SettingsNow().powers;
     if (VideoCore::KiuPowers::g_live.strip.exchange(on, std::memory_order_relaxed) != on) {
         LOG_INFO(Frontend, "xr: Kid Icarus hooks: the powers' strip under the bottom screen {}",
@@ -609,6 +612,7 @@ void ReadPowers(State& s, const KH::GameMemory& mem, bool playing) {
 /// AzaharFrame kiu140: no game of this kind, or nothing asked for: no cutscene and nothing counted.
 void CutsceneOff(State& s) {
     UiOff(s); // AzaharFrame kiu1s
+    Kiu::Talk::Off(); // AzaharFrame kiutalk
     PowersOff(s); // AzaharFrame kiupowers
     s.cutscene_watch = {};
     s.wide_angle = {};
@@ -977,6 +981,9 @@ void Hook(int64_t ticks) {
         Kiu::FirstPerson::SetBattle(wide_in);
         if (first_person) { // AzaharFrame kiu1s
             ReadUi(s, mem, wide_in);
+            Kiu::Talk::Publish(mem, wide_in ? s.ui : Ui::State{}, s.talk_code, // AzaharFrame kiutalk
+                               s.build == &Input::KiuTurn::kBuildUsaRev1,
+                               SwitchIs(kSwitchUiTrace, "1"));
             ReadPowers(s, mem, wide_in && !cutscene); // AzaharFrame kiupowers
         }
         if (cutscene != s.cutscene) {

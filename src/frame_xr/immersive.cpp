@@ -34,6 +34,7 @@
 #include "frame_xr/immersive_names.h" // AzaharFrame kiu
 #include "frame_xr/ipd_smoother.h" // AzaharFrame ipd
 #include "frame_xr/kiu_first_person.h" // AzaharFrame kiuvr
+#include "frame_xr/kiu_talk.h" // AzaharFrame kiutalk
 #include "frame_xr/input/input_frame.h"
 #include "frame_xr/presets.h" // AzaharFrame immersive: preset screen sizes
 #include "frame_xr/render_margin.h" // AzaharFrame fovaxis
@@ -2424,6 +2425,7 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
             const float size = portraits_up ? 1.0f : Kiu::FirstPerson::kPortraitShrunk;
             out.bottom_size = {p.width * size, p.height * size};
             out.bottom_cut = cut;
+            out.bottom_talk = Kiu::Talk::CutoutWanted(); // AzaharFrame kiutalk
             out.show_bottom = true;
             out.bottom_pointable = false;
             out.bottom_alpha = Kiu::FirstPerson::PortraitAlpha(); // its own opacity
