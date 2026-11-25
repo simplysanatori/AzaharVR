@@ -65,6 +65,7 @@
 #include "citra_qt/camera/still_image_camera.h"
 #ifdef ENABLE_ALT_CORES
 #include "citra_qt/frame_alt_cheats.h" // lane/cheats-dl
+#include "citra_qt/frame_alt_mods.h"
 #include "frame_cores/alt_core_host.h"
 #include "frame_cores/profile_input.h"
 #include "frame_cores/rom_info.h"
@@ -3838,6 +3839,7 @@ void GMainWindow::FramePushAltCheats() {
     }
     FrameAltCheats::Fill(alt_core_host->GetRomInfo().title_id, model); // lane/cheats-dl
     FrameXr::SetInGameMenuCheats(model);
+    FrameAltMods::Publish(*alt_core_host);
 #endif
 }
 
@@ -5916,6 +5918,14 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case C::OptimizeStop:
     case C::UseOriginalPack:
     case C::RemoveOriginalPack:
+#ifdef ENABLE_ALT_CORES
+        if (AltGameRunning()) {
+            FrameAltMods::Command(r, *alt_core_host, [this]() -> FrameCores::AltCoreHost* {
+                return AltGameRunning() ? alt_core_host.get() : nullptr;
+            });
+            return;
+        }
+#endif
         if (g_frame_mods) {
             g_frame_mods->Command(r);
         }

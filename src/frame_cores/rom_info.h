@@ -21,6 +21,7 @@ struct RomInfo {
     std::string title;
     std::string game_code;
     uint32_t crc32 = 0;
+    uint16_t header_crc16 = 0; ///< DS games: the one their header has of itself
     bool dsi_enhanced = false;
     bool dsi_ware = false;
     bool is_gbc = false; ///< Game Boy kind only: the header marks a Game Boy Color game

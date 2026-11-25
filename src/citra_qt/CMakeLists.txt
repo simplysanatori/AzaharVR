@@ -470,7 +470,8 @@ endif()
 if (ENABLE_ALT_CORES)
     target_link_libraries(citra_qt PRIVATE frame_cores)
     target_sources(citra_qt PRIVATE frame_alt_window.cpp frame_alt_cheats.cpp
-        frame_alt_cheats.h) # lane/cheats-dl
+        frame_alt_cheats.h # lane/cheats-dl
+        frame_alt_mods.cpp frame_alt_mods.h)
     if (ENABLE_FRAME_XR) # the VR menu's Games tab, the Qt side
         target_sources(citra_qt PRIVATE frame_games.cpp frame_games.h)
     endif()

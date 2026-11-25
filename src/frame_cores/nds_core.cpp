@@ -41,6 +41,7 @@
 #include "frame_cores/nds_resolution.h"
 #include "frame_cores/nds_stereo_renderer.h"
 #include "frame_cores/rom_info.h"
+#include "frame_cores/widescreen.h"
 #include "video_core/renderer_vulkan/alt_graphics.h"
 
 namespace FrameCores {
@@ -233,6 +234,18 @@ struct NdsCore::Impl {
 
     std::vector<int16_t> audio_scratch;
     std::unique_ptr<melonDS::ARCodeFile> ar_file;
+    const Widescreen::Entry* wide = nullptr; ///< the game's widescreen mod; null: it has none
+    /// Its codes are in the engine, after the player's own cheats and in no list of them.
+    bool wide_on = false;
+
+    std::size_t PlayerCheats() const {
+        return nds->AREngine.Cheats.size() - (wide_on ? 1 : 0);
+    }
+    melonDS::ARCode& AddPlayerCheat(melonDS::ARCode&& cheat) {
+        auto& cheats = nds->AREngine.Cheats;
+        const auto at = cheats.begin() + static_cast<std::ptrdiff_t>(PlayerCheats());
+        return *cheats.insert(at, std::move(cheat));
+    }
 
     static int64_t NowMs() {
         const auto now = std::chrono::steady_clock::now().time_since_epoch();
@@ -397,10 +410,32 @@ struct NdsCore::Impl {
             return;
         }
         nds->AREngine.Cheats.clear();
+        wide_on = false;
         ar_file = std::make_unique<melonDS::ARCodeFile>(cheat_file_path);
         if (std::filesystem::exists(cheat_file_path) && ar_file->Load()) {
             nds->AREngine.Cheats = ar_file->GetCodes();
         }
+    }
+
+    /// As the game starts: the widescreen mod, as it is in the game's folder now.
+    void StartWide() {
+        if (wide_on) {
+            nds->AREngine.Cheats.pop_back();
+        }
+        melonDS::ARCode cheat{};
+        cheat.Enabled = true;
+        if (wide) {
+            cheat.Code = Widescreen::CodesFor(paths.game_dir, *wide);
+        }
+        wide_on = !cheat.Code.empty();
+        if (wide_on) {
+            nds->AREngine.Cheats.push_back(std::move(cheat));
+        }
+        const float aspect =
+            wide_on ? Widescreen::kAspect
+                    : Common::AltCore::Capabilities::ForNDS(is_dsi).screens.top_aspect;
+        metrics_dirty |= aspect != caps.screens.top_aspect;
+        caps.screens.top_aspect = aspect;
     }
 };
 
@@ -519,6 +554,10 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
         }
     }
 
+    impl->wide = Widescreen::Find(
+        Widescreen::BuiltIn(), {reinterpret_cast<const char*>(rom_bytes.data()) + 0x0C, 4},
+        static_cast<std::uint16_t>(rom_bytes[0x15E] | rom_bytes[0x15F] << 8));
+
     // Detect DSi-enhanced / DSiWare header unit code (offset 0x12, bit 1)
     const uint8_t unit_code = rom_bytes[0x12];
     const bool rom_is_dsi_capable = (unit_code & 0x02) != 0;
@@ -536,6 +575,7 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
     impl->caps = Common::AltCore::Capabilities::ForNDS(use_dsi);
     impl->caps.layer_depth = true;
     impl->caps.depth_per_screen = true;
+    impl->caps.has_mods = impl->wide != nullptr;
     impl->resolution = NdsResolution(
         impl->HiresMaker(), [i = impl.get()](melonDS::NDS& nds) { return i->MakeSoft(nds); });
     impl->SetResolutionCaps();
@@ -644,6 +684,7 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
 
     impl->audio_scratch.resize(4096u * 2u, 0);
     impl->LoadCheatsFromDisk();
+    impl->StartWide();
     impl->loaded = true;
 
     LOG_INFO(Core, "NdsCore: booted {} in {} mode (JIT={}, threaded3D={})", rom_path,
@@ -680,6 +721,7 @@ void NdsCore::Reset() {
     SetSystemRtc(*impl->nds);
     impl->nds->SetupDirectBoot(impl->rom_filename);
     impl->nds->Start();
+    impl->StartWide();
     impl->rumble_until_ms.store(0, std::memory_order_relaxed);
 }
 
@@ -877,15 +919,17 @@ std::vector<CheatEntry> NdsCore::ListCheats() const {
     if (!impl->nds) {
         return list;
     }
-    list.reserve(impl->nds->AREngine.Cheats.size());
-    for (const auto& ch : impl->nds->AREngine.Cheats) {
+    const std::size_t count = impl->PlayerCheats();
+    list.reserve(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        const auto& ch = impl->nds->AREngine.Cheats[i];
         list.push_back(CheatEntry{ch.Name, FormatArCodeHex(ch.Code), ch.Enabled});
     }
     return list;
 }
 
 bool NdsCore::SetCheatEnabled(std::size_t idx, bool on) {
-    if (!impl->nds || idx >= impl->nds->AREngine.Cheats.size()) {
+    if (!impl->nds || idx >= impl->PlayerCheats()) {
         return false;
     }
     impl->nds->AREngine.Cheats[idx].Enabled = on;
@@ -927,10 +971,10 @@ bool NdsCore::AddCheat(const std::string& name, const std::string& code) {
     ar.Name = name.empty() ? "Action Replay Cheat" : name;
     ar.Enabled = true;
     ar.Code = std::move(words);
-    impl->nds->AREngine.Cheats.push_back(std::move(ar));
+    const melonDS::ARCode& added = impl->AddPlayerCheat(std::move(ar));
 
     if (impl->ar_file) {
-        impl->ar_file->RootCat.Children.emplace_back(impl->nds->AREngine.Cheats.back());
+        impl->ar_file->RootCat.Children.emplace_back(added);
         impl->ar_file->Save();
     }
     return true;
@@ -943,11 +987,12 @@ int NdsCore::ImportCheats(const std::vector<CheatEntry>& cheats) {
     int added = 0;
     for (const auto& in : cheats) {
         auto words = ParseArCodeHex(in.code);
-        if (words.empty() || impl->nds->AREngine.Cheats.size() >= CheatDb::kMaxStoredCheats) {
+        if (words.empty() || impl->PlayerCheats() >= CheatDb::kMaxStoredCheats) {
             continue;
         }
+        const auto first = impl->nds->AREngine.Cheats.begin();
         const bool have = std::any_of(
-            impl->nds->AREngine.Cheats.begin(), impl->nds->AREngine.Cheats.end(),
+            first, first + static_cast<std::ptrdiff_t>(impl->PlayerCheats()),
             [&](const melonDS::ARCode& c) { return c.Name == in.name && c.Code == words; });
         if (have) {
             continue;
@@ -957,9 +1002,9 @@ int NdsCore::ImportCheats(const std::vector<CheatEntry>& cheats) {
         ar.Name = in.name;
         ar.Enabled = false; // downloaded cheats are never on by themselves
         ar.Code = std::move(words);
-        impl->nds->AREngine.Cheats.push_back(std::move(ar));
+        const melonDS::ARCode& stored = impl->AddPlayerCheat(std::move(ar));
         if (impl->ar_file) {
-            impl->ar_file->RootCat.Children.emplace_back(impl->nds->AREngine.Cheats.back());
+            impl->ar_file->RootCat.Children.emplace_back(stored);
         }
         ++added;
     }

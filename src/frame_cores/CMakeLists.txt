@@ -49,6 +49,9 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     second_screen.h
     shadow_eye.cpp
     shadow_eye.h
+    widescreen.cpp
+    widescreen.h
+    widescreen_index.cpp
 )
 
 create_target_directory_groups(frame_cores)

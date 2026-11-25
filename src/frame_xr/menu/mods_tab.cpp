@@ -30,7 +30,8 @@ ModsSegment ShownSegment(const ModsTabModel& m, ModsSegment chosen) {
 }
 
 void TabMenu::DrawMods(Kit& kit, const MenuModel& model, const MenuView& view, const Rect& pane) {
-    if (!Is3ds(model.core)) {
+    const bool other_console = !Is3ds(model.core);
+    if (other_console && !model.core.has_mods) {
         if (model.core.has_alt_cheats) {
             DrawCheats(kit, model, view, pane);
         }
@@ -41,10 +42,14 @@ void TabMenu::DrawMods(Kit& kit, const MenuModel& model, const MenuView& view, c
     // AzaharFrame ctgp7: CTGP-7 as a fourth segment while Mario Kart 7 is open. AzaharFrame
     // kiufix: Angel's Aim the same while Kid Icarus: Uprising is; a target's index is the
     // segment's own value (ModsSegment), so a hidden one before it moves nothing.
-    const std::vector<ModsSegment> segments = ModsSegmentsShown(model.mods);
+    std::vector<ModsSegment> segments = ModsSegmentsShown(model.mods);
     std::vector<std::string> opts = ModsSegmentLabels(model.mods.ctgp7.shown);
     if (model.mods.angels_aim.shown) {
         opts.emplace_back(kAngelsAimSegment);
+    }
+    if (other_console) { // Cheats and Mods, as they come first
+        segments.resize(2);
+        opts.resize(2);
     }
     const auto place = [&](int value) {
         for (std::size_t i = 0; i < segments.size(); i++) {
@@ -57,7 +62,10 @@ void TabMenu::DrawMods(Kit& kit, const MenuModel& model, const MenuView& view, c
     const Rect seg{c.x0, c.y0, c.x0 + kit.SegmentedWidth(opts), c.y0 + kSegH};
     const int hover = view.hover.id == Id::ModsSegment ? place(view.hover.index) : -1;
     const int pressed = view.pressed.id == Id::ModsSegment ? place(view.pressed.index) : -1;
-    const ModsSegment segment = ShownSegment(model.mods, view.mods_segment);
+    ModsSegment segment = ShownSegment(model.mods, view.mods_segment);
+    if (other_console && segment != ModsSegment::Mods) {
+        segment = ModsSegment::Cheats;
+    }
     const int selected = place(static_cast<int>(segment));
     kit.Segmented(seg, opts, selected, hover, pressed);
     const auto e = kit.SegmentEdges(seg, opts);
