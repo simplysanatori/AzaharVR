@@ -414,16 +414,18 @@ TEST_CASE("Sections: a 3DS game's rows, in order", "[frame_xr][tabmenu]") {
     CHECK(ControlsRows(m, ControlsSection::Buttons) == kButtons);
     CHECK(ControlsRows(m, ControlsSection::Pointing) == kPointing);
     m.immersive_mode = 4;
-    std::vector<Id> angels = immersive;
-    const std::vector<Id> first = AngelsAimFirstPersonRows(m);
-    REQUIRE(!first.empty());
-    angels.insert(angels.begin() + 1, first.begin(), first.end());
-    m.kiu_hud = 0; // the game's own HUD
-    CHECK(RowIds(Tab::Settings, m, SettingsSection::Immersive) == angels);
-    m.kiu_hud = 1; // In View: HUD Spacing has nothing to move
-    std::erase(angels, Id::HudSpacingX);
-    std::erase(angels, Id::HudSpacingY);
-    CHECK(RowIds(Tab::Settings, m, SettingsSection::Immersive) == angels);
+    for (const int hud : {0, 1}) { // the game's own, In View
+        m.kiu_hud = hud;
+        std::vector<Id> angels = immersive;
+        const std::vector<Id> first = AngelsAimFirstPersonRows(m);
+        REQUIRE(!first.empty());
+        angels.insert(angels.begin() + 1, first.begin(), first.end());
+        if (hud == 1) { // HUD Spacing has nothing to move
+            std::erase(angels, Id::HudSpacingX);
+            std::erase(angels, Id::HudSpacingY);
+        }
+        CHECK(RowIds(Tab::Settings, m, SettingsSection::Immersive) == angels);
+    }
 }
 
 TEST_CASE("Sections: a DS, a Game Boy Advance and a Game Boy game's rows, in order",
