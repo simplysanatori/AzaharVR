@@ -3,6 +3,8 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     alt_core_host.h
     audio_resampler.cpp
     audio_resampler.h
+    cheat_db.cpp
+    cheat_db.h
     cheat_store.h
     core_backend.h
     driver_runner.cpp

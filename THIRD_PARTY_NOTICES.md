@@ -60,6 +60,10 @@ The Mods list of the VR menu's Mods tab installs mods for a game from a list (ca
 
 The same button then fetches a game's cheat codes from Sharkive (https://github.com/FlagBrew/Sharkive) by FlagBrew, released under the GNU General Public License, version 3. The codes themselves are kept by JourneyOver, the maintainer of the 3DS set, and Sharkive's contributors. Nothing from Sharkive is shipped: the file for the open game is downloaded only when the button is clicked, and merged into the player's own cheat file.
 
+## libretro-database
+
+For DS, GBA, Game Boy and Game Boy Color games, the Cheats tab's Download button fetches one cheat file for the open game from libretro-database (https://github.com/libretro/libretro-database, `cht/`), released under the Creative Commons Attribution-ShareAlike 4.0 International licence (https://creativecommons.org/licenses/by-sa/4.0/; the repository's LICENSE file). The cheats are collected by the libretro community from many sources and its contributors. The file is read from a fixed commit, only when the button is clicked, changed to the codes the emulator reads (the file's own text is not kept), and added to the game's list switched off. Which file belongs to a game comes from an index of game codes and checksums in https://github.com/simplysanatori/ds-gba-game-fixes, which holds no part of libretro's files. Nothing from libretro-database is shipped.
+
 ## LibreSSL
 
 The Download Cheats button, the Mods tab's downloads and the Homebrew downloads talk HTTPS with cpp-httplib 0.14.0 (MIT) and LibreSSL 4.4.1 (https://www.libressl.org/, ISC licence with OpenSSL and SSLeay terms for its older parts), both from `externals/` (LibreSSL is the official release tarball without its tools and tests, see `externals/libressl/AZAHARFRAME-VENDORED.txt`) and linked into the program. LibreSSL's licence text is in `externals/libressl/COPYING`.

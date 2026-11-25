@@ -1195,6 +1195,16 @@ bool AltCoreHost::AddCheat(const std::string& name, const std::string& code) {
     return impl->core->AddCheat(name, code);
 }
 
+int AltCoreHost::ImportCheats(const std::vector<CheatEntry>& cheats) {
+    std::lock_guard lock(impl->core_mutex);
+    return impl->core ? impl->core->ImportCheats(cheats) : 0;
+}
+
+std::string AltCoreHost::RomPath() const {
+    std::lock_guard lock(impl->core_mutex);
+    return impl->core ? impl->rom_path : std::string{};
+}
+
 void AltCoreHost::ReloadMicrophone() {
     std::lock_guard lock(impl->core_mutex);
     if (impl->core) {

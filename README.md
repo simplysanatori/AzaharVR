@@ -165,6 +165,7 @@ If you want to support this app or my other Steam Frame ports, such as PrimedFra
 - [astcenc](https://github.com/ARM-software/astc-encoder) by Arm: the texture pack encoder
 - [Frametop](https://github.com/Frametop/frametop) by DeeJanuz: the 3D mouse pointer is adapted from it
 - [Sharkive](https://github.com/FlagBrew/Sharkive) by FlagBrew, and my [3ds-game-fixes](https://github.com/simplysanatori/3ds-game-fixes): the cheats
+- [libretro-database](https://github.com/libretro/libretro-database) (CC-BY-SA-4.0), and my [ds-gba-game-fixes](https://github.com/simplysanatori/ds-gba-game-fixes): the DS, GBA and Game Boy cheats
 - [Emerald 3DS](https://github.com/ZallaxDev/emerald-3ds) by ZallaxDev, and [CTGP-7](https://ctgp-7.github.io/) by PabloMK7: downloaded from their own sources
 - Mods and texture packs: downloaded from their authors' own pages
 - Azahar logo by angyartanddraw and PabloMK7; backgrounds by GarfieldGaming0624 on [SteamGridDB](https://www.steamgriddb.com/game/5480678)

@@ -194,8 +194,10 @@ void TabMenu::DrawCheats(Kit& kit, const MenuModel& model, const MenuView& view,
     const Rect c{area.x0 + kPad, area.y0, area.x1 - kPad, area.y1 - kPad};
     const bool downloading = m.download == DownloadState::Downloading;
     const bool failed = m.download == DownloadState::Failed;
-    // Downloads, cheat files and Azahar's cheat window are for 3DS cheats only.
+    // Cheat files and Azahar's cheat window are for 3DS cheats only.
     const bool cheats_3ds = model.core.has_3ds_cheats;
+    // DS, GBA and Game Boy games download theirs from libretro-database (lane/cheats-dl).
+    const bool can_download = cheats_3ds || model.core.has_alt_cheats;
 
     // AzaharFrame ui2: Install from Zip's page, for a cheat file, over the segment.
     if (model.mods.zip.open && model.mods.zip.target == ZipTarget::Cheats) {
@@ -256,11 +258,11 @@ void TabMenu::DrawCheats(Kit& kit, const MenuModel& model, const MenuView& view,
             y += 24.0f;
             const std::string label = failed ? "Try Again" : LabelFor(Id::DownloadCheats);
             const std::string add = LabelFor(Id::AddCheat);
-            const float w = cheats_3ds ? ButtonWidth(kit, label, true) : 0.0f;
-            const float gap = cheats_3ds ? 8.0f : 0.0f;
+            const float w = can_download ? ButtonWidth(kit, label, true) : 0.0f;
+            const float gap = can_download ? 8.0f : 0.0f;
             const float aw = ButtonWidth(kit, add, true);
             const float x0 = mid.Cx() - (w + gap + aw) * 0.5f;
-            if (cheats_3ds) {
+            if (can_download) {
                 const Rect b{x0, y, x0 + w, y + button_h};
                 kit.Button(b, ButtonStyle::Filled, failed ? Sym::kRefresh : Sym::kCloudDownload,
                            label, StateOf(view, {Id::DownloadCheats}));
@@ -275,7 +277,7 @@ void TabMenu::DrawCheats(Kit& kit, const MenuModel& model, const MenuView& view,
     }
     {
         float x = c.x0;
-        if (cheats_3ds) {
+        if (can_download) {
             const std::string label = LabelFor(Id::DownloadCheats);
             const Rect dl{x, c.y0, x + ButtonWidth(kit, label, true, kBarSide), c.y0 + kBarH};
             kit.Button(dl, ButtonStyle::Tonal, Sym::kCloudDownload, label,

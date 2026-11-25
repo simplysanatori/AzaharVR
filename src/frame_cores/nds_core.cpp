@@ -37,6 +37,7 @@
 #include "Savestate.h"
 
 #include "common/logging/log.h"
+#include "frame_cores/cheat_db.h"
 #include "frame_cores/rom_info.h"
 
 namespace FrameCores {
@@ -807,6 +808,39 @@ bool NdsCore::AddCheat(const std::string& name, const std::string& code) {
         impl->ar_file->Save();
     }
     return true;
+}
+
+int NdsCore::ImportCheats(const std::vector<CheatEntry>& cheats) {
+    if (!impl->nds) {
+        return 0;
+    }
+    int added = 0;
+    for (const auto& in : cheats) {
+        auto words = ParseArCodeHex(in.code);
+        if (words.empty() || impl->nds->AREngine.Cheats.size() >= CheatDb::kMaxStoredCheats) {
+            continue;
+        }
+        const bool have = std::any_of(
+            impl->nds->AREngine.Cheats.begin(), impl->nds->AREngine.Cheats.end(),
+            [&](const melonDS::ARCode& c) { return c.Name == in.name && c.Code == words; });
+        if (have) {
+            continue;
+        }
+        melonDS::ARCode ar{};
+        ar.Parent = nullptr;
+        ar.Name = in.name;
+        ar.Enabled = false; // downloaded cheats are never on by themselves
+        ar.Code = std::move(words);
+        impl->nds->AREngine.Cheats.push_back(std::move(ar));
+        if (impl->ar_file) {
+            impl->ar_file->RootCat.Children.emplace_back(impl->nds->AREngine.Cheats.back());
+        }
+        ++added;
+    }
+    if (added > 0 && impl->ar_file) {
+        impl->ar_file->Save();
+    }
+    return added;
 }
 
 void NdsCore::SetMicrophone(MicrophoneFactory factory) {

@@ -52,6 +52,7 @@ public:
     std::vector<CheatEntry> ListCheats() const override;
     bool SetCheatEnabled(std::size_t idx, bool on) override;
     bool AddCheat(const std::string& name, const std::string& code) override;
+    int ImportCheats(const std::vector<CheatEntry>& cheats) override;
 
 private:
     struct Impl;

@@ -450,7 +450,8 @@ endif()
 
 if (ENABLE_ALT_CORES)
     target_link_libraries(citra_qt PRIVATE frame_cores)
-    target_sources(citra_qt PRIVATE frame_alt_window.cpp)
+    target_sources(citra_qt PRIVATE frame_alt_window.cpp frame_alt_cheats.cpp
+        frame_alt_cheats.h) # lane/cheats-dl
 endif()
 
 if (ENABLE_WEB_SERVICE)

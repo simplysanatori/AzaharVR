@@ -190,7 +190,7 @@ target_link_libraries(tests PRIVATE citra_common citra_core video_core audio_cor
 if (TARGET frame_cores)
     target_sources(tests PRIVATE frame_cores/alt_cores_tests.cpp frame_cores/microphone_tests.cpp
         frame_cores/second_screen_tests.cpp frame_cores/frame_driver_tests.cpp
-        frame_cores/pokedaisy_driver_tests.cpp)
+        frame_cores/pokedaisy_driver_tests.cpp frame_cores/cheat_db_tests.cpp)
     target_link_libraries(tests PRIVATE frame_cores)
 endif()
 if (TARGET gbads_game)
