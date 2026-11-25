@@ -18,6 +18,7 @@
 #include "common/logging/log.h"
 #include "core/core.h"
 #include "core/core_timing.h"
+#include "core/file_sys/kiu_60fps.h" // AzaharFrame kiu60
 #include "core/perf_stats.h"
 #include "core/hle/kernel/process.h"
 #include "core/memory.h"
@@ -363,6 +364,29 @@ uint32_t FloatBits(float f) {
     return bits;
 }
 
+/// AzaharFrame kiu60: the game's update against one at 30 pictures a second (kiu_60fps.h): 0.5 at
+/// 60, 1 otherwise.
+float UpdateShare(const Probe& p) {
+    namespace K60 = FileSys::Kiu60;
+    Core::System& system = Core::System::GetInstance();
+    Memory::MemorySystem& memory = system.Memory();
+    for (const std::shared_ptr<Kernel::Process>& process : system.Kernel().GetProcessList()) {
+        if (process.get() != p.process || !K60::BuildFor(process->codeset->program_id)) {
+            continue;
+        }
+        const auto mapped = [&](uint32_t a) {
+            return (a & 3u) == 0 && memory.IsValidVirtualAddress(*process, a) &&
+                   memory.IsValidVirtualAddress(*process, a + 3);
+        };
+        if (!mapped(K60::kFrameCounter)) {
+            return 1.0f;
+        }
+        const uint32_t at = memory.Read32(*process, K60::kFrameCounter) + K60::kUpdateLength;
+        return mapped(at) ? K60::UpdateShareFor(memory.Read32(*process, at)) : 1.0f;
+    }
+    return 1.0f;
+}
+
 /// AzaharFrame kiuaim2: Direct Aim, on the emulation thread at each pad update and VBlank: reads
 /// the reticle and writes the ray's pixel into it (Input::DirectAim).
 void AimPoll(int64_t ticks) {
@@ -588,6 +612,9 @@ void AimPoll(int64_t ticks) {
         }
     }
     if (direct_turn && out.write && out.turning) {
+        // AzaharFrame kiu60: the game takes the push once an update, so at 60 pictures a second it
+        // is half as much (its own length of an update says which: a save state can bring either).
+        const float update_share = UpdateShare(p);
         constexpr float kTurnPxPerDeg = 12.0f;
         constexpr float kGameFrameS = 1.0f / 60.0f;
         constexpr float kMaxOvershootPx = 240.0f;
@@ -610,10 +637,10 @@ void AimPoll(int64_t ticks) {
         constexpr float kTurnGainY = 2.0f;
         const float gx = gain("AZAHARFRAME_KIU_TURN_GAIN_X", kTurnGainX);
         const float gy = gain("AZAHARFRAME_KIU_TURN_GAIN_Y", kTurnGainY);
-        const float ox = std::clamp(out.right_dps * kTurnPxPerDeg * kGameFrameS * gx,
-                                    -kMaxOvershootPx, kMaxOvershootPx);
-        const float oy = std::clamp(out.down_dps * kTurnPxPerDeg * kGameFrameS * gy,
-                                    -kMaxOvershootPx, kMaxOvershootPx);
+        const float ox = update_share * std::clamp(out.right_dps * kTurnPxPerDeg * kGameFrameS * gx,
+                                                   -kMaxOvershootPx, kMaxOvershootPx);
+        const float oy = update_share * std::clamp(out.down_dps * kTurnPxPerDeg * kGameFrameS * gy,
+                                                   -kMaxOvershootPx, kMaxOvershootPx);
         // The game's clamp flag is still read for the trace (clamp_seen).
         if (!p.was_turning) {
             p.was_turning = true;

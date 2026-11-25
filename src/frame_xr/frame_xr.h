@@ -418,6 +418,7 @@ enum class MenuSetting {
     KiuTalkPortraits, ///< AzaharFrame kiuaim: `value` index: Hidden, Shown (vr_kiu_talk_portraits)
     KiuTalkPortraitsOpacity, ///< `value` percent, 20 to 100 (vr_kiu_talk_portraits_opacity)
     KiuStickClick, ///< AzaharFrame kiucam: `value` index: Switch Camera, Swap Screens
+    Kiu60Fps, ///< AzaharFrame kiu60: `value` index: Off, On (vr_kiu_60fps)
     KiuHideOffHand, ///< AzaharFrame kiuhands: `value` index: Off, On (vr_kiu_hide_off_hand)
     KiuPowerMenu, ///< AzaharFrame kiuaim: `value` index: Off, Off Hand, Health Bar, Middle, Score (vr_kiu_power_menu)
     KiuPowerMenuAcross, ///< `value` a slider, -40 to 40 degrees (vr_kiu_power_menu_across)

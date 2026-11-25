@@ -1207,6 +1207,9 @@ struct Values {
     // AzaharFrame kiucam: a tap of the right stick's click in a battle in Angel's Aim: 0 switches
     // the camera, 1 Swap Screens (frame_xr/kiu_camera_tap.h).
     SwitchableSetting<u32, true> vr_kiu_stick_click{0, 0, 1, "vr_kiu_stick_click"};
+    // AzaharFrame kiu60: Kid Icarus: Uprising at 60 pictures a second, read when the game starts
+    // (core/file_sys/kiu_60fps.h).
+    SwitchableSetting<bool> vr_kiu_60fps{false, "vr_kiu_60fps"};
     // AzaharFrame kiu: in a game's own file only: the Controls preset's values already decided
     // for this game (FrameXr::ControlsPresetField bits). A value the preset gave, or the game
     // already had, is never given again, so a later choice (Use Global Value too) stays.

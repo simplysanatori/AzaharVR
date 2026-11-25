@@ -2,7 +2,9 @@
 // Licensed under GPLv2 or any later version
 // Refer to the misc/licenses/gplv2.txt file included.
 
+#include <cmath>
 #include <cstdint>
+#include <map>
 #include <vector>
 #include <catch2/catch_test_macros.hpp>
 #include "core/file_sys/kiu_60fps.h"
@@ -35,7 +37,7 @@ TEST_CASE("Kid Icarus 60: the patch is made from the game's own words", "[kiu60]
         const Patch p = Make(b.title, code);
         REQUIRE(p.result == Outcome::Made);
         REQUIRE(p.build == &b);
-        REQUIRE(p.ips.size() == 5 + 5 * 9 + 3);
+        REQUIRE(p.ips.size() == 5 + kChanged * 9 + 3);
         const std::vector<uint8_t> before = code;
         REQUIRE(FileSys::Patch::ApplyIpsPatch(p.ips, code) == Loader::ResultStatus::Success);
         std::size_t changed = 0;
@@ -47,9 +49,9 @@ TEST_CASE("Kid Icarus 60: the patch is made from the game's own words", "[kiu60]
         for (std::size_t i = 0; i < code.size(); ++i) {
             differ += code[i] != before[i] ? 1 : 0;
         }
-        REQUIRE(changed == 20);
-        REQUIRE(differ <= 20); // nothing but the five words
-        REQUIRE(differ >= 5);
+        REQUIRE(changed == 4 * kChanged);
+        REQUIRE(differ <= 4 * kChanged); // nothing but the words
+        REQUIRE(differ >= kChanged);
         REQUIRE(Make(b.title, code).result == Outcome::Already);
     }
 }
@@ -67,6 +69,20 @@ TEST_CASE("Kid Icarus 60: the words", "[kiu60]") {
     REQUIRE(usa.words[4].address == 0x91041C);
     REQUIRE(usa.words[5].address == 0x828E8C);
     REQUIRE(usa.words[7].address == 0x828E30);
+    // The touch's words and the C-Stick mods' hook places.
+    REQUIRE(eur.words[10].address == 0x6D219C);
+    REQUIRE(eur.words[11].address == 0x6D280C);
+    REQUIRE(eur.words[12].address == 0x6D2F7C);
+    REQUIRE(eur.words[13].address == 0x7DAD90);
+    REQUIRE(usa.words[12].address == 0x6D2E30);
+    REQUIRE(usa.words[13].address == 0x7DABF8);
+    for (const Build& b : kBuilds) { // each place once
+        for (std::size_t i = 0; i < b.words.size(); ++i) {
+            for (std::size_t j = 0; j < i; ++j) {
+                REQUIRE(b.words[i].address != b.words[j].address);
+            }
+        }
+    }
 }
 
 TEST_CASE("Kid Icarus 60: nothing for other code", "[kiu60]") {
@@ -91,9 +107,126 @@ TEST_CASE("Kid Icarus 60: nothing for other code", "[kiu60]") {
     REQUIRE(Make(b.title, std::vector<uint8_t>(0x1000, 0)).result == Outcome::Differs);
 }
 
-TEST_CASE("Kid Icarus 60: the switch, on the PC build only", "[kiu60]") {
-    REQUIRE(WantedFor("1", true));
-    REQUIRE_FALSE(WantedFor("1", false));
-    REQUIRE_FALSE(WantedFor("0", true));
-    REQUIRE_FALSE(WantedFor(std::nullopt, true));
+TEST_CASE("Kid Icarus 60: the setting, and the switch over it", "[kiu60]") {
+    REQUIRE(Wanted(std::nullopt, true));
+    REQUIRE_FALSE(Wanted(std::nullopt, false));
+    REQUIRE(Wanted("1", false));
+    REQUIRE_FALSE(Wanted("0", true));
+    REQUIRE(Wanted("", true)); // neither: the setting
+    REQUIRE_FALSE(Wanted("2", false));
+}
+
+TEST_CASE("Kid Icarus 60: the Turn Zone's push is the game's update long", "[kiu60]") {
+    REQUIRE(UpdateShareFor(0x3F800000) == 0.5f); // 60
+    REQUIRE(UpdateShareFor(0x40000000) == 1.0f); // 30
+    REQUIRE(UpdateShareFor(0x40400000) == 1.0f); // anything else: as it was
+    REQUIRE(UpdateShareFor(0) == 1.0f);
+}
+
+namespace {
+
+/// A game's memory: the words, and the vsync manager once it is set up.
+struct Game {
+    std::map<uint32_t, uint32_t> m;
+    int writes = 0;
+    explicit Game(const Build& b, bool sixty, bool manager = true) {
+        for (const Word& w : b.words) {
+            m[w.address] = sixty ? w.ours : w.game;
+        }
+        if (manager) {
+            m[kVsyncManager] = 0x14001000;
+            m[0x14001000 + kManagerRate] = sixty ? 60 : 30;
+            m[0x14001000 + kManagerInterval] = sixty ? 1 : 2;
+        }
+    }
+    Turned To(const Build& b, bool sixty) {
+        const auto write = [this](uint32_t a, uint32_t v) {
+            m[a] = v;
+            ++writes;
+        };
+        return TurnTo(
+            b, sixty,
+            [this](uint32_t a) {
+                const auto i = m.find(a);
+                return i == m.end() ? std::nullopt : std::optional<uint32_t>(i->second);
+            },
+            write, write);
+    }
+};
+
+} // namespace
+
+TEST_CASE("Kid Icarus 60: a save state made at the other rate", "[kiu60]") {
+    for (const Build& b : kBuilds) {
+        for (const bool sixty : {false, true}) {
+            Game game(b, !sixty);
+            REQUIRE(game.To(b, sixty) == Turned::Yes);
+            REQUIRE(game.m == Game(b, sixty).m); // exactly a game started at it
+            const int writes = game.writes;
+            REQUIRE(game.To(b, sixty) == Turned::No); // and nothing more
+            REQUIRE(game.writes == writes);
+            Game same(b, sixty);
+            REQUIRE(same.To(b, sixty) == Turned::No);
+            REQUIRE(same.writes == 0);
+            // Not set up yet, or a rate that is neither: not touched.
+            Game early(b, !sixty, false);
+            REQUIRE(early.To(b, sixty) == Turned::No);
+            REQUIRE(early.writes == 0);
+            Game odd(b, !sixty);
+            odd.m[0x14001000 + kManagerRate] = 20;
+            REQUIRE(odd.To(b, sixty) == Turned::No);
+            REQUIRE(odd.writes == 0);
+            // Another mod's 60 (the five words alone) or any word changed: left alone.
+            Game mod(b, !sixty);
+            mod.m[b.words[13].address] = 0xE1A00000;
+            REQUIRE(mod.To(b, sixty) == Turned::Differs);
+            REQUIRE(mod.writes == 0);
+        }
+    }
+}
+
+// The touch's rule, in C++: the words above do this (seen running, reports/102/rig60). One call an
+// update at 60; the speed in use comes back.
+namespace {
+struct Rule {
+    float last = 0, use = 0;
+    int still = 0;
+    float At60(float e) {
+        const float mean = (e + last) * 0.5f;
+        last = e;
+        still = mean != 0 ? 0 : still + 1;
+        if (mean != 0 || still >= 3) {
+            use = mean;
+        }
+        return use;
+    }
+};
+/// The game's at 30: an update holds two samples; the newest speed that is not zero of two.
+struct Game30 {
+    float before = 0;
+    float At30(float first, float second) {
+        const float e = (first + second) * 0.5f;
+        const float out = e != 0 ? e : before;
+        before = e;
+        return out;
+    }
+};
+} // namespace
+
+TEST_CASE("Kid Icarus 60: the touch turns as far as at 30", "[kiu60]") {
+    // A stylus that moves `step` every `every` VBlanks, 120 VBlanks, then rests.
+    for (const int every : {1, 2, 4}) {
+        for (const float step : {1.0f, 2.0f, 20.0f}) {
+            Rule rule;
+            Game30 game;
+            float at60 = 0, at30 = 0;
+            for (int vb = 0; vb < 132; vb += 2) {
+                const auto d = [&](int v) { return v < 120 && v % every == 0 ? step : 0.0f; };
+                at60 += rule.At60(d(vb)) + rule.At60(d(vb + 1));
+                at30 += 2 * game.At30(d(vb), d(vb + 1));
+            }
+            INFO(every << " VBlanks, " << step << ": " << at60 << " and " << at30);
+            REQUIRE(std::abs(at60 - at30) <= 0.03f * at30);
+        }
+    }
 }

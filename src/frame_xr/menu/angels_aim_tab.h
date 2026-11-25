@@ -238,6 +238,13 @@ inline constexpr const char* kKiuStickClickCamera = "Switch Camera";
 inline constexpr const char* kKiuStickClickSwap = "Swap Screens";
 inline constexpr const char* kKiuStickClickTip =
     "In battles, R3 switches First Person and Third Person.";
+/// AzaharFrame kiu60: 60 FPS (vr_kiu_60fps), under View's More. PROPOSED strings, the toast too
+/// (the setting changed while the game runs: it counts from the next start).
+inline constexpr const char* kKiu60FpsRow = "60 FPS";
+inline constexpr const char* kKiu60FpsTip =
+    "Runs the game at 60 FPS. Needs more power. Restart the game to change it.";
+inline constexpr const char* kKiu60FpsOnToast = "Restart the Game for 60 FPS";
+inline constexpr const char* kKiu60FpsOffToast = "Restart the Game for 30 FPS";
 inline constexpr const char* kOverShoulderRow = "Third Person";
 inline constexpr const char* kOverShoulderTip =
     "Moves your view behind and above Pit, so you can see him.";

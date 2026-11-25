@@ -334,6 +334,9 @@ Row RowFor(Id id, const MenuModel& m) {
     case Id::KiuStickClick: // AzaharFrame kiucam
         segmented(std::clamp(m.kiu_stick_click, 0, 1));
         break;
+    case Id::Kiu60Fps: // AzaharFrame kiu60
+        segmented(std::clamp(m.kiu_60fps, 0, 1));
+        break;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         segmented(std::clamp(m.kiu_hide_off_hand, 0, 1));
         break;
@@ -628,6 +631,7 @@ SettingsSection SectionOf(Id id) {
     case Id::KiuPowerMenuOpacity:
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
     case Id::KiuStickClick: // AzaharFrame kiucam
+    case Id::Kiu60Fps: // AzaharFrame kiu60
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim
     case Id::KiuTalkPortraitsOpacity:
@@ -727,6 +731,7 @@ bool PerGameSetting(Id id) {
     case Id::KiuPowerMenuOpacity:
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
     case Id::KiuStickClick: // AzaharFrame kiucam
+    case Id::Kiu60Fps: // AzaharFrame kiu60
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim
     case Id::KiuTalkPortraitsOpacity:
@@ -928,6 +933,7 @@ std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& m) {
         rows.push_back(Id::KiuPowerMenuOpacity);
     }
     rows.push_back(Id::KiuStickClick); // AzaharFrame kiucam
+    rows.push_back(Id::Kiu60Fps); // AzaharFrame kiu60
     rows.push_back(Id::KiuHideOffHand);
     rows.push_back(Id::KiuTalkPortraits); // AzaharFrame kiuaim
     if (m.kiu_talk_portraits != 0) {
@@ -965,7 +971,7 @@ std::vector<AngelsAimRowGroup> AngelsAimGroups(const MenuModel& model) {
     }
     aiming.rows.push_back(Id::AngelsAimSettings); // the Controls tab at Aiming, as before
     AngelsAimRowGroup view{AngelsAimGroupKind::View, {Id::ImmersiveMode}};
-    for (const Id id : {Id::KiuOverShoulder, Id::KiuPitOpacity, Id::KiuSnapTurn, Id::KiuCutscenes, Id::KiuStickClick, Id::KiuHud, Id::KiuHudSize, Id::KiuHudLinked, Id::KiuHudAcross, Id::KiuHudHeight, Id::KiuBarAcross, Id::KiuBarHeight, Id::KiuScoreAcross, Id::KiuScoreHeight, Id::KiuSubtitleHeight, Id::KiuSubtitleSize, Id::KiuPowerMenu, Id::KiuPowerMenuAcross, Id::KiuPowerMenuHeight, Id::KiuPowerMenuOpacity}) {
+    for (const Id id : {Id::KiuOverShoulder, Id::KiuPitOpacity, Id::KiuSnapTurn, Id::KiuCutscenes, Id::KiuStickClick, Id::Kiu60Fps, Id::KiuHud, Id::KiuHudSize, Id::KiuHudLinked, Id::KiuHudAcross, Id::KiuHudHeight, Id::KiuBarAcross, Id::KiuBarHeight, Id::KiuScoreAcross, Id::KiuScoreHeight, Id::KiuSubtitleHeight, Id::KiuSubtitleSize, Id::KiuPowerMenu, Id::KiuPowerMenuAcross, Id::KiuPowerMenuHeight, Id::KiuPowerMenuOpacity}) {
         if (has(fp, id)) {
             view.rows.push_back(id);
         }
@@ -1205,6 +1211,10 @@ const std::vector<std::string>& OptionsFor(Id id) {
         static const std::vector<std::string> kChoices{kKiuStickClickCamera, kKiuStickClickSwap};
         return kChoices;
     }
+    case Id::Kiu60Fps: { // AzaharFrame kiu60: the stored order
+        static const std::vector<std::string> kChoices{"Off", "On"};
+        return kChoices;
+    }
     case Id::KiuHideOffHand: { // AzaharFrame kiuhands: the stored order (hidden or not)
         static const std::vector<std::string> kChoices{"Shown", "Hidden"};
         return kChoices;
@@ -1415,6 +1425,8 @@ std::string LabelFor(Id id) {
         return kKiuPowerMenuOpacityRow;
     case Id::KiuStickClick: // AzaharFrame kiucam
         return kKiuStickClickRow;
+    case Id::Kiu60Fps: // AzaharFrame kiu60
+        return kKiu60FpsRow;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         return kKiuHideOffHandRow;
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim
@@ -1844,6 +1856,8 @@ std::string ExplainFor(Id id) {
         return kKiuPowerMenuOpacityTip;
     case Id::KiuStickClick: // AzaharFrame kiucam
         return kKiuStickClickTip;
+    case Id::Kiu60Fps: // AzaharFrame kiu60
+        return kKiu60FpsTip;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         return kKiuHideOffHandTip;
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim

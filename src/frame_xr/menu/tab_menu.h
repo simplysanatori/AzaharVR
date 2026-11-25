@@ -320,6 +320,7 @@ enum class Id : int {
     KiuTalkPortraits, ///< AzaharFrame kiuaim: index: Hidden, Shown (vr_kiu_talk_portraits)
     KiuTalkPortraitsOpacity, ///< AzaharFrame kiuaim: a slider, 20 to 100 percent, while Shown
     KiuStickClick, ///< AzaharFrame kiucam: index: Switch Camera, Swap Screens (vr_kiu_stick_click)
+    Kiu60Fps, ///< AzaharFrame kiu60: index: Off, On (vr_kiu_60fps)
     KiuHideOffHand, ///< AzaharFrame kiuhands: index: Off, On (vr_kiu_hide_off_hand)
     KiuPowerMenu, ///< AzaharFrame kiuaim: index: Off, Off Hand, Health Bar, Middle, Score (vr_kiu_power_menu)
     KiuPowerMenuAcross, ///< a slider, -40 to 40 degrees, on the HUD (vr_kiu_power_menu_across)
@@ -517,6 +518,7 @@ struct MenuModel {
     int kiu_subtitle_height = -18; ///< AzaharFrame kiu140 (vr_kiu_subtitle_height)
     int kiu_subtitle_size = 130; ///< AzaharFrame kiu140 (vr_kiu_subtitle_size)
     int kiu_stick_click = 0; ///< AzaharFrame kiucam (vr_kiu_stick_click)
+    int kiu_60fps = 0; ///< AzaharFrame kiu60 (vr_kiu_60fps)
     int kiu_hide_off_hand = 0; ///< AzaharFrame kiuhands (vr_kiu_hide_off_hand)
     int kiu_talk_portraits = 0; ///< AzaharFrame kiuaim (vr_kiu_talk_portraits)
     int kiu_talk_portraits_opacity = 100; ///< percent, 20 to 100 (vr_kiu_talk_portraits_opacity)
