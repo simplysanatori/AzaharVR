@@ -204,7 +204,12 @@ inline void Convert(QWidget* parent, u64 program_id, const QString& name) {
            "then show as soon as they are needed, and use less memory.\n\n"
            "%2 textures, about %3 on disk. The original pack is kept, and you can switch "
            "back to it from this menu. You can stop at any time and carry on later.")
-            .arg(name, QString::number(estimate->textures), size);
+            .arg(name, QString::number(estimate->textures), size) +
+        (CustomTex::Optimize::IsStale(CustomTex::Optimize::OptimizedPath(
+             QFileInfo(pack).canonicalFilePath().toStdString()))
+             ? QStringLiteral("\n\n") +
+                   Tr("Replaces the optimized copy made from the previous version.")
+             : QString());
     QMessageBox box(QMessageBox::Question, Tr("Optimize Texture Pack"), text,
                     QMessageBox::Cancel, parent);
     QPushButton* optimize = box.addButton(Tr("Optimize"), QMessageBox::AcceptRole);

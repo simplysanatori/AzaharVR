@@ -237,6 +237,7 @@ enum class MenuCommand {
     RemoveMod,         ///< `text`: the mod's id (your own files ask first)
     ModsDialog,        ///< the dialog's answer: `value` 1 Replace / Remove, 0 Cancel / OK
     OpenUrl,           ///< `text`: an author's page the Qt side listed, in Steam's browser
+    TexturesShown,     ///< the Textures segment shows now (Menu::TexturesModel::shown answers)
     LoadPackDownloads, ///< Download Packs opened: the packs for the title
     DownloadPack,      ///< `text`: the catalog pack's id (a large one asks first)
     CancelPackDownload,

@@ -1211,6 +1211,25 @@ void MenuPanel::BuildModel(const Host& host) {
             }
         }
     }
+    {
+        // The Textures segment shows (the game's packs): which of them have an update is said once.
+        // Asked again until it arrives, as above
+        const long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::steady_clock::now().time_since_epoch())
+                                     .count();
+        const bool shown = view.tab == Menu::Tab::Mods &&
+                           view.mods_segment == Menu::ModsSegment::Textures;
+        if (!shown) {
+            textures_told_ms = -1;
+        } else if (Menu::ShouldTellTextures(m.mods.textures.shown, now_ms, textures_told_ms)) {
+            textures_told_ms = now_ms;
+            if (host.request) {
+                MenuRequest r;
+                r.command = MenuCommand::TexturesShown;
+                host.request(r);
+            }
+        }
+    }
     bool spinning = m.mods.mods.catalog == Menu::CatalogState::Loading ||
                     (m.mods.mods.catalog != Menu::CatalogState::Ready &&
                      m.mods.mods.catalog != Menu::CatalogState::Failed &&
@@ -2198,6 +2217,7 @@ void MenuPanel::Click(Target t, Host& host) {
         }
         break;
     case Id::DownloadPacks:
+    case Id::UpdateNote: // the snackbar's Update: the player starts it there
         view.textures_page = Menu::TexturesPage::Download;
         view.scroll[static_cast<std::size_t>(view.tab)] = 0.0f;
         ask(MenuCommand::LoadPackDownloads);

@@ -153,6 +153,7 @@ private:
     std::string cheats_other_game;
     Menu::Id rest_id = Menu::Id::None; ///< what the beam rests on, for the tooltip
     int rest_index = -1; ///< AzaharFrame modcat: the resting target's index (ModVersion)
+    long long textures_told_ms = -1; ///< when TexturesShown was sent for the segment showing now
     long long catalog_ask_ms = -1; ///< AzaharFrame jsoncrash: when Install Mods last asked for its list
     int turned_off_seen = 0; ///< AzaharFrame compat: ModsListModel::turned_off_serial last shown
     float rest_s = 0.0f;

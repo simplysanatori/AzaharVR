@@ -113,6 +113,12 @@ inline bool ShouldAskCatalog(CatalogState state, bool install_page_shown, long l
     return last_ask_ms < 0 || now_ms - last_ask_ms >= retry_ms;
 }
 
+/// The same for telling the Qt side that the Textures segment shows.
+inline bool ShouldTellTextures(bool told, long long now_ms, long long last_ms,
+                               long long retry_ms = 1500) {
+    return !told && (last_ms < 0 || now_ms - last_ms >= retry_ms);
+}
+
 /// The question over the panel, when there is one.
 enum class ModsDialogKind : uint8_t {
     None,
@@ -155,6 +161,7 @@ struct ModsDialog {
     /// DeletePack: where the packs are, when that is outside Azahar's own folders; each on a line of
     /// its own over the body, shortened in the middle. Cancel is then the emphasized button.
     std::vector<std::string> places;
+    bool replaces = false; ///< Optimize: a stale optimized copy is replaced (kOptimizeReplaces)
     bool operator==(const ModsDialog&) const = default;
 };
 
@@ -200,6 +207,7 @@ struct TexturePackItem {
     bool customize = false;  ///< AzaharFrame texparts: two or more parts: the Customize button
     bool verified = false;   ///< AzaharFrame fixd: from a verified catalog entry: the Verified chip
     bool recommended = false; ///< from a recommended catalog entry: the Recommended chip
+    bool update = false;      ///< a newer version is on Download Packs: the Update Available chip
     bool operator==(const TexturePackItem&) const = default;
 };
 
@@ -255,6 +263,8 @@ struct PackOptimize {
     /// AzaharFrame fixes7: Converting: the optimized copy's bytes written of its estimated size
     /// (the Optimize dialog's "About 6.1 GB"); the percent follows them. 0 not known
     uint64_t done_bytes = 0, total_bytes = 0;
+    /// The optimized copy is of the version before an update (CustomTex::Optimize::IsStale)
+    bool stale = false;
     bool operator==(const PackOptimize&) const = default;
 };
 
@@ -290,6 +300,7 @@ enum class PackOfferState : uint8_t {
                  ///< "Preparing" until the file's bytes start; then "1.2 of 3.4 GB")
     Installed,   ///< in the pack list
     Failed,      ///< `note` is the error, the button is Try Again
+    Update,      ///< installed, and the catalog has a newer version: the Update button
 };
 
 /// One pack of Download Packs (CustomTex::Download::PackInfo).
@@ -344,6 +355,9 @@ struct TexturesModel {
     /// a PNG pack over 1 GB turned on or downloaded. "" none.
     std::string nudge_pack; ///< its id
     std::string nudge_name;
+    /// "Update Available: <Pack>" with Update (opens Download Packs), once a run and pack. "" none.
+    std::string update_name;
+    bool shown = false; ///< the Qt side knows that the Textures segment shows (TexturesShown)
     bool operator==(const TexturesModel&) const = default;
 };
 
@@ -451,6 +465,13 @@ inline constexpr const char* kOptimizeLine =
 inline constexpr const char* kOptimizeBody =
     "Converts the pack to a format the GPU reads directly, so HD textures show sooner and use "
     "less memory. The original is kept.";
+/// Added to it when the optimized copy there is of a previous version.
+inline constexpr const char* kOptimizeReplaces =
+    "Replaces the optimized copy made from the previous version.";
+/// The line in kOptimizeLine's place then.
+inline constexpr const char* kOptimizeStale = "Optimized From a Previous Version";
+/// "Update Available: Kid Icarus HD" (the snackbar)
+std::string UpdateNoteText(const std::string& pack);
 inline constexpr const char* kOptimizeStopped = "Stopped. Optimize Again to Carry On.";
 /// AzaharFrame ui3: Remove Original's dialog.
 inline constexpr const char* kRemoveOriginalTitle = "Remove the Original Pack?";

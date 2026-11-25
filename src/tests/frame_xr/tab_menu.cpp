@@ -1147,6 +1147,87 @@ TEST_CASE("Delete's dialog for a pack outside the app's folders", "[frame_xr][ta
     CHECK(letters == "\u00e9\u2026\u00e9\u00e9\u00e9");
 }
 
+// A newer version of an installed pack: the row's chip, the snackbar (the last of them, one at a
+// time), Update on Download Packs, and the stale optimized copy's line.
+TEST_CASE("Tab menu: an update of a texture pack", "[frame_xr][tabmenu]") {
+    Drawn d;
+    MenuModel m = Sample();
+    MenuView v;
+    v.tab = kModsTab;
+    v.mods_segment = ModsSegment::Textures;
+    m.mods.textures = Packs(2);
+    m.mods.textures.packs[0].update = true;
+    d.Draw(m, v);
+    CHECK_FALSE(FindHit(d, Id::UpdateNote, -1));
+    CheckTargets(d);
+    m.mods.textures.update_name = "Kid Icarus HD";
+    d.Draw(m, v);
+    REQUIRE(FindHit(d, Id::UpdateNote, -1));
+    CheckTargets(d);
+    CHECK(UpdateNoteText("Kid Icarus HD") == "Update Available: Kid Icarus HD");
+    CHECK(LabelFor(Id::UpdateNote) == "Update");
+    CHECK(ShouldTellTextures(false, 100, -1));
+    CHECK_FALSE(ShouldTellTextures(false, 1000, 100));
+    CHECK(ShouldTellTextures(false, 1700, 100));
+    CHECK_FALSE(ShouldTellTextures(true, 9999, -1));
+    SECTION("under the other snackbars") {
+        m.mods.textures.needs_restart = true;
+        d.Draw(m, v);
+        CHECK_FALSE(FindHit(d, Id::UpdateNote, -1));
+        CHECK(FindHit(d, Id::RestartGame, -1));
+        m.mods.textures.needs_restart = false;
+        m.mods.textures.nudge_pack = "a";
+        m.mods.textures.nudge_name = "A";
+        d.Draw(m, v);
+        CHECK_FALSE(FindHit(d, Id::UpdateNote, -1));
+        CHECK(FindHit(d, Id::OptimizeNudge, -1));
+        m.mods.textures.nudge_pack.clear();
+        m.mods.mods.turned_off = {"No Bloom"};
+        d.Draw(m, v);
+        CHECK_FALSE(FindHit(d, Id::UpdateNote, -1));
+    }
+    SECTION("Download Packs") {
+        PackOffer o;
+        o.id = "kid-icarus-hd";
+        o.name = "Kid Icarus HD";
+        o.state = PackOfferState::Update;
+        o.updated = "Updated Nov 2026";
+        CHECK(PackButtonLabel(o) == "Update");
+        CHECK(PackOfferParts(o) == std::vector<std::string>{"", "Updated Nov 2026"});
+        PackOffer done = o;
+        done.id = "other";
+        done.state = PackOfferState::Installed;
+        m.mods.textures.downloads = {o, done};
+        v.textures_page = TexturesPage::Download;
+        d.Draw(m, v);
+        CHECK_FALSE(FindHit(d, Id::UpdateNote, -1)); // it is here
+        CHECK(FindHit(d, Id::PackDownload, 0));
+        CHECK_FALSE(FindHit(d, Id::PackDownload, 1));
+        m.mods.textures.downloading = true; // another one runs
+        d.Draw(m, v);
+        CHECK_FALSE(FindHit(d, Id::PackDownload, 0));
+        o.resume = "1.2 of 3.4 GB Downloaded";
+        CHECK(PackButtonLabel(o) == "Resume");
+        CHECK(PackOfferParts(o) == std::vector<std::string>{"1.2 of 3.4 GB Downloaded"});
+        o.state = PackOfferState::Failed;
+        o.note = "No connection";
+        CHECK(PackButtonLabel(o) == "Try Again");
+    }
+    SECTION("the optimized copy of the version before") {
+        PackOptimize o;
+        o.state = OptimizeState::Png;
+        o.stale = true;
+        CHECK(OptimizeText(o).line == "Optimized From a Previous Version");
+        CHECK(OptimizeText(o).button == 1);
+        o.state = OptimizeState::Stopped;
+        CHECK(OptimizeText(o).line == kOptimizeStopped);
+        // It fits on one line at the smallest text width of any page: the dialog's
+        Kit kit{1.0f};
+        CHECK(kit.TextWidthSized(14.0f, false, kOptimizeStale) > 100.0f);
+        CHECK(kit.TextWidthSized(14.0f, false, kOptimizeStale) < 392.0f);
+    }
+}
+
 // AzaharFrame menuux: Switch to Flat, the Settings tab's renderer rows, the Touchpad row's line,
 // and no text running into other text or out of its place with the longest strings.
 namespace {

@@ -194,7 +194,16 @@ private:
     int parts_serial = 0; ///< the page opened last (a scan of an older one is dropped)
     void LoadPackDownloads();
     void ListPackDownloads();
+    /// A download, or an update (core/custom_tex/update.h) of the installed pack: only the player's
+    /// own Download or Update comes here.
     void StartDownload(const std::string& id);
+    /// The update in `folder` of the open game's library is here: put in place at once, or when the
+    /// running game, which reads the pack, stops ("Restart the Game to Apply").
+    void PackUpdated(const std::string& folder);
+    /// Puts the waiting updates in place (`title` 0: every title's), and deletes the old versions off
+    /// the GUI thread. While no game reads them.
+    bool ApplyUpdates(u64 title = 0, const std::string& folder = {});
+    void NoteUpdates(); ///< "Update Available: <Pack>" for the packs not yet said
     /// Delete on a pack's row: "Delete <Pack>?" (pack_pending); nothing is deleted before its answer.
     void DeletePackAsk(const std::string& pack_id);
     /// The dialog's Delete (core/custom_tex/delete.h, off the GUI thread).
@@ -292,6 +301,9 @@ private:
     /// AzaharFrame fixd: folder names of installed packs whose catalog entry is verified (the chip)
     std::set<std::string> verified_folders;
     std::set<std::string> recommended_folders; ///< the installed packs' Recommended chip
+    std::set<std::string> update_folders;      ///< the installed packs' Update Available chip
+    std::map<std::string, std::string> updates; ///< catalog ids with an update, and their names
+    std::set<std::string> updates_noted;       ///< the ones the snackbar named this run
     std::map<std::string, u64> offer_sizes; ///< the offers' sizes in bytes (0 unknown)
     std::string pack_failed, pack_error; ///< the pack whose last download failed, and why
     u64 download_title = 0;             ///< the title the running download is for

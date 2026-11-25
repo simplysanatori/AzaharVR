@@ -274,12 +274,16 @@ void FrameMods::Open(u64 title_id_, int run_) {
         zip = {};
         zip_question = ZipQuestion::None;
         deletable.clear();
+        updates.clear();
+        update_folders.clear();
         PublishMods();
         PublishTextures();
         PublishZip();
         angels_aim_report_url.clear(); // AzaharFrame kiufix: the segment goes with its game
         FrameXr::SetInGameMenuAngelsAim({});
     }
+    textures.shown = false;
+    textures.update_name.clear(); // said once
     if (title_id == 0) {
         return;
     }
@@ -412,7 +416,13 @@ void FrameMods::Command(const FrameXr::MenuRequest& r) {
         }
         return;
     }
+    case C::TexturesShown:
+        textures.shown = true;
+        NoteUpdates();
+        PublishTextures();
+        return;
     case C::LoadPackDownloads:
+        textures.update_name.clear(); // answered
         LoadPackDownloads();
         return;
     // AzaharFrame texparts: a pack's Customize page
@@ -1185,12 +1195,14 @@ void FrameMods::FillPackRows() {
         return;
     }
     for (const CustomTex::Layers::PackRow& r :
-         CustomTex::Layers::PackRows(packs, layers->list, layers->partners, layers->copies)) {
+         CustomTex::Layers::PackRows(packs, layers->list, layers->partners, layers->copies,
+                                     layers->stale)) {
         const CustomTex::Pack& p = packs[r.shown];
         const std::string folder = std::filesystem::path(p.path).filename().string();
         Menu::TexturePackItem item{p.id, p.name, PackDetail(p), r.on, deletable.count(p.id) != 0};
         item.verified = p.managed && verified_folders.count(folder) != 0; // AzaharFrame fixd
         item.recommended = p.managed && recommended_folders.count(folder) != 0;
+        item.update = p.managed && update_folders.count(folder) != 0;
         if (const auto it = pack_parts.find(p.id); it != pack_parts.end()) {
             // AzaharFrame texparts; ui3: a PNG or optimized pack has its page too
             item.customize = it->second.count >= 2 || it->second.optimizable;
@@ -1642,6 +1654,8 @@ void FrameMods::SetOffers(const std::vector<CustomTex::Download::PackInfo>& list
     offer_sizes.clear();
     std::set<std::string> verified_now; // AzaharFrame fixd: the installed packs' chip
     std::set<std::string> recommended_now;
+    std::set<std::string> update_now;
+    updates.clear();
     for (const CustomTex::Download::PackInfo& p : list) {
         offer_sizes[p.id] = p.size;
         for (const std::string& f : p.folders) {
@@ -1651,6 +1665,12 @@ void FrameMods::SetOffers(const std::vector<CustomTex::Download::PackInfo>& list
             if (p.recommended) {
                 recommended_now.insert(f);
             }
+            if (p.update) {
+                update_now.insert(f);
+            }
+        }
+        if (p.update) {
+            updates[p.id] = p.name;
         }
         Menu::PackOffer o;
         o.id = p.id;
@@ -1672,13 +1692,16 @@ void FrameMods::SetOffers(const std::vector<CustomTex::Download::PackInfo>& list
         }
         if (running && st.pack_id == p.id) {
             o.state = Menu::PackOfferState::Downloading;
-        } else if (p.installed) {
+        } else if (p.installed && !p.update) {
             o.state = Menu::PackOfferState::Installed;
         } else if (p.id == pack_failed) {
             o.state = Menu::PackOfferState::Failed;
             o.note = pack_error;
+        } else if (p.update) {
+            o.state = Menu::PackOfferState::Update;
         }
-        if (o.state == Menu::PackOfferState::Download && p.partial) {
+        if ((o.state == Menu::PackOfferState::Download || o.state == Menu::PackOfferState::Update) &&
+            p.partial) {
             // AzaharFrame fixes7: a cancelled download (or one the app was closed in) goes on: Resume
             o.resume = Menu::ResumeText(p.partial_bytes, p.size);
         }
@@ -1690,13 +1713,28 @@ void FrameMods::SetOffers(const std::vector<CustomTex::Download::PackInfo>& list
         PollDownload(); // the percent at once
     }
     const bool verified_changed =
-        verified_now != verified_folders || recommended_now != recommended_folders;
+        verified_now != verified_folders || recommended_now != recommended_folders ||
+        update_now != update_folders;
     verified_folders = std::move(verified_now);
     recommended_folders = std::move(recommended_now);
+    update_folders = std::move(update_now);
     if (verified_changed) {
         FillPackRows(); // AzaharFrame fixd: the installed packs' Verified chip
     }
+    NoteUpdates();
     PublishTextures();
+}
+
+void FrameMods::NoteUpdates() {
+    if (!textures.shown || !textures.update_name.empty()) {
+        return;
+    }
+    for (const auto& [id, name] : updates) {
+        if (updates_noted.insert(id).second) {
+            textures.update_name = name;
+            return;
+        }
+    }
 }
 
 Menu::PackOffer* FrameMods::PackOffer(const std::string& id) {
@@ -1721,11 +1759,11 @@ void FrameMods::AllowAnyway(const std::string& id, int value) {
 
 void FrameMods::StartDownload(const std::string& id) {
     Menu::PackOffer* o = PackOffer(id);
-    if (!o || !downloader || textures.downloading) {
+    if (!o || !downloader || textures.downloading || !deleting.empty()) {
         return;
     }
     if (!downloader->Start(id, title_id, unscanned_ok.count(id) != 0,
-                           anyway.count(id) != 0)) { // returns at once; the work runs on its thread
+                           anyway.count(id) != 0, updates.count(id) != 0)) { // returns at once; the work runs on its thread
         LOG_WARNING(Frontend, "xr: texture packs: download {} did not start", id);
         return;
     }
@@ -1783,7 +1821,11 @@ void FrameMods::PollDownload() {
     case Phase::Done:
         LOG_INFO(Frontend, "xr: texture packs: {} downloaded", st.pack_id);
         for (const std::string& f : st.installed) {
-            nudge_candidates.insert("folder:" + f); // AzaharFrame ui3
+            if (st.update) {
+                PackUpdated(f);
+            } else {
+                nudge_candidates.insert("folder:" + f); // AzaharFrame ui3
+            }
         }
         RefreshPacks();
         break;

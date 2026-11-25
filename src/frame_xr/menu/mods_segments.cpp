@@ -688,19 +688,24 @@ std::string OptimizeNudgeText(const std::string& pack) {
     return "Optimize " + pack + " for Frame?";
 }
 
+std::string UpdateNoteText(const std::string& pack) {
+    return std::string(kUpdateChip) + ": " + pack;
+}
+
 OptimizeRowText OptimizeText(const PackOptimize& o) {
     OptimizeRowText t;
+    const char* line = o.stale ? kOptimizeStale : kOptimizeLine;
     const std::string size = o.size_text.empty() ? std::string{} : " \u00b7 " + o.size_text;
     t.title = "PNG" + size;
     switch (o.state) {
     case OptimizeState::None:
         return {};
     case OptimizeState::Png:
-        t.line = kOptimizeLine;
+        t.line = line;
         t.button = 1;
         break;
     case OptimizeState::Checking:
-        t.line = kOptimizeLine;
+        t.line = line;
         t.ring = true;
         break;
     case OptimizeState::Converting:
@@ -844,7 +849,8 @@ std::vector<std::string> PackOfferParts(const PackOffer& offer) {
     if (offer.state == PackOfferState::Failed || offer.state == PackOfferState::Downloading) {
         return {offer.note};
     }
-    if (!offer.resume.empty() && offer.state == PackOfferState::Download) { // AzaharFrame fixes7
+    if (!offer.resume.empty() && (offer.state == PackOfferState::Download ||
+                                  offer.state == PackOfferState::Update)) { // AzaharFrame fixes7
         return {offer.resume};
     }
     return {offer.downloads, offer.updated};
@@ -882,7 +888,9 @@ std::string PackButtonLabel(const PackOffer& offer) { // AzaharFrame fixes7
     if (offer.state == PackOfferState::Failed) {
         return "Try Again";
     }
-    return !offer.resume.empty() ? std::string(kResumeLabel) : LabelFor(Id::PackDownload);
+    return !offer.resume.empty()                     ? std::string(kResumeLabel)
+           : offer.state == PackOfferState::Update ? LabelFor(Id::UpdateNote)
+                                                   : LabelFor(Id::PackDownload);
 }
 
 std::string BylineText(const std::string& author, const std::vector<std::string>& parts,
@@ -943,6 +951,7 @@ float PackTextRight(const Kit& kit, const PackOffer& o, float x1) {
     float right = x1;
     switch (o.state) {
     case PackOfferState::Download:
+    case PackOfferState::Update:
     case PackOfferState::Failed:
         right = x1 - ButtonWidth(kit, PackButtonLabel(o), false, 24.0f); // AzaharFrame fixes7
         break;
@@ -1215,6 +1224,9 @@ void TabMenu::DrawModsDialog(Kit& kit, const ModsDialog& d, const MenuView& view
     case ModsDialogKind::Optimize: // AzaharFrame ui3
         headline = "Optimize Texture Pack?";
         body = kOptimizeBody;
+        if (d.replaces) {
+            body += std::string(" ") + kOptimizeReplaces;
+        }
         confirm = "Optimize";
         break;
     case ModsDialogKind::RemoveOriginal: // AzaharFrame ui3
@@ -1765,6 +1777,11 @@ void TabMenu::DrawTextures(Kit& kit, const MenuModel& model, const MenuView& vie
     if (!m.nudge_pack.empty() && view.textures_page == TexturesPage::Packs) {
         bottom = DrawActionSnackbar(kit, view, area, OptimizeNudgeText(m.nudge_name), Id::OptimizeNudge,
                                     bottom);
+    } else if (!m.update_name.empty() && !m.needs_restart && turned_off.empty() &&
+               view.textures_page == TexturesPage::Packs) {
+        // One at a time: this one last
+        bottom = DrawActionSnackbar(kit, view, area, UpdateNoteText(m.update_name), Id::UpdateNote,
+                                    bottom);
     }
     // AzaharFrame ui2: Install from Zip is on Download Packs, as it is on Install Mods.
     if (view.textures_page == TexturesPage::Download && model.mods.zip.open &&
@@ -1961,7 +1978,9 @@ void TabMenu::DrawTextures(Kit& kit, const MenuModel& model, const MenuView& vie
                 }
                 right = b.x0 + 12.0f - kNameGap;
             }
-            RowText(kit, tx, right, cy, p.name, ChipFor(p.verified, p.recommended), p.detail, false, op); // AzaharFrame fixd
+            RowText(kit, tx, right, cy, p.name,
+                    p.update ? NameChip::Update : ChipFor(p.verified, p.recommended), p.detail, false,
+                    op); // AzaharFrame fixd
         }
     }
     kit.ClearClip();
@@ -2019,6 +2038,7 @@ void TabMenu::DrawPackDownloads(Kit& kit, const TexturesModel& m, const MenuView
         float right = c.x1;
         switch (o.state) {
         case PackOfferState::Download:
+        case PackOfferState::Update:
         case PackOfferState::Failed: {
             const std::string label = PackButtonLabel(o); // AzaharFrame fixes7: or Resume
             const float w = ButtonWidth(kit, label, false, 24.0f);
