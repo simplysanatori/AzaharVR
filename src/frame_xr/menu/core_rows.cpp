@@ -12,6 +12,9 @@ namespace FrameXr::Menu {
 
 namespace {
 
+using Common::AltCore::DriverName;
+using Common::AltCore::DriverOption;
+
 enum class Need {
     Any,
     Bottom, ///< a Secondary Screen now
@@ -35,6 +38,8 @@ enum class Need {
     SaveImport,
     SecondScreen, ///< two choices or more
     EditGame,
+    GbaDsGroup,
+    PokeDaisyGroup,
 };
 
 struct Rule {
@@ -56,6 +61,8 @@ constexpr Rule kRules[] = {
     {Id::DsConsoleMode, Need::ConsoleMode},
     {Id::SecondScreen, Need::SecondScreen},
     {Id::AllowGameEditing, Need::EditGame},
+    {Id::GbaDsHeader, Need::GbaDsGroup},
+    {Id::PokeDaisyHeader, Need::PokeDaisyGroup},
     {Id::DsTouchEnabled, Need::DsTouch},
     {Id::DsMicBlow, Need::MicBlow},
     {Id::DsLidToggle, Need::Lid},
@@ -147,13 +154,31 @@ bool Has(Need need, const CoreCaps& core) {
         return std::popcount(core.second_screen_choices) >= 2;
     case Need::EditGame:
         return core.can_edit_game;
+    case Need::GbaDsGroup:
+        return core.driver == DriverName::GbaDs && core.driver_options != 0;
+    case Need::PokeDaisyGroup:
+        return core.driver == DriverName::PokeDaisy && core.driver_options != 0;
     }
     return false;
 }
 
 } // namespace
 
+static_assert(static_cast<int>(Id::QuickMenuStyle) - static_cast<int>(Id::RotatePages) + 1 ==
+              static_cast<int>(DriverOption::Count));
+
+std::optional<DriverOption> OptionOf(Id id) {
+    const int at = static_cast<int>(id) - static_cast<int>(Id::RotatePages);
+    if (at < 0 || at >= static_cast<int>(DriverOption::Count)) {
+        return std::nullopt;
+    }
+    return static_cast<DriverOption>(at);
+}
+
 bool RowApplies(Id id, const CoreCaps& core) {
+    if (const auto option = OptionOf(id)) {
+        return !Is3ds(core) && (core.driver_options & DriverOptionBit(*option)) != 0;
+    }
     for (const Rule& rule : kRules) {
         if (rule.id == id) {
             return Is3ds(core) ? !ForOthersOnly(rule.need) : Has(rule.need, core);

@@ -29,6 +29,43 @@ struct ScreenMetrics {
     bool operator==(const ScreenMetrics&) const = default;
 };
 
+/// What draws a GBA or Game Boy game's Secondary Screen and has options of its own.
+enum class DriverName : uint8_t { None, PokeDaisy, GbaDs };
+
+/// Those options, as the VR menu has them: on or off (PokeDaisy's, in its settings.txt), a value
+/// (GBA DS's, in the settings) or a press (TurnPage).
+enum class DriverOption : uint32_t {
+    RotatePages, ///< timed pages turn by themselves
+    TurnPage,    ///< BtnTurnPage
+    MapRefresh,  ///< an index of kMapRefreshFrames
+    // PokeDaisy's that edit the game (Allow Game Editing)
+    AutoRun,
+    RunIndoors,
+    WildEncounters,
+    ReusableTms,
+    InstantText,
+    TradeEvolutions,
+    // and that do not
+    Hud,
+    DarkMode,
+    BattleInfo,
+    BattleHints,
+    OneTapMoves,
+    BattleGen5, ///< else Gen 4
+    QuickGrid,  ///< else a ring
+    Count,
+};
+
+constexpr uint32_t DriverOptionBit(DriverOption option) {
+    return 1u << static_cast<uint32_t>(option);
+}
+constexpr bool OptionEditsGame(DriverOption option) {
+    return option >= DriverOption::AutoRun && option <= DriverOption::TradeEvolutions;
+}
+
+/// Settings::values.gba_map_refresh: frames from one capture of a map to the next.
+inline constexpr uint32_t kMapRefreshFrames[] = {30, 60, 90, 180};
+
 struct Capabilities {
     CoreKind kind = CoreKind::N3DS;
     bool has_stereo_3d = true;
@@ -56,6 +93,9 @@ struct Capabilities {
     bool can_edit_game = false; ///< Allow Game Editing means something for this game
     bool has_quick_menu = false; ///< BtnQuickMenu opens PokeDaisy's quick menu
     bool has_pages = false;      ///< a GBA game whose Secondary Screen BtnTurnPage may turn
+    DriverName driver = DriverName::None; ///< the one running, whatever the choice is
+    uint32_t driver_options = 0;    ///< DriverOptionBit of those it has for this game now
+    uint32_t driver_options_on = 0; ///< of those, the ones that are on
     ScreenMetrics screens{};
     bool operator==(const Capabilities&) const = default;
 

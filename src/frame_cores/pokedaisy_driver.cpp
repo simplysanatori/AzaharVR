@@ -73,6 +73,26 @@ Toggles ShownToggles(const Toggles& wanted, bool editing, bool open) {
     return shown;
 }
 
+bool Toggles::*FieldOf(Common::AltCore::DriverOption option) {
+    using Option = Common::AltCore::DriverOption;
+    switch (option) {
+    case Option::AutoRun:
+        return &Toggles::auto_run;
+    case Option::RunIndoors:
+        return &Toggles::run_indoors;
+    case Option::WildEncounters: // the field is whether they are off
+        return &Toggles::wild_off;
+    case Option::ReusableTms:
+        return &Toggles::reusable_tms;
+    case Option::InstantText:
+        return &Toggles::instant_text;
+    case Option::TradeEvolutions:
+        return &Toggles::trade_evos;
+    default:
+        return nullptr;
+    }
+}
+
 Toggles ChangedToggles(const Toggles& kept, const Toggles& shown, const Toggles& now) {
     const auto pick = [](bool k, bool s, bool n) { return n != s ? n : k; };
     Toggles out;
@@ -585,6 +605,63 @@ public:
         return true;
     }
 
+    // The options in the VR menu
+
+    Common::AltCore::DriverName Name() const override {
+        return Common::AltCore::DriverName::PokeDaisy;
+    }
+
+    /// What PokeDaisy's own settings page has for this game. What edits stays listed with editing
+    /// off (the menu locks it).
+    uint32_t Options() const override {
+        uint32_t options = OptionBit(Option::DarkMode) | OptionBit(Option::BattleInfo) |
+                           OptionBit(Option::OneTapMoves);
+        const auto add = [&options](bool has, Option option) {
+            options |= has ? OptionBit(option) : 0u;
+        };
+        add(field_supported, Option::AutoRun);
+        add(field_supported, Option::RunIndoors);
+        add(s.host.wildSupported, Option::WildEncounters);
+        add(s.host.tmsSupported == 1, Option::ReusableTms);
+        add(s.host.textSupported != 0, Option::InstantText);
+        add(s.tradeEvoOk, Option::TradeEvolutions);
+        add(s.host.hasHud, Option::Hud);
+        add(is_gba, Option::BattleGen5);
+        add(s.host.hasQuickMenu, Option::QuickGrid);
+        add(!wanted.noBattleInfo, Option::BattleHints);
+        return options;
+    }
+
+    uint32_t OptionsOn() const override {
+        uint32_t on = 0;
+        for (uint32_t i = 0; i < static_cast<uint32_t>(Option::Count); ++i) {
+            const Option option = static_cast<Option>(i);
+            on |= IsOn(option) ? OptionBit(option) : 0u;
+        }
+        return on;
+    }
+
+    bool SetOption(Common::AltCore::DriverOption option, uint32_t value) override {
+        const bool on = value != 0;
+        if (!(Options() & OptionBit(option)) || on == IsOn(option)) {
+            return (Options() & OptionBit(option)) != 0;
+        }
+        if (const auto field = FieldOf(option)) {
+            Toggles toggles = GetToggles();
+            toggles.*field = option == Option::WildEncounters ? !on : on;
+            if (!SetToggles(toggles)) {
+                return false;
+            }
+            s.redraw = true;
+            return true;
+        }
+        const auto [field, inverted] = SettingOf(option);
+        live.*field = on != inverted;
+        // As its own page does it; what the gate holds back stays the player's.
+        Forward(PD_ACTION_SETTINGS_CHANGED);
+        return true;
+    }
+
     // Actions
 
     bool Offers(Ask ask) const override {
@@ -669,6 +746,42 @@ public:
     }
 
 private:
+    using Option = Common::AltCore::DriverOption;
+    static constexpr uint32_t OptionBit(Option option) {
+        return Common::AltCore::DriverOptionBit(option);
+    }
+
+    /// The setting of an option that edits nothing, and whether it says the opposite.
+    static std::pair<bool pd_settings::*, bool> SettingOf(Option option) {
+        switch (option) {
+        case Option::Hud:
+            return {&pd_settings::hud, false};
+        case Option::DarkMode:
+            return {&pd_settings::darkMode, false};
+        case Option::BattleInfo:
+            return {&pd_settings::noBattleInfo, true};
+        case Option::BattleHints:
+            return {&pd_settings::hideHints, true};
+        case Option::OneTapMoves:
+            return {&pd_settings::oneTapMoves, false};
+        case Option::BattleGen5:
+            return {&pd_settings::battleGen5, false};
+        case Option::QuickGrid:
+            return {&pd_settings::quickGrid, false};
+        default:
+            return {nullptr, false};
+        }
+    }
+
+    /// The player's, whether or not it acts now.
+    bool IsOn(Option option) const {
+        if (const auto field = FieldOf(option)) {
+            return TogglesOf(wanted).*field != (option == Option::WildEncounters);
+        }
+        const auto [field, inverted] = SettingOf(option);
+        return field && wanted.*field != inverted;
+    }
+
     /// Room for a path and its ".tmp" in PokeDaisy's smallest buffer (pd_session.nuzPath).
     static constexpr std::size_t kPathRoom = 290;
 

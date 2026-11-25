@@ -61,6 +61,9 @@ struct FrameOutput {
     bool held = false;              ///< No frame ran: the driver holds the game (DriverFrame)
     bool metrics_changed = false;
     Common::AltCore::ScreenMetrics updated_metrics{};
+    bool options_changed = false; ///< Capabilities::driver_options, driver_options_on
+    uint32_t updated_options = 0;
+    uint32_t updated_options_on = 0;
 };
 
 /// Internal emulation backend interface implemented by GbaCore, GbCore, and NdsCore.
@@ -113,6 +116,10 @@ public:
     virtual void SetEditing(bool /*on*/) {}
     /// The Secondary Screen's next page (GBA games), from the next frame.
     virtual void TurnPage() {}
+    /// An option of the driver's (GBA and Game Boy games), between frames.
+    virtual bool SetDriverOption(Common::AltCore::DriverOption /*option*/, uint32_t /*value*/) {
+        return false;
+    }
     virtual void SetMicBlow(bool /*on*/) {}
     /// DS/DSi: the microphone's input, before Load.
     virtual void SetMicrophone(MicrophoneFactory /*factory*/) {}

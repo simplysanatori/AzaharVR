@@ -294,6 +294,7 @@ enum class MenuCommand {
     DsMicBlow,   ///< toggle/trigger DS microphone blow noise (`value`: 1 on, 0 off)
     DsLidToggle, ///< toggle DS lid closed (`value`: 1 closed, 0 open)
     ImportSave,  ///< open file picker to import a .sav / .dsv save file
+    DriverOption, ///< MenuRequest::option to `value`: the Secondary Screen's, kept by its driver
 };
 enum class MenuSetting {
     HideBottomScreen,
@@ -418,11 +419,14 @@ enum class MenuSetting {
     /// `value`: 0 Off, 1 On (gba_allow_editing), per game too. The menu leaves it off on a 1: the
     /// Qt side asks once (game_editing_warning) and then sets it.
     AllowGameEditing,
+    RotatePages, ///< `value`: 0 Off, 1 On (gba_rotate_pages), per game too, as the next
+    MapRefresh,  ///< `value`: an index of Common::AltCore::kMapRefreshFrames (gba_map_refresh)
 };
 struct MenuRequest {
     MenuCommand command = MenuCommand::Continue;
     MenuSetting setting = MenuSetting::HideBottomScreen;
     int value = 0;
+    Common::AltCore::DriverOption option{}; ///< MenuCommand::DriverOption
     bool per_game = false;
     std::string text; ///< AzaharFrame texui: a pack's or a mod's id
     std::vector<std::string> buttons; ///< AzaharFrame remap: SetButtons, Settings::InputProfile::buttons

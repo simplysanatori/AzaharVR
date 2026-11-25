@@ -46,6 +46,7 @@ public:
     void AfterStateLoad() override;
     void SetEditing(bool on) override;
     void TurnPage() override;
+    bool SetDriverOption(Common::AltCore::DriverOption option, uint32_t value) override;
 
     bool ImportBatterySave(const std::string& sav_path) override;
 

@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -54,6 +55,9 @@ public:
     /// Off until told; a driver made again (Import Save) goes on with it.
     void SetEditing(bool on);
     void TurnPage();
+    /// A driver made again goes on with GBA DS's; PokeDaisy has its own in its file.
+    bool SetOption(Common::AltCore::DriverOption option, uint32_t value,
+                   Common::AltCore::Capabilities& caps);
 
     /// Calls of RunFrame that did not step exactly once, or in a held frame did (a step outside
     /// RunFrame is one too).
@@ -63,6 +67,7 @@ public:
 
 private:
     bool UpdateSecondary(Common::AltCore::Capabilities& caps);
+    bool UpdateOptions(Common::AltCore::Capabilities& caps);
     void NoteMisstep(uint32_t stepped, const char* where);
 
     std::unique_ptr<FrameDriver> driver;
@@ -72,6 +77,8 @@ private:
     uint64_t missteps = 0;
     bool backed_up = false; ///< this session
     bool editing = false;
+    std::optional<uint32_t> rotate_pages; ///< as asked, for a driver made later
+    std::optional<uint32_t> map_refresh;
 };
 
 } // namespace FrameCores

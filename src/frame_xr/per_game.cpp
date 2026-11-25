@@ -125,6 +125,12 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::AllowGameEditing:
         f(v.gba_allow_editing);
         return true;
+    case Id::RotatePages:
+        f(v.gba_rotate_pages);
+        return true;
+    case Id::MapRefresh:
+        f(v.gba_map_refresh);
+        return true;
     case Id::TouchpadTouch: // AzaharFrame reticle: the Controls tab's rows
         f(v.vr_touchpad_touch);
         return true;

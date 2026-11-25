@@ -160,6 +160,18 @@ TEST_CASE("PokeDaisy toggles held back stay the player's", "[frame_cores]") {
     CHECK(ChangedToggles(kAllOn, kAllOn, {}) == Toggles{});
 }
 
+TEST_CASE("PokeDaisy options that edit the game are its toggles", "[frame_cores]") {
+    using Option = Common::AltCore::DriverOption;
+    for (uint32_t i = 0; i < static_cast<uint32_t>(Option::Count); ++i) {
+        const auto option = static_cast<Option>(i);
+        INFO("option " << i);
+        CHECK((FieldOf(option) != nullptr) == Common::AltCore::OptionEditsGame(option));
+    }
+    CHECK(FieldOf(Option::AutoRun) == &Toggles::auto_run);
+    CHECK(FieldOf(Option::WildEncounters) == &Toggles::wild_off);
+    CHECK(FieldOf(Option::TradeEvolutions) == &Toggles::trade_evos);
+}
+
 TEST_CASE("PokeDaisy settings the host owns", "[frame_cores]") {
     const HeldSettings s = DefaultSettings();
     CHECK(s.language == 0); // English, never AUTO

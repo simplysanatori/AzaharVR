@@ -5,6 +5,7 @@
 #include "frame_cores/gbads_driver.h"
 
 #include <algorithm>
+#include <iterator>
 #include <system_error>
 
 #include "common/logging/log.h"
@@ -19,6 +20,8 @@ extern "C" {
 namespace FrameCores {
 namespace {
 
+using Common::AltCore::DriverOption;
+using Common::AltCore::DriverOptionBit;
 using std::chrono::milliseconds;
 
 constexpr uint32_t kOpaque = 0xFF000000u;
@@ -55,8 +58,8 @@ GbaDsDriver::GbaDsDriver(const DriverServices& services_, const GbadsLoop& loop_
     host.emu = services.emu;
     host.rom_path = services.rom_path.c_str();
     host.logo_dir = logo_dir.empty() ? nullptr : logo_dir.c_str();
-    host.events = [](void* ctx, bool* turn_page) {
-        return static_cast<GbaDsDriver*>(ctx)->OnEvents(turn_page);
+    host.events = [](void* ctx, GbadsAsk* ask) {
+        return static_cast<GbaDsDriver*>(ctx)->OnEvents(ask);
     };
     host.keys = [](void* ctx) { return static_cast<GbaDsDriver*>(ctx)->keys; };
     host.step = [](void* ctx, uint32_t step_keys) {
@@ -196,6 +199,46 @@ std::pair<uint32_t, uint32_t> GbaDsDriver::SecondarySize() const {
     return {secondary_w, secondary_h};
 }
 
+uint32_t GbaDsDriver::Options() const {
+    if (!thread.joinable() || late || !loop.features) {
+        return 0;
+    }
+    const unsigned has = loop.features();
+    uint32_t options = 0;
+    if (has & GBADS_HAS_PAGES) {
+        options |= DriverOptionBit(DriverOption::RotatePages);
+    }
+    if (has & (GBADS_HAS_PAGES | GBADS_HAS_VIEWS)) {
+        options |= DriverOptionBit(DriverOption::TurnPage);
+    }
+    if (has & GBADS_HAS_MAP) {
+        options |= DriverOptionBit(DriverOption::MapRefresh);
+    }
+    return options;
+}
+
+uint32_t GbaDsDriver::OptionsOn() const {
+    return rotate.load(std::memory_order_relaxed) ? DriverOptionBit(DriverOption::RotatePages) : 0u;
+}
+
+bool GbaDsDriver::SetOption(DriverOption option, uint32_t value) {
+    switch (option) {
+    case DriverOption::RotatePages:
+        rotate.store(value != 0, std::memory_order_relaxed);
+        return true;
+    case DriverOption::MapRefresh:
+        map_interval.store(static_cast<int>(Common::AltCore::kMapRefreshFrames[std::min<std::size_t>(
+                               value, std::size(Common::AltCore::kMapRefreshFrames) - 1)]),
+                           std::memory_order_relaxed);
+        return true;
+    case DriverOption::TurnPage:
+        TurnPage();
+        return true;
+    default:
+        return false;
+    }
+}
+
 void GbaDsDriver::StopLoop() {
     if (!thread.joinable()) {
         return;
@@ -289,7 +332,7 @@ bool GbaDsDriver::Park() {
     return !leaving;
 }
 
-bool GbaDsDriver::OnEvents(bool* turn_page) {
+bool GbaDsDriver::OnEvents(GbadsAsk* ask) {
     if (leaving) {
         return false;
     }
@@ -299,7 +342,9 @@ bool GbaDsDriver::OnEvents(bool* turn_page) {
             return false;
         }
     }
-    *turn_page = page_asked.exchange(false, std::memory_order_relaxed);
+    ask->turn_page = page_asked.exchange(false, std::memory_order_relaxed);
+    ask->rotate = rotate.load(std::memory_order_relaxed);
+    ask->map_interval = map_interval.load(std::memory_order_relaxed);
     return true;
 }
 

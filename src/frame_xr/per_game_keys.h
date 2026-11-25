@@ -76,6 +76,8 @@ void ForEachMenuKey(F&& f) {
     f(v.gba_solar_level);
     f(v.gba_second_screen);
     f(v.gba_allow_editing);
+    f(v.gba_rotate_pages);
+    f(v.gba_map_refresh);
     // Controls (AzaharFrame reticle)
     f(v.vr_touchpad_touch);
     f(v.vr_bottom_screen_reticle);

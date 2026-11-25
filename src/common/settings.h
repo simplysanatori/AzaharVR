@@ -1196,6 +1196,9 @@ struct Values {
     // 2 Off (FrameCores::SecondScreen). Allow Game Editing off: the game is never written to.
     SwitchableSetting<u32, true> gba_second_screen{0, 0, 2, "gba_second_screen"};
     SwitchableSetting<bool> gba_allow_editing{false, "gba_allow_editing"};
+    // GBA DS's, as Common::AltCore::DriverOption
+    SwitchableSetting<bool> gba_rotate_pages{false, "gba_rotate_pages"};
+    SwitchableSetting<u32, true> gba_map_refresh{1, 0, 3, "gba_map_refresh"};
 };
 
 extern Values values;

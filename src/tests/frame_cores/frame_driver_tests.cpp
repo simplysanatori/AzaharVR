@@ -86,6 +86,10 @@ struct Script {
     int loads = 0;
     int pages = 0;
     int gone = 0;
+    Common::AltCore::DriverName name = Common::AltCore::DriverName::None;
+    uint32_t options = 0;
+    uint32_t options_on = 0;
+    std::vector<std::pair<Common::AltCore::DriverOption, uint32_t>> asked;
     bool can_edit = false;
     bool editing = false;
 };
@@ -132,6 +136,19 @@ public:
     }
     void TurnPage() override {
         ++script.pages;
+    }
+    Common::AltCore::DriverName Name() const override {
+        return script.name;
+    }
+    uint32_t Options() const override {
+        return script.options;
+    }
+    uint32_t OptionsOn() const override {
+        return script.options_on;
+    }
+    bool SetOption(Common::AltCore::DriverOption option, uint32_t value) override {
+        script.asked.emplace_back(option, value);
+        return true;
     }
     std::pair<uint32_t, uint32_t> SecondarySize() const override {
         return script.size;
@@ -415,6 +432,49 @@ TEST_CASE("DriverRunner: pages are the driver's, offered to GBA games gba-ds kno
     // A driver without pages takes it and does nothing.
     auto plain = MakePlainDriver(core.Services(), {});
     plain->TurnPage();
+}
+
+TEST_CASE("DriverRunner: the driver's options are the capabilities'", "[frame_cores]") {
+    using Option = Common::AltCore::DriverOption;
+    using Common::AltCore::DriverName;
+    FakeCore core;
+    Script script;
+    Capabilities caps = Capabilities::ForGBA();
+    FrameOutput out;
+    DriverRunner runner;
+    CHECK(caps.driver == DriverName::None);
+    CHECK_FALSE(runner.SetOption(Option::RotatePages, 1, caps)); // no driver: for a later one
+    CHECK_FALSE(runner.SetOption(Option::AutoRun, 1, caps));     // which keeps its own
+
+    script.name = DriverName::GbaDs;
+    script.options = DriverOptionBit(Option::RotatePages);
+    script.options_on = DriverOptionBit(Option::RotatePages) | DriverOptionBit(Option::Hud);
+    runner.Start(DriverKind::Plain, {}, core.Services(), {}, With(script), {}, caps);
+    REQUIRE(script.asked.size() == 1);
+    CHECK(script.asked[0].first == Option::RotatePages);
+    CHECK(script.asked[0].second == 1u);
+    CHECK(caps.driver == DriverName::GbaDs);
+    CHECK(caps.driver_options == script.options);
+    CHECK(caps.driver_options_on == script.options); // none it does not have
+
+    runner.RunFrame({}, out, caps);
+    CHECK_FALSE(out.options_changed);
+    script.options |= DriverOptionBit(Option::TurnPage); // the game's map came up
+    script.options_on = 0;
+    runner.RunFrame({}, out, caps);
+    CHECK(out.options_changed);
+    CHECK(out.updated_options == script.options);
+    CHECK(out.updated_options_on == 0u);
+    CHECK(caps.driver_options == script.options);
+    runner.RunFrame({}, out, caps);
+    CHECK_FALSE(out.options_changed);
+
+    script.options_on = DriverOptionBit(Option::RotatePages);
+    CHECK(runner.SetOption(Option::MapRefresh, 2, caps));
+    CHECK(script.asked.back().first == Option::MapRefresh);
+    CHECK(script.asked.back().second == 2u);
+    CHECK(caps.driver_options_on == script.options_on);
+    runner.Stop();
 }
 
 TEST_CASE("The overlay covers the screen it is drawn over", "[frame_cores]") {

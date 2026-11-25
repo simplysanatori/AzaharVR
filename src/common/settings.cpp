@@ -384,6 +384,8 @@ void RestoreGlobalState(bool is_powered_on) {
     values.gba_solar_level.SetGlobal(true);
     values.gba_second_screen.SetGlobal(true);
     values.gba_allow_editing.SetGlobal(true);
+    values.gba_rotate_pages.SetGlobal(true);
+    values.gba_map_refresh.SetGlobal(true);
 }
 
 /// Gets the graphics API that should be used; not necessarily one set in settings

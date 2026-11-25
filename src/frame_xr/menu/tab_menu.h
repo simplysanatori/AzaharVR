@@ -317,6 +317,25 @@ enum class Id : int {
     ImportSave,
     SecondScreen,     ///< GBA and Game Boy games: index of SecondScreenOptions (gba_second_screen)
     AllowGameEditing, ///< GBA and Game Boy games: a switch (gba_allow_editing)
+    GbaDsHeader,
+    PokeDaisyHeader,
+    // Common::AltCore::DriverOption, in its order (OptionOf)
+    RotatePages, ///< a switch (gba_rotate_pages)
+    TurnPage,    ///< a button
+    MapRefresh,  ///< index of kMapRefreshFrames (gba_map_refresh)
+    AutoRun,     ///< and on: PokeDaisy's own, kept in its settings.txt
+    RunIndoors,
+    WildEncounters,
+    ReusableTms,
+    InstantText,
+    TradeEvolutions,
+    PokeHud,
+    PokeDarkMode,
+    BattleInfo,
+    BattleHints,
+    OneTapMoves,
+    BattleStyle, ///< index: 0 Gen 4, 1 Gen 5
+    QuickMenuStyle, ///< index: 0 Ring, 1 Grid
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -342,6 +361,7 @@ enum class Lock : uint8_t {
     AtLowest,    ///< AzaharFrame menuux: Dynamic Resolution at 1x Internal Resolution
     InPassthrough, ///< AzaharFrame vis: Show Controllers while the Background is Passthrough
     AutosaveOff,   ///< AzaharFrame autosave: Every and Keep while Autosave is off
+    EditingOff,    ///< AzaharVR: what edits the game while Allow Game Editing is off
     NoGameValues,  ///< AzaharFrame reticle: the scope's ⋮ while nothing on the tab is per game
     NoGame,        ///< AzaharFrame reticle: the scope with no game that can have its own values
 };
@@ -546,6 +566,8 @@ struct MenuModel {
     int ds_console_mode = 0;      ///< 0 Automatic, 1 DS, 2 DSi
     int gba_second_screen = 0;    ///< 0 PokeDaisy, 1 GBA DS, 2 Off
     bool gba_allow_editing = false;
+    bool gba_rotate_pages = false;
+    int gba_map_refresh = 1; ///< index of kMapRefreshFrames
     bool ds_touch_enabled = true; ///< DS touch input switch
     int ds_screen_rotation = 0;   ///< 0 = 0°, 1 = 90°, 2 = 270°
     bool ds_lid_closed = false;   ///< DS lid closed toggle

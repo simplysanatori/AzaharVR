@@ -3856,6 +3856,9 @@ void GMainWindow::ApplyAltSettings() {
     if (caps.can_edit_game) {
         alt_core_host->SetEditing(v.gba_allow_editing.GetValue());
     }
+    using Option = Common::AltCore::DriverOption;
+    alt_core_host->SetDriverOption(Option::RotatePages, v.gba_rotate_pages.GetValue() ? 1 : 0);
+    alt_core_host->SetDriverOption(Option::MapRefresh, v.gba_map_refresh.GetValue());
 }
 #endif
 
@@ -5772,6 +5775,13 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         }
 #endif
         return;
+    case C::DriverOption:
+#ifdef ENABLE_ALT_CORES
+        if (alt_core_host && alt_core_host->IsRunning()) {
+            alt_core_host->SetDriverOption(r.option, static_cast<u32>(r.value));
+        }
+#endif
+        return;
     case C::ImportSave:
 #ifdef ENABLE_ALT_CORES
         if (alt_core_host && alt_core_host->IsRunning()) {
@@ -6242,6 +6252,12 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
             return;
         }
         set(v.gba_allow_editing, r.value != 0);
+        break;
+    case S::RotatePages:
+        set(v.gba_rotate_pages, r.value != 0);
+        break;
+    case S::MapRefresh:
+        set(v.gba_map_refresh, std::min<u32>(u, 3));
         break;
     }
 #ifdef ENABLE_ALT_CORES

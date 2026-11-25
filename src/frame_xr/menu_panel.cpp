@@ -389,6 +389,10 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::SecondScreen;
     case Id::AllowGameEditing:
         return MenuSetting::AllowGameEditing;
+    case Id::RotatePages:
+        return MenuSetting::RotatePages;
+    case Id::MapRefresh:
+        return MenuSetting::MapRefresh;
     case Id::AutosaveKeep:
     default: // UseGlobal checks PerGameSetting first
         return MenuSetting::AutosaveKeep;
@@ -1331,6 +1335,8 @@ void MenuPanel::BuildModel(const Host& host) {
         m.gba_solar_level = static_cast<int>(v.gba_solar_level.GetValue());
         m.gba_second_screen = static_cast<int>(v.gba_second_screen.GetValue());
         m.gba_allow_editing = v.gba_allow_editing.GetValue();
+        m.gba_rotate_pages = v.gba_rotate_pages.GetValue();
+        m.gba_map_refresh = static_cast<int>(v.gba_map_refresh.GetValue());
         const DsHeld held = GetDsHeld();
         m.ds_lid_closed = held.lid_closed;
         m.ds_mic_active = held.mic_blow;
@@ -1895,6 +1901,15 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
             Apply(v.gba_allow_editing, false, per_game);
         } // on: the Qt side asks once, then sets it (the switch follows the setting)
         r.setting = MenuSetting::AllowGameEditing;
+        break;
+    case Id::RotatePages:
+        Apply(v.gba_rotate_pages, value != 0, per_game);
+        r.setting = MenuSetting::RotatePages;
+        break;
+    case Id::MapRefresh:
+        r.value = std::clamp(value, 0, 3);
+        Apply(v.gba_map_refresh, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::MapRefresh;
         break;
     default:
         return;
@@ -2726,6 +2741,7 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::DsConsoleMode:
     case Id::DsScreenRotation:
     case Id::SecondScreen:
+    case Id::MapRefresh:
         if (t.index >= 0) {
             // AzaharFrame kiuweap2: Aiming turned on in Kid Icarus: "Angel's Aim Is On", once
             // (a plain new key remembers it).
@@ -2752,6 +2768,9 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::AllowGameEditing:
         SetSetting(Id::AllowGameEditing, model.gba_allow_editing ? 0 : 1, host);
         break;
+    case Id::RotatePages:
+        SetSetting(Id::RotatePages, model.gba_rotate_pages ? 0 : 1, host);
+        break;
     case Id::DsMicBlow: {
         DsHeld held = GetDsHeld();
         held.mic_blow = !held.mic_blow;
@@ -2770,6 +2789,17 @@ void MenuPanel::Click(Target t, Host& host) {
         ask(MenuCommand::ImportSave);
         break;
     default:
+        // AzaharVR: the rows whose state the Secondary Screen's driver has
+        if (const auto option = Menu::OptionOf(t.id)) {
+            const bool on = (model.core.driver_options_on & DriverOptionBit(*option)) != 0;
+            MenuRequest r;
+            r.command = MenuCommand::DriverOption;
+            r.option = *option;
+            r.value = t.index >= 0 ? t.index : on ? 0 : 1;
+            if (host.request) {
+                host.request(r);
+            }
+        }
         break;
     }
 }

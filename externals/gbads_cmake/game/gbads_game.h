@@ -11,6 +11,13 @@ extern "C" {
 
 struct Emu;
 
+/* What the player set or pressed, for the pass that begins. */
+typedef struct GbadsAsk {
+    bool turn_page;    /* the next page, or the other view */
+    bool rotate;       /* timed pages turn by themselves; off, a page stays until it is turned */
+    int map_interval;  /* frames from one capture of a map to the next; 0: gba-ds's own */
+} GbadsAsk;
+
 /* What the loop asks of the host, always on the thread that runs it. False: leave now, the call
  * does not come back to game.c. */
 typedef struct GbadsHost {
@@ -19,7 +26,7 @@ typedef struct GbadsHost {
     const char* rom_path; /* must outlive the run */
     const char* logo_dir; /* the game's own, for its logo's picture; so must this. NULL: no logos */
     /* The top of a pass, the first one once the set-up is done. False: the loop ends by itself. */
-    bool (*events)(void* ctx, bool* turn_page);
+    bool (*events)(void* ctx, GbadsAsk* ask);
     uint32_t (*keys)(void* ctx);
     /* The game's one frame. A frame game.c runs to draw a picture again is not asked for here. */
     bool (*step)(void* ctx, uint32_t keys);
@@ -39,6 +46,13 @@ typedef struct GbadsPicture {
     int shade; /* 0..255: black laid over it */
 } GbadsPicture;
 
+/* GbadsLoop.features */
+enum {
+    GBADS_HAS_MAP = 1,   /* captures of a map: map_interval */
+    GBADS_HAS_PAGES = 2, /* timed pages: rotate, turn_page */
+    GBADS_HAS_VIEWS = 4, /* views turned by hand only: turn_page */
+};
+
 /* One session at a time in a process: game.c's state is all static. */
 typedef struct GbadsLoop {
     /* The whole session on the calling thread. It puts back what it did to the core. */
@@ -54,6 +68,8 @@ typedef struct GbadsLoop {
     void (*restart)(void);
     /* What game.c does after it loads a state. */
     void (*state_loaded)(void);
+    /* GBADS_HAS_* of the game now (a compilation's may change). NULL: none. */
+    unsigned (*features)(void);
 } GbadsLoop;
 
 extern const GbadsLoop gbads_game_loop;
