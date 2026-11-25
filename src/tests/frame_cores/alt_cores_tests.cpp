@@ -905,6 +905,27 @@ TEST_CASE("DS and DSi adapters boot with FreeBIOS + JIT, touch, mic, lid, and sa
     REQUIRE(host.SaveSlot(3));
     REQUIRE(host.LoadSlot(3));
     host.Stop();
+
+    // Automatic: a DSi-enhanced game without the player's DSi files is a DS game
+    REQUIRE(host.Boot(dsi_path.string(), (tmp.path / "data").string(), /*headless_for_test=*/true));
+    CHECK(host.GetCapabilities().kind == Common::AltCore::CoreKind::NDS);
+    REQUIRE(host.StepFrames(2));
+    host.Stop();
+}
+
+TEST_CASE("NDS adapter: the console a game starts on", "[frame_cores]") {
+    using FrameCores::PicksDsi;
+    const FrameCores::CoreBootOptions automatic{};
+    CHECK_FALSE(PicksDsi(false, false, true, automatic));
+    CHECK_FALSE(PicksDsi(false, true, false, automatic));
+    CHECK(PicksDsi(false, true, true, automatic));
+    CHECK(PicksDsi(true, true, false, automatic)); // made for the DSi only
+    FrameCores::CoreBootOptions ds{};
+    ds.force_nds = true;
+    CHECK_FALSE(PicksDsi(true, true, true, ds));
+    FrameCores::CoreBootOptions dsi{};
+    dsi.force_dsi = true;
+    CHECK(PicksDsi(false, false, false, dsi));
 }
 
 TEST_CASE("Autosaves: rotation, the menu's own, Keep lowered, loading", "[frame_cores]") {
