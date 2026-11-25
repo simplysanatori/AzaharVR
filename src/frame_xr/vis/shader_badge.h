@@ -34,6 +34,10 @@ namespace FrameXr::Vis::Badge {
 /// right edges (the same fraction).
 constexpr float kScreenHeight = 0.08f;
 constexpr float kScreenInset = 0.03f;
+/// A toast in that corner (hud.cpp ToastQuad): its height, and how far down it goes while the badge
+/// is there, both over the screen's height.
+constexpr float kToastHeight = 0.1f;
+constexpr float kToastBelow = kScreenHeight + kScreenInset * 0.5f;
 /// Head-locked: this far ahead (metres), this many degrees high (the normal one is 2.3 degrees on
 /// the default 1 m high screen 2 m away), kept this many degrees inside the view's top and right
 /// edges, kHeadInsetDeg inside the screen's.
@@ -87,9 +91,10 @@ float CurveLift(float badge_width, float curve_radius);
 /// Normal view: on the screen centred at `screen`, `width` x `height` metres, flat or (with
 /// `curve_radius` above 0) a cylinder of that radius as ScreenRig::CylinderFor makes it. `aspect`:
 /// the badge's width over its height. Shrunk to fit a very small screen. On the cylinder its
-/// centre is CurveLift in front of the surface.
+/// centre is CurveLift in front of the surface. `share`: its height over the screen's. `below`:
+/// lower by that much of the screen's height (kToastBelow: under the badge).
 Placed OnScreen(const Input::Posef& screen, float width, float height, float curve_radius,
-                float aspect);
+                float aspect, float share = kScreenHeight, float below = 0.0f);
 
 /// Angles from the head's forward axis, radians (OpenXR XrFovf signs: left and down negative).
 struct Angles {

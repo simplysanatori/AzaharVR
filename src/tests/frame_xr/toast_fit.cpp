@@ -45,4 +45,5 @@ TEST_CASE("Toasts: how long they stay", "[frame_xr]") {
     CHECK(DurationNs(ToastTime::Short) == 2'000'000'000);
     CHECK(DurationNs(ToastTime::Long) == 5'000'000'000);
     CHECK(DurationNs(ToastTime::Long) >= 4'000'000'000);
+    CHECK(DurationNs(ToastTime::Brief) == 1'500'000'000);
 }

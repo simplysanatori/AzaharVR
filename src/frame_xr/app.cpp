@@ -1765,7 +1765,8 @@ void Runtime::FrameLoop() {
             }
             // AzaharFrame vrqol: a toast (Quick Saved ...) in front of everything.
             Quad toast;
-            if (hud.ToastQuad(LatestViewPose(), fs.predictedDisplayTime, toast, &toast_screens)) {
+            if (hud.ToastQuad(LatestViewPose(), fs.predictedDisplayTime, toast, badge_anchor,
+                              &toast_screens)) {
                 slot_add(LayerSlots::Group::Toast, local_space, toast);
             }
             // AzaharFrame controls: the grip hint chip under the held screen.

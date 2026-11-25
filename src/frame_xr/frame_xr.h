@@ -593,8 +593,9 @@ void SetInGameMenuHomebrew(const Menu::HomebrewTabModel& homebrew); ///< citra_q
 void SetInGameMenuAutosaves(const std::vector<Menu::AutosaveCard>& autosaves,
                             const std::string& undo_load);
 
-/// A short message on a small panel in front of you (any thread; VR only): Quick Saved, Quick
-/// Loaded and No Quick Save for five seconds, Fast Forward and Normal Speed for two (ToastTimeOf).
+/// A short message (any thread; VR only): in the Primary Screen's top-right corner for 1.5 s, or
+/// in front of you while there is no such screen in view (immersive modes). Autosaved always in
+/// front of you, for two (ToastTimeOf).
 enum class Toast {
     QuickSaved = 0,
     QuickLoaded = 1,
@@ -610,10 +611,7 @@ void ShowToast(Toast kind);
 void ShowAutosaved();
 /// AzaharFrame ui3: how long each of those stays.
 constexpr ToastTime ToastTimeOf(Toast kind) {
-    return kind == Toast::FastForward || kind == Toast::NormalSpeed ||
-                   kind == Toast::Autosaved // AzaharFrame autosave
-               ? ToastTime::Short
-                                                                    : ToastTime::Long;
+    return kind == Toast::Autosaved ? ToastTime::Short : ToastTime::Brief;
 }
 /// AzaharFrame vrsize: a short message of any text (UTF-8, one line; a degree sign is drawn
 /// too) in the same place as a toast. Any thread. AzaharFrame ui3: `time` (toast_fit.h): Short

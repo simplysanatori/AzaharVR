@@ -66,6 +66,27 @@ TEST_CASE("Shader badge: just inside the normal top screen's top-right corner", 
     REQUIRE(2.0f * std::atan(b.height / 2.0f / 2.0f) / kDeg == Approx(2.3f).margin(0.1f));
 }
 
+TEST_CASE("Shader badge: a toast in the same corner, under the badge while that is there",
+          "[frame_xr]") {
+    for (const float w : {5.0f / 3.0f, 4.0f / 3.0f, 1.5f}) {
+        for (const float curve : {0.0f, 1.8f}) {
+            INFO(w << " wide, curve " << curve);
+            const Placed badge = OnScreen(Top(), w, 1.0f, curve, 8.0f);
+            const Placed alone = OnScreen(Top(), w, 1.0f, curve, 512.0f / 96.0f, kToastHeight);
+            const Placed under =
+                OnScreen(Top(), w, 1.0f, curve, 512.0f / 96.0f, kToastHeight, kToastBelow);
+            REQUIRE(alone.height == Approx(kToastHeight));
+            REQUIRE(alone.width == Approx(kToastHeight * 512.0f / 96.0f));
+            REQUIRE(under.width == Approx(alone.width));
+            REQUIRE(Corner(alone, 0.5f, 0.5f).y == Approx(0.5f - kScreenInset));
+            REQUIRE(Corner(alone, 0.5f, 0.5f).x == Approx(Corner(badge, 0.5f, 0.5f).x).margin(0.08f));
+            REQUIRE(Corner(under, 0.5f, 0.5f).y < Corner(badge, 0.5f, -0.5f).y); // no overlap
+            REQUIRE(Corner(under, 0.5f, -0.5f).y > 0.2f);                        // the top strip
+            REQUIRE(Corner(under, -0.5f, 0.5f).x > 0.0f);
+        }
+    }
+}
+
 TEST_CASE("Shader badge: moves and turns with the screen", "[frame_xr]") {
     const float w = 5.0f / 3.0f, h = 1.0f;
     const Placed at_rest = OnScreen(Top(), w, h, 0.0f, kAspect);

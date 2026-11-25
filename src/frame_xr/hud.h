@@ -9,8 +9,9 @@
 //    AzaharFrame vis: only on frames without the controller models; their layer is transparent
 //    round them and is then the one projection layer (vis/layer_plan.h: SteamVR shakes a second).
 //    Both live in one swapchain (SteamVR allows 16 per session).
-//  - A toast: a short message ("Quick Saved") on a small quad in front of you for two or five
-//    seconds (AzaharFrame ui3: ToastTime, toast_fit.h), or until a newer toast replaces it.
+//  - A toast: a short message on a small quad in front of you for two or five seconds
+//    (AzaharFrame ui3: ToastTime, toast_fit.h), or until a newer toast replaces it. "Quick Saved"
+//    and the like (ShowToast): in the Primary Screen's corner for 1.5 s, where there is one.
 //    The messages are drawn once into one swapchain when the session is made, so showing
 //    one needs no GPU work (the XR thread does none while a game runs).
 //    "Fast Forward" and "Normal Speed" are toasts too (fast forward turned on or off).
@@ -79,25 +80,6 @@ public:
     /// Any thread. AzaharFrame controls: the grip hint chip, up to two lines ('\n'; "↕" and "↔"
     /// are drawn as arrows), at `pose` (LOCAL space), `width_m` wide, for three seconds.
     void ShowHint(const std::string& text, const XrPosef& pose, float width_m);
-    /// XR thread, each frame: the toast quad while one shows. `time` is the display time.
-    /// AzaharFrame kiu2: `screens` (LOCAL space, as drawn this frame): the toast comes nearer
-    /// than every one it is over (toast_depth.h).
-    bool ToastQuad(const ViewPose& head, XrTime time, Quad& quad,
-                   const std::vector<Input::PanelQuad>* screens = nullptr);
-    /// XR thread, each frame after ToastQuad: the hint chip while it shows.
-    bool HintQuad(XrTime time, Quad& quad, const ViewPose& head = {},
-                  const std::vector<Input::PanelQuad>* screens = nullptr);
-    /// AzaharFrame autosave: any thread. "Autosaved" over the top screen's corner (vis/
-    /// autosave_label.h), else the Autosaved toast.
-    void ShowAutosaved();
-    /// XR thread, each frame: the label while it shows. `top_ok`: the top screen is the normal
-    /// one, at `top_pose` (LOCAL space), `top_size` (not immersive, not swapped, not hidden).
-    bool LabelQuad(const ViewPose& head, bool top_ok, const XrPosef& top_pose, XrExtent2Df top_size,
-                   XrTime time, Quad& quad);
-
-    /// AzaharFrame shaderbadge: any thread. The badge's line and its ring's progress (0 to 1);
-    /// "" fades it out.
-    void SetShaderBadge(const std::string& text, float progress);
     /// Where the badge may go this frame (app.cpp).
     struct BadgeAnchor {
         /// The normal main screen, in LOCAL space (`curve` above 0: a cylinder of that radius).
@@ -115,6 +97,26 @@ public:
         bool live = false;
         bool pictures = false;
     };
+    /// XR thread, each frame: the toast quad while one shows. `time` is the display time.
+    /// AzaharFrame kiu2: `screens` (LOCAL space, as drawn this frame): the toast comes nearer
+    /// than every one it is over (toast_depth.h). ShowToast's go in `anchor`'s screen's corner
+    /// (BadgeAnchor::screen: no immersive picture this frame), under the badge while that is there.
+    bool ToastQuad(const ViewPose& head, XrTime time, Quad& quad, const BadgeAnchor& anchor,
+                   const std::vector<Input::PanelQuad>* screens = nullptr);
+    /// XR thread, each frame after ToastQuad: the hint chip while it shows.
+    bool HintQuad(XrTime time, Quad& quad, const ViewPose& head = {},
+                  const std::vector<Input::PanelQuad>* screens = nullptr);
+    /// AzaharFrame autosave: any thread. "Autosaved" over the top screen's corner (vis/
+    /// autosave_label.h), else the Autosaved toast.
+    void ShowAutosaved();
+    /// XR thread, each frame: the label while it shows. `top_ok`: the top screen is the normal
+    /// one, at `top_pose` (LOCAL space), `top_size` (not immersive, not swapped, not hidden).
+    bool LabelQuad(const ViewPose& head, bool top_ok, const XrPosef& top_pose, XrExtent2Df top_size,
+                   XrTime time, Quad& quad);
+
+    /// AzaharFrame shaderbadge: any thread. The badge's line and its ring's progress (0 to 1);
+    /// "" fades it out.
+    void SetShaderBadge(const std::string& text, float progress);
     /// XR thread, each frame: the badge while it shows. `in_view_space`: the quad's pose is in
     /// VIEW space (head-locked), else LOCAL.
     bool BadgeQuad(const ViewPose& head, const BadgeAnchor& anchor, XrTime time, Quad& quad,
@@ -133,6 +135,8 @@ private:
     XrTime shown_since = 0;
     XrTime shown_ns = ToastFit::kShortNs; ///< AzaharFrame ui3: how long the one on view stays
     XrPosef shown_pose{{0, 0, 0, 1}, {0, 0, 0}};
+    bool shown_corner = false; ///< in the Primary Screen's corner (chosen when it appears)
+    bool shown_lower = false;  ///< there, under the badge
     bool toast_nearer_logged = false; ///< AzaharFrame kiu2
     ToastDepth::Ease toast_ease; ///< AzaharFrame integ9: its depth, eased (toast_depth.h)
     ToastDepth::Ease hint_ease;  ///< AzaharFrame integ9: the hint chip's
