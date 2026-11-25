@@ -169,3 +169,24 @@ TEST_CASE("Kid Icarus HUD: the subtitles, where they are asked for", "[frame_xr]
     Vertex world[3] = {{0, 0, 0, 1}, {0, 1, 0, 4}, {1, 1, 0, 1}};
     REQUIRE_FALSE(MoveSubtitle(world, 3, At(), 1.0f, 1.0f));
 }
+
+TEST_CASE("Kid Icarus HUD: a page outside a battle keeps its layout", "[kiu140]") {
+    using namespace VideoCore::KiuHud;
+    const Place p = PagePlace(4.0f, 5.0f);
+    REQUIRE(p.on);
+    REQUIRE(p.page);
+    // Pieces at a top corner, the middle and the foot: each over the game's own frame.
+    for (const float up : {0.9f, 0.0f, -0.9f}) {
+        for (const float across : {-0.9f, 0.0f, 0.9f}) {
+            Vertex v[3] = {{up, across, 0, 1}, {up + 0.02f, across, 0, 1}, {up, across + 0.02f, 0, 1}};
+            Move(v, 3, p, 4.0f, 5.0f);
+            REQUIRE(std::abs(v[0].x / v[0].w - up) < 1e-5f);
+            REQUIRE(std::abs(v[0].y / v[0].w - across) < 1e-5f);
+            REQUIRE(v[0].w == 2.0f);
+        }
+    }
+    Live live;
+    live.Set(p);
+    REQUIRE(live.Get().page);
+    REQUIRE_FALSE(PagePlace(0.5f, 1.0f).on);
+}

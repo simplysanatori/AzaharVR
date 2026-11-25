@@ -390,10 +390,26 @@ Talk TalkNow() {
 // AzaharFrame kiu131
 namespace {
 std::atomic<bool> g_cutscene{false};
+std::atomic<float> g_cutscene_tan{0.0f};
+std::atomic<bool> g_battle{false};
 } // namespace
 
-void SetCutscene(bool on) {
+void SetCutscene(bool on, float tan_half_y) {
     g_cutscene.store(on, std::memory_order_relaxed);
+    g_cutscene_tan.store(on ? tan_half_y : 0.0f, std::memory_order_relaxed);
+}
+float CutsceneAngleDeg() {
+    const float t = g_cutscene_tan.load(std::memory_order_relaxed);
+    if (!std::isfinite(t) || !(t > 0.0f) || CutscenesOnScreen()) {
+        return 0.0f;
+    }
+    return std::clamp(2.0f * std::atan(t) * 57.2957795f, 15.0f, 110.0f);
+}
+void SetBattle(bool on) {
+    g_battle.store(on, std::memory_order_relaxed);
+}
+bool Battle() {
+    return g_battle.load(std::memory_order_relaxed);
 }
 bool Cutscene() {
     return g_cutscene.load(std::memory_order_relaxed);

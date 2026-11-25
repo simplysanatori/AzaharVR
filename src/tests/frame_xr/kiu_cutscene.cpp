@@ -67,3 +67,14 @@ TEST_CASE("Kid Icarus cutscenes: the game's own object, two VBlanks in a row",
     REQUIRE(w.Update(false));
     REQUIRE_FALSE(w.Update(false));
 }
+
+TEST_CASE("Kid Icarus cutscene: known by the game's flag, its angle counts at once", "[kiu140]") {
+    FrameXr::Kiu::CutsceneWatch known, plain;
+    bool a = false, b = false;
+    for (int i = 0; i < 10; ++i) {
+        a = known.Update(true, 0, 8, true);
+        b = plain.Update(true, 0, 8);
+    }
+    REQUIRE(a);
+    REQUIRE_FALSE(b);
+}

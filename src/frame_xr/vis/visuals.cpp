@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <span>
 #include <string>
 #include <thread>
 
@@ -182,6 +183,49 @@ ModelInputs ModelInputsFor(const Input::InputFrame& in, int h) {
         m[kInDpadRight] = f(in.dpad_right);
     }
     return m;
+}
+
+/// AzaharFrame kiu140: what the runtime says the fingers do on the controller, for the log (Pit's
+/// arm, finger joints on): each finger's bend and side turn as read, the trigger and grip with
+/// them, and where the tracked wrist is in the controller's aim space. A line when a finger moved.
+void LogFingers(int h, const Input::HandInput& held, const Input::TrackedJoints& joints,
+                std::span<const PitJointPose, kPitXrJoints> pit) {
+    static std::array<PitFingerAngles, 2> last{};
+    static std::array<int64_t, 2> last_ms{};
+    static int lines = 0;
+    const auto i = static_cast<std::size_t>(h);
+    const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch())
+                            .count();
+    if (lines >= 300 || now - last_ms[i] < 250) {
+        return;
+    }
+    const PitFingerAngles a = PitFingerAnglesOf(pit);
+    float most = last_ms[i] == 0 ? 360.0f : 0.0f;
+    for (std::size_t f = 0; f < a.bend.size(); f++) {
+        most = std::max(most, std::abs(a.bend[f] - last[i].bend[f]));
+    }
+    if (most < 12.0f) {
+        return;
+    }
+    last[i] = a;
+    last_ms[i] = now;
+    lines++;
+    const Input::Quatf back{-held.aim.orientation.x, -held.aim.orientation.y,
+                            -held.aim.orientation.z, held.aim.orientation.w};
+    const Input::Posef& wrist = joints.joint[kPitWrist];
+    const Input::Vec3f at = Input::Rotate(back, wrist.position - held.aim.position);
+    const Input::Quatf turn = Input::Normalized(Input::Multiply(back, wrist.orientation));
+    const Input::Vec3f ahead = Input::Rotate(turn, {0.0f, 0.0f, -1.0f});
+    const Input::Vec3f up = Input::Rotate(turn, {0.0f, 1.0f, 0.0f});
+    LOG_INFO(Frontend,
+             "xr: fingers: {} hand bend {:.0f} {:.0f} {:.0f} {:.0f} {:.0f}, side {:.0f} {:.0f} "
+             "{:.0f} {:.0f} {:.0f} (thumb to little), trigger {:.2f}{} grip {:.2f}{}; wrist at "
+             "{:.3f} {:.3f} {:.3f}, ahead {:.2f} {:.2f} {:.2f}, up {:.2f} {:.2f} {:.2f} of the aim",
+             h == 0 ? "left" : "right", a.bend[0], a.bend[1], a.bend[2], a.bend[3], a.bend[4],
+             a.side[0], a.side[1], a.side[2], a.side[3], a.side[4], held.trigger,
+             held.trigger_touch ? " touched" : "", held.grip, held.grip_touch ? " touched" : "",
+             at.x, at.y, at.z, ahead.x, ahead.y, ahead.z, up.x, up.y, up.z);
 }
 
 } // namespace
@@ -1123,6 +1167,9 @@ void Visuals::Frame(Runtime& rt, const FrameInfo& info, Where where, const Windo
                 const Input::Posef& p = joints.joint[j];
                 out.pit_joints[j] = {{p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w},
                                      {p.position.x, p.position.y, p.position.z}};
+            }
+            if (out.pit_tracked) {
+                LogFingers(h, held, joints, out.pit_joints);
             }
         }
     } else if (ControllerModelsWanted(Settings::values.vr_show_controllers.GetValue(),

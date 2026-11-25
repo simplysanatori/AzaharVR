@@ -514,7 +514,7 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
                 vertex_batch[i].position = {flat[i].x, flat[i].y, flat[i].z, flat[i].w};
             }
         };
-        if (subtitle && VideoCore::KiuHud::MoveSubtitle(flat.data(), flat.size(), place, vr_factor,
+        if (subtitle && !place.page && VideoCore::KiuHud::MoveSubtitle(flat.data(), flat.size(), place, vr_factor,
                                                         vr_factor_y)) {
             put();
             return;

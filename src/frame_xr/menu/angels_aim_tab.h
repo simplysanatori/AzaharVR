@@ -162,7 +162,7 @@ inline constexpr const char* kKiuWristAlongTip =
     "How far up your arm the Bottom Screen sits. Below 0 is toward your hand.";
 inline constexpr const char* kKiuCutscenesRow = "Cutscenes"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuCutscenesTip =
-    "Primary Screen: the game's cutscenes play on the Primary Screen, then your view comes back.";
+    "In View: cutscenes play around you, in third person. Primary Screen: on the Primary Screen.";
 inline constexpr const char* kKiuHudRow = "HUD"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuHudTip =
     "In View: the health bar, the score and the rest sit inside your view. Game's Own: where the game puts them.";
@@ -210,6 +210,9 @@ inline constexpr const char* kCameraRow = "Camera";
 /// Camera lists First Person and Over the Shoulder only, and a saved vr_kiu_game_camera is not
 /// used. AZAHARFRAME_KIU_GAME_CAMERA=1 still turns it on, for work on it.
 inline constexpr bool kGameCameraOffered = false;
+/// AzaharFrame kiu140: Pit's Arm is not offered yet (the owner, 2026-11-24): no row, no hand model
+/// row, the controller on the free hand. AZAHARFRAME_KIU_PIT_ARM=1 draws it, for work on it.
+inline constexpr bool kPitArmOffered = false;
 inline constexpr const char* kCameraFirstPerson = "First Person";
 inline constexpr const char* kCameraGame = "Game's Camera";
 inline constexpr const char* kCameraTip = "Where you see from: Pit's eyes, or behind and above Pit.";

@@ -186,8 +186,20 @@ struct PitJointPose {
 /// tracked hand's turn rather than keep ours (1: all of it; less keeps our palm's shape
 /// when a runtime's palm bones differ from ours), the fingers beyond them pointing as tracked
 /// either way.
+/// `from_palm`: each of the four fingers starts from its own metacarpal as tracked, put on ours
+/// (AZAHARFRAME_KIU_FINGERS_PALM=1): what a runtime's palm bones differ by from ours does not
+/// reach the finger. Otherwise it starts from the wrist.
 PitHandPose PitHandPoseFromJoints(std::span<const PitJointPose, kPitXrJoints> joints,
-                                  bool right_hand, float metacarpal_follow = 1.0f);
+                                  bool right_hand, float metacarpal_follow = 1.0f,
+                                  bool from_palm = false);
+inline constexpr const char* kFingersPalmSwitch = "AZAHARFRAME_KIU_FINGERS_PALM";
+/// What the runtime says each finger does, thumb to little, from its joints alone (wherever the
+/// hand is): `bend` the sum of the turns from its metacarpal to its last bone, `side` the first
+/// bone's turn to the side as seen from the wrist (degrees, right positive). For the log.
+struct PitFingerAngles {
+    std::array<float, 5> bend{}, side{};
+};
+PitFingerAngles PitFingerAnglesOf(std::span<const PitJointPose, kPitXrJoints> joints);
 /// Where to draw the hand for a tracked wrist: arm space to the joints' space (the wrist on
 /// the tracked wrist, turned as it is; `scale` on kPitHandUnit). For a right hand the matrix
 /// mirrors: see "Right hands" below.

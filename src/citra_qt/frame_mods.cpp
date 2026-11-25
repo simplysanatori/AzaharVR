@@ -705,7 +705,7 @@ void FrameMods::RefreshAngelsAim() {
             m.textures_pack = AngelsAimPackOn(tid);
             m.hand_installed = FrameXr::Vis::HandFileExists(
                 FileUtil::GetUserPath(FileUtil::UserPath::UserDir)); // AzaharFrame kiu140
-            if (m.mapped && !m.hand_installed) {
+            if (Menu::kPitArmOffered && m.mapped && !m.hand_installed) {
                 m.hand_zip = FrameXr::Vis::FindHandZip(downloads);
             }
             m.report_url = Menu::AngelsAimReportUrl(AppVersion(), game, m.mod_installed);

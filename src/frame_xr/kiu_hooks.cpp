@@ -457,6 +457,7 @@ void CutsceneOff(State& s) {
     s.event_watch = {};
     s.cutscene = false;
     Kiu::FirstPerson::SetCutscene(false);
+    Kiu::FirstPerson::SetBattle(false);
     VideoCore::Immersive::g_drawn_angle.reg.store(0, std::memory_order_relaxed);
 }
 
@@ -672,9 +673,11 @@ void Hook(int64_t ticks) {
     const KH::Player p = KH::FindPlayer(mem, *s.build);
     KH::EyeRequest eye;
     // AzaharFrame kiu140: the game's own cutscene object (kiu_cutscene.h): its own camera, then.
-    const bool event_cutscene = s.event_watch.Update(
-        first_person && Kiu::FirstPerson::CutscenesOnScreen() && KH::CutsceneObject(mem) != 0);
-    eye.on = want_eye && !event_cutscene;
+    // With Cutscenes In View the eye stays with him, behind and above (Over the Shoulder's place).
+    const bool event_cutscene =
+        s.event_watch.Update(first_person && KH::CutsceneObject(mem) != 0);
+    const bool cutscenes_on_screen = Kiu::FirstPerson::CutscenesOnScreen();
+    eye.on = want_eye && !(event_cutscene && cutscenes_on_screen);
     if (first_person && !p.land) {
         eye.offset = kEyeOffsetAir; // AzaharFrame kiuvr
     }
@@ -703,8 +706,9 @@ void Hook(int64_t ticks) {
         const auto text = Switch(kSwitchShoulder);
         KH::Vec3 eye_at, look_at;
         if (Kiu::FirstPerson::ShoulderFor(text ? text->c_str() : nullptr,
-                                          Settings::values.vr_kiu_over_shoulder.GetValue(), back,
-                                          up, side) &&
+                                          Settings::values.vr_kiu_over_shoulder.GetValue() ||
+                                              (event_cutscene && !cutscenes_on_screen),
+                                          back, up, side) &&
             KH::ReadVec3(mem, KH::kSceneEye, eye_at) &&
             KH::ReadVec3(mem, KH::kSceneLookAt, look_at)) {
             eye.extra = KH::Rotate(KH::LevelYawAxes(look_at - eye_at),
@@ -739,7 +743,7 @@ void Hook(int64_t ticks) {
     // goes back to the game's own (the angle comes back with the game's next frame by itself).
     {
         KH::WideRequest wide;
-        if (first_person && p.actor != 0 && !event_cutscene) {
+        if (first_person && p.actor != 0 && !(event_cutscene && cutscenes_on_screen)) {
             wide.on = Kiu::FirstPerson::WideTarget(wide.fov_y, wide.aspect);
         }
         uint32_t node_aspect = 0;
@@ -795,13 +799,15 @@ void Hook(int64_t ticks) {
         const bool wide_in = mailbox.wide_node != 0 &&
                              r.state[static_cast<std::size_t>(KH::Group::WideCamera)] ==
                                  KH::GroupState::In;
-        const bool wanted = wide_in && Kiu::FirstPerson::CutscenesOnScreen();
         const uint32_t match = drawn.match.exchange(0, std::memory_order_relaxed);
         const uint32_t other = drawn.other.exchange(0, std::memory_order_relaxed);
         drawn.want.store(wide_in ? std::tan(0.5f * mailbox.wide_fov_y) : 0.0f,
                          std::memory_order_relaxed);
         drawn.reg.store(wide_in ? Kiu::FirstPerson::kViewRegister : 0u, std::memory_order_relaxed);
-        cutscene = s.cutscene_watch.Update(wanted, match, other) || event_cutscene;
+        // In a cutscene with a camera of its own the view follows the angle that one draws.
+        const bool own_camera = s.cutscene_watch.Update(wide_in, match, other, event_cutscene);
+        cutscene = own_camera || event_cutscene;
+        Kiu::FirstPerson::SetBattle(wide_in);
         if (cutscene != s.cutscene) {
             LOG_INFO(Frontend,
                      "xr: Kid Icarus hooks: cutscene {} ({}; the world drawn {:.1f} degrees high, "
@@ -812,7 +818,9 @@ void Hook(int64_t ticks) {
                      mailbox.wide_fov_y / kDegToRad, match, other);
             s.cutscene = cutscene;
         }
-        Kiu::FirstPerson::SetCutscene(cutscene);
+        Kiu::FirstPerson::SetCutscene(
+            cutscene,
+            own_camera ? drawn.last_other.load(std::memory_order_relaxed) : 0.0f);
         s.angle_match += match;
         s.angle_other += other;
         if (SwitchIs("AZAHARFRAME_KIU_CUTSCENE_TRACE", "1") &&

@@ -838,7 +838,8 @@ L::ScreenDecision Decision() {
     s.bottom_toggled = g.bottom_toggled;
     s.bottom_focused = g.focus_bottom;
     s.menu_open = g.menu_open;
-    s.cutscene = KiuFirstPerson() && Kiu::FirstPerson::Cutscene(); // AzaharFrame kiu140
+    s.cutscene = KiuFirstPerson() && Kiu::FirstPerson::Cutscene() &&
+                 Kiu::FirstPerson::CutscenesOnScreen(); // AzaharFrame kiu140
     s.view_valid = g.view.valid;
     return L::Decide(s);
 }
@@ -1646,6 +1647,13 @@ void OnFrame(const FrameInfo& info) {
                 }
             }
             Kiu::FirstPerson::PublishDrawnShape(fp_aspect);
+            // AzaharFrame kiu140: a cutscene with a camera of its own, in the view.
+            if (const float cut = Kiu::FirstPerson::CutsceneAngleDeg(); cut > 0.0f) {
+                fp_fov = cut;
+                if (Kiu::FirstPerson::GameAspect() > 0.1f) {
+                    fp_aspect = Kiu::FirstPerson::GameAspect();
+                }
+            }
             const float fp_max = Kiu::FirstPerson::FactorMax();
             // AzaharFrame kiuview: AZAHARFRAME_KIU_FP_FIELD, the share of the view covered.
             g.solved = L::SolveKiuFirstPerson(fp_fov, fp_aspect, g.view_fov, eye_shift, fp_max,
@@ -1677,7 +1685,11 @@ void OnFrame(const FrameInfo& info) {
 
     // AzaharFrame kiu140: HUD: In View (video_core/kiu_hud.h).
     VideoCore::KiuHud::Place hud_place;
-    if (g.engaged && IsViewMode(mode) && KiuFirstPerson() && Kiu::FirstPerson::HudInView()) {
+    if (g.engaged && IsViewMode(mode) && KiuFirstPerson() && Kiu::FirstPerson::HudInView() &&
+        !Kiu::FirstPerson::Battle()) {
+        hud_place = VideoCore::KiuHud::PagePlace(g.solved.factor, g.solved.factor_y);
+    } else if (g.engaged && IsViewMode(mode) && KiuFirstPerson() &&
+               Kiu::FirstPerson::HudInView()) {
         auto& v = Settings::values;
         VideoCore::KiuHud::Wanted wanted;
         wanted.size = static_cast<int>(v.vr_kiu_hud_size.GetValue());

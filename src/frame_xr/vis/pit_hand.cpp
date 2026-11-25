@@ -438,7 +438,7 @@ bool PitHandPoseDiffers(const PitHandPose& a, const PitHandPose& b, float degree
 }
 
 PitHandPose PitHandPoseFromJoints(std::span<const PitJointPose, kPitXrJoints> joints, bool right_hand,
-                                  float metacarpal_follow) {
+                                  float metacarpal_follow, bool from_palm) {
     const Bind& bind = TheBind();
     // Every joint's orientation as seen from the wrist; a right hand's mirrored into a left's
     // (x turned over: a rotation's y and z change sign).
@@ -464,6 +464,11 @@ PitHandPose PitHandPoseFromJoints(std::span<const PitJointPose, kPitXrJoints> jo
         if (finger_metacarpal && follow < 1.0f) {
             q = Nlerp(bind.frames.q[j], q, follow);
         }
+        // The finger's bones one after another, each as tracked against the one before it.
+        if (from_palm && j > kPitIndexMetacarpal && j <= kPitLittleTip && !finger_metacarpal) {
+            const auto before = static_cast<std::size_t>(kPitParent[j]);
+            q = Mul(world[before], Mul(Conj(rel[before]), rel[static_cast<std::size_t>(j)]));
+        }
         world[static_cast<std::size_t>(j)] = Normalized(q);
     }
     PitHandPose p = bind.pose;
@@ -474,6 +479,32 @@ PitHandPose PitHandPoseFromJoints(std::span<const PitJointPose, kPitXrJoints> jo
         }
     }
     return p;
+}
+
+PitFingerAngles PitFingerAnglesOf(std::span<const PitJointPose, kPitXrJoints> joints) {
+    constexpr float kDegrees = 57.2957795f;
+    constexpr std::array<std::array<int, 4>, 5> kChain{{
+        {kPitThumbMetacarpal, kPitThumbProximal, kPitThumbDistal, kPitThumbDistal},
+        {kPitIndexMetacarpal, kPitIndexProximal, kPitIndexIntermediate, kPitIndexDistal},
+        {kPitMiddleMetacarpal, kPitMiddleProximal, kPitMiddleIntermediate, kPitMiddleDistal},
+        {kPitRingMetacarpal, kPitRingProximal, kPitRingIntermediate, kPitRingDistal},
+        {kPitLittleMetacarpal, kPitLittleProximal, kPitLittleIntermediate, kPitLittleDistal},
+    }};
+    // Every bone points along its frame's -z (OpenXR).
+    const auto along = [&joints](int j) {
+        return Rotate(Normalized(joints[static_cast<std::size_t>(j)].orientation), V3{0.0f, 0.0f, -1.0f});
+    };
+    const PitQuat wrist_inv = Conj(Normalized(joints[kPitWrist].orientation));
+    PitFingerAngles a;
+    for (std::size_t f = 0; f < kChain.size(); f++) {
+        for (std::size_t k = 0; k + 1 < kChain[f].size(); k++) {
+            const V3 u = along(kChain[f][k]), v = along(kChain[f][k + 1]);
+            a.bend[f] += kDegrees * std::atan2(Length(Cross(u, v)), Dot(u, v));
+        }
+        const V3 first = Rotate(wrist_inv, along(kChain[f][1]));
+        a.side[f] = kDegrees * std::atan2(first.x, -first.z);
+    }
+    return a;
 }
 
 PitMat4 PitHandTrackedFit(const PitJointPose& wrist, bool right_hand, float scale) {

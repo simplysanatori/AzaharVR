@@ -103,8 +103,11 @@ constexpr float WristScreenBesideStats(float width) {
 
 /// AzaharFrame kiu140: the quarter turns (0 to 3, counterclockwise as seen) that put the picture's
 /// top nearest to `head_up` as seen on `panel`; `now` stays until it is kUprightDeg off.
-constexpr float kUprightDeg = 60.0f;
-int UprightTurns(const Input::Posef& panel, const Input::Vec3f& head_up, int now);
+/// While it shows it turns only when it lies on its head (kUprightShownDeg): a hand turned to
+/// look at it, or to touch it, flips nothing.
+constexpr float kUprightDeg = 60.0f, kUprightShownDeg = 125.0f;
+int UprightTurns(const Input::Posef& panel, const Input::Vec3f& head_up, int now,
+                 float keep_deg = kUprightDeg);
 /// `panel` turned that many quarters about its front.
 Input::Posef TurnedQuarters(const Input::Posef& panel, int turns);
 

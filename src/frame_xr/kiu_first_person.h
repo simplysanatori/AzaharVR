@@ -400,8 +400,17 @@ struct BottomNow {
 /// AzaharFrame kiu140: the game plays a cutscene of its own drawing, shown on the Primary Screen
 /// (kiu_cutscene.h; Cutscenes, vr_kiu_cutscenes, or AZAHARFRAME_KIU_CUTSCENES=0|1). Set each VBlank
 /// by the hooks; any thread.
-void SetCutscene(bool on);
+/// `tan_half_y`: the angle the cutscene's own camera draws (half of it, its tangent), 0 for one
+/// that plays through the battle's.
+void SetCutscene(bool on, float tan_half_y = 0.0f);
 bool Cutscene();
+/// The angle for the view to follow while such a cutscene plays in it (0: none), within 15 to 110
+/// degrees.
+float CutsceneAngleDeg();
+/// A battle under way in first person (the wide camera in): its 2D is the HUD. Elsewhere (the
+/// results, menus) the 2D is a page, which stays the game's.
+void SetBattle(bool on);
+bool Battle();
 bool CutscenesOnScreen();
 /// AzaharFrame kiu140: the HUD moved into the view (HUD, vr_kiu_hud, or AZAHARFRAME_KIU_HUD=0|1).
 bool HudInView();

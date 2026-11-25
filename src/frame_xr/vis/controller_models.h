@@ -223,10 +223,7 @@ private:
         FitPart fit;
         bool turned = false;
         FitMat turn{};
-        /// AzaharFrame kiu140: Pit's hand of our own, and where its elbow is (arm space).
-        bool pit = false;
-        bool pit_elbow = false;
-        PitVec3 elbow{};
+        bool pit = false; ///< AzaharFrame kiu140: Pit's hand of our own
     };
     std::array<ArmDraw, 2> arm_draws{};
     std::shared_ptr<const PitModel> pit_model; ///< the player's hand file (null: none)

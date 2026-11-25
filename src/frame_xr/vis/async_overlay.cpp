@@ -103,6 +103,15 @@ void AsyncOverlay::Destroy() {
         XrSwapchainImageReleaseInfo ri{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
         queue_lock->With([&] { return Xr().xrReleaseSwapchainImage(handle, &ri); });
         in_flight = false;
+        // AzaharFrame kiu140: the release may have sent work of the runtime's own.
+        try {
+            queue_lock->With([&] {
+                queue.waitIdle();
+                return 0;
+            });
+        } catch (const std::exception& e) {
+            LOG_ERROR(Frontend, "xr: waiting for the GPU before a panel goes: {}", e.what());
+        }
     }
     if (handle != XR_NULL_HANDLE) {
         const auto destroy = [&] { return Xr().xrDestroySwapchain(handle); };
