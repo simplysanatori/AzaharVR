@@ -1,6 +1,6 @@
 // Copyright Azahar for Frame contributors
-// Licensed under GPLv2 or any later version
-// Refer to the misc/licenses/gplv2.txt file included.
+// Licensed under GPLv3 or any later version
+// Refer to the license.txt file included.
 
 // AzaharFrame kiu60: Kid Icarus: Uprising at 60 pictures a second (vr_kiu_60fps, per game, off).
 // The app makes an IPS patch from the game's own code as it loads, when every word is the game's,
