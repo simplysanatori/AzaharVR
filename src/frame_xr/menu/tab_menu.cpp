@@ -2931,7 +2931,8 @@ constexpr float kScopeEditGap = 40.0f;
 constexpr float kRowChipH = 32.0f, kRowChipPad = 12.0f, kRowChipGap = 12.0f;
 const char* RowChip(Id id) {
     return id == Id::MotionClarity || id == Id::MotionClarityNormal || id == Id::ScreenAsPanel ||
-                   id == Id::HudSpacingX || id == Id::HudSpacingY // AzaharFrame hudmove
+                   id == Id::HudSpacingX || id == Id::HudSpacingY || // AzaharFrame hudmove
+                   id == Id::Kiu60Fps                                // AzaharFrame kiu60
                ? Immersive::Names::kExperimental
                : nullptr;
 }

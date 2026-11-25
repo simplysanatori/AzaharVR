@@ -681,6 +681,7 @@ TEST_CASE("Angel's Aim page: 60 FPS", "[frame_xr][kiuaim][kiu60]") {
     d.Draw(m, v);
     CHECK(d.Drew("View \xC2\xB7 More"));
     CHECK(d.Drew("60 FPS"));
+    CHECK(d.Drew(FrameXr::Immersive::Names::kExperimental)); // its chip, as HUD Spacing's rows have
     CHECK(d.Hit(Id::Kiu60Fps, 0));
     CHECK(d.Hit(Id::Kiu60Fps, 1));
 }
