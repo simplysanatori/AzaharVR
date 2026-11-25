@@ -499,11 +499,14 @@ void UiQuiet(State& s) {
 
 /// AzaharFrame kiu1s: what the game's battle UI shows (kiu_ui.h), for the switches that ask.
 void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
+    const auto menus_text = Switch(kSwitchMenuScreens);
+    const auto which_menus =
+        Kiu::FirstPerson::MenuScreensFor(menus_text ? menus_text->c_str() : nullptr);
     const bool page = SwitchIs(kSwitchPage, "1"), exact = SwitchIs(kSwitchHudExact, "1"),
                pause = SwitchIs(kSwitchPausePanel, "1"), trace = SwitchIs(kSwitchUiTrace, "1"),
                portraits = Kiu::FirstPerson::PortraitsWanted(),
                menu_panel = SwitchIs(kSwitchMenuPanel, "1"),
-               menu_screens = menu_panel || SwitchIs(kSwitchMenuScreens, "1");
+               menu_screens = menu_panel || which_menus != Kiu::FirstPerson::MenuScreens::None;
     const auto census_text = Switch(kSwitchHudCensus);
     const uint32_t census =
         census_text ? static_cast<uint32_t>(std::strtoul(census_text->c_str(), nullptr, 10)) : 0u;
@@ -560,7 +563,9 @@ void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
     if (!menu_screens) {
         s.ui_menu = {}; // switched off with a menu up: nothing kept for the next time
     }
-    const int menu = menu_screens ? s.ui_menu.Update(now.menu) : Ui::kNoMenu;
+    const int steady_menu = menu_screens ? s.ui_menu.Update(now.menu) : Ui::kNoMenu;
+    const int menu =
+        menu_panel ? steady_menu : Kiu::FirstPerson::MenuOnScreens(which_menus, steady_menu);
     if (menu != s.menu_up) {
         LOG_INFO(Frontend, "xr: Kid Icarus hooks: menu {} -> {}", s.menu_up, menu);
         s.menu_up = menu;

@@ -547,6 +547,20 @@ constexpr bool WeaponHiddenFor(int menu, bool battle) {
 }
 void SetWeaponHidden(bool hidden);
 bool WeaponHidden();
+/// AzaharFrame kiu140: which of the game's menus get the normal screens: the flat ones (drawn for
+/// the game's frame, so in the view what is beside it shows) unless the switch says 0 (none) or 1
+/// (the goddess's room, which is a room to look round in, too).
+enum class MenuScreens { None, Flat, All };
+constexpr MenuScreens MenuScreensFor(const char* text) {
+    return text && *text == '0' ? MenuScreens::None
+           : text && *text == '1' ? MenuScreens::All
+                                  : MenuScreens::Flat;
+}
+constexpr int MenuOnScreens(MenuScreens which, int menu) {
+    return which == MenuScreens::None || (which == MenuScreens::Flat && menu == Ui::kMenuHub)
+               ? Ui::kNoMenu
+               : menu;
+}
 bool CutscenesOnScreen();
 /// AzaharFrame kiu140: the HUD moved into the view (HUD, vr_kiu_hud, or AZAHARFRAME_KIU_HUD=0|1).
 bool HudInView();

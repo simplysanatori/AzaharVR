@@ -132,6 +132,7 @@ struct MenuClasses {
 inline constexpr MenuClasses kMenuEur{0xCFC660, 0xCFC3B4}, kMenuUsaRev1{0xCFC5C0, 0xCFC314};
 inline constexpr int kNoMenu = -1;
 inline constexpr int kMenuCount = 59; ///< the game's own count (its last name is MENUID_MAX)
+inline constexpr int kMenuHub = 3; ///< the goddess's room
 inline constexpr int kMenuCauldron = 5;
 template <class Reader>
 int Menu(const Reader& m, const MenuClasses& c) {
