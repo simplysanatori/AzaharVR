@@ -32,8 +32,8 @@ namespace FrameCores::CheatDb {
 /// The pins. The index and the cheat files are only ever read at these commits.
 inline constexpr const char* kLibretroCommit = "f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029";
 /// Of github.com/simplysanatori/ds-gba-game-fixes, the commit holding cheats/libretro-index.tsv
-/// built for kLibretroCommit. Empty until that commit is pushed: Download then says no file list.
-inline constexpr const char* kFixesCommit = "";
+/// built for kLibretroCommit.
+inline constexpr const char* kFixesCommit = "e50a853cfc0b76180f5f8ace5eb37ca246cd414b";
 
 inline constexpr const char* kCreditText = "Cheats: libretro-database, CC-BY-SA-4.0";
 inline constexpr const char* kCreditUrl = "https://github.com/libretro/libretro-database";
