@@ -107,7 +107,7 @@ TEST_CASE("ParseIndex refuses what is not an index", "[frame_cores][cheat_db]") 
 
 TEST_CASE("FindMatch: code and CRC, then the name", "[frame_cores][cheat_db]") {
     const auto p = ParseIndex(Index(kLibretro, kLines));
-    const Index& idx = p.index;
+    const auto& idx = p.index;
 
     auto m = FindMatch(idx, System::Nds, "BJBF", 0x1FCCF595u, "whatever");
     REQUIRE(m.entry);
