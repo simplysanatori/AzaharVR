@@ -138,7 +138,23 @@ TEST_CASE("Core rows: the table for each other console", "[frame_xr][tabmenu]") 
         touch.has_save_import = false;
         CHECK(!RowApplies(Id::CoreHeader, touch));
     }
-    // A core that draws at a chosen resolution has the row, and Graphics with it.
+    // A core that draws at a chosen resolution has the row in its own sizes, and Graphics with it.
+    CHECK(ResolutionOptions(CoreCaps::ForN3DS()) == OptionsFor(Id::InternalResolution));
+    for (const CoreCaps& ds : {CoreCaps::ForNDS(), CoreCaps::ForNDS(true)}) {
+        const auto sizes = ResolutionOptions(ds);
+        REQUIRE(sizes.size() == static_cast<std::size_t>(kMaxResolution));
+        CHECK(sizes.front() == "1x (256x192)");
+        CHECK(sizes.back() == "8x (2048x1536)");
+    }
+    // GBA 240x160, Game Boy and Game Boy Color 160x144: what the picture is drawn at, times n
+    CHECK(ResolutionOptions(CoreCaps::ForGBA()).front() == "1x (240x160)");
+    CHECK(ResolutionOptions(CoreCaps::ForGBA()).back() == "8x (1920x1280)");
+    CHECK(ResolutionOptions(CoreCaps::ForGB()).front() == "1x (160x144)");
+    CHECK(ResolutionOptions(CoreCaps::ForGB()).back() == "8x (1280x1152)");
+    CHECK(ExplainFor(Id::InternalResolution, CoreCaps::ForGBA()) == "Higher is sharper.");
+    CHECK(ExplainFor(Id::InternalResolution, CoreCaps::ForGB()) == "Higher is sharper.");
+    CHECK(ExplainFor(Id::InternalResolution, CoreCaps::ForN3DS()) ==
+          ExplainFor(Id::InternalResolution));
     for (CoreCaps own : OtherConsoles()) {
         CHECK(RowApplies(Id::InternalResolution, own) == !Common::AltCore::IsDs(own.kind));
         CHECK(RowApplies(Id::TextureFilter, own) == !Common::AltCore::IsDs(own.kind));

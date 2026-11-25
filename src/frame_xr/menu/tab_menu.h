@@ -684,6 +684,8 @@ void DrawAutosavedLabel(Kit& kit, const Rect& r);
 
 /// The option lists (Azahar for Frame's own strings).
 const std::vector<std::string>& OptionsFor(Id id);
+/// Internal Resolution: the console's own sizes.
+std::vector<std::string> ResolutionOptions(const CoreCaps& core);
 /// Second Screen: the game's choices only (core.second_screen_choices), in OptionsFor's order;
 /// the row's index counts these. The setting's value of an index, and the index of a value (one
 /// the game has not falls to the next it has).
