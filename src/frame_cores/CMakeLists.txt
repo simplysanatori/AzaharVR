@@ -10,6 +10,7 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     core_backend.h
     ds_gl/ds_gl.h
     ds_gl/ds_gl_decl.h
+    ds_gl/ds_gl_state.h
     ds_gl/ds_gl_vk.cpp
     ds_gl/ds_gl_vk.h
     ds_gl/nds_gl_captures.h
@@ -28,7 +29,10 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     nds_core.cpp
     nds_core.h
     nds_depth.h
+    nds_gl_edge.h
     nds_gl_renderer.cpp
+    nds_gl_stereo.cpp
+    nds_gl_stereo.h
     nds_resolution.cpp
     nds_resolution.h
     nds_stereo_3d.cpp

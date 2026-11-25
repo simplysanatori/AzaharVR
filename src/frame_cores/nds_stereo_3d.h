@@ -32,6 +32,8 @@ class NdsRight3D final : public melonDS::Renderer3D {
 public:
     /// `game`: the game's GPU3D, only read.
     NdsRight3D(melonDS::GPU3D& game, melonDS::SoftRenderer& parent);
+    /// Only Prepare and Scene, for a renderer of another kind; of the rest, Cut and NoScene.
+    explicit NdsRight3D(melonDS::GPU3D& game);
     ~NdsRight3D() override;
 
     /// Copies the frame and draws it, after the left eye's renderer has started on it: that one
@@ -41,6 +43,19 @@ public:
     /// `screen`: the one the scene is for, whose view it follows (NdsDepth::ViewTrack), unless
     /// `depth` has a fixed convergence.
     void Start(const NdsDepth::Depth& depth, int screen, bool threaded);
+    /// The frame copied, moved as it returns, into Scene. Start does it by itself.
+    NdsDepth::SceneShift Prepare(const NdsDepth::Depth& depth, int screen);
+    /// The right eye's GPU3D.
+    melonDS::GPU3D& Scene();
+    /// How far right of their places the last one's polygons are (NdsDepth::SceneOffset): its
+    /// lines are scrolled by as much.
+    int Offset() const {
+        return offset;
+    }
+    /// How far right what is behind the last one is.
+    int FarShift() const {
+        return far_shift;
+    }
     /// The game's next scene has nothing to do with the last one.
     void Cut();
     /// Engine A shows no 3D in the frame, which is for this screen.
@@ -74,6 +89,7 @@ private:
         melonDS::u32 frame = 0;
         melonDS::u32 index = 0;
         int shift = 0;
+        int fine = 0;
     };
 
     void Create(bool threaded);
@@ -85,7 +101,7 @@ private:
     bool CopyPolygon(const melonDS::Polygon& from, melonDS::Polygon& to,
                      const NdsDepth::SceneShift& shift);
 
-    melonDS::SoftRenderer& owner;
+    melonDS::SoftRenderer* owner = nullptr;
     std::unique_ptr<melonDS::GPU3D> scene; ///< outlives `soft`, whose thread reads it
     std::unique_ptr<melonDS::SoftRenderer3D> soft;
 

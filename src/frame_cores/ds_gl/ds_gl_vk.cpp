@@ -13,12 +13,14 @@
 #include <regex>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <SPIRV/GlslangToSpv.h>
 #include <glslang/Public/ShaderLang.h>
 
 #include "ds_gl_decl.h"
+#include "ds_gl_state.h"
 #include "ds_gl_vk.h"
 
 #define VKD VULKAN_HPP_DEFAULT_DISPATCHER
@@ -345,6 +347,12 @@ TBuiltInResource Resources() {
 }
 
 bool g_glslang = false;
+void StartGlslang() {
+    if (!g_glslang) {
+        glslang::InitializeProcess();
+        g_glslang = true;
+    }
+}
 
 } // namespace
 
@@ -363,7 +371,17 @@ public:
     u64 batch_serial = 1;
 
     State st;
+    State other;              ///< the state not in use (UseState)
+    int state = 0;            ///< which `st` is
+    std::vector<GLuint> made; ///< the names made in state 1, some of them deleted since
     u32 next_name = 1;
+
+    u32 NewName() {
+        if (state == 1) {
+            made.push_back(next_name);
+        }
+        return next_name++;
+    }
     std::unordered_map<GLuint, Buf> bufs;
     std::unordered_map<GLuint, Tex> texs;
     std::unordered_map<GLuint, Fbo> fbos;
@@ -375,6 +393,7 @@ public:
     std::map<std::array<u64, 5>, VkFramebuffer> framebuffers;
     std::map<std::array<u32, 3>, VkSampler> samplers;
     std::unordered_map<std::string, VkPipeline> pipelines;
+    VkPipelineCache pipeline_cache = VK_NULL_HANDLE; ///< the same programs come again (Compiled)
 
     // the open render pass
     bool pass_open = false;
@@ -444,10 +463,12 @@ public:
             why = "no command pool";
             return false;
         }
-        if (!g_glslang) {
-            glslang::InitializeProcess();
-            g_glslang = true;
+        const VkPipelineCacheCreateInfo cci{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO, nullptr,
+                                            0, 0, nullptr};
+        if (VKD.vkCreatePipelineCache(d.device, &cci, nullptr, &pipeline_cache) != VK_SUCCESS) {
+            pipeline_cache = VK_NULL_HANDLE; // slower
         }
+        StartGlslang();
         NewBatch();
         return healthy;
     }
@@ -1147,6 +1168,21 @@ public:
         return src;
     }
 
+    static void Dialect(std::string& vs, std::string& fs) {
+        // layout(location=) came with 330, which has all of 140's core
+        for (std::string* src : {&vs, &fs}) {
+            const size_t at = src->find("#version 140");
+            if (at != std::string::npos) {
+                src->replace(at, 12, "#version 330");
+            }
+        }
+        // OpenGL's depth is -w..w, Vulkan's 0..w
+        const size_t eol = vs.find('\n') + 1;
+        vs = vs.substr(0, eol) + "#define main dsgl_main\n" + vs.substr(eol) +
+             "\n#undef main\nvoid main() { dsgl_main(); gl_Position.z = (gl_Position.z + "
+             "gl_Position.w) * 0.5; }\n";
+    }
+
     bool Link(Program& p) {
         std::string vs, fs;
         for (GLuint s : p.shaders) {
@@ -1162,19 +1198,38 @@ public:
         }
         vs = Place(vs, p.attrib_locs, "in");
         fs = Place(fs, p.frag_locs, "out");
-        // layout(location=) came with 330, which has all of 140's core
-        for (std::string* src : {&vs, &fs}) {
-            const size_t at = src->find("#version 140");
-            if (at != std::string::npos) {
-                src->replace(at, 12, "#version 330");
-            }
-        }
-        // OpenGL's depth is -w..w, Vulkan's 0..w
-        const size_t eol = vs.find('\n') + 1;
-        vs = vs.substr(0, eol) + "#define main dsgl_main\n" + vs.substr(eol) +
-             "\n#undef main\nvoid main() { dsgl_main(); gl_Position.z = (gl_Position.z + "
-             "gl_Position.w) * 0.5; }\n";
+        Dialect(vs, fs);
 
+        // Two renderers have the same programs, and one is made again with every change of Layer
+        // Depth: their SPIR-V is kept
+        static std::map<std::string, Compiled> compiled;
+        const auto [entry, is_new] = compiled.try_emplace(vs + '\0' + fs);
+        if (is_new && !Compile(vs, fs, entry->second, p.log)) {
+            compiled.erase(entry);
+            return false;
+        }
+        const Compiled& c = entry->second;
+        p.uniforms = c.uniforms;
+        p.bindings = c.bindings;
+        p.blocks = c.blocks;
+        p.input_kind = c.input_kind;
+        p.defaults.assign(c.defaults, 0);
+        p.defaults_buf.data = p.defaults;
+        return Make(p, c);
+    }
+
+    /// What is found out of a program's source.
+    struct Compiled {
+        std::vector<Program::Uniform> uniforms;
+        std::vector<Program::Binding> bindings;
+        std::vector<int> blocks;
+        std::array<int, kAttrs> input_kind{};
+        size_t defaults = 0;
+        std::array<std::vector<u32>, 2> spv; ///< vertex, fragment
+    };
+
+    static bool Compile(const std::string& vs, const std::string& fs, Compiled& p,
+                        std::string& log) {
         const TBuiltInResource res = Resources();
         const EShMessages msg =
             static_cast<EShMessages>(EShMsgDefault | EShMsgSpvRules | EShMsgVulkanRules);
@@ -1191,7 +1246,7 @@ public:
             sh[i]->setAutoMapBindings(true);
             sh[i]->setAutoMapLocations(true);
             if (!sh[i]->parse(&res, 140, ECoreProfile, false, true, msg)) {
-                p.log = std::string(i ? "fragment: " : "vertex: ") + sh[i]->getInfoLog();
+                log = std::string(i ? "fragment: " : "vertex: ") + sh[i]->getInfoLog();
                 return false;
             }
         }
@@ -1207,15 +1262,12 @@ public:
             built = prog.mapIO(resolver.get(), mapper.get());
         }
         if (!built) {
-            p.log = std::string("link: ") + prog.getInfoLog();
+            log = std::string("link: ") + prog.getInfoLog();
             return false;
         }
         prog.buildReflection(EShReflectionDefault);
 
         // blocks
-        p.bindings.clear();
-        p.uniforms.clear();
-        p.blocks.clear();
         int default_block = -1;
         for (int i = 0; i < prog.getNumUniformBlocks(); i++) {
             const auto& b = prog.getUniformBlock(i);
@@ -1226,8 +1278,7 @@ public:
             bind.is_default = b.name == "gl_DefaultUniformBlock";
             if (bind.is_default) {
                 default_block = i;
-                p.defaults.assign((bind.size + 15) & ~15u, 0);
-                p.defaults_buf.data = p.defaults;
+                p.defaults = (bind.size + 15) & ~15u;
             }
             p.blocks.push_back(static_cast<int>(p.bindings.size()));
             p.bindings.push_back(bind);
@@ -1272,7 +1323,6 @@ public:
                 p.uniforms.push_back(un);
             }
         }
-        p.input_kind.fill(0);
         for (int i = 0; i < prog.getNumPipeInputs(); i++) {
             const auto& in = prog.getPipeInput(i);
             const u32 loc = in.layoutLocation();
@@ -1285,13 +1335,19 @@ public:
             p.input_kind[loc] = is_int ? 2 : is_uint ? 3 : 1;
         }
 
-        std::vector<u32> spv[2];
-        for (int i = 0; i < 2; i++) {
+        for (size_t i = 0; i < 2; i++) {
             glslang::SpvOptions opt;
             opt.disableOptimizer = true;
-            glslang::GlslangToSpv(*prog.getIntermediate(langs[i]), spv[i], &opt);
+            glslang::GlslangToSpv(*prog.getIntermediate(langs[i]), p.spv[i], &opt);
+        }
+        return true;
+    }
+
+    bool Make(Program& p, const Compiled& compiled) {
+        for (size_t i = 0; i < 2; i++) {
+            const std::vector<u32>& spv = compiled.spv[i];
             const VkShaderModuleCreateInfo ci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, nullptr,
-                                              0, spv[i].size() * 4, spv[i].data()};
+                                              0, spv.size() * 4, spv.data()};
             VkShaderModule m = VK_NULL_HANDLE;
             if (VkResult r = VKD.vkCreateShaderModule(d.device, &ci, nullptr, &m);
                 r != VK_SUCCESS) {
@@ -1517,7 +1573,7 @@ public:
         ci.renderPass = pass_rp;
         VkPipeline pl = VK_NULL_HANDLE;
         if (VkResult r =
-                VKD.vkCreateGraphicsPipelines(d.device, VK_NULL_HANDLE, 1, &ci, nullptr, &pl);
+                VKD.vkCreateGraphicsPipelines(d.device, pipeline_cache, 1, &ci, nullptr, &pl);
             r != VK_SUCCESS) {
             Fail("vkCreateGraphicsPipelines", r);
         }
@@ -1947,6 +2003,7 @@ public:
 };
 
 namespace {
+ShaderPatch g_shader_patch = nullptr;
 Context* g_ctx = nullptr; ///< the gl* calls go to it (null: they do nothing)
 }
 
@@ -2018,7 +2075,49 @@ void Destroy(Context* c) {
     } else if (c->pool) {
         VKD.vkDestroyCommandPool(c->d.device, c->pool, nullptr);
     }
+    if (c->pipeline_cache) {
+        VKD.vkDestroyPipelineCache(c->d.device, c->pipeline_cache, nullptr);
+    }
     delete c;
+}
+
+void UseState(int state) {
+    if (Context* c = g_ctx; c && c->state != state) {
+        std::swap(c->st, c->other);
+        c->state = state;
+    }
+}
+
+bool Compiles(const std::string& vertex, const std::string& fragment, std::string& log) {
+    StartGlslang();
+    std::string vs = vertex, fs = fragment;
+    Context::Dialect(vs, fs);
+    Context::Compiled compiled;
+    return Context::Compile(vs, fs, compiled, log);
+}
+
+void PatchShaders(ShaderPatch patch) {
+    g_shader_patch = patch;
+}
+
+void FreeState() {
+    Context* c = g_ctx;
+    if (!c) {
+        return;
+    }
+    UseState(0);
+    for (const GLuint name : std::exchange(c->made, {})) {
+        if (name == c->clear_program || name == c->clear_vao) {
+            continue; // the layer's own, for both
+        }
+        glDeleteFramebuffers(1, &name);
+        glDeleteTextures(1, &name);
+        glDeleteBuffers(1, &name);
+        glDeleteVertexArrays(1, &name);
+        glDeleteProgram(name);
+        glDeleteShader(name);
+    }
+    c->other = {};
 }
 
 void Flush(bool wait) {
@@ -2086,7 +2185,7 @@ namespace {
 template <typename M>
 void Gen(Context* c, M& map, GLsizei n, GLuint* out) {
     for (GLsizei i = 0; i < n; i++) {
-        out[i] = c->next_name++;
+        out[i] = c->NewName();
         map[out[i]];
     }
 }
@@ -2535,7 +2634,7 @@ void glReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format
 
 GLuint glCreateShader(GLenum type) {
     CTXR(0);
-    const GLuint name = c->next_name++;
+    const GLuint name = c->NewName();
     c->shaders[name].type = type;
     return name;
 }
@@ -2558,6 +2657,9 @@ void glShaderSource(GLuint shader, GLsizei count, const GLchar* const* string,
             it->second.source.append(string[i]);
         }
     }
+    if (g_shader_patch) {
+        g_shader_patch(it->second.source);
+    }
 }
 void glCompileShader(GLuint) {}
 void glGetShaderiv(GLuint, GLenum pname, GLint* params) {
@@ -2574,7 +2676,7 @@ void glGetShaderInfoLog(GLuint, GLsizei bufSize, GLsizei* length, GLchar* infoLo
 }
 GLuint glCreateProgram(void) {
     CTXR(0);
-    const GLuint name = c->next_name++;
+    const GLuint name = c->NewName();
     c->programs[name];
     return name;
 }
