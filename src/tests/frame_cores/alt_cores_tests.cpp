@@ -30,8 +30,10 @@
 #include "frame_cores/audio_resampler.h"
 #include "frame_cores/cheat_store.h"
 #include "frame_cores/frame_driver.h"
+#include "frame_cores/gb_core.h"
 #include "frame_cores/gba_core.h"
 #include "frame_cores/nds_core.h"
+#include "frame_cores/pokedaisy_driver.h"
 #include "frame_cores/rom_info.h"
 
 namespace {
@@ -571,6 +573,88 @@ TEST_CASE("GBA sound: the rate is the game's own, as it changes it", "[frame_cor
     CHECK(frames < 1200);
     core.Unload();
 }
+
+#ifdef HAVE_POKEDAISY
+TEST_CASE("PokeDaisy's ROM stays where it is when the game writes to its cartridge",
+          "[frame_cores]") {
+    using FrameCores::PokeDaisy::RomOf;
+    using FrameCores::PokeDaisy::SettleRom;
+    TempDir tmp("pdrom");
+    FrameCores::CorePaths paths;
+    paths.game_dir = (tmp.path / "data").string();
+    fs::create_directories(paths.game_dir);
+
+    // As FireRed: a 16 MiB game that sets up its debug print
+    std::vector<uint8_t> rom = MakeHomebrewGbaRom();
+    PutLE32(rom, 0xE8, 0xE59F0014u); // ldr r0, =0x08FE2FFE, the print area's lock
+    PutLE32(rom, 0xEC, 0xE3A01020u); // mov r1, #0x20
+    PutLE32(rom, 0xF0, 0xE1C010B0u); // strh r1, [r0]
+    PutLE32(rom, 0xF4, 0xE59F000Cu); // ldr r0, =0x08FE20FA, its bank
+    PutLE32(rom, 0xF8, 0xE3A010FDu); // mov r1, #0xFD
+    PutLE32(rom, 0xFC, 0xE1C010B0u); // strh r1, [r0]
+    PutLE32(rom, 0x100, 0xEAFFFFFEu); // b .
+    PutLE32(rom, 0x104, 0x08FE2FFEu);
+    PutLE32(rom, 0x108, 0x08FE20FAu);
+    rom.resize(0x1000000);
+    const fs::path rom_path = tmp.path / "hb.gba";
+    WriteFile(rom_path, rom);
+    for (const bool settled : {false, true}) {
+        CAPTURE(settled);
+        mCore* mgba = nullptr;
+        FrameCores::CoreBootOptions opts;
+        opts.driver.make = [&](const FrameCores::DriverServices& services) {
+            mgba = services.core;
+            if (settled) {
+                SettleRom(mgba);
+            }
+            return std::unique_ptr<FrameCores::FrameDriver>{};
+        };
+        FrameCores::GbaCore core;
+        REQUIRE(core.Load(rom_path.string(), paths, opts));
+        REQUIRE(mgba);
+        const auto before = RomOf(mgba);
+        REQUIRE(before.first);
+        REQUIRE(before.second == rom.size());
+        CHECK(std::memcmp(before.first, rom.data(), rom.size()) == 0);
+        FrameCores::FrameOutput out;
+        for (int i = 0; i < 10; ++i) {
+            core.RunFrame(out);
+        }
+        CHECK((RomOf(mgba) == before) == settled);
+        core.Reset();
+        for (int i = 0; i < 10; ++i) {
+            core.RunFrame(out);
+        }
+        CHECK(RomOf(mgba).second == rom.size());
+        if (settled) {
+            CHECK(RomOf(mgba) == before);
+        }
+        core.Unload();
+    }
+
+    const std::vector<uint8_t> gb = MakeHomebrewGbRom();
+    const fs::path gb_path = tmp.path / "hb.gb";
+    WriteFile(gb_path, gb);
+    FrameCores::CoreBootOptions opts;
+    const uint8_t* first = nullptr;
+    mCore* mgba = nullptr;
+    opts.driver.make = [&](const FrameCores::DriverServices& services) {
+        mgba = services.core;
+        first = RomOf(mgba).first;
+        SettleRom(mgba);
+        return std::unique_ptr<FrameCores::FrameDriver>{};
+    };
+    FrameCores::GbCore core;
+    REQUIRE(core.Load(gb_path.string(), paths, opts));
+    const auto now = RomOf(mgba);
+    CHECK(now.first != first); // the copy a cheat would have made
+    REQUIRE(now.second == gb.size());
+    CHECK(std::memcmp(now.first, gb.data(), gb.size()) == 0);
+    SettleRom(mgba);
+    CHECK(RomOf(mgba) == now);
+    core.Unload();
+}
+#endif
 
 TEST_CASE("AudioResampler: a new rate is read as that rate", "[frame_cores]") {
     FrameCores::AudioResampler resampler;
