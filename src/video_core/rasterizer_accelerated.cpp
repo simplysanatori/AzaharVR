@@ -375,7 +375,7 @@ bool RasterizerAccelerated::ReticleDraw() const {
            VideoCore::Immersive::ReticleScaled(regs.texturing.texture0.GetPhysicalAddress());
 }
 
-bool RasterizerAccelerated::HudDraw(bool* subtitle) const {
+bool RasterizerAccelerated::HudDraw(bool* subtitle, bool* exact) const {
     if (!VideoCore::KiuHud::g_live.on.load(std::memory_order_relaxed) || vr_immersive_mode < 2 ||
         regs.pipeline.use_gs != Pica::PipelineRegs::UseGS::No) {
         return false;
@@ -402,8 +402,20 @@ bool RasterizerAccelerated::HudDraw(bool* subtitle) const {
     }
     // The reticle is the hand's, not the HUD's.
     const u32 reticle = VideoCore::Immersive::g_reticle_texture.load(std::memory_order_relaxed);
-    return VideoCore::KiuHud::IsSubtitle(d) ||
-           (VideoCore::KiuHud::MayBeHud(d) && !(reticle != 0 && d.texture == reticle));
+    const bool is_reticle = reticle != 0 && d.textured && d.texture == reticle;
+    // AzaharFrame kiu1s: in a battle whose 2D batch is known, its draws and no others.
+    const auto batch = VideoCore::KiuHud::g_batch.Get();
+    if (batch.quads != 0 && !VideoCore::KiuHud::g_live.page.load(std::memory_order_relaxed)) {
+        const bool in = d.top_viewport && regs.pipeline.index_array.format.Value() != 0 &&
+                        VideoCore::KiuHud::InBatch(
+                            batch, regs.pipeline.vertex_attributes.GetPhysicalBaseAddress(),
+                            regs.pipeline.index_array.offset, d.vertices);
+        if (exact) {
+            *exact = in;
+        }
+        return (in && !is_reticle) || VideoCore::KiuHud::IsBattery(d);
+    }
+    return VideoCore::KiuHud::IsSubtitle(d) || (VideoCore::KiuHud::MayBeHud(d) && !is_reticle);
 }
 
 bool RasterizerAccelerated::SheetDraw() const {
@@ -491,8 +503,8 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
         AddSheetRim();
     }
     // AzaharFrame kiu140: a piece of the HUD, moved into the view (kiu_hud.h); never with the world.
-    bool subtitle = false;
-    if (vertex_batch.size() >= 3 && HudDraw(&subtitle)) {
+    bool subtitle = false, exact = false;
+    if (vertex_batch.size() >= 3 && HudDraw(&subtitle, &exact)) {
         std::vector<VideoCore::KiuHud::Vertex> flat(vertex_batch.size());
         for (std::size_t i = 0; i < flat.size(); ++i) {
             const auto& q = vertex_batch[i].position;
@@ -507,7 +519,7 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
             }
             LOG_INFO(Render, "kiu hud: texture {:08X} {}:{}",
                      regs.texturing.texture0.GetPhysicalAddress(),
-                     subtitle ? "the subtitles" : "a piece", at);
+                     subtitle ? "the subtitles" : exact ? "a piece (exact)" : "a piece", at);
         }
         const auto put = [&] {
             for (std::size_t i = 0; i < flat.size(); ++i) {
@@ -521,10 +533,19 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
         }
         if (VideoCore::KiuHud::Movable(flat.data(), flat.size())) {
             const std::size_t step = flat.size() % 6 == 0 ? 6 : 3; // quads
+            if (exact && !place.page) { // AzaharFrame kiu1s: the whole draw is one piece
+                VideoCore::KiuHud::MovePiece(flat.data(), flat.size(), place, vr_factor,
+                                             vr_factor_y);
+                put();
+                return;
+            }
             for (std::size_t i = 0; i + step <= flat.size(); i += step) {
                 VideoCore::KiuHud::Move(flat.data() + i, step, place, vr_factor, vr_factor_y);
             }
             put();
+            return;
+        }
+        if (exact) { // AzaharFrame kiu1s: the battle UI's, the whole frame (a fade): not the world's
             return;
         }
     }

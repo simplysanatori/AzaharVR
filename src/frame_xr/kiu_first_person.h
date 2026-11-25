@@ -411,6 +411,23 @@ float CutsceneAngleDeg();
 /// results, menus) the 2D is a page, which stays the game's.
 void SetBattle(bool on);
 bool Battle();
+/// AzaharFrame kiu1s: what the game's battle UI shows (kiu_ui.h), each behind its test switch and
+/// false while that is off or the UI cannot be read: a page instead of the HUD
+/// (AZAHARFRAME_KIU_PAGE=1), the pause screen (AZAHARFRAME_KIU_PAUSE_PANEL=1: the Secondary Screen
+/// comes up in front as a panel to point at). Set each VBlank by the hooks; any thread.
+void SetBattleUi(bool page, bool pause_panel);
+bool BattlePage();
+bool PausePanel();
+/// The 2D on view is a page, whole, rather than the HUD's pieces.
+constexpr bool WholePage(bool battle, bool battle_page) {
+    return !battle || battle_page;
+}
+/// The pause panel: degrees below straight ahead, across, and how far away (metres).
+inline constexpr float kPauseDownDeg = 4.0f, kPauseWidthDeg = 36.0f;
+/// Shown: paused, unless the Secondary Screen is up on the wrist (that one takes the touches).
+constexpr bool PausePanelShown(bool paused, bool wrist_up) {
+    return paused && !wrist_up;
+}
 bool CutscenesOnScreen();
 /// AzaharFrame kiu140: the HUD moved into the view (HUD, vr_kiu_hud, or AZAHARFRAME_KIU_HUD=0|1).
 bool HudInView();

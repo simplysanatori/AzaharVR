@@ -154,7 +154,7 @@ public:
     bool ReticleDraw() const;
     /// AzaharFrame kiu140: whether this draw may be a piece of Kid Icarus: Uprising's HUD, moved
     /// into the view on the CPU (kiu_hud.h).
-    bool HudDraw(bool* subtitle = nullptr) const;
+    bool HudDraw(bool* subtitle = nullptr, bool* exact = nullptr) const;
     /// AzaharFrame kiu140: whether this draw is one of Kid Icarus: Uprising's known cloud sheets,
     /// given a soft rim on the CPU (kiu_sheets.h), and the world's turn for it is known.
     bool SheetDraw() const;

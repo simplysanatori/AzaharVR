@@ -29,6 +29,8 @@
 #include "frame_xr/kiu_scan.h"
 #include "frame_xr/test_switches.h"
 #include "frame_xr/kiu_cutscene.h" // AzaharFrame kiu140
+#include "frame_xr/kiu_ui.h" // AzaharFrame kiu1s
+#include "video_core/kiu_hud.h" // AzaharFrame kiu1s
 #include "video_core/kiu_sheets.h" // AzaharFrame kiu140
 #include "video_core/kiu_view_tap.h" // AzaharFrame kiuvr: the view register's tap
 
@@ -63,6 +65,12 @@ constexpr const char* kSwitchSheets = "AZAHARFRAME_KIU_SHEETS"; // AzaharFrame k
 constexpr const char* kSwitchSheetsOut = "AZAHARFRAME_KIU_SHEETS_OUT"; // AzaharFrame kiu140
 constexpr const char* kSwitchSheetsSky = "AZAHARFRAME_KIU_SHEETS_SKY"; // AzaharFrame kiu140
 constexpr const char* kSwitchTrace = "AZAHARFRAME_KIU_HOOK_TRACE";
+// AzaharFrame kiu1s: the single screen's, all off by default (KIU_HOOKS.md, "Single screen").
+constexpr const char* kSwitchPage = "AZAHARFRAME_KIU_PAGE";
+constexpr const char* kSwitchHudExact = "AZAHARFRAME_KIU_HUD_EXACT";
+constexpr const char* kSwitchTalkTop = "AZAHARFRAME_KIU_TALK_TOP";
+constexpr const char* kSwitchPausePanel = "AZAHARFRAME_KIU_PAUSE_PANEL";
+constexpr const char* kSwitchUiTrace = "AZAHARFRAME_KIU_UI_TRACE";
 // AzaharFrame kiuvr (kiu_first_person.h)
 constexpr const char* kSwitchFpTrace = "AZAHARFRAME_KIU_FP_TRACE";
 constexpr const char* kSwitchFpProbe = "AZAHARFRAME_KIU_FP_PROBE";
@@ -169,6 +177,10 @@ struct State {
     int64_t fp_trace_ns = 0; ///< AzaharFrame kiuvr
     /// AzaharFrame kiu140: cutscenes told by the angle drawn, and the trace's counts.
     Kiu::CutsceneWatch cutscene_watch;
+    // AzaharFrame kiu1s: the battle UI (kiu_ui.h): its code looked at (-1 not yet), the last state.
+    int ui_code = -1;
+    Ui::State ui;
+    Ui::Steady ui_page, ui_pause;
     Kiu::EventWatch event_watch;
     bool cutscene = false;
     uint32_t angle_match = 0, angle_other = 0;
@@ -451,8 +463,55 @@ void TraceFirstPerson(State& s, const KH::GameMemory& mem, const KH::Player& p,
     LOG_INFO(Frontend, "xr: Kid Icarus first person: {}", line);
 }
 
+/// AzaharFrame kiu1s: the battle UI not read: nothing said of it.
+void UiOff(State& s) {
+    s.ui_code = -1;
+    s.ui = {};
+    s.ui_page = s.ui_pause = {};
+    Kiu::FirstPerson::SetBattleUi(false, false);
+    VideoCore::KiuHud::g_batch.Set({});
+}
+
+/// AzaharFrame kiu1s: what the game's battle UI shows (kiu_ui.h), for the switches that ask.
+void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
+    const bool page = SwitchIs(kSwitchPage, "1"), exact = SwitchIs(kSwitchHudExact, "1"),
+               pause = SwitchIs(kSwitchPausePanel, "1"), trace = SwitchIs(kSwitchUiTrace, "1");
+    if (!page && !exact && !pause && !trace) {
+        UiOff(s);
+        return;
+    }
+    const bool usa = s.build == &Input::KiuTurn::kBuildUsaRev1;
+    if (s.ui_code < 0) {
+        s.ui_code = Ui::CodeMatches(mem, usa) ? 1 : 0;
+        LOG_INFO(Frontend, "xr: Kid Icarus hooks: the battle UI: {}",
+                 s.ui_code != 0 ? "its code matches" : "off: the game's code differs");
+    }
+    const Ui::State now =
+        s.ui_code != 0 ? Ui::Read(mem, usa ? Ui::kMenuUsaRev1 : Ui::kMenuEur) : Ui::State{};
+    const bool is_page = s.ui_page.Update(now.page || now.menu != Ui::kNoMenu);
+    const bool is_paused = s.ui_pause.Update(now.paused);
+    Kiu::FirstPerson::SetBattleUi(page && is_page, pause && is_paused && battle);
+    VideoCore::KiuHud::Batch batch;
+    if (exact && battle) {
+        batch = {now.vertex_base, now.index_offset, now.quads};
+    }
+    VideoCore::KiuHud::g_batch.Set(batch);
+    if (trace && !(now == s.ui)) {
+        LOG_INFO(Frontend,
+                 "xr: Kid Icarus hooks: the battle UI {:08X}, menu {}: {}{}{}{}{}; vertices "
+                 "{:08X}, indices {:X}",
+                 now.context, now.menu, now.known ? "" : "not there",
+                 now.known && !now.shown ? "not shown" : "", now.page ? "a page" : "",
+                 now.paused ? " paused" : "",
+                 now.talk ? (now.talk_below ? " talk (bottom)" : " talk (top)") : "",
+                 now.vertex_base, now.index_offset);
+    }
+    s.ui = now;
+}
+
 /// AzaharFrame kiu140: no game of this kind, or nothing asked for: no cutscene and nothing counted.
 void CutsceneOff(State& s) {
+    UiOff(s); // AzaharFrame kiu1s
     s.cutscene_watch = {};
     s.event_watch = {};
     s.cutscene = false;
@@ -785,6 +844,9 @@ void Hook(int64_t ticks) {
                             (want_aim_hold ? KH::Bit(KH::Group::AimHold) : 0u) |
                             (want_aim_box ? KH::Bit(KH::Group::AimBox) : 0u) |
                             (want_player_shadow ? KH::Bit(KH::Group::PlayerShadow) : 0u) |
+                            (first_person && SwitchIs(kSwitchTalkTop, "1")
+                                 ? KH::Bit(KH::Group::TalkTop)
+                                 : 0u) | // AzaharFrame kiu1s
                             (mailbox.wide_node != 0 ? KH::Bit(KH::Group::WideCamera) : 0u);
     const KH::SyncResult r = KH::Sync(mem, wanted, mailbox, code);
     LogChanges(s, r);
@@ -808,6 +870,9 @@ void Hook(int64_t ticks) {
         const bool own_camera = s.cutscene_watch.Update(wide_in, match, other, event_cutscene);
         cutscene = own_camera || event_cutscene;
         Kiu::FirstPerson::SetBattle(wide_in);
+        if (first_person) { // AzaharFrame kiu1s
+            ReadUi(s, mem, wide_in);
+        }
         if (cutscene != s.cutscene) {
             LOG_INFO(Frontend,
                      "xr: Kid Icarus hooks: cutscene {} ({}; the world drawn {:.1f} degrees high, "

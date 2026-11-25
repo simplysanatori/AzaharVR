@@ -1680,8 +1680,12 @@ void OnFrame(const FrameInfo& info) {
     // AzaharFrame kiu140: HUD: In View (video_core/kiu_hud.h).
     VideoCore::KiuHud::Place hud_place;
     if (g.engaged && IsViewMode(mode) && KiuFirstPerson() && Kiu::FirstPerson::HudInView() &&
-        !Kiu::FirstPerson::Battle()) {
-        hud_place = VideoCore::KiuHud::PagePlace(g.solved.factor, g.solved.factor_y);
+        Kiu::FirstPerson::WholePage(Kiu::FirstPerson::Battle(),
+                                    Kiu::FirstPerson::BattlePage())) { // AzaharFrame kiu1s
+        hud_place = Kiu::FirstPerson::Battle()
+                        ? VideoCore::KiuHud::PagePlaceInBattle(
+                              g.solved.tan_half_y * g.solved.aspect, g.solved.tan_half_y)
+                        : VideoCore::KiuHud::PagePlace(g.solved.factor, g.solved.factor_y);
     } else if (g.engaged && IsViewMode(mode) && KiuFirstPerson() &&
                Kiu::FirstPerson::HudInView()) {
         auto& v = Settings::values;
@@ -2347,6 +2351,30 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
             out.bottom_alpha = bottom.alpha;
         }
         bottom_as_drawn = bottom.mode != Kiu::FirstPerson::BottomScreen::Off; // kiu140
+        // AzaharFrame kiu1s: paused (test switch): the Secondary Screen in front, to point at. It
+        // stays where the head was as the game paused, so it is still to read and to point at.
+        static bool pause_seen = false;
+        static XrPosef pause_head{};
+        const bool pause = KiuFirstPerson() && g.view.valid && Kiu::FirstPerson::PausePanel();
+        if (pause != pause_seen) {
+            pause_seen = pause;
+            pause_head = g.view.head;
+            LOG_INFO(Frontend, "xr: Angel's Aim: the pause panel {}", pause ? "up" : "away");
+        }
+        if (Kiu::FirstPerson::PausePanelShown(pause, g.wrist_shown &&
+                                                         g.wrist_time == g.display_time)) {
+            const Kiu::FirstPerson::PanelInView p = Kiu::FirstPerson::PersistentInView(
+                0.0f, Kiu::FirstPerson::kPauseDownDeg, Kiu::FirstPerson::kPauseWidthDeg,
+                320.0f / 240.0f);
+            out.bottom_pose = Compose(pause_head, XrPosef{{p.qx, p.qy, p.qz, p.qw},
+                                                          {p.x, p.y, p.z}});
+            out.bottom_size = {p.width, p.height};
+            out.show_bottom = true;
+            out.bottom_pointable = true;
+            out.bottom_persistent = false; // the grips do not move it
+            out.bottom_alpha = 1.0f;
+            bottom_as_drawn = true;
+        }
         out.head_driven = true; // AzaharFrame flash
         // AzaharFrame kiuwrist: Angel's Aim's Secondary Screen on the off hand's wrist, set for
         // this display frame (the controls ask for this frame's screens after setting it).

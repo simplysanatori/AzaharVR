@@ -319,6 +319,7 @@ them.
 | `AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]` | over the shoulder (unset: the setting Over the Shoulder, `vr_kiu_over_shoulder`, 2.5 m back and 0.5 m up when on; `0` off whatever the setting; AzaharFrame kiutoggles): the eye this many metres behind, above and to the right of the first-person eye along the camera's level view (game units = metres × the leaning scale, 7.7 per metre at life size); `AZAHARFRAME_KIU_EYE_OFFSET` wins |
 | `AZAHARFRAME_KIU_WRIST_SCREEN=0\|1` | Angel's Aim's Secondary Screen on the off hand's wrist (default 0, off; unset: the setting Bottom Screen's Wrist, `vr_kiu_bottom_screen`, AzaharFrame kiu131; before it Secondary Screen on Wrist; `1` wins over Persistent): shown while the wrist is turned up, touched by the aiming hand's beam without a shot ("The Secondary Screen on the wrist" below) |
 | `AZAHARFRAME_KIU_FP_FACTOR=<f>` | the most the game draws past its own frame on either axis in first person (1 to 8, default 6); past it the screen is smaller on that axis ("The screen in first person" below) |
+| `AZAHARFRAME_KIU_PAGE=1`, `AZAHARFRAME_KIU_HUD_EXACT=1`, `AZAHARFRAME_KIU_TALK_TOP=1`, `AZAHARFRAME_KIU_PAUSE_PANEL=1`, `AZAHARFRAME_KIU_UI_TRACE=1` | the single screen's, each off without it, first person only, live ("Single screen" below; AzaharFrame kiu1s) |
 | `AZAHARFRAME_KIU_FP_TRACE=1\|2`, `AZAHARFRAME_KIU_FP_PROBE=<hex>` | a line of `key=value` words a second (2: a VBlank): the scene camera, the view register, the rest pose, the head, the hand's ray in the world, the reticle, the mailbox; and an actor's place in the world and in the head's view. AzaharFrame kiupit: `cam_node_44=` the scene camera node's ten words from +0x44, as floats (to find its near plane) |
 
 ### The transform (`kiu_room.h`)
@@ -1125,3 +1126,40 @@ view is the Game's Camera; otherwise `over_shoulder` decides
   one-pass blend.
 
 **1.3.0: the Game's Camera is held back.** Its view was broken on the headset (Pit far off in the air; the camp's view wrong). `Menu::kGameCameraOffered` (`menu/angels_aim_tab.h`) is false: Camera lists First Person and Over the Shoulder, and a saved `vr_kiu_game_camera` is not used. `AZAHARFRAME_KIU_GAME_CAMERA=1` still turns it on for work on it.
+
+### Single screen (AzaharFrame kiu1s; test switches, all off)
+
+Where to look was learnt from **UprisingHack** (https://github.com/patricksmill/UprisingHack,
+GPL-3.0-or-later), a PC port of the game, from its notes on USA Rev 1. Each address was found again
+in both builds by its code; no code or layout of it is used.
+
+- **The battle UI (`kiu_ui.h`).** One 2D context, `[0xEE3098 + 0x140]`, for both screens: the top pass
+  (EUR 0x60D538, USA 0x60D3EC), the bottom pass (0x60DA88, 0x60D93C). 21 code words that name the
+  fields are checked first; another word and nothing is read.
+
+| Field | What |
+|---|---|
+| +0x1C, +0x28 | the vertices' base (physical), the quads' index offset (after two buffers of 0x60 a quad: 400 quads). V: the HUD's draws, to the byte (land and air; the first HUD draw is quad 0, they add up to +0x128) |
+| +0x31B8 bit 0 | the UI draws; `& 0x10100`: a page instead of the HUD |
+| +0x218C bit 0 | a page (a dim band and two columns) instead of the bar; the score is still drawn. I: the battle's results; never seen set |
+| +0x243C & 0x801 | the pause screen is drawn |
+| +0x3124 (+0, +1, +3, +4) | the talk's message: shown, shown, its screen (0 top, 1 bottom), its line |
+
+- **`AZAHARFRAME_KIU_PAGE=1`.** The 2D is a page (`PagePlace`) outside a battle as before, and also (45 degrees high, `PagePlaceInBattle`)
+  while the game itself draws a page instead of the HUD, two VBlanks in a row, or a menu is up: its number is the byte `[[[0xE6F98C] + 0xC] + 0x72C]`
+  (classes 0xCFC660 and 0xCFC3B4; USA 0xA0 lower), the holder null in a battle. V: the title 0, the page after Pit falls 51 (CONTINUE). That page comes 2 s after
+  the battle's camera is out, so nothing looked different with the switch; the in-battle page and its place were never seen.
+- **`AZAHARFRAME_KIU_HUD_EXACT=1`.** The HUD's draws are the top screen's draws of that context
+  (vertex base and index offset, `KiuHud::InBatch`) and no others but the console's battery (the dialogs' context; `IsBattery`), each moved as one by its own middle.
+  The flush (EUR 0x92F5A0) only adds to a list that is replayed later for both eyes, so a draw's caller
+  is not known. Batch not known: the guess (`MayBeHud`), as without the switch. V (air, land): every HUD draw logged as exact; on land the bar and score are on the same pixels as by the guess (best match at no shift).
+- **`AZAHARFRAME_KIU_TALK_TOP=1`.** One word (EUR 0x60D804, USA 0x60D6B8: `bne`, the message is the bottom
+  screen's, to `mov r0, r0`), group "talk on top": the top pass draws the line with the game's own function for
+  the top screen (EUR 0x9E9D2C), as Subtitles: Upper does. The bottom keeps its line, the setting is not touched.
+  V: Practice Range, the words of the bottom screen on top from the switch on (two quads more in the top pass).
+- **`AZAHARFRAME_KIU_PAUSE_PANEL=1`.** While the pause screen is drawn in a battle, the Secondary Screen is a
+  panel in front (36 degrees wide, 4 below straight ahead, 0.8 m), pointable, still where the head was as
+  the game paused. The Secondary Screen up on the wrist wins.
+  V: START: up in the same frame; the beam's trigger on Resume touched 74,82 and the game went on, the panel away;
+  it stays up through Retreat's dialog and No (the same flag). Not run: the Options pages, Yes, whether the trigger that taps
+  Resume reaches the game after. The mock does not composite, so the panel over the picture was not seen.

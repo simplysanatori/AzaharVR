@@ -392,6 +392,7 @@ namespace {
 std::atomic<bool> g_cutscene{false};
 std::atomic<float> g_cutscene_tan{0.0f};
 std::atomic<bool> g_battle{false};
+std::atomic<bool> g_battle_page{false}, g_pause_panel{false}; // AzaharFrame kiu1s
 } // namespace
 
 void SetCutscene(bool on, float tan_half_y) {
@@ -410,6 +411,16 @@ void SetBattle(bool on) {
 }
 bool Battle() {
     return g_battle.load(std::memory_order_relaxed);
+}
+void SetBattleUi(bool page, bool pause_panel) {
+    g_battle_page.store(page, std::memory_order_relaxed);
+    g_pause_panel.store(pause_panel, std::memory_order_relaxed);
+}
+bool BattlePage() {
+    return g_battle_page.load(std::memory_order_relaxed);
+}
+bool PausePanel() {
+    return g_pause_panel.load(std::memory_order_relaxed);
 }
 bool Cutscene() {
     return g_cutscene.load(std::memory_order_relaxed);
