@@ -18,6 +18,7 @@
 #include "common/logging/log.h"
 #include "frame_cores/ds_gl/ds_gl_state.h"
 #include "frame_cores/nds_gl_edge.h"
+#include "frame_cores/nds_gl_seal.h"
 #include "frame_cores/nds_stereo_3d.h"
 
 namespace FrameCores {
@@ -107,6 +108,21 @@ void WriteWindows(melonDS::GPU& gpu, const Windows& windows) {
     gpu.GPU2D_B.Win0Active = static_cast<melonDS::u8>(windows.b0);
     gpu.GPU2D_B.Win1Active = static_cast<melonDS::u8>(windows.b1);
 }
+
+/// melonDS's 3D, of either eye, with the gaps between its polygons filled.
+class SealedGl3D final : public melonDS::GLRenderer3D {
+public:
+    using melonDS::GLRenderer3D::GLRenderer3D;
+
+    void RenderFrame() override {
+        seal.Add(GPU3D, GetScaleFactor());
+        GLRenderer3D::RenderFrame();
+        seal.Remove(GPU3D);
+    }
+
+private:
+    NdsGlSeal seal;
+};
 
 } // namespace
 
@@ -229,7 +245,7 @@ public:
         : HasScene{nds.GPU.GPU3D}, melonDS::GLRenderer(nds, false) {
         Rend2D_A = std::make_unique<RightEye2D>(GPU.GPU2D_A, *this);
         Rend2D_B = std::make_unique<RightEye2D>(GPU.GPU2D_B, *this);
-        Rend3D = std::make_unique<melonDS::GLRenderer3D>(scene->Scene(), *this);
+        Rend3D = std::make_unique<SealedGl3D>(scene->Scene(), *this);
     }
 
     NdsRight3D& Scene() {
@@ -316,7 +332,9 @@ void StereoGl::Unseen::Swap(melonDS::GPU& gpu) {
     std::swap(palette, gpu.PaletteDirty);
 }
 
-StereoGl::StereoGl(melonDS::NDS& nds) : melonDS::GLRenderer(nds, false) {}
+StereoGl::StereoGl(melonDS::NDS& nds) : melonDS::GLRenderer(nds, false) {
+    Rend3D = std::make_unique<SealedGl3D>(GPU.GPU3D, *this);
+}
 
 StereoGl::~StereoGl() {
     DropRight();

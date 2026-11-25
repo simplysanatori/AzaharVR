@@ -29,6 +29,7 @@
 #include "frame_cores/ds_gl/ds_gl_state.h"
 #include "frame_cores/nds_core.h"
 #include "frame_cores/nds_gl_edge.h"
+#include "frame_cores/nds_gl_seal.h"
 #include "frame_cores/nds_resolution.h"
 #include "frame_cores/nds_stereo_3d.h"
 #include "video_core/renderer_vulkan/alt_present.h"
@@ -594,6 +595,216 @@ TEST_CASE("DS resolution: melonDS's shaders are those the right eye's edge is pu
         std::string same = source;
         CHECK(Edge::Patch(same));
         CHECK(same == source);
+    }
+}
+
+namespace {
+
+/// A GPU3D's frame, of polygons with their corners in 16ths of a pixel.
+struct SealScene {
+    static constexpr uint32_t kOpaque = 0x001F0000;
+
+    std::unique_ptr<melonDS::NDS> nds = std::make_unique<melonDS::NDS>(melonDS::NDSArgs{}, nullptr);
+    melonDS::GPU3D& gpu = nds->GPU.GPU3D;
+    uint32_t vertices = 0;
+
+    melonDS::Polygon& Add(const std::vector<std::array<int, 2>>& corners, uint32_t attr = kOpaque,
+                          int w = 0x1000) {
+        melonDS::Polygon& polygon = gpu.PolygonRAM[gpu.RenderNumPolygons];
+        polygon = {};
+        polygon.Attr = attr;
+        polygon.NumVertices = static_cast<uint32_t>(corners.size());
+        for (std::size_t i = 0; i < corners.size(); i++) {
+            melonDS::Vertex& vertex = gpu.VertexRAM[vertices++];
+            vertex = {};
+            vertex.HiresPosition[0] = corners[i][0];
+            vertex.HiresPosition[1] = corners[i][1];
+            vertex.Position[3] = w;
+            polygon.Vertices[i] = &vertex;
+            polygon.FinalZ[i] = 0x400000;
+            polygon.FinalW[i] = w;
+        }
+        gpu.RenderPolygonRAM[gpu.RenderNumPolygons++] = &polygon;
+        return polygon;
+    }
+};
+
+/// The left one's right edge has a corner of the two on its right on it, a 16th off.
+void AddJoin(SealScene& scene, int y, uint32_t attr = SealScene::kOpaque, int w = 0x1000) {
+    scene.Add({{0, y}, {159, y}, {159, y + 160}, {0, y + 160}}, SealScene::kOpaque);
+    scene.Add({{159, y}, {320, y}, {320, y + 80}, {160, y + 80}}, attr, w);
+    scene.Add({{160, y + 80}, {320, y + 80}, {320, y + 160}, {159, y + 160}}, attr, w);
+}
+
+} // namespace
+
+TEST_CASE("DS resolution: gaps between polygons are filled", "[frame_cores]") {
+    SealScene scene;
+    FrameCores::NdsGlSeal seal;
+
+    SECTION("A corner on an edge") {
+        AddJoin(scene, 320);
+        // What is in the list after the game's polygons stays
+        melonDS::Polygon& old = scene.gpu.PolygonRAM[7];
+        scene.gpu.RenderPolygonRAM[3] = &old;
+        const auto before = scene.gpu.RenderPolygonRAM;
+        seal.Add(scene.gpu, 4);
+        REQUIRE(seal.Triangles() == 1);
+        REQUIRE(scene.gpu.RenderNumPolygons == 4);
+        const melonDS::Polygon& gap = *scene.gpu.RenderPolygonRAM[3];
+        REQUIRE(gap.NumVertices == 3);
+        REQUIRE(gap.Attr == scene.gpu.RenderPolygonRAM[0]->Attr);
+        REQUIRE(gap.Vertices[0]->HiresPosition[0] == 159);
+        REQUIRE(gap.Vertices[1]->HiresPosition[0] == 160);
+        REQUIRE(gap.Vertices[1]->HiresPosition[1] == 400);
+        REQUIRE(gap.Vertices[2]->HiresPosition[1] == 480);
+        for (int i = 0; i < 3; i++) {
+            REQUIRE(gap.FinalZ[i] > 0x400000); // behind what it is between
+            REQUIRE(gap.FinalW[i] == 0x1000);
+        }
+        seal.Remove(scene.gpu);
+        REQUIRE(scene.gpu.RenderNumPolygons == 3);
+        REQUIRE(scene.gpu.RenderPolygonRAM == before);
+        // The same frame again
+        scene.gpu.RenderFrameIdentical = true;
+        seal.Add(scene.gpu, 4);
+        REQUIRE(scene.gpu.RenderNumPolygons == 4);
+        seal.Remove(scene.gpu);
+        REQUIRE(scene.gpu.RenderPolygonRAM == before);
+    }
+
+    SECTION("Two edges with corners apart") {
+        scene.Add({{0, 0}, {159, 0}, {159, 160}, {0, 160}});
+        scene.Add({{160, 0}, {320, 0}, {320, 160}, {160, 160}});
+        seal.Add(scene.gpu, 4);
+        REQUIRE(seal.Triangles() >= 2);
+        seal.Remove(scene.gpu);
+    }
+
+    SECTION("An edge both have") {
+        scene.Add({{0, 0}, {160, 0}, {160, 160}, {0, 160}});
+        scene.Add({{160, 0}, {320, 0}, {320, 160}, {160, 160}});
+        seal.Add(scene.gpu, 4);
+        REQUIRE(seal.Triangles() == 0);
+        REQUIRE(scene.gpu.RenderNumPolygons == 2);
+        seal.Remove(scene.gpu);
+    }
+
+    SECTION("Seen from its side") {
+        // Its other corners are on its edge, or all but on it
+        scene.Add({{0, 0}, {1, 480}, {2, 320}, {1, 160}});
+        scene.Add({{320, 0}, {325, 480}, {324, 320}, {322, 160}});
+        seal.Add(scene.gpu, 4);
+        REQUIRE(seal.Triangles() == 0);
+        seal.Remove(scene.gpu);
+    }
+
+    SECTION("Depth by w") {
+        AddJoin(scene, 320);
+        for (uint32_t i = 0; i < 3; i++) {
+            scene.gpu.RenderPolygonRAM[i]->WBuffer = true;
+            for (int v = 0; v < 4; v++) {
+                scene.gpu.RenderPolygonRAM[i]->FinalZ[v] = 0x1000;
+            }
+        }
+        seal.Add(scene.gpu, 4);
+        REQUIRE(seal.Triangles() == 1);
+        for (int i = 0; i < 3; i++) {
+            REQUIRE(scene.gpu.RenderPolygonRAM[3]->FinalZ[i] == 0x100A);
+        }
+        seal.Remove(scene.gpu);
+    }
+
+    SECTION("A corner of what is far behind") {
+        AddJoin(scene, 0, SealScene::kOpaque, 0x2000);
+        seal.Add(scene.gpu, 4);
+        for (std::size_t i = 0; i < seal.Triangles(); i++) { // between those two alone
+            REQUIRE(scene.gpu.RenderPolygonRAM[3 + i]->FinalW[0] == 0x2000);
+        }
+        seal.Remove(scene.gpu);
+    }
+
+    SECTION("What is blended, a shadow, a line and a wire frame") {
+        AddJoin(scene, 0, 0x000F0000);
+        AddJoin(scene, 480, 0);
+        for (uint32_t i = 0; i < 3; i++) {
+            scene.gpu.RenderPolygonRAM[i]->Translucent = true;
+        }
+        AddJoin(scene, 960);
+        for (uint32_t i = 6; i < 9; i++) {
+            scene.gpu.RenderPolygonRAM[i]->IsShadowMask = true;
+        }
+        AddJoin(scene, 1440);
+        for (uint32_t i = 9; i < 12; i++) {
+            scene.gpu.RenderPolygonRAM[i]->Type = 1;
+        }
+        seal.Add(scene.gpu, 4);
+        REQUIRE(seal.Triangles() == 0);
+        seal.Remove(scene.gpu);
+    }
+
+    SECTION("No room in the frame") {
+        const uint32_t count = GENERATE(2048u, 2046u, 2045u);
+        while (scene.gpu.RenderNumPolygons < count - 3) {
+            scene.Add({{2000, 2000}, {2100, 2000}, {2100, 2100}});
+        }
+        AddJoin(scene, 320);
+        const auto before = scene.gpu.RenderPolygonRAM;
+        seal.Add(scene.gpu, 4);
+        REQUIRE(scene.gpu.RenderNumPolygons == std::min(2048u, count + 1));
+        seal.Remove(scene.gpu);
+        REQUIRE(scene.gpu.RenderNumPolygons == count);
+        REQUIRE(scene.gpu.RenderPolygonRAM == before);
+    }
+
+    SECTION("No room for corners") {
+        // melonDS's renderer has room for 10240 of them
+        for (uint32_t i = 0; i < 1000; i++) {
+            melonDS::Polygon& polygon = scene.Add({{0, 0}, {160, 0}, {160, 160}, {0, 160}});
+            polygon.NumVertices = 10;
+            scene.vertices -= 4;
+            for (std::size_t v = 0; v < 10; v++) {
+                polygon.Vertices[v] = &scene.gpu.VertexRAM[v % 4];
+            }
+        }
+        AddJoin(scene, 320);
+        const uint32_t count = scene.gpu.RenderNumPolygons;
+        seal.Add(scene.gpu, 4);
+        uint32_t corners = 0;
+        for (uint32_t i = 0; i < scene.gpu.RenderNumPolygons; i++) {
+            corners += scene.gpu.RenderPolygonRAM[i]->NumVertices;
+        }
+        REQUIRE(corners <= 10240);
+        seal.Remove(scene.gpu);
+        REQUIRE(scene.gpu.RenderNumPolygons == count);
+    }
+
+    SECTION("All of it in one place") {
+        for (int i = 0; i < 1500; i++) {
+            const int x = 130 + i % 90;
+            const int y = 130 + i / 90 * 2;
+            scene.Add({{x, y}, {x + 25, y + 3}, {x + 11, y + 29}, {x - 2, y + 24}});
+        }
+        const auto before = scene.gpu.RenderPolygonRAM;
+        seal.Add(scene.gpu, 4); // it looks at as much as there is time for
+        REQUIRE(scene.gpu.RenderNumPolygons == 1500 + seal.Triangles());
+        seal.Remove(scene.gpu);
+        REQUIRE(scene.gpu.RenderPolygonRAM == before);
+    }
+
+    SECTION("No polygons") {
+        seal.Add(scene.gpu, 4);
+        REQUIRE(scene.gpu.RenderNumPolygons == 0);
+        seal.Remove(scene.gpu);
+    }
+
+    SECTION("Past the borders") {
+        scene.Add({{4096, 3072}, {8191, 3072}, {8191, 4095}, {4096, 4095}});
+        scene.Add({{0, 0}, {8191, 4095}, {0, 4095}});
+        scene.Add({{1, 0}, {8190, 4095}, {8191, 0}});
+        seal.Add(scene.gpu, 4);
+        seal.Remove(scene.gpu);
+        REQUIRE(scene.gpu.RenderNumPolygons == 3);
     }
 }
 
