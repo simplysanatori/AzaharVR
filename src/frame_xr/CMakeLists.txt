@@ -110,6 +110,7 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     kiu_powers_live.cpp # AzaharFrame kiupowers
     kiu_powers_live.h
     kiu_ui.h # AzaharFrame kiu1s
+    kiu_camera_tap.h # AzaharFrame kiucam
     kiu_pit_opacity.cpp # AzaharFrame kiu133
     kiu_pit_opacity.h
     input/screen_rig.cpp
