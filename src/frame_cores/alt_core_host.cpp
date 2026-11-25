@@ -14,6 +14,9 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#ifdef __GLIBC__
+#include <malloc.h> // malloc_trim
+#endif
 #include <mutex>
 #include <span>
 #include <thread>
@@ -1038,6 +1041,12 @@ void AltCoreHost::Stop() {
             impl->core.reset();
         }
     }
+
+#ifdef __GLIBC__
+    // What the game's threads freed stays in their arenas otherwise: the DS renderer's keep some
+    // megabytes more at each start.
+    malloc_trim(0);
+#endif
 
     impl->caps = Common::AltCore::Capabilities::ForN3DS();
     SetPacerEmuFrameUs(Common::XrPacer::Get(), Common::XrPacer::kEmuFrameUs);
