@@ -3388,7 +3388,7 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
     CHECK(OptionsFor(Id::KiuSnapTurn) ==
           std::vector<std::string>{"Smooth", "30\xC2\xB0", "45\xC2\xB0", "60\xC2\xB0", "90\xC2\xB0"});
     const MenuModel defaults;
-    CHECK(defaults.kiu_bottom_screen == 0);
+    CHECK(defaults.kiu_bottom_screen == 2); // Wrist
     CHECK(defaults.kiu_bottom_size == 100);
     CHECK(defaults.kiu_bottom_opacity == 100);
     CHECK(defaults.wrist_side == 0);
