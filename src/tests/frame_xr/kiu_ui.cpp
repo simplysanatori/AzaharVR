@@ -33,7 +33,8 @@ Memory Battle() {
                {kCtx + Ui::kHigh, 240},              {kCtx + Ui::kPage, 0},
                {kCtx + Ui::kPause, 0},               {kCtx + Ui::kMessage, 0},
                {kCtx + Ui::kMessage + 4, 0},         {kCtx + Ui::kFlags, 1},
-               {kCtx + Ui::kVertexBase, 0x24155000}, {kCtx + Ui::kIndexOffset, 0x12C00}};
+               {kCtx + Ui::kVertexBase, 0x24155000}, {kCtx + Ui::kIndexOffset, 0x12C00},
+               {kCtx + Ui::kBuffer, 0x14155000}};
     return m;
 }
 } // namespace
@@ -141,6 +142,21 @@ TEST_CASE("Kid Icarus UI: what the battle UI shows", "[frame_xr][kiu1s]") {
         m.words[kCtx + Ui::kIndexOffset] = 0x12C04; // not two whole buffers
         CHECK(Ui::Read(m).quads == 0);
         m.words[kCtx + Ui::kIndexOffset] = 0xC0 * 1025;
+        CHECK(Ui::Read(m).quads == 0);
+    }
+    SECTION("a first buffer not on 16 bytes: the GPU's base is below it, the offsets carry the rest") {
+        // The owner's state before Chapter 2's boss (2026-11-25): buffer 1416A7B8, base 2016A7B0.
+        m.words[kCtx + Ui::kBuffer] = 0x1416A7B8;
+        m.words[kCtx + Ui::kVertexBase] = 0x2016A7B0;
+        CHECK(Ui::Read(m).quads == 0); // the offset does not say so
+        m.words[kCtx + Ui::kIndexOffset] = 0x12C08;
+        const Ui::State s = Ui::Read(m);
+        CHECK(s.quads == 400);
+        const VideoCore::KiuHud::Batch b{s.vertex_base, s.index_offset, s.quads};
+        CHECK(VideoCore::KiuHud::InBatch(b, 0x2016A7B0, 0x12C08, 42));
+        CHECK(VideoCore::KiuHud::InBatch(b, 0x2016A7B0, 0x12C5C, 18));
+        CHECK_FALSE(VideoCore::KiuHud::InBatch(b, 0x2016A7B0, 0x12C00, 6));
+        m.words[kCtx + Ui::kBuffer] = 0x1416A7B0;
         CHECK(Ui::Read(m).quads == 0);
     }
 }

@@ -143,6 +143,15 @@ inline Place PagePlaceInBattle(float tan_half_x, float tan_half_y) {
     return p;
 }
 
+/// AzaharFrame kiuhud: a menu's 2D (the hub's hearts, words and battery): the game's own layout,
+/// whole, in the frame the battle's HUD has (HUD Size), its middle straight ahead at the HUD's
+/// height: in the view and readable, where the game's own frame is 2.8 to 5 times smaller there.
+inline Place PageInView(const Wanted& w, float tan_half_x, float tan_half_y, float pitch_rad) {
+    Place p = PlaceFor(w, tan_half_x, tan_half_y, pitch_rad);
+    p.page = p.on;
+    return p;
+}
+
 /// The state of a draw that may be the HUD's.
 struct Draw {
     bool top_viewport = false; ///< 240 x 400
@@ -203,6 +212,38 @@ constexpr bool IsBattery(const Draw& d) {
     return MayBeHud(d) && d.vertices == 6 && d.width == 256 && d.height == 128 && d.format == 9;
 }
 
+/// AzaharFrame kiuhud: what a draw of the top screen is, by what is known of the game's 2D.
+enum class As : uint8_t {
+    Not,       ///< not the 2D's: as the game draws it (the world, a pass over the whole picture)
+    Guess,     ///< the batch is not known: a quad at a time, by where each is (the old way)
+    Piece,     ///< a whole draw of the battle UI's batch: one piece, never apart
+    WithScore, ///< whole, with the score (the console's battery)
+    Subtitle,
+    Page,      ///< a page's (the results, a menu): the page's frame, every quad alike
+};
+/// `in_batch`: the draw is the battle UI's own (InBatch); `batch_known`: its batch is known at all;
+/// `page`: the 2D on view is a page, not the HUD; `reticle`: the hand's reticle, never the HUD's.
+constexpr As Decide(const Draw& d, bool in_batch, bool batch_known, bool page, bool reticle) {
+    if (reticle) {
+        return As::Not;
+    }
+    if (page) {
+        // The battle UI's page whatever its blend or texture (its lines have none); another
+        // context's (a menu's words, the battery) by the guess.
+        return in_batch || IsText(d) || MayBeHud(d) ? As::Page : As::Not;
+    }
+    if (batch_known) {
+        return IsSubtitle(d) ? As::Subtitle
+               : in_batch    ? As::Piece
+               : IsBattery(d) ? As::WithScore
+                              : As::Not;
+    }
+    return IsSubtitle(d)               ? As::Subtitle
+           : IsBattery(d)              ? As::WithScore
+           : IsText(d) || MayBeHud(d) ? As::Guess
+                                       : As::Not;
+}
+
 struct Vertex {
     float x, y, z, w; ///< clip: x up, y across
 };
@@ -221,19 +262,28 @@ inline bool Movable(const Vertex* v, std::size_t n) {
     }
     return n >= 3 && !(x1 - x0 > 1.9f && y1 - y0 > 1.9f);
 }
-/// `up`, `across`: the middle that decides its group.
-inline void MoveBy(Vertex* t, std::size_t n, const Place& p, float factor_across, float factor_up,
-                   float up, float across) {
-    float at_across = 0.0f, at_up = p.middle_up, rise = 0.0f;
+/// Where a piece goes: with the health bar, with the score, the frame's lower part (further
+/// down), or the frame's middle part.
+enum class Group : uint8_t { Middle, Bar, Score, Low };
+/// By a middle (the guess: a quad's; the batch: a whole draw's).
+constexpr Group GroupAt(float up, float across) {
+    return up > kTopUp && across < kBarAside     ? Group::Bar
+           : up > kTopUp && across > kScoreAside ? Group::Score
+           : up < kLow                           ? Group::Low
+                                                 : Group::Middle;
+}
+/// A group's vertices moved; a page's all go as one (the group is not asked).
+inline void MoveAs(Vertex* t, std::size_t n, const Place& p, float factor_across, float factor_up,
+                   Group group) {
+    float at_across = 0.0f, at_up = p.middle_up, rise = 0.0f; // a page's middle_up: PagePlace 0
     if (p.page) {
-        at_up = 0.0f;
-    } else if (up > kTopUp && across < kBarAside) {
+    } else if (group == Group::Bar) {
         at_across = p.bar_across;
         at_up = p.bar_up;
-    } else if (up > kTopUp && across > kScoreAside) {
+    } else if (group == Group::Score) {
         at_across = p.score_across;
         at_up = p.score_up;
-    } else if (up < kLow) {
+    } else if (group == Group::Low) {
         rise = -kLowDown;
     }
     for (std::size_t i = 0; i < n; ++i) {
@@ -242,6 +292,11 @@ inline void MoveBy(Vertex* t, std::size_t n, const Place& p, float factor_across
         const float a = at_across + p.half_across * v.y;
         v = {2.0f * u * factor_up, 2.0f * a * factor_across, 2.0f * v.z, 2.0f};
     }
+}
+/// `up`, `across`: the middle that decides its group.
+inline void MoveBy(Vertex* t, std::size_t n, const Place& p, float factor_across, float factor_up,
+                   float up, float across) {
+    MoveAs(t, n, p, factor_across, factor_up, GroupAt(up, across));
 }
 /// One piece moved: a quad (two triangles in a row) or a triangle, by its middle. `factor`s: what
 /// the vertex shader divides by (the game drawing past its frame). The result has w = 2, so the
@@ -267,6 +322,23 @@ inline void MovePiece(Vertex* v, std::size_t n, const Place& p, float factor_acr
         a1 = std::max(a1, v[i].y);
     }
     MoveBy(v, n, p, factor_across, factor_up, 0.5f * (u0 + u1), 0.5f * (a0 + a1));
+}
+
+/// AzaharFrame kiuhud: a page's draw: each quad (or triangle) that is flat and not the whole frame
+/// goes to the page's frame; one over the whole frame (the dim behind the page) stays over the
+/// whole view. All go the same way, so a draw of a band and of small pieces stays right.
+/// Returns how many vertices moved.
+inline std::size_t MovePage(Vertex* v, std::size_t n, const Place& p, float factor_across,
+                            float factor_up) {
+    const std::size_t step = n % 6 == 0 ? 6 : 3;
+    std::size_t moved = 0;
+    for (std::size_t i = 0; i + step <= n; i += step) {
+        if (Movable(v + i, step)) {
+            MoveAs(v + i, step, p, factor_across, factor_up, Group::Middle);
+            moved += step;
+        }
+    }
+    return moved;
 }
 
 /// The subtitles' quads (the line and its shadow) moved whole, their middle straight ahead at the

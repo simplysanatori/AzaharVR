@@ -71,6 +71,9 @@ constexpr const char* kSwitchHudExact = "AZAHARFRAME_KIU_HUD_EXACT";
 constexpr const char* kSwitchTalkTop = "AZAHARFRAME_KIU_TALK_TOP";
 constexpr const char* kSwitchPausePanel = "AZAHARFRAME_KIU_PAUSE_PANEL";
 constexpr const char* kSwitchUiTrace = "AZAHARFRAME_KIU_UI_TRACE";
+// AzaharFrame kiuhud: test aids (video_core/kiu_view_tap.h).
+constexpr const char* kSwitchHudCensus = "AZAHARFRAME_KIU_HUD_CENSUS";
+constexpr const char* kSwitchHudCost = "AZAHARFRAME_KIU_HUD_COST";
 // AzaharFrame kiuvr (kiu_first_person.h)
 constexpr const char* kSwitchFpTrace = "AZAHARFRAME_KIU_FP_TRACE";
 constexpr const char* kSwitchFpProbe = "AZAHARFRAME_KIU_FP_PROBE";
@@ -181,6 +184,8 @@ struct State {
     int ui_code = -1;
     Ui::State ui;
     Ui::Steady ui_page, ui_pause;
+    uint32_t hud_cost_vblanks = 0; ///< AzaharFrame kiuhud
+    std::string hud_slots_logged;
     Kiu::EventWatch event_watch;
     bool cutscene = false;
     uint32_t angle_match = 0, angle_other = 0;
@@ -465,6 +470,7 @@ void TraceFirstPerson(State& s, const KH::GameMemory& mem, const KH::Player& p,
 
 /// AzaharFrame kiu1s: the battle UI not read: nothing said of it.
 void UiOff(State& s) {
+    VideoCore::Immersive::g_hud_census.store(0, std::memory_order_relaxed);
     s.ui_code = -1;
     s.ui = {};
     s.ui_page = s.ui_pause = {};
@@ -476,7 +482,26 @@ void UiOff(State& s) {
 void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
     const bool page = SwitchIs(kSwitchPage, "1"), exact = SwitchIs(kSwitchHudExact, "1"),
                pause = SwitchIs(kSwitchPausePanel, "1"), trace = SwitchIs(kSwitchUiTrace, "1");
-    if (!page && !exact && !pause && !trace) {
+    const auto census_text = Switch(kSwitchHudCensus);
+    const uint32_t census =
+        census_text ? static_cast<uint32_t>(std::strtoul(census_text->c_str(), nullptr, 10)) : 0u;
+    VideoCore::Immersive::g_hud_census.store(census & 0xFFFFu, std::memory_order_relaxed);
+    {
+        const bool cost = SwitchIs(kSwitchHudCost, "1");
+        VideoCore::Immersive::g_hud_cost.store(cost, std::memory_order_relaxed);
+        if (cost && ++s.hud_cost_vblanks >= 300) {
+            const auto ns = VideoCore::Immersive::g_hud_cost_ns.exchange(0);
+            const auto asked = VideoCore::Immersive::g_hud_cost_asked.exchange(0);
+            const auto moved = VideoCore::Immersive::g_hud_cost_moved.exchange(0);
+            LOG_INFO(Frontend,
+                     "xr: Kid Icarus hooks: the HUD's cost: {:.1f} us a VBlank ({} draws asked, {} "
+                     "moved in {} VBlanks)",
+                     static_cast<double>(ns) / 1000.0 / s.hud_cost_vblanks, asked, moved,
+                     s.hud_cost_vblanks);
+            s.hud_cost_vblanks = 0;
+        }
+    }
+    if (!page && !exact && !pause && !trace && census == 0) {
         UiOff(s);
         return;
     }
@@ -490,7 +515,8 @@ void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
         s.ui_code != 0 ? Ui::Read(mem, usa ? Ui::kMenuUsaRev1 : Ui::kMenuEur) : Ui::State{};
     const bool is_page = s.ui_page.Update(now.page || now.menu != Ui::kNoMenu);
     const bool is_paused = s.ui_pause.Update(now.paused);
-    Kiu::FirstPerson::SetBattleUi(page && is_page, pause && is_paused && battle);
+    Kiu::FirstPerson::SetBattleUi(page && is_page, pause && is_paused && battle,
+                                  !battle && now.menu != Ui::kNoMenu);
     VideoCore::KiuHud::Batch batch;
     if (exact && battle) {
         batch = {now.vertex_base, now.index_offset, now.quads};
@@ -499,13 +525,36 @@ void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
     if (trace && !(now == s.ui)) {
         LOG_INFO(Frontend,
                  "xr: Kid Icarus hooks: the battle UI {:08X}, menu {}: {}{}{}{}{}; vertices "
-                 "{:08X}, indices {:X}",
+                 "{:08X}, indices {:X}; flags {:X} parts {:X} page {:X} battle {}",
                  now.context, now.menu, now.known ? "" : "not there",
                  now.known && !now.shown ? "not shown" : "", now.page ? "a page" : "",
                  now.paused ? " paused" : "",
                  now.talk ? (now.talk_below ? " talk (bottom)" : " talk (top)") : "",
-                 now.vertex_base, now.index_offset);
+                 now.vertex_base, now.index_offset, now.raw_flags, now.raw_parts, now.raw_page,
+                 battle);
     }
+    if (census != 0 && now.known) { // AzaharFrame kiuhud: the context's texture slots, as they change
+        uint32_t count = 0, table = 0;
+        std::string slots;
+        if (mem.Read32(now.context + 0x8, count) && mem.Read32(now.context + 0x10, table) &&
+            count <= 64) {
+            for (uint32_t i = 0; i < count; ++i) {
+                uint32_t format = 0, at = 0;
+                mem.Read32(table + i * 12, format);
+                mem.Read32(table + i * 12 + 4, at);
+                slots += fmt::format(" {}:{:08X}/{:X}", i, at << 3, format);
+            }
+        }
+        if (slots != s.hud_slots_logged) {
+            s.hud_slots_logged = slots;
+            LOG_INFO(Frontend, "xr: Kid Icarus hooks: the battle UI's texture slots:{}", slots);
+        }
+    }
+    VideoCore::Immersive::g_hud_census_state.store(
+        (battle ? 1u : 0u) | (now.known ? 2u : 0u) | (now.shown ? 4u : 0u) |
+            (is_page ? 8u : 0u) | (now.paused ? 16u : 0u) | (now.talk ? 32u : 0u) |
+            (static_cast<uint32_t>(now.menu & 0xFF) << 8),
+        std::memory_order_relaxed);
     s.ui = now;
 }
 

@@ -4,6 +4,10 @@
 
 #pragma once
 
+#include <set>
+#include <string>
+#include <vector>
+#include "video_core/kiu_hud.h" // AzaharFrame kiuhud
 #include "video_core/rasterizer_interface.h"
 #include "video_core/shader/generator/pica_fs_config.h"
 #include "video_core/shader/generator/shader_uniforms.h"
@@ -154,11 +158,19 @@ public:
     bool ReticleDraw() const;
     /// AzaharFrame kiu140: whether this draw may be a piece of Kid Icarus: Uprising's HUD, moved
     /// into the view on the CPU (kiu_hud.h).
-    bool HudDraw(bool* subtitle = nullptr, bool* exact = nullptr) const;
+    KiuHud::As HudDraw() const;
+    /// AzaharFrame kiuhud: the census (kiu_view_tap.h g_hud_census) wants this draw on the CPU.
+    bool HudCensusDraw() const;
+    void HudCensus(const char* done);
     /// AzaharFrame kiu140: whether this draw is one of Kid Icarus: Uprising's known cloud sheets,
     /// given a soft rim on the CPU (kiu_sheets.h), and the world's turn for it is known.
     bool SheetDraw() const;
     void AddSheetRim();
+
+private:
+    std::set<std::string> hud_census_seen; ///< AzaharFrame kiuhud
+    std::vector<KiuHud::Vertex> hud_flat; ///< AzaharFrame kiuhud: kept, not made a draw
+    u32 hud_census_key = 0;
 };
 
 } // namespace VideoCore

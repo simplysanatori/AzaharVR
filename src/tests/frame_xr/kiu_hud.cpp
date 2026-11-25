@@ -212,3 +212,118 @@ TEST_CASE("Kid Icarus HUD: the text texture's other draws are pieces; text targe
     REQUIRE_FALSE(IsTextTarget(240.0f, 320.0f));
     REQUIRE_FALSE(IsTextTarget(128.0f, 256.0f));
 }
+
+TEST_CASE("Kid Icarus HUD: what a draw is, by what is known of the game's 2D",
+          "[frame_xr][kiuhud]") {
+    const Draw piece{true, false, true, true, 0x218D1300, 42, 256, 256, 9};
+    const Draw battery{true, false, true, true, 0x2188B680, 6, 256, 128, 9};
+    const Draw subtitle{true, false, true, true, 0x181A8000, 12, 512, 128, 0};
+    const Draw list{true, false, true, true, 0x181A8000, 24, 512, 128, 0};
+    Draw line{true, false, true, false, 0, 12}; // a page's rule: no texture
+    Draw mark{true, false, false, true, 0x18400000, 30, 256, 256, 12}; // added light, from VRAM
+    Draw glyphs{true, false, true, true, 0x27C06080, 60, 128, 32, 11}; // a menu's words
+
+    SECTION("the batch not known (another build, the code differs): the old way") {
+        CHECK(Decide(piece, false, false, false, false) == As::Guess);
+        CHECK(Decide(battery, false, false, false, false) == As::WithScore);
+        CHECK(Decide(subtitle, false, false, false, false) == As::Subtitle);
+        CHECK(Decide(list, false, false, false, false) == As::Guess);
+        CHECK(Decide(line, false, false, false, false) == As::Not);
+        CHECK(Decide(mark, false, false, false, false) == As::Not);
+        CHECK(Decide(piece, false, false, false, true) == As::Not); // the reticle
+    }
+    SECTION("a battle whose batch is known: its draws and the battery, no others") {
+        CHECK(Decide(piece, true, true, false, false) == As::Piece);
+        CHECK(Decide(line, true, true, false, false) == As::Piece); // whatever its state
+        CHECK(Decide(subtitle, true, true, false, false) == As::Subtitle);
+        CHECK(Decide(list, true, true, false, false) == As::Piece);
+        CHECK(Decide(battery, false, true, false, false) == As::WithScore);
+        CHECK(Decide(piece, false, true, false, false) == As::Not); // another context's
+        CHECK(Decide(mark, false, true, false, false) == As::Not);
+        CHECK(Decide(piece, true, true, false, true) == As::Not);
+    }
+    SECTION("a page: the battle UI's draws whatever their state, the others by the guess") {
+        CHECK(Decide(line, true, true, true, false) == As::Page);
+        CHECK(Decide(piece, true, true, true, false) == As::Page);
+        CHECK(Decide(list, false, true, true, false) == As::Page);
+        CHECK(Decide(battery, false, true, true, false) == As::Page);
+        CHECK(Decide(glyphs, false, false, true, false) == As::Page); // the hub: no battle UI
+        CHECK(Decide(battery, false, false, true, false) == As::Page);
+        CHECK(Decide(line, false, false, true, false) == As::Not);
+        CHECK(Decide(mark, false, false, true, false) == As::Not);
+    }
+}
+
+TEST_CASE("Kid Icarus HUD: the battery goes with the score wherever the game has it",
+          "[frame_xr][kiuhud]") {
+    const Place p = At();
+    // The dialogs' context draws it in a corner of its own; by its place it would go with the bar.
+    Vertex corner[6], score[6];
+    const float up[6] = {0.9f, 1.0f, 0.9f, 1.0f, 1.0f, 0.9f};
+    const float at[6] = {-1.0f, -1.0f, -0.9f, -1.0f, -0.9f, -0.9f};
+    for (int i = 0; i < 6; ++i) {
+        corner[i] = {up[i], at[i], 0.1f, 1.0f};
+        score[i] = {up[i], at[i], 0.1f, 1.0f};
+    }
+    CHECK(GroupAt(0.95f, -0.95f) == Group::Bar);
+    MoveAs(corner, 6, p, 1.0f, 1.0f, Group::Score);
+    MoveAs(score, 6, p, 1.0f, 1.0f, GroupAt(0.95f, 0.8f));
+    for (int i = 0; i < 6; ++i) {
+        CHECK(corner[i].x == score[i].x);
+        CHECK(corner[i].y == score[i].y);
+        CHECK(corner[i].w == 2.0f);
+    }
+}
+
+TEST_CASE("Kid Icarus HUD: a page's draw, quad by quad the same way; the dim stays whole",
+          "[frame_xr][kiuhud]") {
+    const auto quad = [](Vertex* v, float u0, float u1, float a0, float a1) {
+        const float up[6] = {u0, u1, u0, u1, u1, u0};
+        const float at[6] = {a0, a0, a1, a0, a1, a1};
+        for (int i = 0; i < 6; ++i) {
+            v[i] = {up[i], at[i], 0.3f, 1.0f};
+        }
+    };
+    const Place p = PagePlaceInBattle(kTanX, kTanY);
+    REQUIRE(p.page);
+    Vertex v[18];
+    quad(v, -1.0f, 1.0f, -1.0f, 1.0f);     // the dim over the picture
+    quad(v + 6, 0.6f, 0.9f, -1.0f, -0.3f); // where the bar's group would be
+    quad(v + 12, -0.9f, -0.6f, 0.5f, 1.0f); // the frame's lower part
+    CHECK(MovePage(v, 18, p, 1.0f, 1.0f) == 12);
+    CHECK(v[0].w == 1.0f); // as the game draws it: the shader keeps it over the whole view
+    CHECK(v[0].x == -1.0f);
+    for (int i = 6; i < 18; ++i) {
+        CHECK(v[i].w == 2.0f);
+    }
+    // One scale and one middle for all of it: the layout is the game's.
+    CHECK(v[6].x / 2.0f == Approx(p.half_up * 0.6f));
+    CHECK(v[6].y / 2.0f == Approx(p.half_across * -1.0f));
+    CHECK(v[12].x / 2.0f == Approx(p.half_up * -0.9f));
+    CHECK(v[12].y / 2.0f == Approx(p.half_across * 0.5f));
+    Vertex world[6];
+    quad(world, 0.0f, 0.2f, 0.0f, 0.2f);
+    world[3].w = 7.0f;
+    CHECK(MovePage(world, 6, p, 1.0f, 1.0f) == 0);
+}
+
+TEST_CASE("Kid Icarus HUD: a menu's 2D in the view, in the HUD's frame", "[frame_xr][kiuhud]") {
+    Wanted w;
+    const Place hud = At(w), p = PageInView(w, kTanX, kTanY, -5.0f * kRad);
+    REQUIRE(p.on);
+    REQUIRE(p.page);
+    CHECK(p.half_across == hud.half_across);
+    CHECK(p.half_up == hud.half_up);
+    // The frame's corners: 30 degrees aside at HUD Size 100 %, whatever the game draws past it.
+    for (const float f : {1.0f, 2.8f, 5.0f}) {
+        Vertex v[3] = {{-0.8f, 1.0f, 0, 1}, {-0.7f, 1.0f, 0, 1}, {-0.8f, 0.9f, 0, 1}};
+        CHECK(MovePage(v, 3, p, f, f) == 3);
+        CHECK(std::atan(v[0].y / v[0].w / f * kTanX) / kRad == Approx(30.0f).margin(0.01f));
+        const float up = std::atan(v[0].x / v[0].w / f * kTanY) / kRad - 5.0f;
+        CHECK(up < kMiddleDeg);
+        CHECK(up > kMiddleDeg - 20.0f);
+    }
+    w.size = 150;
+    CHECK(PageInView(w, kTanX, kTanY, 0.0f).half_across > p.half_across);
+    CHECK_FALSE(PageInView(w, 0.0f, kTanY, 0.0f).on);
+}

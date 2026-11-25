@@ -86,11 +86,16 @@ inline constexpr uint32_t kPause = 0x243C, kPauseShown = 0x801;
 inline constexpr uint32_t kMessage = 0x3124;
 inline constexpr uint32_t kFlags = 0x31B8, kFlagShown = 1, kFlagPages = 0x10100;
 /// The indices come after its two vertex buffers (0x60 a quad), so their offset says how many quads
-/// a buffer holds (400 in the battles seen); a list names a quad by 10 bits.
-constexpr uint32_t QuadsFor(uint32_t index_offset) {
-    const uint32_t quads = index_offset / 0xC0;
-    return index_offset % 0xC0 == 0 && quads <= 1024 ? quads : 0;
+/// a buffer holds (400 in the battles seen); a list names a quad by 10 bits. The GPU's base is a
+/// multiple of 16 below the first buffer, so the offset carries what was cut off (`pad`: 0 or 8 seen).
+constexpr uint32_t QuadsFor(uint32_t index_offset, uint32_t pad = 0) {
+    if (pad >= 16 || index_offset < pad) {
+        return 0;
+    }
+    const uint32_t quads = (index_offset - pad) / 0xC0;
+    return (index_offset - pad) % 0xC0 == 0 && quads <= 1024 ? quads : 0;
 }
+inline constexpr uint32_t kBuffer = 0x30; ///< its first vertex buffer (virtual)
 // A menu outside a battle (the game's MENUID: 0 the title, 3 the hub, 51 the page after a fall):
 // its holder (null in a battle) and body, by their classes.
 inline constexpr uint32_t kMenuHolder = 0xE6F928 + 0x64, kMenuBody = 0xC, kMenuId = 0x72C;
@@ -126,6 +131,7 @@ struct State {
     uint32_t context = 0;
     uint32_t vertex_base = 0, index_offset = 0; ///< of the context's draws
     uint32_t quads = 0;                         ///< 0: its draws are not known
+    uint32_t raw_flags = 0, raw_parts = 0, raw_page = 0; ///< +0x31B8, +0x31BC, +0x218C (the trace's)
     bool operator==(const State&) const = default;
 };
 
@@ -154,17 +160,21 @@ State Read(const Reader& m, const MenuClasses& menus = kMenuEur) {
     }
     s.known = true;
     s.context = ctx;
+    s.raw_flags = flags;
+    s.raw_page = page;
+    m.Read32(ctx + kFlags + 4, s.raw_parts);
     s.shown = (flags & kFlagShown) != 0;
     s.page = s.shown && ((page & kPageShown) != 0 || (flags & kFlagPages) != 0);
     s.paused = s.shown && (pause & kPauseShown) != 0;
     s.talk = s.shown && (shown & 0xFF) != 0 && (shown & 0xFF00) != 0 && line != 0;
     s.talk_below = s.talk && (shown >> 24) == 1;
-    uint32_t base = 0, index = 0;
+    uint32_t base = 0, index = 0, buffer = 0;
     if (m.Read32(ctx + kVertexBase, base) && m.Read32(ctx + kIndexOffset, index) &&
-        base >= 0x18000000u && base < 0x30000000u && (base & 7u) == 0 && QuadsFor(index) != 0) {
+        m.Read32(ctx + kBuffer, buffer) && base >= 0x18000000u && base < 0x30000000u &&
+        (base & 7u) == 0 && QuadsFor(index, buffer & 0xFu) != 0) {
         s.vertex_base = base;
         s.index_offset = index;
-        s.quads = QuadsFor(index);
+        s.quads = QuadsFor(index, buffer & 0xFu);
     }
     return s;
 }

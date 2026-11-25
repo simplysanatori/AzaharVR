@@ -415,8 +415,11 @@ bool Battle();
 /// false while that is off or the UI cannot be read: a page instead of the HUD
 /// (AZAHARFRAME_KIU_PAGE=1), the pause screen (AZAHARFRAME_KIU_PAUSE_PANEL=1: the Secondary Screen
 /// comes up in front as a panel to point at). Set each VBlank by the hooks; any thread.
-void SetBattleUi(bool page, bool pause_panel);
+void SetBattleUi(bool page, bool pause_panel, bool menu = false);
 bool BattlePage();
+/// AzaharFrame kiuhud: that page is a menu's (the hub), with AZAHARFRAME_KIU_PAGE=1: its 2D goes in
+/// the view as the HUD does (kiu_hud.h PageInView).
+bool MenuPage();
 bool PausePanel();
 /// The 2D on view is a page, whole, rather than the HUD's pieces.
 constexpr bool WholePage(bool battle, bool battle_page) {
