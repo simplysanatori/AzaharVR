@@ -968,7 +968,8 @@ bool NdsCore::AddCheat(const std::string& name, const std::string& code) {
     }
     melonDS::ARCode ar{};
     ar.Parent = nullptr;
-    ar.Name = name.empty() ? "Action Replay Cheat" : name;
+    // One of spaces alone would not be read back, and no cheat of the file with it
+    ar.Name = name.find_first_not_of(" \t") == std::string::npos ? "Action Replay Cheat" : name;
     ar.Enabled = true;
     ar.Code = std::move(words);
     const melonDS::ARCode& added = impl->AddPlayerCheat(std::move(ar));
