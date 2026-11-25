@@ -422,27 +422,26 @@ TEST_CASE("Sections: a 3DS game's rows, in order", "[frame_xr][tabmenu]") {
     CHECK(ControlsRows(m, ControlsSection::Pointing) == kPointing);
     CHECK(ControlsRows(m, ControlsSection::Motion) ==
           std::set<Id>{Id::MotionControls, Id::GyroAim, Id::GyroSensitivity});
-    // Kid Icarus: Uprising, out of Angel's Aim mode: its weapon rows are Aiming's, Immersive the
-    // same; in it, the first-person rows right under Immersive Mode.
+    // Kid Icarus: Uprising: Angel's Aim's own rows are on its page only (angels_aim_page.cpp);
+    // in its mode Immersive links to it, right under Immersive Mode.
     m.mods.angels_aim.shown = m.mods.angels_aim.mapped = true;
     m.gyro_aim = 2;
     CHECK(RowIds(Tab::Settings, m, SettingsSection::Immersive) == immersive);
-    const std::vector<Id> aiming = AimingRows(m);
+    const std::vector<Id> aiming = ControlsAimingRows(m);
     std::set<Id> motion{aiming.begin(), aiming.end()};
     motion.insert(Id::MotionControls);
     std::set<Id> drawn = ControlsRows(m, ControlsSection::Motion);
     drawn.erase(Id::CalibrateAimReset);
     CHECK(drawn == motion);
-    CHECK(motion.contains(Id::WeaponInHand));
+    CHECK(motion.contains(Id::LaserSight));
+    CHECK(!motion.contains(Id::WeaponInHand));
     CHECK(ControlsRows(m, ControlsSection::Buttons) == kButtons);
     CHECK(ControlsRows(m, ControlsSection::Pointing) == kPointing);
     m.immersive_mode = 4;
     for (const int hud : {0, 1}) { // the game's own, In View
         m.kiu_hud = hud;
         std::vector<Id> angels = immersive;
-        const std::vector<Id> first = AngelsAimFirstPersonRows(m);
-        REQUIRE(!first.empty());
-        angels.insert(angels.begin() + 1, first.begin(), first.end());
+        angels.insert(angels.begin() + 1, Id::AngelsAimLink);
         if (hud == 1) { // HUD Spacing has nothing to move
             std::erase(angels, Id::HudSpacingX);
             std::erase(angels, Id::HudSpacingY);

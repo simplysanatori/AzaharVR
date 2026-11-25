@@ -3549,6 +3549,7 @@ TEST_CASE("Tab menu: Direct Aim's lock, grip and Turn Zone basis", "[frame_xr][t
         m.gyro_aim = aiming;
         const bool direct = aiming == 2;
         v.tab = Tab::Controls;
+        v.controls_section = ControlsSection::Motion;
         bool rows = false;
         for (float scroll = 0.0f; scroll <= 3000.0f && !rows; scroll += kRowH) {
             v.scroll[static_cast<int>(Tab::Controls)] = scroll;
