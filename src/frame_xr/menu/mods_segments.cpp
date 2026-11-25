@@ -1284,8 +1284,12 @@ void TabMenu::DrawModsDialog(Kit& kit, const ModsDialog& d, const MenuView& view
                    (kPanelH + h) * 0.5f};
     kit.Fill(box, 28.0f, Tok::kSurfaceContainerHigh);
     float y = box.y0 + kP;
+    // AzaharVR: the text and the buttons are centred; rows, paths and a checkbox start at the left.
+    const auto centred = [&](const std::string& l, float size) {
+        return box.Cx() - kit.TextWidthSized(size, false, l) * 0.5f;
+    };
     for (const std::string& l : head_lines) {
-        kit.TextSized(box.x0 + kP, y + head_lh * 0.5f + kit.CapHeightSized(kHead, false) * 0.5f,
+        kit.TextSized(centred(l, kHead), y + head_lh * 0.5f + kit.CapHeightSized(kHead, false) * 0.5f,
                       kHead, false, Tok::kOnSurface, l);
         y += head_lh;
     }
@@ -1302,7 +1306,7 @@ void TabMenu::DrawModsDialog(Kit& kit, const ModsDialog& d, const MenuView& view
         y += 8.0f;
     }
     for (const std::string& l : body_lines) {
-        kit.TextSized(box.x0 + kP, y + body_lh * 0.5f + kit.CapHeightSized(kBody, false) * 0.5f,
+        kit.TextSized(centred(l, kBody), y + body_lh * 0.5f + kit.CapHeightSized(kBody, false) * 0.5f,
                       kBody, false, Tok::kOnSurfaceVariant, l);
         y += body_lh;
     }
@@ -1360,17 +1364,15 @@ void TabMenu::DrawModsDialog(Kit& kit, const ModsDialog& d, const MenuView& view
             y += kInfoRowH;
         }
     }
-    // The actions: text buttons at the end, the confirming one last.
-    float right = box.x1 - kP + 12.0f; // a text button's own padding lines its label up
-    const float by = box.y1 - kP - kButtonH;
+    // The actions: text buttons, centred, the confirming one last.
+    struct Action {
+        Id id;
+        std::string label;
+        bool tonal;
+    };
+    std::vector<Action> actions; // from the right
     const auto action = [&](Id id, const std::string& label, bool tonal = false) {
-        const float w = ButtonWidth(kit, label, false, tonal ? 24.0f : 12.0f);
-        const Rect b{right - w, by, right, by + kButtonH};
-        kit.Button(b, tonal ? ButtonStyle::Tonal : ButtonStyle::Text, 0, label, StateOf(view, {id}));
-        // AzaharFrame kiuweap2: a short label ("OK") still gets a 48 dp target.
-        const float grow = std::max(0.0f, (48.0f - b.W()) * 0.5f);
-        AddHit({b.x0 - grow, b.Cy() - 24.0f, b.x1 + grow, b.Cy() + 24.0f}, {id}, panel);
-        right = b.x0 - 8.0f;
+        actions.push_back({id, label, tonal});
     };
     if (d.kind == ModsDialogKind::Blocked) {
         action(Id::DialogCancel, "OK");
@@ -1385,6 +1387,24 @@ void TabMenu::DrawModsDialog(Kit& kit, const ModsDialog& d, const MenuView& view
     } else {
         action(Id::DialogConfirm, confirm);
         action(Id::DialogCancel, "Cancel", !d.places.empty());
+    }
+    const auto width = [&kit](const Action& a) {
+        return ButtonWidth(kit, a.label, false, a.tonal ? 24.0f : 12.0f);
+    };
+    float total = 8.0f * static_cast<float>(actions.size() - 1);
+    for (const Action& a : actions) {
+        total += width(a);
+    }
+    float right = box.Cx() + total * 0.5f;
+    const float by = box.y1 - kP - kButtonH;
+    for (const Action& a : actions) {
+        const Rect b{right - width(a), by, right, by + kButtonH};
+        kit.Button(b, a.tonal ? ButtonStyle::Tonal : ButtonStyle::Text, 0, a.label,
+                   StateOf(view, {a.id}));
+        // AzaharFrame kiuweap2: a short label ("OK") still gets a 48 dp target.
+        const float grow = std::max(0.0f, (48.0f - b.W()) * 0.5f);
+        AddHit({b.x0 - grow, b.Cy() - 24.0f, b.x1 + grow, b.Cy() + 24.0f}, {a.id}, panel);
+        right = b.x0 - 8.0f;
     }
 }
 
