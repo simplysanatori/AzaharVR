@@ -484,6 +484,24 @@ TEST_CASE("Kid Icarus UI: no weapon in the hand in the game's menus", "[frame_xr
     CHECK_FALSE(WeaponHiddenFor(m.Update(Ui::kNoMenu), false));
 }
 
+TEST_CASE("Kid Icarus menus: the flat ones on the normal screens, the goddess's room in the view",
+          "[frame_xr][kiu140]") {
+    namespace FP = FrameXr::Kiu::FirstPerson;
+    using FP::MenuScreens;
+    CHECK(FP::MenuScreensFor(nullptr) == MenuScreens::Flat);
+    CHECK(FP::MenuScreensFor("") == MenuScreens::Flat);
+    CHECK(FP::MenuScreensFor("0") == MenuScreens::None);
+    CHECK(FP::MenuScreensFor("1") == MenuScreens::All);
+    for (const int menu : {0, 2, 4, FrameXr::Kiu::Ui::kMenuCauldron, 51}) {
+        CHECK(FP::MenuOnScreens(MenuScreens::Flat, menu) == menu);
+        CHECK(FP::MenuOnScreens(MenuScreens::None, menu) == FrameXr::Kiu::Ui::kNoMenu);
+    }
+    CHECK(FP::MenuOnScreens(MenuScreens::Flat, FrameXr::Kiu::Ui::kMenuHub) ==
+          FrameXr::Kiu::Ui::kNoMenu);
+    CHECK(FP::MenuOnScreens(MenuScreens::All, FrameXr::Kiu::Ui::kMenuHub) == 3);
+    CHECK(FP::MenuOnScreens(MenuScreens::Flat, FrameXr::Kiu::Ui::kNoMenu) < 0);
+}
+
 TEST_CASE("Kid Icarus UI: the portraits' setting, its switch, and the words that go with it",
           "[frame_xr][kiu1s]") {
     using namespace FirstPerson;
