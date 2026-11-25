@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "common/logging/log.h"
+#include "frame_cores/utf8_path.h"
 
 namespace FrameCores {
 namespace {
@@ -80,16 +81,17 @@ std::unique_ptr<FrameDriver> MakeDriver(DriverKind& kind, const DriverServices& 
 bool BackUpSave(const std::string& save_path) {
     namespace fs = std::filesystem;
     std::error_code ec;
-    const auto size = fs::file_size(save_path, ec);
+    const auto save = FsPath(save_path);
+    const auto size = fs::file_size(save, ec);
     if (ec == std::errc::no_such_file_or_directory || (!ec && size == 0)) {
         return true; // the cores make an empty file
     }
     const auto copy = [&save_path](int n) {
-        return save_path + ".before-edit-" + std::to_string(n);
+        return FsPath(save_path + ".before-edit-" + std::to_string(n));
     };
-    const std::string made = save_path + ".before-edit.tmp";
+    const auto made = FsPath(save_path + ".before-edit.tmp");
     if (!ec) {
-        fs::copy_file(save_path, made, fs::copy_options::overwrite_existing, ec);
+        fs::copy_file(save, made, fs::copy_options::overwrite_existing, ec);
     }
     for (int n = kSaveCopies; n > 1 && !ec; --n) {
         if (fs::exists(copy(n - 1), ec)) {

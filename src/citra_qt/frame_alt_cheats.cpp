@@ -17,6 +17,7 @@
 #include "core/cheats/online.h"
 #include "frame_cores/alt_core_host.h"
 #include "frame_cores/cheat_db.h"
+#include "frame_cores/utf8_path.h"
 #include "frame_xr/frame_xr.h"
 #include "frame_xr/menu/cheat_entry.h"
 #include "frame_xr/swkbd.h"
@@ -194,7 +195,7 @@ void Start(FrameCores::AltCoreHost& host, std::function<FrameCores::AltCoreHost*
     const std::uint64_t key = g_key;
     const Db::System system = CheatSystemOf(info);
     const std::string code = info.game_code;
-    const std::string stem = std::filesystem::path(rom_path).stem().string();
+    const std::string stem = FrameCores::FsUtf8(FrameCores::FsPath(rom_path).stem());
     std::thread([=] {
         const auto crc = Db::RomCrc32(rom_path);
         Db::Result result = Db::Download(Online::HttpsGet, system, code, crc, stem);

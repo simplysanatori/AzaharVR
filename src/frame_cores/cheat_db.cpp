@@ -10,6 +10,7 @@
 #include <map>
 
 #include "frame_cores/rom_info.h"
+#include "frame_cores/utf8_path.h"
 
 namespace FrameCores::CheatDb {
 
@@ -548,7 +549,7 @@ Result Download(const Cheats::Online::HttpGet& get, System system, std::string_v
 }
 
 std::optional<std::uint32_t> RomCrc32(const std::string& path) {
-    std::ifstream in(path, std::ios::binary);
+    std::ifstream in(FsPath(path), std::ios::binary);
     if (!in) {
         return std::nullopt;
     }

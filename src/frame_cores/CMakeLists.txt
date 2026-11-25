@@ -1,3 +1,8 @@
+# AzaharVR: the cores' headers are GNU C, so this directory's compiler on Windows is clang-cl
+if (COMMAND alt_cores_compiler)
+    alt_cores_compiler()
+endif()
+
 add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     alt_core_host.cpp
     alt_core_host.h
@@ -94,7 +99,7 @@ else()
     target_link_libraries(frame_cores PRIVATE faad2)
 endif()
 
-# gba-ds's game.c: Linux only, see externals/gbads_cmake
+# gba-ds's game.c, see externals/gbads_cmake
 if (TARGET gbads_game)
     target_sources(frame_cores PRIVATE
         gbads_driver.cpp

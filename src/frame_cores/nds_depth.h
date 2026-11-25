@@ -15,6 +15,15 @@
 
 #include "common/layer_depth.h"
 
+#ifdef _WIN32 // AzaharVR: <windows.h> has these as macros
+#undef near
+#undef far
+#undef NEAR
+#undef FAR
+#define NEAR
+#define FAR
+#endif
+
 namespace FrameCores::NdsDepth {
 
 constexpr int kWidth = 256;

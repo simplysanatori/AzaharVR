@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "frame_cores/core_backend.h"
+#include "frame_cores/utf8_path.h"
 
 namespace FrameCores {
 
@@ -60,13 +61,13 @@ inline bool SaveCustomCheats(const std::string& path, const std::vector<CheatEnt
     }
     std::error_code ec;
     if (list.empty()) {
-        std::filesystem::remove(path, ec);
+        std::filesystem::remove(FsPath(path), ec);
         return true;
     }
-    std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);
+    std::filesystem::create_directories(FsPath(path).parent_path(), ec);
     const std::string tmp = path + ".tmp";
     {
-        std::ofstream out(tmp, std::ios::trunc);
+        std::ofstream out(FsPath(tmp), std::ios::binary | std::ios::trunc);
         if (!out) {
             return false;
         }
@@ -79,9 +80,9 @@ inline bool SaveCustomCheats(const std::string& path, const std::vector<CheatEnt
             return false;
         }
     }
-    std::filesystem::rename(tmp, path, ec);
+    std::filesystem::rename(FsPath(tmp), FsPath(path), ec);
     if (ec) {
-        std::filesystem::remove(tmp, ec);
+        std::filesystem::remove(FsPath(tmp), ec);
         return false;
     }
     return true;
@@ -89,7 +90,7 @@ inline bool SaveCustomCheats(const std::string& path, const std::vector<CheatEnt
 
 inline std::vector<CheatEntry> LoadCustomCheats(const std::string& path) {
     std::vector<CheatEntry> list;
-    std::ifstream in(path);
+    std::ifstream in(FsPath(path), std::ios::binary);
     std::string line;
     while (std::getline(in, line)) {
         if (!line.empty() && line.back() == '\r') {

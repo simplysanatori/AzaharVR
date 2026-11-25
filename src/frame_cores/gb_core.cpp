@@ -21,6 +21,7 @@
 #include "frame_cores/driver_runner.h"
 #include "frame_cores/rom_info.h"
 #include "frame_cores/shadow_eye.h"
+#include "frame_cores/utf8_path.h"
 
 extern "C" {
 #include <mgba-util/audio-buffer.h>
@@ -47,12 +48,12 @@ bool EnsureDir(const std::string& dir) {
         return false;
     }
     std::error_code ec;
-    std::filesystem::create_directories(dir, ec);
+    std::filesystem::create_directories(FsPath(dir), ec);
     return !ec;
 }
 
 bool IsZipPath(const std::string& path) {
-    auto ext = std::filesystem::path(path).extension().string();
+    auto ext = FsUtf8(FsPath(path).extension());
     for (char& ch : ext) {
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
     }
@@ -60,10 +61,10 @@ bool IsZipPath(const std::string& path) {
 }
 
 bool AtomicWriteBytes(const std::string& path, const uint8_t* data, std::size_t size) {
-    EnsureDir(std::filesystem::path(path).parent_path().string());
+    EnsureDir(FsUtf8(FsPath(path).parent_path()));
     const std::string tmp = path + ".tmp";
     {
-        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        std::ofstream out(FsPath(tmp), std::ios::binary | std::ios::trunc);
         if (!out) {
             return false;
         }
@@ -74,13 +75,13 @@ bool AtomicWriteBytes(const std::string& path, const uint8_t* data, std::size_t 
         }
     }
     std::error_code ec;
-    if (std::filesystem::exists(path, ec)) {
-        std::filesystem::rename(path, path + ".bak", ec);
+    if (std::filesystem::exists(FsPath(path), ec)) {
+        std::filesystem::rename(FsPath(path), FsPath(path + ".bak"), ec);
         ec.clear();
     }
-    std::filesystem::rename(tmp, path, ec);
+    std::filesystem::rename(FsPath(tmp), FsPath(path), ec);
     if (ec) {
-        std::filesystem::remove(tmp, ec);
+        std::filesystem::remove(FsPath(tmp), ec);
         return false;
     }
     return true;
@@ -313,7 +314,7 @@ bool GbCore::Load(const std::string& rom_path, const CorePaths& paths,
     if (opts.use_bios && !paths.bios_dir.empty()) {
         const std::array<std::string, 2> bios_names = {"gbc_bios.bin", "gb_bios.bin"};
         for (const auto& name : bios_names) {
-            const auto bios_path = (std::filesystem::path(paths.bios_dir) / name).string();
+            const auto bios_path = FsUtf8(FsPath(paths.bios_dir) / FsPath(name));
             if (VFile* bvf = VFileOpen(bios_path.c_str(), O_RDONLY)) {
                 if (!core->loadBIOS(core, bvf, 0)) {
                     bvf->close(bvf);
@@ -325,8 +326,8 @@ bool GbCore::Load(const std::string& rom_path, const CorePaths& paths,
         }
     }
 
-    const std::string stem = std::filesystem::path(rom_path).stem().string();
-    impl->save_path = (std::filesystem::path(paths.game_dir) / (stem + ".sav")).string();
+    const std::string stem = FsUtf8(FsPath(rom_path).stem());
+    impl->save_path = FsUtf8(FsPath(paths.game_dir) / FsPath(stem + ".sav"));
     if (VFile* save_vf = VFileOpen(impl->save_path.c_str(), O_CREAT | O_RDWR)) {
         if (!core->loadSave(core, save_vf)) {
             save_vf->close(save_vf);
@@ -347,7 +348,7 @@ bool GbCore::Load(const std::string& rom_path, const CorePaths& paths,
     impl->input = {};
     impl->caps.has_alt_cheats = true;
     impl->custom_cheats_path =
-        (std::filesystem::path(paths.game_dir) / (stem + ".custom.cheats")).string();
+        FsUtf8(FsPath(paths.game_dir) / FsPath(stem + ".custom.cheats"));
     impl->custom_cheats = LoadCustomCheats(impl->custom_cheats_path);
     impl->ApplyCheats();
     const unsigned rate = core->audioSampleRate(core);
@@ -543,7 +544,7 @@ bool GbCore::ImportBatterySave(const std::string& sav_path) {
     if (!impl->core || sav_path.empty() || impl->save_path.empty()) {
         return false;
     }
-    std::ifstream in(sav_path, std::ios::binary | std::ios::ate);
+    std::ifstream in(FsPath(sav_path), std::ios::binary | std::ios::ate);
     if (!in) {
         return false;
     }

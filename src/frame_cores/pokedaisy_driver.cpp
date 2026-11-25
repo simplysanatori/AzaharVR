@@ -29,6 +29,7 @@
 #include "common/logging/log.h"
 #include "frame_cores/frame_driver.h"
 #include "frame_cores/rom_info.h"
+#include "frame_cores/utf8_path.h"
 
 #include <mgba/core/core.h>
 #include <mgba/internal/gb/gb.h>
@@ -61,6 +62,10 @@ extern "C" {
 #include "linux/hud.h"
 #include "linux/quick_menu.h"
 }
+
+#ifdef _WIN32 // AzaharVR: mGBA's common.h has it as _snprintf
+#undef snprintf
+#endif
 
 namespace FrameCores {
 
@@ -299,7 +304,7 @@ bool Listed(const uint8_t* rom, std::size_t size, const std::string& sha1) {
 }
 
 bool ReadRom(const std::string& path, std::vector<uint8_t>& rom) {
-    std::ifstream f(path, std::ios::binary);
+    std::ifstream f(FsPath(path), std::ios::binary);
     char magic[2] = {};
     if (!f.read(magic, sizeof(magic))) {
         return false;
@@ -388,9 +393,9 @@ public:
         is_gba = core->platform(core) == mPLATFORM_GBA;
 
         std::error_code ec;
-        const auto folder = std::filesystem::path(services.game_dir) / "pokedaisy";
+        const auto folder = FsPath(services.game_dir) / "pokedaisy";
         std::filesystem::create_directories(folder, ec);
-        dir = folder.string();
+        dir = FsUtf8(folder);
 
         if (is_gba) {
             renderer = static_cast<GBA*>(core->board)->video.renderer;
@@ -1519,11 +1524,12 @@ bool PokeDaisyKnows(const std::string& rom_path) {
     static std::map<std::string, Entry> cache; // under g_mutex
 
     std::error_code ec;
-    const std::uintmax_t size = std::filesystem::file_size(rom_path, ec);
+    const auto file = FsPath(rom_path);
+    const std::uintmax_t size = std::filesystem::file_size(file, ec);
     if (ec) {
         return false;
     }
-    const auto mtime = std::filesystem::last_write_time(rom_path, ec);
+    const auto mtime = std::filesystem::last_write_time(file, ec);
     if (ec) {
         return false;
     }

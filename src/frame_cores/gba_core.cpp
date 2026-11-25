@@ -19,6 +19,7 @@
 #include "frame_cores/driver_runner.h"
 #include "frame_cores/gba_eyes.h"
 #include "frame_cores/second_screen.h"
+#include "frame_cores/utf8_path.h"
 
 extern "C" {
 #include "cheats.h"
@@ -29,6 +30,10 @@ extern "C" {
 #include <mgba/core/core.h>
 #include <mgba/core/serialize.h>
 }
+
+#ifdef _WIN32 // AzaharVR: mGBA's common.h has it as _snprintf
+#undef snprintf
+#endif
 
 namespace FrameCores {
 namespace {
@@ -41,18 +46,18 @@ bool EnsureDir(const std::string& dir) {
         return false;
     }
     std::error_code ec;
-    std::filesystem::create_directories(dir, ec);
+    std::filesystem::create_directories(FsPath(dir), ec);
     return !ec;
 }
 
 bool AtomicCopyFile(const std::string& src, const std::string& dst) {
-    std::ifstream in(src, std::ios::binary);
+    std::ifstream in(FsPath(src), std::ios::binary);
     if (!in) {
         return false;
     }
     const std::string tmp = dst + ".tmp";
     {
-        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        std::ofstream out(FsPath(tmp), std::ios::binary | std::ios::trunc);
         if (!out) {
             return false;
         }
@@ -63,13 +68,13 @@ bool AtomicCopyFile(const std::string& src, const std::string& dst) {
         }
     }
     std::error_code ec;
-    if (std::filesystem::exists(dst, ec)) {
-        std::filesystem::rename(dst, dst + ".bak", ec);
+    if (std::filesystem::exists(FsPath(dst), ec)) {
+        std::filesystem::rename(FsPath(dst), FsPath(dst + ".bak"), ec);
         ec.clear();
     }
-    std::filesystem::rename(tmp, dst, ec);
+    std::filesystem::rename(FsPath(tmp), FsPath(dst), ec);
     if (ec) {
-        std::filesystem::remove(tmp, ec);
+        std::filesystem::remove(FsPath(tmp), ec);
         return false;
     }
     return true;
@@ -155,8 +160,14 @@ GbaCore::~GbaCore() {
     Unload();
 }
 
+#ifdef _WIN32 // AzaharVR: gba-ds looks for '/' in it
+bool GbaCore::Load(const std::string& rom_path_, const CorePaths& paths,
+                   const CoreBootOptions& opts) {
+    const std::string rom_path = FsUtf8(FsPath(rom_path_));
+#else
 bool GbaCore::Load(const std::string& rom_path, const CorePaths& paths,
                    const CoreBootOptions& opts) {
+#endif
     Unload();
 
     impl->rom_path = rom_path;
@@ -167,18 +178,18 @@ bool GbaCore::Load(const std::string& rom_path, const CorePaths& paths,
     EnsureDir(paths.game_dir);
     EnsureDir(paths.cheat_dir);
 
-    const std::string stem = std::filesystem::path(rom_path).stem().string();
-    impl->save_path = (std::filesystem::path(paths.game_dir) / (stem + ".sav")).string();
+    const std::string stem = FsUtf8(FsPath(rom_path).stem());
+    impl->save_path = FsUtf8(FsPath(paths.game_dir) / FsPath(stem + ".sav"));
 
     // Optional GBA BIOS discovery in <bios_dir>/gba_bios.bin (else mGBA HLE BIOS).
     emu_bios_path[0] = '\0';
     if (opts.use_bios && !paths.bios_dir.empty()) {
         const std::array<std::filesystem::path, 2> candidates = {
-            std::filesystem::path(paths.bios_dir) / "gba_bios.bin",
-            std::filesystem::path(paths.bios_dir) / "bios" / "gba_bios.bin",
+            FsPath(paths.bios_dir) / "gba_bios.bin",
+            FsPath(paths.bios_dir) / "bios" / "gba_bios.bin",
         };
         for (const auto& candidate : candidates) {
-            const std::string s = candidate.string();
+            const std::string s = FsUtf8(candidate);
             if (emu_bios_check(s.c_str()) == BIOS_FILE_OK) {
                 std::snprintf(emu_bios_path, sizeof(emu_bios_path), "%s", s.c_str());
                 LOG_INFO(Core, "GbaCore: using GBA BIOS at {}", s);
@@ -201,7 +212,7 @@ bool GbaCore::Load(const std::string& rom_path, const CorePaths& paths,
 
     // Load .cht cheats from <cheat_dir> and beside the ROM
     Config cheat_cfg{};
-    const std::string rom_dir = std::filesystem::path(rom_path).parent_path().string();
+    const std::string rom_dir = FsUtf8(FsPath(rom_path).parent_path());
     std::string dirs = paths.cheat_dir;
     if (!rom_dir.empty()) {
         if (!dirs.empty()) {
@@ -212,11 +223,11 @@ bool GbaCore::Load(const std::string& rom_path, const CorePaths& paths,
     std::snprintf(cheat_cfg.cheatDir, sizeof(cheat_cfg.cheatDir), "%s", dirs.c_str());
     std::snprintf(cheat_cfg.assetDir, sizeof(cheat_cfg.assetDir), "%s", paths.bios_dir.c_str());
     const std::string prefs_path =
-        (std::filesystem::path(paths.game_dir) / (stem + ".cheats")).string();
+        FsUtf8(FsPath(paths.game_dir) / FsPath(stem + ".cheats"));
     cheats_load(&impl->cheats, &cheat_cfg, rom_path.c_str(), impl->emu.gameCode,
                 prefs_path.c_str());
     impl->custom_cheats_path =
-        (std::filesystem::path(paths.game_dir) / (stem + ".custom.cheats")).string();
+        FsUtf8(FsPath(paths.game_dir) / FsPath(stem + ".custom.cheats"));
     impl->custom_cheats = LoadCustomCheats(impl->custom_cheats_path);
     impl->ApplyAllCheats();
 

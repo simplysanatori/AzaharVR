@@ -21,6 +21,7 @@
 
 #include "common/logging/log.h"
 #include "frame_cores/nds_core.h"
+#include "frame_cores/utf8_path.h"
 
 namespace FrameCores {
 namespace {
@@ -106,6 +107,11 @@ std::string BuildOpenModeString(FileMode mode, bool exists) {
     if (!text) {
         out.push_back('b');
     }
+#ifdef _WIN32 // AzaharVR: the same files as on Linux
+    else {
+        out.push_back('b');
+    }
+#endif
     return out;
 }
 
@@ -121,7 +127,7 @@ std::string GetLocalFilePath(const std::string& filename) {
     if (filename.empty()) {
         return filename;
     }
-    std::filesystem::path p(filename);
+    const std::filesystem::path p = FrameCores::FsPath(filename);
     if (p.is_absolute()) {
         return filename;
     }
@@ -129,7 +135,7 @@ std::string GetLocalFilePath(const std::string& filename) {
     if (base.empty()) {
         return filename;
     }
-    return (std::filesystem::path(base) / p).string();
+    return FrameCores::FsUtf8(FrameCores::FsPath(base) / p);
 }
 
 FileHandle* OpenFile(const std::string& path, FileMode mode) {
@@ -137,12 +143,17 @@ FileHandle* OpenFile(const std::string& path, FileMode mode) {
         return nullptr;
     }
     std::error_code ec;
-    const bool exists = std::filesystem::exists(path, ec);
+    const bool exists = std::filesystem::exists(FrameCores::FsPath(path), ec);
     if ((mode & FileMode::Write) && (mode & FileMode::NoCreate) && !exists) {
         return nullptr;
     }
     const std::string mode_str = BuildOpenModeString(mode, exists);
+#ifdef _WIN32 // AzaharVR
+    FILE* fp = _wfopen(FrameCores::FsPath(path).c_str(),
+                       std::wstring(mode_str.begin(), mode_str.end()).c_str());
+#else
     FILE* fp = std::fopen(path.c_str(), mode_str.c_str());
+#endif
     if (!fp) {
         return nullptr;
     }
@@ -155,7 +166,7 @@ FileHandle* OpenLocalFile(const std::string& path, FileMode mode) {
 
 bool FileExists(const std::string& name) {
     std::error_code ec;
-    return std::filesystem::is_regular_file(name, ec);
+    return std::filesystem::is_regular_file(FrameCores::FsPath(name), ec);
 }
 
 bool LocalFileExists(const std::string& name) {

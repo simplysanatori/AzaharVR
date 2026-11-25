@@ -19,6 +19,7 @@
 #include <fmt/format.h>
 
 #include "common/string_util.h"
+#include "frame_cores/utf8_path.h"
 
 extern "C" {
 #include <mgba-util/vfs.h>
@@ -147,7 +148,7 @@ struct ZipEntryInfo {
 /// Fast ZIP directory scan: reads End of Central Directory (EOCD) first,
 /// falling back to local file headers if needed.
 std::optional<ZipEntryInfo> FindRomEntryInZip(const std::string& path) {
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    std::ifstream f(FsPath(path), std::ios::binary | std::ios::ate);
     if (!f) {
         return std::nullopt;
     }
@@ -448,7 +449,7 @@ bool ExtractRomFromZip(const std::string& zip_path, std::vector<uint8_t>& out_da
     if (!entry.has_value() || entry->compression != 0 || entry->uncompressed_size == 0) {
         return false;
     }
-    std::ifstream f(zip_path, std::ios::binary);
+    std::ifstream f(FsPath(zip_path), std::ios::binary);
     if (!f) {
         return false;
     }
@@ -493,7 +494,8 @@ std::optional<RomInfo> ProbeRom(const std::string& path) {
     static std::map<std::string, std::pair<Key, std::optional<RomInfo>>> cache;
 
     std::error_code ec;
-    const Key key{std::filesystem::file_size(path, ec), std::filesystem::last_write_time(path, ec)};
+    const auto file = FsPath(path);
+    const Key key{std::filesystem::file_size(file, ec), std::filesystem::last_write_time(file, ec)};
     if (ec) {
         return std::nullopt;
     }
@@ -525,7 +527,7 @@ std::optional<RomInfo> ProbeRomUncached(const std::string& path) {
     const bool is_zip = IsZipExtension(path);
     std::vector<uint8_t> head;
     std::vector<uint8_t> banner_buf;
-    std::string fallback_stem = std::filesystem::path(path).stem().string();
+    std::string fallback_stem = FsUtf8(FsPath(path).stem());
 
     constexpr size_t kProbePrefixBytes = 64u * 1024u;
     if (is_zip) {
@@ -546,10 +548,10 @@ std::optional<RomInfo> ProbeRomUncached(const std::string& path) {
             }
         }
         if (!inner.empty()) {
-            fallback_stem = std::filesystem::path(inner).stem().string();
+            fallback_stem = FsUtf8(FsPath(inner).stem());
         }
     } else {
-        std::ifstream f(path, std::ios::binary);
+        std::ifstream f(FsPath(path), std::ios::binary);
         if (!f) {
             return std::nullopt;
         }
@@ -818,14 +820,14 @@ std::string CleanName(std::string name) {
 }
 
 std::string NameOfFile(const std::string& path) {
-    std::filesystem::path file = std::filesystem::path(path).stem();
+    std::filesystem::path file = FsPath(path).stem();
     static constexpr std::array<std::string_view, 6> kRoms{".gba", ".gb", ".gbc", ".nds", ".dsi",
                                                            ".srl"};
-    const std::string inner = Common::ToLower(file.extension().string()); // "Game.gba.zip"
+    const std::string inner = Common::ToLower(FsUtf8(file.extension())); // "Game.gba.zip"
     if (std::find(kRoms.begin(), kRoms.end(), inner) != kRoms.end()) {
         file = file.stem();
     }
-    return CleanName(file.string());
+    return CleanName(FsUtf8(file));
 }
 
 std::string DisplayTitle(const RomInfo& info, const std::string& path) {
@@ -848,9 +850,8 @@ const char* CoreFolder(Common::AltCore::CoreKind kind) {
 }
 
 std::string GameFolder(const std::string& data_dir, const RomInfo& info) {
-    return (std::filesystem::path(data_dir) / CoreFolder(info.kind) / "games" /
-            fmt::format("{:016X}", info.title_id))
-        .string();
+    return FsUtf8(FsPath(data_dir) / CoreFolder(info.kind) / "games" /
+                  FsPath(fmt::format("{:016X}", info.title_id)));
 }
 
 } // namespace FrameCores

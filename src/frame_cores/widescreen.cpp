@@ -10,6 +10,7 @@
 #include <fstream>
 
 #include "common/logging/log.h"
+#include "frame_cores/utf8_path.h"
 #include "core/homebrew/net.h"
 
 namespace FrameCores::Widescreen {
@@ -76,7 +77,7 @@ std::optional<Entry> ParseEntry(std::string_view line) {
 
 /// The hack while it is on; off it has ".off" after that.
 std::filesystem::path PathOf(const std::string& game_dir, const Entry& entry) {
-    return std::filesystem::path(game_dir) / "mods" / entry.file;
+    return FsPath(game_dir) / "mods" / FsPath(entry.file);
 }
 
 std::filesystem::path OffPathOf(const std::string& game_dir, const Entry& entry) {

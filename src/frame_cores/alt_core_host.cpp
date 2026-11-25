@@ -34,6 +34,7 @@
 #include "frame_cores/gb_core.h"
 #include "frame_cores/gba_core.h"
 #include "frame_cores/nds_core.h"
+#include "frame_cores/utf8_path.h"
 #include "video_core/renderer_vulkan/alt_graphics.h"
 #include "video_core/renderer_vulkan/alt_xr_renderer.h"
 
@@ -70,12 +71,12 @@ constexpr std::size_t kStateHeaderSize = 256; // Core::MakeStateHeader
 
 CorePaths BuildCorePaths(const RomInfo& info, const std::string& data_dir) {
     const std::filesystem::path base =
-        std::filesystem::path(data_dir) / CoreFolder(info.kind);
+        FsPath(data_dir) / CoreFolder(info.kind);
     CorePaths paths{};
     paths.data_dir = data_dir;
     paths.game_dir = GameFolder(data_dir, info);
-    paths.bios_dir = base.string();
-    paths.cheat_dir = (base / "cheats").string();
+    paths.bios_dir = FsUtf8(base);
+    paths.cheat_dir = FsUtf8(base / "cheats");
     return paths;
 }
 
@@ -171,7 +172,7 @@ struct AltCoreHost::Impl {
     Core::Autosave::Writer writer;    ///< last: its thread ends before the rest goes
 
     std::string StatesDir() const {
-        return (std::filesystem::path(paths.game_dir) / "").string();
+        return FsUtf8(FsPath(paths.game_dir) / "");
     }
 
     std::string SlotPath(int slot) const {
@@ -180,7 +181,7 @@ struct AltCoreHost::Impl {
 
     /// The battery save, where the cores keep it.
     std::string SavePath() const {
-        return (std::filesystem::path(paths.game_dir) / (rom_stem + ".sav")).string();
+        return FsUtf8(FsPath(paths.game_dir) / FsPath(rom_stem + ".sav"));
     }
 
     bool Ask(StateRequest request) {
@@ -398,7 +399,7 @@ struct AltCoreHost::Impl {
         writer.WaitIdle(); // a save to this file may still be on its way
         const auto info = Core::GetSaveStateInfoAt(path, rom_info.title_id);
         done.time = info.time;
-        std::ifstream in(path, std::ios::binary | std::ios::ate);
+        std::ifstream in(FsPath(path), std::ios::binary | std::ios::ate);
         if (!in || (info.slot == 0 && request.time != 0 && info.time != request.time)) {
             return LoadResult::Gone;
         }
@@ -435,10 +436,10 @@ struct AltCoreHost::Impl {
         core->FlushBatterySave();
         std::error_code ec;
         const std::string save = SavePath();
-        if (!std::filesystem::exists(save, ec)) {
+        if (!std::filesystem::exists(FsPath(save), ec)) {
             return true; // nothing to back up
         }
-        std::filesystem::copy_file(save, save + ".before-load-anyway",
+        std::filesystem::copy_file(FsPath(save), FsPath(save + ".before-load-anyway"),
                                    std::filesystem::copy_options::overwrite_existing, ec);
         return !ec;
     }
@@ -561,7 +562,7 @@ struct AltCoreHost::Impl {
             if (core) {
                 core->FlushBatterySave();
                 std::error_code ec;
-                before.imported = std::filesystem::exists(SavePath(), ec);
+                before.imported = std::filesystem::exists(FsPath(SavePath()), ec);
             }
             if (core && MomentLocked(before)) {
                 last_frame = FrameOutput{}; // the core starts again
@@ -889,7 +890,7 @@ bool AltCoreHost::Boot(const std::string& rom_path, const std::string& data_dir,
 
     impl->rom_info = *probed;
     impl->rom_path = rom_path;
-    impl->rom_stem = std::filesystem::path(rom_path).stem().string();
+    impl->rom_stem = FsUtf8(FsPath(rom_path).stem());
     impl->paths = BuildCorePaths(impl->rom_info, data_dir);
     impl->boot_opts = opts;
     impl->headless = headless_for_test;

@@ -41,6 +41,7 @@
 #include "frame_cores/nds_resolution.h"
 #include "frame_cores/nds_stereo_renderer.h"
 #include "frame_cores/rom_info.h"
+#include "frame_cores/utf8_path.h"
 #include "frame_cores/widescreen.h"
 #include "video_core/renderer_vulkan/alt_graphics.h"
 
@@ -56,12 +57,12 @@ bool EnsureDir(const std::string& dir) {
         return false;
     }
     std::error_code ec;
-    std::filesystem::create_directories(dir, ec);
+    std::filesystem::create_directories(FsPath(dir), ec);
     return !ec;
 }
 
 bool IsZipPath(const std::string& path) {
-    auto ext = std::filesystem::path(path).extension().string();
+    auto ext = FsUtf8(FsPath(path).extension());
     for (char& ch : ext) {
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
     }
@@ -70,7 +71,7 @@ bool IsZipPath(const std::string& path) {
 
 bool ReadWholeFile(const std::string& path, std::vector<uint8_t>& out) {
     out.clear();
-    std::ifstream in(path, std::ios::binary | std::ios::ate);
+    std::ifstream in(FsPath(path), std::ios::binary | std::ios::ate);
     if (!in) {
         return false;
     }
@@ -92,10 +93,10 @@ bool AtomicWriteFile(const std::string& path, const uint8_t* data, std::size_t s
     if (path.empty() || (!data && size > 0)) {
         return false;
     }
-    EnsureDir(std::filesystem::path(path).parent_path().string());
+    EnsureDir(FsUtf8(FsPath(path).parent_path()));
     const std::string tmp = path + ".tmp";
     {
-        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        std::ofstream out(FsPath(tmp), std::ios::binary | std::ios::trunc);
         if (!out) {
             return false;
         }
@@ -108,13 +109,13 @@ bool AtomicWriteFile(const std::string& path, const uint8_t* data, std::size_t s
         }
     }
     std::error_code ec;
-    if (keep_backup && std::filesystem::exists(path, ec)) {
-        std::filesystem::rename(path, path + ".bak", ec);
+    if (keep_backup && std::filesystem::exists(FsPath(path), ec)) {
+        std::filesystem::rename(FsPath(path), FsPath(path + ".bak"), ec);
         ec.clear();
     }
-    std::filesystem::rename(tmp, path, ec);
+    std::filesystem::rename(FsPath(tmp), FsPath(path), ec);
     if (ec) {
-        std::filesystem::remove(tmp, ec);
+        std::filesystem::remove(FsPath(tmp), ec);
         return false;
     }
     return true;
@@ -123,7 +124,7 @@ bool AtomicWriteFile(const std::string& path, const uint8_t* data, std::size_t s
 template <std::size_t N>
 std::unique_ptr<std::array<melonDS::u8, N>> TryLoadExactBios(const std::filesystem::path& path) {
     std::vector<uint8_t> bytes;
-    if (!ReadWholeFile(path.string(), bytes) || bytes.size() != N) {
+    if (!ReadWholeFile(FsUtf8(path), bytes) || bytes.size() != N) {
         return nullptr;
     }
     auto arr = std::make_unique<std::array<melonDS::u8, N>>();
@@ -133,7 +134,7 @@ std::unique_ptr<std::array<melonDS::u8, N>> TryLoadExactBios(const std::filesyst
 
 std::optional<melonDS::Firmware> TryLoadFirmware(const std::filesystem::path& path) {
     std::vector<uint8_t> bytes;
-    if (!ReadWholeFile(path.string(), bytes) || bytes.size() < 0x20000) {
+    if (!ReadWholeFile(FsUtf8(path), bytes) || bytes.size() < 0x20000) {
         return std::nullopt;
     }
     return melonDS::Firmware(bytes.data(), static_cast<melonDS::u32>(bytes.size()));
@@ -381,19 +382,19 @@ struct NdsCore::Impl {
             return false;
         }
 
-        const std::string gba_stem = std::filesystem::path(gba_path).stem().string();
+        const std::string gba_stem = FsUtf8(FsPath(gba_path).stem());
         std::filesystem::path sav_candidate =
-            std::filesystem::path(gba_path).replace_extension(".sav");
+            FsPath(gba_path).replace_extension(".sav");
         if (!std::filesystem::exists(sav_candidate) && !paths.data_dir.empty()) {
             if (const auto gba = ProbeRom(gba_path)) { // the save this GBA game has on its own
                 const auto alt =
-                    std::filesystem::path(GameFolder(paths.data_dir, *gba)) / (gba_stem + ".sav");
+                    FsPath(GameFolder(paths.data_dir, *gba)) / FsPath(gba_stem + ".sav");
                 // A new save goes in the game's folder, not beside the player's ROM.
-                EnsureDir(alt.parent_path().string());
+                EnsureDir(FsUtf8(alt.parent_path()));
                 sav_candidate = alt;
             }
         }
-        gba_save_path = sav_candidate.string();
+        gba_save_path = FsUtf8(sav_candidate);
 
         std::vector<uint8_t> sram_bytes;
         ReadWholeFile(gba_save_path, sram_bytes);
@@ -418,7 +419,7 @@ struct NdsCore::Impl {
         nds->AREngine.Cheats.clear();
         wide_on = false;
         ar_file = std::make_unique<melonDS::ARCodeFile>(cheat_file_path);
-        if (std::filesystem::exists(cheat_file_path) && ar_file->Load()) {
+        if (std::filesystem::exists(FsPath(cheat_file_path)) && ar_file->Load()) {
             nds->AREngine.Cheats = ar_file->GetCodes();
         }
     }
@@ -452,7 +453,7 @@ static bool HasDsiFiles(const std::string& bios_dir) {
     }
     std::error_code ec;
     for (const char* name : {"dsi_bios9.bin", "dsi_bios7.bin", "dsi_firmware.bin", "dsi_nand.bin"}) {
-        if (!std::filesystem::is_regular_file(std::filesystem::path(bios_dir) / name, ec)) {
+        if (!std::filesystem::is_regular_file(FsPath(bios_dir) / name, ec)) {
             return false;
         }
     }
@@ -477,16 +478,16 @@ std::string PrepareWorkingNand(const std::filesystem::path& bios_dir) {
         std::getline(in, have);
     }
     if (have == stamp && std::filesystem::exists(copy, ec)) {
-        return copy.string();
+        return FsUtf8(copy);
     }
     if (std::filesystem::exists(copy, ec)) {
-        std::filesystem::rename(copy, copy.string() + ".bak", ec);
+        std::filesystem::rename(copy, std::filesystem::path(copy) += ".bak", ec);
         if (ec) {
             LOG_ERROR(Core, "NdsCore: cannot keep the old DSi NAND copy: {}", ec.message());
             return {};
         }
     }
-    const std::string tmp = copy.string() + ".tmp";
+    const auto tmp = std::filesystem::path(copy) += ".tmp";
     std::filesystem::copy_file(original, tmp, std::filesystem::copy_options::overwrite_existing,
                                ec);
     if (!ec) {
@@ -502,7 +503,7 @@ std::string PrepareWorkingNand(const std::filesystem::path& bios_dir) {
         return {};
     }
     std::ofstream(stamp_file, std::ios::trunc) << stamp;
-    return copy.string();
+    return FsUtf8(copy);
 }
 
 NdsCore::NdsCore() : impl(std::make_unique<Impl>()) {}
@@ -544,19 +545,19 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
             LOG_ERROR(Core, "NdsCore: failed to read DS ROM {}", rom_path);
             return false;
         }
-        impl->rom_filename = std::filesystem::path(rom_path).filename().string();
+        impl->rom_filename = FsUtf8(FsPath(rom_path).filename());
     }
 
-    const std::string stem = std::filesystem::path(rom_path).stem().string();
-    impl->save_path = (std::filesystem::path(paths.game_dir) / (stem + ".sav")).string();
-    impl->cheat_file_path = (std::filesystem::path(paths.game_dir) / (stem + ".mch")).string();
+    const std::string stem = FsUtf8(FsPath(rom_path).stem());
+    impl->save_path = FsUtf8(FsPath(paths.game_dir) / FsPath(stem + ".sav"));
+    impl->cheat_file_path = FsUtf8(FsPath(paths.game_dir) / FsPath(stem + ".mch"));
     {
         // The game's own cheats; a file the player put in the shared folder is the start of them.
         std::error_code ec;
-        const auto shared = std::filesystem::path(paths.cheat_dir) / (stem + ".mch");
-        if (!std::filesystem::exists(impl->cheat_file_path, ec) &&
+        const auto shared = FsPath(paths.cheat_dir) / FsPath(stem + ".mch");
+        if (!std::filesystem::exists(FsPath(impl->cheat_file_path), ec) &&
             std::filesystem::exists(shared, ec)) {
-            std::filesystem::copy_file(shared, impl->cheat_file_path, ec);
+            std::filesystem::copy_file(shared, FsPath(impl->cheat_file_path), ec);
         }
     }
 
@@ -604,7 +605,7 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
     }
 
     // Build NDSArgs / DSiArgs with bundled FreeBIOS by default + optional user BIOS/firmware/NAND
-    const std::filesystem::path bios_dir(paths.bios_dir);
+    const std::filesystem::path bios_dir = FsPath(paths.bios_dir);
     melonDS::NDSArgs nds_args{};
     nds_args.OutputSampleRate = kDsAudioRate;
     nds_args.BitDepth = melonDS::AudioBitDepth::Auto;
