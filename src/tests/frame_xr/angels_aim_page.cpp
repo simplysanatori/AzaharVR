@@ -2,11 +2,13 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
-// AzaharFrame kiuaim: the Angel's Aim page with fewer rows on view (menu/angels_aim_tab.h;
-// handoff/reports/101/aim-page).
+// AzaharFrame kiuaim: the Angel's Aim page (menu/angels_aim_tab.h), the only place of the rows that
+// act in Kid Icarus: Uprising alone.
 
 #include <algorithm>
+#include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 #include <catch2/catch_test_macros.hpp>
 #include "frame_xr/menu/angels_aim_tab.h"
@@ -15,16 +17,6 @@
 using namespace FrameXr::Menu;
 
 namespace {
-
-/// The page on for one test (the library's default is the page as it was).
-struct PageOn {
-    PageOn() {
-        SetAimPage(true);
-    }
-    ~PageOn() {
-        SetAimPage(false);
-    }
-};
 
 /// The four cases: another game, a copy Angel's Aim is not mapped for, the mode off, the mode on.
 enum class Case { OtherGame, Unmapped, ModeOff, ModeOn };
@@ -51,22 +43,9 @@ bool Has(const std::vector<Id>& ids, Id id) {
 
 } // namespace
 
-TEST_CASE("Angel's Aim page: the switch is on unless it says off", "[frame_xr][kiuaim]") {
-    CHECK(AimPageSwitchOn(std::nullopt));
-    CHECK(AimPageSwitchOn(std::string("1")));
-    CHECK(AimPageSwitchOn(std::string("")));
-    CHECK_FALSE(AimPageSwitchOn(std::string("0")));
-    CHECK_FALSE(AimPageSwitchOn(std::string("Off")));
-    CHECK_FALSE(AimPageSwitchOn(std::string("false")));
-    CHECK(std::string(kKiuAimPageSwitch) == "AZAHARFRAME_KIU_AIM_PAGE");
-    CHECK_FALSE(AimPageOn()); // the library's own default: the app turns it on
-}
-
-TEST_CASE("Angel's Aim page: rows that leave it or wait", "[frame_xr][kiuaim]") {
+TEST_CASE("Angel's Aim page: rows that wait", "[frame_xr][kiuaim]") {
     MenuModel m = ModelFor(Case::ModeOn);
-    CHECK_FALSE(AimPageRowShown(m, Id::WristSide));         // the Stats tab's
-    CHECK_FALSE(AimPageRowShown(m, Id::AngelsAimSettings)); // its rows are here
-    // Reset Bottom Screen Position: Persistent, and moved.
+    // Reset Bottom Screen Position: In View, and moved.
     for (const int mode : {0, 1, 2}) {
         for (const bool moved : {false, true}) {
             m.kiu_bottom_screen = mode;
@@ -83,13 +62,6 @@ TEST_CASE("Angel's Aim page: rows that leave it or wait", "[frame_xr][kiuaim]") 
                         Id::WeaponInHand, Id::ImmersiveMode, Id::CalibrateAim}) {
         CHECK(AimPageRowShown(m, id));
     }
-    // The filter acts only while the page is on.
-    std::vector<Id> rows{Id::GyroAim, Id::GyroSensitivity, Id::WristSide, Id::AngelsAimSettings};
-    AimPageFilter(m, rows);
-    CHECK(rows.size() == 4);
-    const PageOn on;
-    AimPageFilter(m, rows);
-    CHECK(rows == std::vector<Id>{Id::GyroAim});
 }
 
 TEST_CASE("Angel's Aim page: the approved tips, each within two lines", "[frame_xr][kiuaim]") {
@@ -116,53 +88,7 @@ TEST_CASE("Angel's Aim page: the approved tips, each within two lines", "[frame_
     }
 }
 
-TEST_CASE("Angel's Aim page: the groups' lists in the four cases", "[frame_xr][kiuaim]") {
-    const auto ids = [](const MenuModel& m) {
-        std::vector<Id> out;
-        for (const AngelsAimRowGroup& g : AngelsAimGroups(m)) {
-            out.insert(out.end(), g.rows.begin(), g.rows.end());
-        }
-        return out;
-    };
-    for (const Case c : kCases) {
-        INFO("case " << static_cast<int>(c));
-        MenuModel m = ModelFor(c);
-        m.kiu_bottom_screen = 1; // Persistent, in its place
-        const std::vector<Id> before = ids(m);
-        const PageOn on;
-        const std::vector<Id> after = ids(m);
-        if (c == Case::OtherGame) {
-            CHECK(before.empty());
-            CHECK(after.empty());
-            continue;
-        }
-        // Off the page: Wrist Side and the link, in every case; Gyro Sensitivity with Direct Aim.
-        CHECK(Has(before, Id::WristSide));
-        CHECK(Has(before, Id::AngelsAimSettings));
-        CHECK(Has(before, Id::GyroSensitivity));
-        CHECK_FALSE(Has(after, Id::WristSide));
-        CHECK_FALSE(Has(after, Id::AngelsAimSettings));
-        CHECK_FALSE(Has(after, Id::GyroSensitivity));
-        // Reset: only in the mode, and only once Persistent was moved.
-        CHECK(Has(before, Id::KiuBottomReset) == (c == Case::ModeOn));
-        CHECK_FALSE(Has(after, Id::KiuBottomReset));
-        m.kiu_bottom_moved = true;
-        CHECK(Has(ids(m), Id::KiuBottomReset) == (c == Case::ModeOn));
-        // Nothing else goes: the page's rows are the old ones less those.
-        std::vector<Id> expect;
-        for (const Id id : before) {
-            if (AimPageRowShown(m, id)) {
-                expect.push_back(id);
-            }
-        }
-        CHECK(ids(m) == expect);
-        // With Gyro Aim its sensitivity is back.
-        m.gyro_aim = 1;
-        CHECK(Has(ids(m), Id::GyroSensitivity));
-    }
-}
-
-// ---- Phase 2: the front view, the pages, More ----
+// ---- The front view, the pages, More ----
 namespace {
 
 struct Drawn {
@@ -308,13 +234,15 @@ TEST_CASE("Angel's Aim page: counts, and every row reachable", "[frame_xr][kiuai
                 }
             }
             CHECK(AimPageUnplaced(m).empty()); // a new row needs its place (AimPlaces)
-            // The rows of the page as it was, less Wrist Side, the link, and the two that wait;
-            // Immersive Mode is the front view's own.
+            // Every row of the two lists, less the two that wait; Immersive Mode is the front
+            // view's own.
             std::vector<Id> before;
-            for (const AngelsAimRowGroup& g : AngelsAimGroups(m)) {
-                for (const Id id : g.rows) {
-                    if (id != Id::ImmersiveMode && AimPageRowShown(m, id)) {
-                        before.push_back(id);
+            if (c != Case::OtherGame) {
+                for (const auto& list : {AimingRows(m), AngelsAimFirstPersonRows(m)}) {
+                    for (const Id id : list) {
+                        if (AimPageRowShown(m, id)) {
+                            before.push_back(id);
+                        }
                     }
                 }
             }
@@ -374,7 +302,6 @@ TEST_CASE("Angel's Aim page: counts, and every row reachable", "[frame_xr][kiuai
 }
 
 TEST_CASE("Angel's Aim page: presses, Back and B, and what is kept", "[frame_xr][kiuaim]") {
-    const PageOn on;
     const MenuModel m = ModelFor(Case::ModeOn);
     MenuView v = AimView();
     const std::size_t mods = static_cast<std::size_t>(Tab::Mods);
@@ -429,15 +356,10 @@ TEST_CASE("Angel's Aim page: presses, Back and B, and what is kept", "[frame_xr]
     MenuView bad = AimView();
     bad.aim_group = 99;
     CHECK(AimPageShown(m, bad).group == -1);
-    // Off (the A/B): the Bottom Screen's page is never open.
-    SetAimPage(false);
-    CHECK_FALSE(AimBottomPageOpen(m, v));
-    SetAimPage(true);
 }
 
 TEST_CASE("Angel's Aim page: drawn, the front view never scrolls and every row is a target",
           "[frame_xr][kiuaim]") {
-    const PageOn on;
     Drawn d;
     for (const Case c : {Case::Unmapped, Case::ModeOff, Case::ModeOn}) {
         for (const int scope : {0, 1}) {
@@ -471,7 +393,6 @@ TEST_CASE("Angel's Aim page: drawn, the front view never scrolls and every row i
             }
             CHECK_FALSE(d.Hit(Id::AngelsAimGroup, kAimBackIndex));
             CHECK_FALSE(d.Hit(Id::WristSide, 0));
-            CHECK_FALSE(d.Hit(Id::AngelsAimSettings, -1));
             CHECK_FALSE(d.Hit(Id::Scrollbar, -1));
             d.CheckFit("front");
         }
@@ -480,7 +401,6 @@ TEST_CASE("Angel's Aim page: drawn, the front view never scrolls and every row i
 
 TEST_CASE("Angel's Aim page: each group's page by the beam, its rows targets, B back",
           "[frame_xr][kiuaim]") {
-    const PageOn on;
     Drawn d;
     const std::size_t mods = static_cast<std::size_t>(Tab::Mods);
     for (const Case c : {Case::Unmapped, Case::ModeOn}) {
@@ -590,48 +510,523 @@ TEST_CASE("Angel's Aim page: each group's page by the beam, its rows targets, B 
     CHECK(d.Drew(kAimTipRecoil));
 }
 
-TEST_CASE("Angel's Aim page: off, the page as it was; other games as before",
-          "[frame_xr][kiuaim]") {
+TEST_CASE("Angel's Aim page: other games have none of it", "[frame_xr][kiuaim]") {
     Drawn d;
-    const MenuModel m = ModelFor(Case::ModeOn);
-    MenuView v = AimView();
-    v.aim_group = static_cast<int>(AimGroup::Aiming); // ignored while off
-    d.Draw(m, v);
-    CHECK(d.Drew(kAngelsAimSettings));
-    CHECK_FALSE(d.Hit(Id::AngelsAimGroup, static_cast<int>(AimGroup::Aiming)));
-    CHECK(d.menu.MaxScroll() > 2000.0f);
-    // Another game: no segment with the page on or off, and its other tabs draw the same.
     const MenuModel other = ModelFor(Case::OtherGame);
+    CHECK(AimScopeRows(other).empty());
     for (const Tab tab : {Tab::Settings, Tab::Controls, Tab::Mods, Tab::Stats}) {
         MenuView ov;
         ov.tab = tab;
         ov.section = SettingsSection::Immersive;
         ov.mods_segment = ModsSegment::AngelsAim; // falls back to Cheats
         d.Draw(other, ov);
-        const auto before = d.menu.Hits();
-        const auto texts_before = d.texts.size();
-        const PageOn on;
-        d.Draw(other, ov);
         INFO("tab " << static_cast<int>(tab));
-        REQUIRE(d.menu.Hits().size() == before.size());
-        for (std::size_t i = 0; i < before.size(); i++) {
-            CHECK(d.menu.Hits()[i].t == before[i].t);
-        }
-        CHECK(d.texts.size() == texts_before);
         CHECK_FALSE(d.Hit(Id::AngelsAimGroup, 0));
+        CHECK_FALSE(d.Hit(Id::AngelsAimLink, -1));
     }
-    // Kid Icarus's own Settings and Controls rows are not the page's: the same with it on.
-    for (const Tab tab : {Tab::Settings, Tab::Controls, Tab::Stats}) {
-        MenuView kv;
-        kv.tab = tab;
-        kv.section = SettingsSection::Immersive;
-        d.Draw(m, kv);
-        const std::size_t before = d.menu.Hits().size();
-        const PageOn on;
-        d.Draw(m, kv);
-        CHECK(d.menu.Hits().size() == before);
+    MenuView kv;
+    kv.tab = Tab::Stats;
+    d.Draw(ModelFor(Case::ModeOn), kv);
+    CHECK(d.Hit(Id::WristSide, 0)); // Wrist Side is the Stats tab's
+}
+
+// ---- AzaharFrame kiuaim: the rows that act in Kid Icarus: Uprising alone are on the page only ----
+namespace {
+
+/// The menu in each of the game's copies: the European one (mapped by its title), the USA one
+/// before its code is found and after, and the others (never mapped).
+struct Copy {
+    const char* name;
+    bool mapped, recommended;
+};
+constexpr Copy kCopies[] = {{"Europe", true, true},
+                            {"USA, mapped late", true, false},
+                            {"USA, not mapped yet", false, false},
+                            {"Japan or Korea", false, false}};
+
+/// Every combination of the settings that show rows: Aiming's and first person's.
+struct RowSettings {
+    int aim, recoil, weapon, flash, shots;                             // 3 * 2^4
+    int bottom, moved, view, hud, linked, power, talk, portraits_linked; // 3 * 2^4 * 5 * 2^2
+};
+std::vector<RowSettings> AimSettings() {
+    std::vector<RowSettings> out;
+    for (int aim = 0; aim < 3; aim++) {
+        for (int bits = 0; bits < 16; bits++) {
+            RowSettings s{};
+            s.aim = aim;
+            s.recoil = bits & 1;
+            s.weapon = (bits >> 1) & 1;
+            s.flash = (bits >> 2) & 1;
+            s.shots = (bits >> 3) & 1;
+            out.push_back(s);
+        }
     }
-    CHECK(d.Hit(Id::WristSide, 0)); // Wrist Side stays on the Stats tab
+    return out;
+}
+std::vector<RowSettings> FirstPersonSettings() {
+    std::vector<RowSettings> out;
+    for (int bottom = 0; bottom < 3; bottom++) {
+        for (int power = 0; power < 5; power++) {
+            for (int bits = 0; bits < 64; bits++) {
+                RowSettings s{};
+                s.bottom = bottom;
+                s.power = power;
+                s.moved = bits & 1;
+                s.view = (bits >> 1) & 1;
+                s.hud = (bits >> 2) & 1;
+                s.linked = (bits >> 3) & 1;
+                s.talk = (bits >> 4) & 1;
+                s.portraits_linked = (bits >> 5) & 1;
+                out.push_back(s);
+            }
+        }
+    }
+    return out;
+}
+
+MenuModel ModelOf(const Copy& copy, int mode) {
+    MenuModel m;
+    m.game_title = "Kid Icarus: Uprising";
+    m.scope = 1;
+    m.mods.angels_aim.shown = true;
+    m.mods.angels_aim.mapped = copy.mapped;
+    m.mods.angels_aim.recommended = copy.recommended;
+    m.mods.angels_aim.report_url = kAngelsAimIssuesUrl;
+    m.immersive_mode = mode;
+    return m;
+}
+void PutAim(MenuModel& m, const RowSettings& s) {
+    m.gyro_aim = s.aim;
+    m.recoil = s.recoil;
+    m.weapon_in_hand = s.weapon;
+    m.muzzle_flash = s.flash;
+    m.projectiles = s.shots;
+}
+void PutFirstPerson(MenuModel& m, const RowSettings& s) {
+    m.kiu_bottom_screen = s.bottom;
+    m.kiu_bottom_moved = s.moved;
+    m.kiu_view = s.view;
+    m.kiu_hud = s.hud;
+    m.kiu_hud_linked = s.linked;
+    m.kiu_power_menu = s.power;
+    m.kiu_talk_portraits = s.talk;
+    m.kiu_portraits_linked = s.portraits_linked;
+}
+
+/// The rows that left the general tabs: Kid Icarus: Uprising's of Aiming's rows (Controls) and the
+/// first-person rows (Settings, Immersive).
+std::vector<Id> RowsThatLeft(const MenuModel& m) {
+    std::vector<Id> out;
+    for (const Id id : AimingRows(m)) {
+        if (KiuOnlyControlsRow(id)) {
+            out.push_back(id);
+        }
+    }
+    const auto fp = AngelsAimFirstPersonRows(m);
+    out.insert(out.end(), fp.begin(), fp.end());
+    return out;
+}
+/// On the page too, as they act in any game.
+const std::vector<Id> kAnyGame{Id::GyroAim,       Id::GyroSensitivity, Id::Recoil,
+                               Id::RecoilCharged, Id::RecoilRapid,     Id::LaserSight,
+                               Id::KeepOnScreen,  Id::GripFreesAim};
+
+/// The targets of a tab, all the way down.
+std::set<Id> TabIds(Drawn& d, const MenuModel& m, Tab tab, SettingsSection section) {
+    std::set<Id> ids;
+    MenuView v;
+    v.tab = tab;
+    v.section = section;
+    for (float& scroll = v.scroll[static_cast<std::size_t>(tab)];; scroll += 200.0f) {
+        d.Draw(m, v);
+        for (const auto& h : d.menu.Hits()) {
+            ids.insert(h.t.id);
+        }
+        if (scroll >= d.menu.MaxScroll()) {
+            return ids;
+        }
+    }
+}
+/// The targets a group's page or its More shows, by the beam: pressed from the front view.
+std::set<Id> PressedIds(Drawn& d, const MenuModel& m, AimGroup g, bool more) {
+    std::set<Id> ids;
+    MenuView v;
+    AimPageOpen(v, -1);
+    d.Draw(m, v);
+    const auto* row = d.Hit(Id::AngelsAimGroup, static_cast<int>(g));
+    if (!row || !AimPagePress(m, v, d.menu.HitTest(row->r.Cx(), row->r.Cy()).index)) {
+        return ids;
+    }
+    d.Draw(m, v);
+    if (more) {
+        const auto* mr = d.Hit(Id::AngelsAimGroup, kAimMoreIndex);
+        if (!mr || !AimPagePress(m, v, d.menu.HitTest(mr->r.Cx(), mr->r.Cy()).index)) {
+            return ids;
+        }
+    }
+    for (float& scroll = v.scroll[static_cast<std::size_t>(Tab::Mods)];; scroll += kRowH) {
+        d.Draw(m, v);
+        for (const auto& h : d.menu.Hits()) {
+            if (h.r.H() >= 40.0f) {
+                ids.insert(h.t.id);
+            }
+        }
+        if (scroll >= d.menu.MaxScroll()) {
+            return ids;
+        }
+    }
+}
+
+} // namespace
+
+TEST_CASE("Angel's Aim page: every row that left the general tabs has its place on it",
+          "[frame_xr][kiuaim][kiuaimonly]") {
+    Drawn d;
+    const auto aims = AimSettings();
+    const auto views = FirstPersonSettings();
+    std::set<std::tuple<int, bool, std::vector<Id>>> drawn; // each list of rows drawn once
+    const auto check = [&](const MenuModel& m, const std::string& state) {
+        const std::vector<Id> left = RowsThatLeft(m);
+        std::vector<Id> on_page;
+        for (const AimGroup g : AimFrontGroups(m)) {
+            const AimPage page = AimPageRows(m, g);
+            for (const bool more : {false, true}) {
+                const auto& ids = more ? page.more : page.rows;
+                on_page.insert(on_page.end(), ids.begin(), ids.end());
+                if (ids.empty() || !drawn.emplace(static_cast<int>(g), more, ids).second) {
+                    continue;
+                }
+                const std::set<Id> seen = PressedIds(d, m, g, more);
+                for (const Id id : ids) {
+                    INFO(state << ": " << AimGroupName(g) << ", " << LabelFor(id));
+                    CHECK(seen.count(id) == 1);
+                }
+            }
+        }
+        // Without a CHECK each (hundreds of thousands): what is wrong, if anything.
+        std::string lost, twice, both;
+        for (const Id id : left) {
+            // Reset Bottom Screen Position has nothing to put back until the screen was moved.
+            const bool waits = id == Id::KiuBottomReset && !m.kiu_bottom_moved;
+            if (!waits && !Has(on_page, id)) {
+                lost += LabelFor(id) + "; ";
+            }
+            if (std::count(on_page.begin(), on_page.end(), id) > 1) {
+                twice += LabelFor(id) + "; ";
+            }
+        }
+        for (const Id id : ControlsAimingRows(m)) {
+            if (Has(left, id) || (Has(on_page, id) && !Has(kAnyGame, id))) {
+                both += LabelFor(id) + "; ";
+            }
+        }
+        if (!lost.empty() || !twice.empty() || !both.empty()) {
+            FAIL_CHECK(state << ": lost " << lost << " twice " << twice << " both " << both);
+        }
+    };
+    std::size_t states = 0;
+    for (const Copy& copy : kCopies) {
+        for (int mode = 0; mode <= 4; mode++) {
+            const std::string at = std::string(copy.name) + ", mode " + std::to_string(mode);
+            MenuModel m = ModelOf(copy, mode);
+            const bool first_person = copy.mapped && mode == 4;
+            for (const RowSettings& view : views) {
+                PutFirstPerson(m, view);
+                if (!first_person) { // no such row, whatever the settings
+                    if (!AngelsAimFirstPersonRows(m).empty()) {
+                        FAIL_CHECK(at << ": a first-person row");
+                    }
+                    if (&view != &views.front()) {
+                        continue;
+                    }
+                }
+                for (const RowSettings& aim : aims) {
+                    PutAim(m, aim);
+                    check(m, at);
+                    states++;
+                }
+            }
+        }
+    }
+    CHECK(states == 18 * aims.size() + 2 * aims.size() * views.size());
+    CHECK(drawn.size() > 20);
+}
+
+TEST_CASE("Angel's Aim page: the general tabs have none of its rows",
+          "[frame_xr][kiuaim][kiuaimonly]") {
+    Drawn d;
+    // Everything that brings a row on, and one setting changed at a time.
+    std::vector<MenuModel> models;
+    for (const Copy& copy : kCopies) {
+        for (int mode = 0; mode <= 4; mode++) {
+            for (const int aim : {0, 1, 2}) {
+                for (const int scope : {0, 1}) {
+                    if (scope == 0 && mode != 4) {
+                        continue;
+                    }
+                    MenuModel m = ModelOf(copy, mode);
+                    m.scope = scope;
+                    RowSettings s{aim, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 0};
+                    PutAim(m, s);
+                    PutFirstPerson(m, s);
+                    models.push_back(m);
+                    if (copy.mapped && mode == 4 && scope == 1) {
+                        for (const int bottom : {0, 2}) {
+                            m.kiu_bottom_screen = bottom;
+                            m.kiu_hud = bottom / 2;
+                            m.kiu_hud_linked = 0;
+                            models.push_back(m);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for (const MenuModel& m : models) {
+        INFO("mapped " << m.mods.angels_aim.mapped << ", mode " << m.immersive_mode << ", aim "
+                       << m.gyro_aim << ", scope " << m.scope);
+        std::set<Id> ids = TabIds(d, m, Tab::Controls, SettingsSection::General);
+        for (int section = 0; section < static_cast<int>(SettingsSection::Count); section++) {
+            if (section != static_cast<int>(SettingsSection::Immersive) && m.gyro_aim != 2) {
+                continue; // General and Graphics have no row that depends on it
+            }
+            const auto more = TabIds(d, m, Tab::Settings, static_cast<SettingsSection>(section));
+            ids.insert(more.begin(), more.end());
+        }
+        for (int i = 0; i < kIdCount; i++) {
+            const Id id = static_cast<Id>(i);
+            if (KiuOnlyControlsRow(id)) {
+                INFO(LabelFor(id));
+                CHECK(ids.count(id) == 0);
+            }
+        }
+        CHECK(ids.count(Id::CalibrateAimReset) == 0);
+        for (const Id id : RowsThatLeft(m)) {
+            INFO(LabelFor(id));
+            CHECK(ids.count(id) == 0);
+        }
+        // The rows that act in any game stay on Controls, with the conditions they had.
+        for (const Id id : kAnyGame) {
+            INFO(LabelFor(id));
+            CHECK((ids.count(id) == 1) == Has(AimingRows(m), id));
+        }
+        // Immersive keeps its others; the link with Angel's Aim only.
+        CHECK(ids.count(Id::ImmersiveMode) == 1);
+        CHECK((ids.count(Id::AngelsAimLink) == 1) == (m.immersive_mode == 4));
+        CHECK(ids.count(Id::GameFov) == 1);
+        CHECK(ids.count(Id::WorldScale) == 1);
+        CHECK(ids.count(Id::ScreenAsPanel) == 1);
+        // Check Aim's Reset is on the page, with a map of the game's own.
+        if (m.gyro_aim == 2) {
+            MenuModel cal = m;
+            cal.aim_calibrated = cal.aim_calibration_ok = true;
+            CHECK(PressedIds(d, cal, AimGroup::Aiming, true).count(Id::CalibrateAimReset) == 1);
+        }
+    }
+}
+
+TEST_CASE("Angel's Aim page: its scope counts what the general tabs did",
+          "[frame_xr][kiuaim][kiuaimonly]") {
+    const auto sorted = [](std::vector<Id> v) {
+        std::sort(v.begin(), v.end());
+        return v;
+    };
+    for (const Copy& copy : kCopies) {
+        for (int mode = 0; mode <= 4; mode++) {
+            for (const int aim : {0, 1, 2}) {
+                for (const int on : {0, 1}) {
+                    INFO(copy.name << ", mode " << mode << ", aim " << aim << ", on " << on);
+                    MenuModel m = ModelOf(copy, mode);
+                    RowSettings s{aim, on, on, on, on, 1, on, on, on, on, 2 * on, on, 0};
+                    PutAim(m, s);
+                    PutFirstPerson(m, s);
+                    for (int i = 0; i < kIdCount; i++) { // the game has its own value of each
+                        m.game_value[static_cast<std::size_t>(i)] = true;
+                    }
+                    // The general tabs: none of the page's own.
+                    auto general = GameValueRows(m, Tab::Controls);
+                    CHECK(general == ControlsScopeRows());
+                    const auto immersive =
+                        GameValueRows(m, Tab::Settings, SettingsSection::Immersive);
+                    general.insert(general.end(), immersive.begin(), immersive.end());
+                    for (const Id id : general) {
+                        INFO(LabelFor(id));
+                        CHECK_FALSE(KiuOnlyControlsRow(id));
+                        CHECK_FALSE(Has(AngelsAimFirstPersonRows(m), id));
+                    }
+                    // The page: Immersive Mode, what is on it, and Kid Icarus: Uprising's own that
+                    // Aiming or a switch hides (Controls counted them shown or not).
+                    std::vector<Id> expect{Id::ImmersiveMode};
+                    for (const Id id : PageIds(m)) {
+                        if (PerGameSetting(id)) {
+                            expect.push_back(id);
+                        }
+                    }
+                    for (int i = 0; i < kIdCount; i++) {
+                        const Id id = static_cast<Id>(i);
+                        if (KiuOnlyControlsRow(id) && PerGameSetting(id) && !Has(expect, id)) {
+                            expect.push_back(id);
+                        }
+                    }
+                    const auto page = GameValueRows(m, Tab::Mods);
+                    CHECK(sorted(page) == sorted(expect));
+                    for (const Id id : RowsThatLeft(m)) {
+                        INFO(LabelFor(id));
+                        CHECK((!PerGameSetting(id) || Has(page, id)));
+                    }
+                    // Its toggle, its count and Use Global Values for All.
+                    Drawn d;
+                    MenuView v = AimView();
+                    d.Draw(m, v);
+                    CHECK(d.Hit(Id::Scope, 0));
+                    CHECK(d.Hit(Id::ScopeMore, -1));
+                    v.tooltip = Id::Scope;
+                    v.tooltip_index = 1;
+                    v.hover = {Id::Scope, 1};
+                    d.Draw(m, v);
+                    CHECK(d.Drew(GameValueCount(expect.size())));
+                    v.tooltip = Id::None;
+                    v.open_menu = Id::ScopeMore;
+                    d.Draw(m, v);
+                    CHECK(d.Hit(Id::ScopeMore, 0));
+                }
+            }
+        }
+    }
+    // Global, with the game's own value: locked on the page as it was on its tab.
+    MenuModel m = ModelOf(kCopies[0], 4);
+    RowSettings s{2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 0};
+    PutAim(m, s);
+    PutFirstPerson(m, s);
+    m.scope = 0;
+    for (const Id id : {Id::WeaponInHand, Id::KiuSnapTurn, Id::TriggerLayout}) {
+        m.locked[static_cast<std::size_t>(id)] = Lock::GameValue;
+    }
+    Drawn d;
+    MenuView v;
+    AimPageOpen(v, static_cast<int>(AimGroup::Weapon));
+    d.Draw(m, v);
+    CHECK_FALSE(d.Hit(Id::WeaponInHand, -1));
+    CHECK(d.Hit(Id::WeaponInHand, kLabelIndex));
+    CHECK(d.Hit(Id::MuzzleFlash, -1));
+    AimPageOpen(v, static_cast<int>(AimGroup::View));
+    d.Draw(m, v);
+    CHECK_FALSE(d.Hit(Id::KiuSnapTurn, 1));
+    CHECK(d.Hit(Id::KiuOverShoulder, 1));
+    AimPageOpen(v, static_cast<int>(AimGroup::Aiming));
+    d.Draw(m, v);
+    CHECK_FALSE(d.Hit(Id::TriggerLayout, 1));
+    CHECK(d.Hit(Id::GyroAim, 1));
+}
+
+TEST_CASE("Angel's Aim page: the link, Show Aiming and the Mods tab land on it",
+          "[frame_xr][kiuaim][kiuaimonly]") {
+    Drawn d;
+    for (const Copy& copy : kCopies) {
+        MenuModel m = ModelOf(copy, 4);
+        m.gyro_aim = 2;
+        INFO(copy.name);
+        // The link: under Immersive Mode, its whole row a target; the front view.
+        MenuView v;
+        v.tab = Tab::Settings;
+        v.section = SettingsSection::Immersive;
+        v.scroll[static_cast<std::size_t>(Tab::Mods)] = 300.0f; // left by another segment
+        v.aim_more = true;
+        d.Draw(m, v);
+        const auto* link = d.Hit(Id::AngelsAimLink, -1);
+        REQUIRE(link);
+        CHECK(d.menu.HitTest(link->r.Cx(), link->r.Cy()) == Target{Id::AngelsAimLink});
+        CHECK(d.Drew("Angel's Aim"));
+        AimPageOpen(v, -1);
+        AimPageKeep(m, v);
+        CHECK(v.tab == Tab::Mods);
+        CHECK(v.page == Page::Tabs);
+        CHECK(v.mods_segment == ModsSegment::AngelsAim);
+        CHECK(AimPageShown(m, v).group == -1);
+        CHECK(v.scroll[static_cast<std::size_t>(Tab::Mods)] == 0.0f);
+        d.Draw(m, v);
+        CHECK(d.Drew(kAimPageTitle));
+        CHECK(d.Hit(Id::AngelsAimGroup, static_cast<int>(AimGroup::Aiming)));
+        // Show Aiming, from the prompt on any tab: the Aiming group's page.
+        for (const Tab tab : {Tab::Controls, Tab::Mods}) {
+            MenuView p = v;
+            p.tab = tab;
+            p.angels_intro = true;
+            d.Draw(m, p);
+            CHECK(d.Hit(Id::DialogExtra, -1));
+            p.angels_intro = false;
+            AimPageOpen(p, static_cast<int>(AimGroup::Aiming));
+            AimPageKeep(m, p);
+            CHECK(AimPageShown(m, p).group == static_cast<int>(AimGroup::Aiming));
+            CHECK_FALSE(AimPageShown(m, p).more);
+            d.Draw(m, p);
+            CHECK(d.Hit(Id::GyroAim, 1));
+            CHECK(d.Hit(Id::TriggerLayout, 0));
+        }
+        // The Mods tab reopens on the page when it was left there: another tab, the menu closed
+        // and opened (its Main tab), then Mods again.
+        AimPageOpen(v, static_cast<int>(AimGroup::Weapon));
+        for (const Tab tab : {Tab::Controls, Tab::Main, Tab::Mods}) {
+            v.tab = tab;
+            AimPageKeep(m, v);
+        }
+        CHECK(v.mods_segment == ModsSegment::AngelsAim);
+        CHECK(AimPageShown(m, v).group == -1);
+        d.Draw(m, v);
+        CHECK(d.Drew(kAimPageTitle));
+        // Another game has no page: Cheats, and it stays there.
+        MenuView other = v;
+        AimPageKeep(ModelFor(Case::OtherGame), other);
+        CHECK(other.mods_segment == ModsSegment::Cheats);
+        AimPageKeep(m, other);
+        CHECK(other.mods_segment == ModsSegment::Cheats);
+    }
+}
+
+TEST_CASE("Angel's Aim page: a copy mapped late keeps every row", "[frame_xr][kiuaim][kiuaimonly]") {
+    Drawn d;
+    MenuModel early = ModelOf(kCopies[2], 4), late = ModelOf(kCopies[1], 4);
+    for (MenuModel* m : {&early, &late}) {
+        RowSettings s{2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 0};
+        PutAim(*m, s);
+        PutFirstPerson(*m, s);
+    }
+    // Wherever the menu is when it changes, either way.
+    for (int group = -1; group < static_cast<int>(AimGroup::Count); group++) {
+        for (const bool more : {false, true}) {
+            MenuView v;
+            AimPageOpen(v, group);
+            v.aim_more = more;
+            v.scroll[static_cast<std::size_t>(Tab::Mods)] = 500.0f;
+            for (const MenuModel* m : {&early, &late, &early, &late}) {
+                d.Draw(*m, v); // the frame before the fields follow
+                AimPageKeep(*m, v);
+                d.Draw(*m, v);
+                CHECK(d.menu.Hits().size() > 0);
+                const int shown = AimPageShown(*m, v).group;
+                CHECK(v.aim_group == shown);
+                const auto front = AimFrontGroups(*m);
+                CHECK((shown == -1 || std::find(front.begin(), front.end(),
+                                                static_cast<AimGroup>(shown)) != front.end()));
+            }
+        }
+    }
+    const auto before = PageIds(early), after = PageIds(late);
+    for (const Id id : before) {
+        INFO(LabelFor(id));
+        CHECK(Has(after, id));
+    }
+    for (const Id id : AngelsAimFirstPersonRows(late)) {
+        INFO(LabelFor(id));
+        CHECK(Has(after, id));
+    }
+    // The general tabs stay as they are but for HUD Spacing (with HUD: In View).
+    for (const MenuModel* m : {&early, &late}) {
+        const auto ids = TabIds(d, *m, Tab::Settings, SettingsSection::Immersive);
+        CHECK(ids.count(Id::AngelsAimLink) == 1);
+        CHECK((ids.count(Id::HudSpacingX) == 1) == !m->mods.angels_aim.mapped);
+    }
 }
 
 // AzaharFrame kiuaim: Power Menu and its opacity (the power lane's settings).

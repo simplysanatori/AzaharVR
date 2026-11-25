@@ -981,10 +981,7 @@ void MenuPanel::BuildModel(const Host& host) {
         }
         view.requires_ctgp7 = false;
     }
-    // AzaharFrame kiufix: the Angel's Aim segment only while Kid Icarus: Uprising is open
-    if (!m.mods.angels_aim.shown && view.mods_segment == Menu::ModsSegment::AngelsAim) {
-        view.mods_segment = Menu::ModsSegment::Cheats;
-    }
+    // (AzaharFrame kiufix: the Angel's Aim segment too: AimPageKeep, below.)
     if (!m.mods.angels_aim.shown) {
         view.angels_intro = false; // AzaharFrame kiuweap2: its prompt goes with the game
     }
@@ -2531,12 +2528,9 @@ void MenuPanel::Click(Target t, Host& host) {
         if (model.notice.kind != Menu::ModsDialogKind::None) {
             ask(MenuCommand::NoticeAnswer, 2);
         } else if (view.angels_intro) {
-            // AzaharFrame kiuweap2: the prompt's Controls: the Controls tab at Aiming
+            // AzaharFrame kiuweap2: the prompt's Show Aiming: the Angel's Aim page's group
             view.angels_intro = false;
-            view.tab = Menu::Tab::Controls;
-            view.page = Menu::Page::Tabs;
-            controls_page = 0;
-            scroll_to_aiming = true;
+            Menu::AimPageOpen(view, static_cast<int>(Menu::AimGroup::Aiming));
         } else if (view.mods_segment == Menu::ModsSegment::Ctgp7 && // AzaharFrame ctgp7
                    model.mods.ctgp7.dialog.kind != Menu::ModsDialogKind::None) {
             ask_text(MenuCommand::Ctgp7Dialog, view.dialog_check ? "checked" : "", 2);
@@ -2768,11 +2762,8 @@ void MenuPanel::Click(Target t, Host& host) {
             host.reset_aim_calibration();
         }
         break;
-    case Id::AngelsAimSettings: // AzaharFrame kiufix: the Controls tab at Aiming
-        view.tab = Menu::Tab::Controls;
-        view.page = Menu::Page::Tabs;
-        controls_page = 0;
-        scroll_to_aiming = true;
+    case Id::AngelsAimLink: // AzaharFrame kiuaim: the Angel's Aim page's front view
+        Menu::AimPageOpen(view, -1);
         break;
     case Id::AngelsAimGroup: // AzaharFrame kiuaim: a group's row, More, Back
         Menu::AimPagePress(model, view, t.index);
@@ -3103,7 +3094,7 @@ void MenuPanel::Frame(const FrameInfo& info, const Input::InputFrame& in, bool h
                     !view.open_link.empty())) {
             Click({Id::DialogCancel}, host);
         } else if (view.tab == Menu::Tab::Mods && // AzaharFrame kiuaim: a group's page, More
-                   view.mods_segment == Menu::ModsSegment::AngelsAim && Menu::AimPageOn() &&
+                   view.mods_segment == Menu::ModsSegment::AngelsAim &&
                    Menu::AimPageBack(model, view)) {
         } else if (mods_shown && view.mods_page == Menu::ModsPage::Install) {
             Click({Id::ModsBack}, host);
@@ -3239,12 +3230,6 @@ void MenuPanel::Frame(const FrameInfo& info, const Input::InputFrame& in, bool h
             chain.Upload(reinterpret_cast<const uint8_t*>(shared->pixels.data()));
             layout = shared->layout;
             stale_uploaded = true; // AzaharFrame kbd
-            // AzaharFrame kiufix: Angel's Aim's Aiming Settings: the Controls tab at Aiming, once
-            // its page is drawn (the scroll that does it is the page's own).
-            if (scroll_to_aiming && layout.controls && view.tab == Menu::Tab::Controls) {
-                scroll_to_aiming = false;
-                view.scroll[static_cast<std::size_t>(Menu::Tab::Controls)] = layout.aiming_scroll;
-            }
         }
     }
     if (stale && stale_uploaded && !chain.Busy()) {

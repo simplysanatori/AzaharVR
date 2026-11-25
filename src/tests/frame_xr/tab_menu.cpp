@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -517,6 +518,47 @@ void DrawControlsAt(Drawn& d, MenuModel m, MenuView& v, float rows_up) {
     d.Draw(m, v);
     v.scroll[static_cast<int>(Tab::Controls)] = std::max(0.0f, d.menu.Layout().aiming_scroll - rows_up);
     d.Draw(m, v);
+}
+bool Has(const std::vector<Id>& ids, Id id) {
+    return std::find(ids.begin(), ids.end(), id) != ids.end();
+}
+// AzaharFrame kiuaim: draws the Angel's Aim page where it has the target (each group's page and its
+// More, scrolled down by rows; `with`, when given, on view too); false when it has none.
+bool DrawAimPage(Drawn& d, const MenuModel& m, MenuView& v, Id id, int index,
+                 std::optional<Target> with = std::nullopt) {
+    for (const AimGroup g : AimFrontGroups(m)) {
+        for (const bool more : {false, true}) {
+            AimPageOpen(v, static_cast<int>(g));
+            v.aim_more = more;
+            float& scroll = v.scroll[static_cast<std::size_t>(Tab::Mods)];
+            for (;; scroll += kRowH) {
+                d.Draw(m, v);
+                if (HasHit(d, id, index) && (!with || HasHit(d, with->id, with->index))) {
+                    return true;
+                }
+                if (scroll >= d.menu.MaxScroll()) {
+                    break;
+                }
+            }
+        }
+    }
+    return false;
+}
+/// Whether the Controls tab has a target of `id`, all the way down.
+bool OnControls(Drawn& d, const MenuModel& m, Id id) {
+    MenuView v;
+    v.tab = Tab::Controls;
+    for (float& scroll = v.scroll[static_cast<std::size_t>(Tab::Controls)];; scroll += kRowH) {
+        d.Draw(m, v);
+        for (const auto& h : d.menu.Hits()) {
+            if (h.t.id == id) {
+                return true;
+            }
+        }
+        if (scroll >= d.menu.MaxScroll()) {
+            return false;
+        }
+    }
 }
 constexpr float kReticleRowsUp = 330.0f; ///< Touchpad's row down to At Edge's pair, above Aiming
 
@@ -2998,16 +3040,12 @@ TEST_CASE("Tab menu: the Per-Game count and Use Global Values for All, per tab",
     // AzaharFrame kiugyro: C-Stick at Edge shelved: not a row.
     // AzaharFrame kiufix: and Aiming's rows (moved here from Settings, General); kiuflash's
     // Muzzle Flash with them (integ13).
+    // AzaharFrame kiuaim: Kid Icarus: Uprising's own rows are the Angel's Aim page's.
     CHECK(ControlsScopeRows() ==
           std::vector<Id>{Id::TouchpadTouch, Id::BottomScreenReticle, Id::ReticleSpeed,
                           Id::ReticleAtEdge, Id::ReticleCenter, Id::ReticleStick, Id::GyroAim,
                           Id::GyroSensitivity, Id::Recoil, Id::RecoilCharged, Id::RecoilRapid,
-                          Id::WeaponInHand, Id::WeaponOpacity, Id::WeaponSize, Id::WeaponScale,
-                          Id::MuzzleFlash, Id::MuzzleFlashSize, Id::Projectiles,
-                          Id::ProjectileOpacity, Id::ProjectileSize, Id::ProjectileSpeed,
-                          Id::LaserSight, Id::TurnZone, Id::TurnSpeed, Id::TurnSpeedVertical,
-                          Id::KeepOnScreen, Id::GripFreesAim, Id::TurnZoneFrom,
-                          Id::TriggerLayout}); // AzaharFrame kiufire
+                          Id::LaserSight, Id::KeepOnScreen, Id::GripFreesAim});
     MenuModel m = Sample();
     m.scope = 1;
     for (const Tab t : {Tab::Settings, Tab::Controls, Tab::Position}) {
@@ -3220,7 +3258,7 @@ TEST_CASE("Tab menu: Aiming's names and order", "[frame_xr][tabmenu][kiugyro]") 
 }
 
 // AzaharFrame kiuaim3: Keep Reticle on Screen, Grip Frees Aim and Turn Zone From, per game, with
-// Direct Aim only, between Laser Sight and Turn Zone.
+// Direct Aim only; AzaharFrame kiuaim: Turn Zone From, with Turn Zone, on the Angel's Aim page.
 TEST_CASE("Tab menu: Direct Aim's lock, grip and Turn Zone basis", "[frame_xr][tabmenu][kiuaim3]") {
     CHECK(LabelFor(Id::KeepOnScreen) == "Keep Reticle on Screen");
     CHECK(LabelFor(Id::GripFreesAim) == "Grip Frees Aim");
@@ -3241,29 +3279,21 @@ TEST_CASE("Tab menu: Direct Aim's lock, grip and Turn Zone basis", "[frame_xr][t
     MenuModel m = Sample();
     m.mods.angels_aim.shown = true; // AzaharFrame kiurows: Kid Icarus: Uprising's rows
     MenuView v;
-    v.tab = Tab::Controls;
-    const auto shown = [&d](Id id) {
-        for (const auto& h : d.menu.Hits()) {
-            if (h.t.id == id) {
-                return true;
-            }
-        }
-        return false;
-    };
     for (const int aiming : {0, 1, 2}) {
         INFO("aiming " << aiming);
         m.gyro_aim = aiming;
+        const bool direct = aiming == 2;
+        v.tab = Tab::Controls;
         bool rows = false;
         for (float scroll = 0.0f; scroll <= 3000.0f && !rows; scroll += kRowH) {
             v.scroll[static_cast<int>(Tab::Controls)] = scroll;
             d.Draw(m, v);
-            rows = shown(Id::KeepOnScreen) && shown(Id::GripFreesAim) && shown(Id::TurnZoneFrom) &&
-                   shown(Id::TurnZone);
+            rows = HasHit(d, Id::KeepOnScreen, -1) && HasHit(d, Id::GripFreesAim, 0);
             if (scroll >= d.menu.MaxScroll()) {
                 break;
             }
         }
-        CHECK(rows == (aiming == 2));
+        CHECK(rows == direct);
         if (rows) {
             const MenuLayout::Hit* laser = FindHit(d, Id::LaserSight, -1);
             const MenuLayout::Hit* keep = FindHit(d, Id::KeepOnScreen, -1);
@@ -3275,12 +3305,24 @@ TEST_CASE("Tab menu: Direct Aim's lock, grip and Turn Zone basis", "[frame_xr][t
             a.Check("Controls, Direct Aim's lock and grip");
             CHECK(a.Drew("Keep Reticle on Screen"));
             CHECK(a.Drew("Grip Frees Aim"));
+            CHECK_FALSE(a.Drew("Turn Zone From"));
+        }
+        CHECK_FALSE(OnControls(d, m, Id::TurnZoneFrom));
+        CHECK_FALSE(OnControls(d, m, Id::TurnZone));
+        CHECK_FALSE(OnControls(d, m, Id::CalibrateAim));
+        CHECK(DrawAimPage(d, m, v, Id::TurnZone, kLabelIndex) == direct);
+        CHECK(DrawAimPage(d, m, v, Id::CalibrateAim, kLabelIndex) == direct);
+        CHECK(DrawAimPage(d, m, v, Id::TurnZoneFrom, 1) == direct);
+        if (direct) {
+            Audit a;
+            a.Draw(m, v);
+            a.Check("Angel's Aim, Turn Zone From");
             CHECK(a.Drew("Turn Zone From"));
         }
     }
 }
 
-// AzaharFrame kiufire: Trigger Layout, per game, in Aiming's group with Aiming on, and only while
+// AzaharFrame kiufire: Trigger Layout, per game, on the Angel's Aim page with Aiming on, only while
 // Kid Icarus: Uprising is open (the Angel's Aim segment's flag). Shown Fire and Power, Original;
 // stored 1, 0 (Original, the default).
 TEST_CASE("Tab menu: Trigger Layout, Kid Icarus only", "[frame_xr][tabmenu][kiufire]") {
@@ -3301,51 +3343,34 @@ TEST_CASE("Tab menu: Trigger Layout, Kid Icarus only", "[frame_xr][tabmenu][kiuf
     Drawn d;
     MenuModel m = Sample();
     MenuView v;
-    v.tab = Tab::Controls;
-    const auto any = [&d](Id id) -> const MenuLayout::Hit* {
-        for (const auto& h : d.menu.Hits()) {
-            if (h.t.id == id) {
-                return &h;
-            }
-        }
-        return nullptr;
-    };
     for (const bool kiu : {false, true}) {
         for (const int aiming : {0, 1, 2}) {
             INFO("kiu " << kiu << ", aiming " << aiming);
             m.mods.angels_aim.shown = kiu;
             m.gyro_aim = aiming;
-            bool row = false;
-            for (float scroll = 0.0f; scroll <= 3000.0f && !row; scroll += kRowH) {
-                v.scroll[static_cast<int>(Tab::Controls)] = scroll;
-                d.Draw(m, v);
-                row = FindHit(d, Id::TriggerLayout, 0) != nullptr &&
-                      FindHit(d, Id::TriggerLayout, 1) != nullptr;
-                if (scroll >= d.menu.MaxScroll()) {
-                    break;
-                }
-            }
+            CHECK_FALSE(OnControls(d, m, Id::TriggerLayout));
+            const bool row = DrawAimPage(d, m, v, Id::TriggerLayout, 0);
             CHECK(row == (kiu && aiming != 0));
             if (row) {
-                // Never locked: both choices take a press (found above), and the label.
-                const MenuLayout::Hit* sens = any(Id::GyroSensitivity);
+                // Never locked: both choices take a press, and the label.
+                CHECK(HasHit(d, Id::TriggerLayout, 1));
                 const MenuLayout::Hit* layout = FindHit(d, Id::TriggerLayout, kLabelIndex);
+                const MenuLayout::Hit* aim = FindHit(d, Id::GyroAim, kLabelIndex);
                 REQUIRE(layout != nullptr);
-                if (sens != nullptr) { // not scrolled away
-                    CHECK(layout->r.y0 >= sens->r.y1 - 0.01f); // under Gyro Sensitivity
-                }
+                REQUIRE(aim != nullptr);
+                CHECK(layout->r.y0 >= aim->r.y1 - 0.01f); // under Aiming
                 Audit a;
                 a.Draw(m, v);
-                a.Check("Controls, Trigger Layout");
+                a.Check("Angel's Aim, Trigger Layout");
                 CHECK(a.Drew("Trigger Layout"));
             }
         }
     }
 }
 
-// AzaharFrame kiutoggles: Angel's Aim's first-person options, per game, in the Settings tab's
-// Immersive section right under Immersive Mode, shown only while Kid Icarus: Uprising is open and
-// Immersive Mode is Angel's Aim (stored 4). Three switches (off by default) and Turning's choices
+// AzaharFrame kiutoggles: Angel's Aim's first-person options, per game, on the Angel's Aim page only
+// (AzaharFrame kiuaim; the Settings tab's Immersive section has the link to it under Immersive
+// Mode), shown only while Kid Icarus: Uprising is open and Immersive Mode is Angel's Aim (stored 4). Three switches (off by default) and Turning's choices
 // (Smooth by default; stored in degrees). The strings are proposed (angels_aim_tab.h).
 TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim only",
           "[frame_xr][tabmenu][kiutoggles][kiu131]") {
@@ -3397,6 +3422,11 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
     CHECK_FALSE(AngelsAimRowsShown(false, 4));
     CHECK_FALSE(AngelsAimRowsShown(true, 3));
 
+    CHECK(LabelFor(Id::AngelsAimLink) == "Angel's Aim");
+    CHECK(ExplainFor(Id::AngelsAimLink).empty());
+    CHECK(SectionOf(Id::AngelsAimLink) == SettingsSection::Immersive);
+    CHECK_FALSE(PerGameSetting(Id::AngelsAimLink));
+
     for (const int bottom : {0, 1, 2}) {
         for (const bool kiu : {false, true}) {
             for (const int mode : {0, 3, 4}) {
@@ -3404,28 +3434,26 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
                 Drawn d;
                 MenuModel m = Sample();
                 m.mods.angels_aim.shown = kiu;
-                m.mods.angels_aim.mapped = kiu; // AzaharFrame kiu132: the European game
+                m.mods.angels_aim.mapped = kiu; // AzaharFrame kiu132
                 m.immersive_mode = mode;
                 m.kiu_bottom_screen = bottom;
+                m.kiu_bottom_moved = true;
+                const bool shown = kiu && mode == 4;
                 MenuView v;
                 v.tab = Tab::Settings;
                 v.section = SettingsSection::Immersive;
-                bool seen_bottom[3] = {}, size = false, opacity = false, reset = false,
-                     reticle = false, under_mode = false;
+                bool link = false, others = false, under_mode = false;
                 for (float scroll = 0.0f; scroll <= 3000.0f; scroll += kRowH) {
                     v.scroll[static_cast<int>(Tab::Settings)] = scroll;
                     d.Draw(m, v);
-                    for (int i = 0; i < 3; i++) {
-                        seen_bottom[i] |= FindHit(d, Id::KiuBottomScreen, i) != nullptr;
+                    for (const auto& h : d.menu.Hits()) {
+                        link |= h.t == Target{Id::AngelsAimLink};
+                        others |= Has(ids, h.t.id) || h.t.id == Id::KiuBottomReset;
                     }
-                    size |= FindHit(d, Id::KiuBottomSize, kLabelIndex) != nullptr;
-                    opacity |= FindHit(d, Id::KiuBottomOpacity, kLabelIndex) != nullptr;
-                    reset |= FindHit(d, Id::KiuBottomReset, -1) != nullptr;
-                    reticle |= FindHit(d, Id::KiuReticleSize, kLabelIndex) != nullptr;
                     const auto* mode_row = FindHit(d, Id::ImmersiveMode, kLabelIndex);
-                    const auto* first = FindHit(d, Id::KiuBottomScreen, kLabelIndex);
-                    if (mode_row && first) {
-                        const float dy = 0.5f * ((first->r.y0 + first->r.y1) -
+                    const auto* row = FindHit(d, Id::AngelsAimLink, -1);
+                    if (mode_row && row) {
+                        const float dy = 0.5f * ((row->r.y0 + row->r.y1) -
                                                  (mode_row->r.y0 + mode_row->r.y1));
                         under_mode |= std::abs(dy - kRowH) < 1.0f;
                     }
@@ -3433,20 +3461,32 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
                         break;
                     }
                 }
-                const bool shown = kiu && mode == 4;
-                for (int i = 0; i < 3; i++) {
-                    CHECK(seen_bottom[i] == shown);
-                }
-                CHECK(size == (shown && bottom != 0));
-                CHECK(opacity == (shown && bottom != 0));
-                CHECK(reset == (shown && bottom == 1));
-                CHECK(reticle == shown);
+                CHECK(link == shown);
+                CHECK_FALSE(others);
                 if (shown) {
                     CHECK(under_mode);
                     Audit a;
                     v.scroll[static_cast<int>(Tab::Settings)] = 0.0f;
                     a.Draw(m, v);
-                    a.Check("Settings, Immersive, Angel's Aim's rows");
+                    a.Check("Settings, Immersive, the Angel's Aim link");
+                    CHECK(a.Drew("Angel's Aim"));
+                    d.Draw(m, v);
+                    CheckTargets(d);
+                }
+                // The rows on the page.
+                for (int i = 0; i < 3; i++) {
+                    CHECK(DrawAimPage(d, m, v, Id::KiuBottomScreen, i) == shown);
+                }
+                CHECK(DrawAimPage(d, m, v, Id::KiuBottomSize, kLabelIndex) == (shown && bottom != 0));
+                CHECK(DrawAimPage(d, m, v, Id::KiuBottomOpacity, kLabelIndex) ==
+                      (shown && bottom != 0));
+                CHECK(DrawAimPage(d, m, v, Id::KiuBottomReset, -1) == (shown && bottom == 1));
+                CHECK(DrawAimPage(d, m, v, Id::KiuReticleSize, kLabelIndex) == shown);
+                if (shown) {
+                    REQUIRE(DrawAimPage(d, m, v, Id::KiuBottomScreen, 0));
+                    Audit a;
+                    a.Draw(m, v);
+                    a.Check("Angel's Aim, Bottom Screen");
                     CHECK(a.Drew("Bottom Screen"));
                 }
             }
@@ -3475,8 +3515,8 @@ TEST_CASE("Tab menu: Wrist Side under Stats Position", "[frame_xr][tabmenu][kiu1
     CHECK(a.Drew("Wrist Side"));
 }
 
-// AzaharFrame kiuflash: Muzzle Flash, a game's switch in Aiming's group on the Controls page,
-// under Weapon in Hand's own rows, shown only with it on.
+// AzaharFrame kiuflash: Muzzle Flash, a game's switch in the Angel's Aim page's Weapon group, under
+// Weapon in Hand, shown only with it on.
 TEST_CASE("Tab menu: Muzzle Flash under Weapon in Hand", "[frame_xr][tabmenu][kiuflash]") {
     CHECK(LabelFor(Id::MuzzleFlash) == "Muzzle Flash");
     CHECK(ExplainFor(Id::MuzzleFlash) == "A flash at your weapon's tip on each shot.");
@@ -3485,33 +3525,25 @@ TEST_CASE("Tab menu: Muzzle Flash under Weapon in Hand", "[frame_xr][tabmenu][ki
     MenuModel m = Sample();
     m.mods.angels_aim.shown = true; // AzaharFrame kiurows: Kid Icarus: Uprising's rows
     MenuView v;
-    v.tab = Tab::Controls;
     for (const int aiming : {0, 1, 2}) {
         for (const bool weapon : {false, true}) {
             INFO("aiming " << aiming << ", weapon " << weapon);
             m.gyro_aim = aiming;
             m.weapon_in_hand = weapon;
             m.muzzle_flash = true;
-            // Scrolled down until the row is on view (Aiming is low on the page).
-            bool row = false;
-            for (float scroll = 0.0f; scroll <= 4000.0f && !row; scroll += kRowH) {
-                v.scroll[static_cast<int>(Tab::Controls)] = scroll;
-                d.Draw(m, v);
-                row = HasHit(d, Id::MuzzleFlash, -1) && HasHit(d, Id::WeaponScale, kLabelIndex);
-                if (scroll >= d.menu.MaxScroll()) {
-                    break;
-                }
-            }
+            CHECK_FALSE(OnControls(d, m, Id::MuzzleFlash));
+            const bool row = DrawAimPage(d, m, v, Id::MuzzleFlash, -1);
             CHECK(row == (aiming != 0 && weapon));
+            CHECK(DrawAimPage(d, m, v, Id::WeaponScale, kLabelIndex) == row);
             if (row) {
-                const MenuLayout::Hit* scale = FindHit(d, Id::WeaponScale, kLabelIndex);
+                REQUIRE(DrawAimPage(d, m, v, Id::MuzzleFlash, -1));
+                const MenuLayout::Hit* hand = FindHit(d, Id::WeaponInHand, -1);
                 const MenuLayout::Hit* flash = FindHit(d, Id::MuzzleFlash, -1);
-                REQUIRE(scale != nullptr);
-                REQUIRE(flash != nullptr);
-                CHECK(flash->r.y0 >= scale->r.y1 - 0.01f); // under Weapon in Hand's rows
+                REQUIRE(hand != nullptr);
+                CHECK(flash->r.y0 >= hand->r.y1 - 0.01f); // under Weapon in Hand
                 Audit a;
                 a.Draw(m, v);
-                a.Check("Controls, Muzzle Flash");
+                a.Check("Angel's Aim, Muzzle Flash");
                 CHECK(a.Drew("Muzzle Flash"));
             }
         }
@@ -3519,10 +3551,11 @@ TEST_CASE("Tab menu: Muzzle Flash under Weapon in Hand", "[frame_xr][tabmenu][ki
     m.scope = 1;
     m.game_value = {};
     m.game_value[static_cast<std::size_t>(Id::MuzzleFlash)] = true;
-    CHECK(GameValueRows(m, Tab::Controls) == std::vector<Id>{Id::MuzzleFlash});
+    CHECK(GameValueRows(m, Tab::Mods) == std::vector<Id>{Id::MuzzleFlash});
+    CHECK(GameValueRows(m, Tab::Controls).empty());
 }
 
-// AzaharFrame kiuflash: Projectiles under Muzzle Flash, its Size and Speed under it while it is on.
+// AzaharFrame kiuflash: Projectiles under Muzzle Flash, its Size and Speed while it is on.
 TEST_CASE("Tab menu: Projectiles and their size and speed", "[frame_xr][tabmenu][kiuflash]") {
     CHECK(LabelFor(Id::Projectiles) == "Projectiles");
     CHECK(LabelFor(Id::ProjectileSize) == "Projectile Size");
@@ -3543,46 +3576,31 @@ TEST_CASE("Tab menu: Projectiles and their size and speed", "[frame_xr][tabmenu]
     m.mods.angels_aim.shown = true; // AzaharFrame kiurows: Kid Icarus: Uprising's rows
     m.gyro_aim = 2;
     MenuView v;
-    v.tab = Tab::Controls;
-    const auto find = [&](Id id, int index) {
-        for (float scroll = 0.0f; scroll <= 4000.0f; scroll += kRowH) {
-            v.scroll[static_cast<int>(Tab::Controls)] = scroll;
-            d.Draw(m, v);
-            if (HasHit(d, id, index)) {
-                return true;
-            }
-            if (scroll >= d.menu.MaxScroll()) {
-                break;
-            }
-        }
-        return false;
-    };
+    const auto find = [&](Id id, int index) { return DrawAimPage(d, m, v, id, index); };
     for (const bool weapon : {false, true}) {
         for (const bool on : {false, true}) {
             INFO("weapon " << weapon << ", projectiles " << on);
             m.weapon_in_hand = weapon;
             m.projectiles = on;
+            CHECK_FALSE(OnControls(d, m, Id::Projectiles));
             CHECK(find(Id::Projectiles, -1) == weapon);
             CHECK(find(Id::ProjectileSize, kLabelIndex) == (weapon && on));
             CHECK(find(Id::ProjectileSpeed, kLabelIndex) == (weapon && on));
             if (weapon && on) {
-                // In order: Muzzle Flash, Projectiles, Projectile Size, Projectile Speed.
-                REQUIRE(find(Id::ProjectileSpeed, kLabelIndex));
+                // In order: Muzzle Flash, Projectiles; under More Projectile Size, Speed.
+                REQUIRE(find(Id::Projectiles, -1));
                 const MenuLayout::Hit* flash = FindHit(d, Id::MuzzleFlash, -1);
                 const MenuLayout::Hit* proj = FindHit(d, Id::Projectiles, -1);
+                REQUIRE(flash != nullptr);
+                CHECK(proj->r.y0 >= flash->r.y1 - 0.01f);
+                REQUIRE(DrawAimPage(d, m, v, Id::ProjectileSpeed, kLabelIndex,
+                                    Target{Id::ProjectileSize, kLabelIndex}));
                 const MenuLayout::Hit* size = FindHit(d, Id::ProjectileSize, kLabelIndex);
                 const MenuLayout::Hit* speed = FindHit(d, Id::ProjectileSpeed, kLabelIndex);
-                REQUIRE(proj != nullptr);
-                REQUIRE(size != nullptr);
-                REQUIRE(speed != nullptr);
-                if (flash) {
-                    CHECK(proj->r.y0 >= flash->r.y1 - 0.01f);
-                }
-                CHECK(size->r.y0 >= proj->r.y1 - 0.01f);
                 CHECK(speed->r.y0 >= size->r.y1 - 0.01f);
                 Audit a;
                 a.Draw(m, v);
-                a.Check("Controls, Projectiles");
+                a.Check("Angel's Aim, Projectiles");
                 CHECK(a.Drew("Projectile Speed"));
             }
         }
@@ -3591,12 +3609,12 @@ TEST_CASE("Tab menu: Projectiles and their size and speed", "[frame_xr][tabmenu]
     m.game_value = {};
     m.game_value[static_cast<std::size_t>(Id::ProjectileSize)] = true;
     m.game_value[static_cast<std::size_t>(Id::Projectiles)] = true;
-    CHECK(GameValueRows(m, Tab::Controls) ==
+    CHECK(GameValueRows(m, Tab::Mods) ==
           std::vector<Id>{Id::Projectiles, Id::ProjectileSize});
 }
 
-// AzaharFrame kiuopacity: Weapon Opacity first under Weapon in Hand, Projectile Opacity first
-// under Projectiles (the owner's order), each shown while its switch is on.
+// AzaharFrame kiuopacity: Weapon Opacity first of the weapon's rows, Projectile Opacity first of the
+// projectiles' (the owner's order), each shown while its switch is on.
 TEST_CASE("Tab menu: Weapon Opacity and Projectile Opacity", "[frame_xr][tabmenu][kiuopacity]") {
     CHECK(LabelFor(Id::WeaponOpacity) == "Weapon Opacity");
     CHECK(LabelFor(Id::ProjectileOpacity) == "Projectile Opacity");
@@ -3618,20 +3636,7 @@ TEST_CASE("Tab menu: Weapon Opacity and Projectile Opacity", "[frame_xr][tabmenu
     m.weapon_opacity = 60;
     m.projectile_opacity = 30;
     MenuView v;
-    v.tab = Tab::Controls;
-    const auto find = [&](Id id, int index) {
-        for (float scroll = 0.0f; scroll <= 4000.0f; scroll += kRowH) {
-            v.scroll[static_cast<int>(Tab::Controls)] = scroll;
-            d.Draw(m, v);
-            if (HasHit(d, id, index)) {
-                return true;
-            }
-            if (scroll >= d.menu.MaxScroll()) {
-                break;
-            }
-        }
-        return false;
-    };
+    const auto find = [&](Id id, int index) { return DrawAimPage(d, m, v, id, index); };
     for (const int aiming : {0, 1, 2}) {
         for (const bool weapon : {false, true}) {
             for (const bool on : {false, true}) {
@@ -3640,36 +3645,32 @@ TEST_CASE("Tab menu: Weapon Opacity and Projectile Opacity", "[frame_xr][tabmenu
                 m.weapon_in_hand = weapon;
                 m.projectiles = on;
                 const bool weapon_rows = aiming != 0 && weapon;
+                CHECK_FALSE(OnControls(d, m, Id::WeaponOpacity));
                 CHECK(find(Id::WeaponOpacity, kLabelIndex) == weapon_rows);
                 CHECK(find(Id::ProjectileOpacity, kLabelIndex) == (weapon_rows && on));
                 if (!(weapon_rows && on)) {
                     continue;
                 }
-                // Weapon in Hand, Weapon Opacity, Weapon Size, Weapon Scale; then Projectiles,
-                // Projectile Opacity, Projectile Size (each on the page with the one before).
+                // Under More: Weapon Opacity, Weapon Size, Weapon Scale; then Projectile Opacity,
+                // Projectile Size (each on view with the one before).
                 const auto below = [&](Id upper, int ui, Id lower, int li) {
-                    REQUIRE(find(lower, li));
+                    REQUIRE(DrawAimPage(d, m, v, lower, li, Target{upper, ui}));
                     const MenuLayout::Hit* l = FindHit(d, lower, li);
                     const MenuLayout::Hit* u = FindHit(d, upper, ui);
-                    REQUIRE(l != nullptr);
-                    if (u) {
-                        CHECK(l->r.y0 >= u->r.y1 - 0.01f);
-                        CHECK(l->r.y0 - u->r.y1 < kRowH);
-                    }
+                    CHECK(l->r.y0 >= u->r.y1 - 0.01f);
+                    CHECK(l->r.y0 - u->r.y1 < kRowH);
                 };
-                below(Id::WeaponInHand, -1, Id::WeaponOpacity, kLabelIndex);
                 below(Id::WeaponOpacity, kLabelIndex, Id::WeaponSize, kLabelIndex);
-                below(Id::Projectiles, -1, Id::ProjectileOpacity, kLabelIndex);
                 below(Id::ProjectileOpacity, kLabelIndex, Id::ProjectileSize, kLabelIndex);
                 REQUIRE(find(Id::WeaponOpacity, kLabelIndex));
                 Audit a;
                 a.Draw(m, v);
-                a.Check("Controls, Weapon Opacity");
+                a.Check("Angel's Aim, Weapon Opacity");
                 CHECK(a.Drew("Weapon Opacity"));
                 CHECK(a.Drew("60%"));
                 REQUIRE(find(Id::ProjectileOpacity, kLabelIndex));
                 a.Draw(m, v);
-                a.Check("Controls, Projectile Opacity");
+                a.Check("Angel's Aim, Projectile Opacity");
                 CHECK(a.Drew("Projectile Opacity"));
                 CHECK(a.Drew("30%"));
             }
@@ -3680,11 +3681,11 @@ TEST_CASE("Tab menu: Weapon Opacity and Projectile Opacity", "[frame_xr][tabmenu
     m.game_value[static_cast<std::size_t>(Id::ProjectileOpacity)] = true;
     m.game_value[static_cast<std::size_t>(Id::WeaponOpacity)] = true;
     m.game_value[static_cast<std::size_t>(Id::WeaponScale)] = true;
-    CHECK(GameValueRows(m, Tab::Controls) ==
+    CHECK(GameValueRows(m, Tab::Mods) ==
           std::vector<Id>{Id::WeaponOpacity, Id::WeaponScale, Id::ProjectileOpacity});
 }
 
-// AzaharFrame kiuweap2: Muzzle Flash Size, a slider under Muzzle Flash while it is on.
+// AzaharFrame kiuweap2: Muzzle Flash Size, a slider while Muzzle Flash is on.
 TEST_CASE("Tab menu: Muzzle Flash Size under Muzzle Flash", "[frame_xr][tabmenu][kiuweap2]") {
     CHECK(LabelFor(Id::MuzzleFlashSize) == "Muzzle Flash Size");
     CHECK(ExplainFor(Id::MuzzleFlashSize) == "How big the flash at your weapon's tip is.");
@@ -3698,20 +3699,7 @@ TEST_CASE("Tab menu: Muzzle Flash Size under Muzzle Flash", "[frame_xr][tabmenu]
     m.mods.angels_aim.shown = true; // AzaharFrame kiurows: Kid Icarus: Uprising's rows
     m.flash_size = 150;
     MenuView v;
-    v.tab = Tab::Controls;
-    const auto find = [&](Id id, int index) {
-        for (float scroll = 0.0f; scroll <= 4000.0f; scroll += kRowH) {
-            v.scroll[static_cast<int>(Tab::Controls)] = scroll;
-            d.Draw(m, v);
-            if (HasHit(d, id, index) && HasHit(d, Id::MuzzleFlash, -1)) {
-                return true;
-            }
-            if (scroll >= d.menu.MaxScroll()) {
-                break;
-            }
-        }
-        return false;
-    };
+    const auto find = [&](Id id, int index) { return DrawAimPage(d, m, v, id, index); };
     for (const int aiming : {0, 1, 2}) {
         for (const bool weapon : {false, true}) {
             for (const bool flash : {false, true}) {
@@ -3720,19 +3708,14 @@ TEST_CASE("Tab menu: Muzzle Flash Size under Muzzle Flash", "[frame_xr][tabmenu]
                 m.weapon_in_hand = weapon;
                 m.muzzle_flash = flash;
                 const bool shown = aiming != 0 && weapon && flash;
+                CHECK_FALSE(OnControls(d, m, Id::MuzzleFlashSize));
                 CHECK(find(Id::MuzzleFlashSize, kLabelIndex) == shown);
                 if (!shown) {
                     continue;
                 }
-                const MenuLayout::Hit* size = FindHit(d, Id::MuzzleFlashSize, kLabelIndex);
-                const MenuLayout::Hit* sw = FindHit(d, Id::MuzzleFlash, -1);
-                REQUIRE(size != nullptr);
-                REQUIRE(sw != nullptr);
-                CHECK(size->r.y0 >= sw->r.y1 - 0.01f); // right under its switch
-                CHECK(size->r.y0 - sw->r.y1 < kRowH);
                 Audit a;
                 a.Draw(m, v);
-                a.Check("Controls, Muzzle Flash Size");
+                a.Check("Angel's Aim, Muzzle Flash Size");
                 CHECK(a.Drew("Muzzle Flash Size"));
                 CHECK(a.Drew("150%"));
             }
@@ -3741,7 +3724,7 @@ TEST_CASE("Tab menu: Muzzle Flash Size under Muzzle Flash", "[frame_xr][tabmenu]
     m.scope = 1;
     m.game_value = {};
     m.game_value[static_cast<std::size_t>(Id::MuzzleFlashSize)] = true;
-    CHECK(GameValueRows(m, Tab::Controls) == std::vector<Id>{Id::MuzzleFlashSize});
+    CHECK(GameValueRows(m, Tab::Mods) == std::vector<Id>{Id::MuzzleFlashSize});
 }
 
 // AzaharFrame kiuweap2: "Angel's Aim Is On": once, when Aiming is turned on in Kid Icarus.
@@ -4755,9 +4738,10 @@ TEST_CASE("Tab menu: Immersive Mode lists Angel's Aim in every game",
           N::kModeOtherGames);
 }
 
-// AzaharFrame kiurows: the Controls rows only Kid Icarus: Uprising has show while it is the game
-// and are gone in the global scope and in every other game; the generic rows are unchanged.
-TEST_CASE("Controls tab: Angel's Aim's rows show in Kid Icarus only",
+// AzaharFrame kiurows: the rows only Kid Icarus: Uprising has are never on the Controls tab (AzaharFrame
+// kiuaim: the Angel's Aim page has them while it is the game); the generic rows are the same in every
+// game.
+TEST_CASE("Controls tab: the rows only Kid Icarus has are not on it",
           "[frame_xr][tabmenu][kiurows]") {
     const std::vector<Id> kiu_only{
         Id::WeaponInHand,    Id::WeaponOpacity,    Id::WeaponSize,        Id::WeaponScale,
@@ -4805,6 +4789,7 @@ TEST_CASE("Controls tab: Angel's Aim's rows show in Kid Icarus only",
     const std::vector<Id> global_ids = drawn_ids(false, 0);
     for (const Id id : kiu_only) {
         INFO(LabelFor(id));
+        CHECK_FALSE(has(kiu_ids, id));
         CHECK_FALSE(has(other_ids, id));
         CHECK_FALSE(has(global_ids, id));
     }
@@ -4813,24 +4798,29 @@ TEST_CASE("Controls tab: Angel's Aim's rows show in Kid Icarus only",
         CHECK(has(other_ids, id) == has(kiu_ids, id));
         CHECK(has(global_ids, id) == has(kiu_ids, id));
     }
-    // Per-game value counting follows: no Kid Icarus-only row in another game or in Global.
+    // Per-game value counting follows: no Kid Icarus-only row on Controls in any game; the Angel's
+    // Aim page counts each, also while Aiming or its switch hides it.
     MenuModel m = Sample();
     m.scope = 1;
     for (const Id id : kiu_only) {
         m.game_value[static_cast<std::size_t>(id)] = true;
     }
     m.game_value[static_cast<std::size_t>(Id::Recoil)] = true;
-    m.mods.angels_aim.shown = false;
-    CHECK(GameValueRows(m, Tab::Controls) == std::vector<Id>{Id::Recoil});
-    m.mods.angels_aim.shown = true;
-    const auto rows = GameValueRows(m, Tab::Controls);
-    for (const Id id : kiu_only) {
-        if (id != Id::CalibrateAim) { // not a per-game setting: no value of its own to count
-            CHECK(std::find(rows.begin(), rows.end(), id) != rows.end());
+    CHECK(GameValueRows(m, Tab::Mods).empty()); // another game
+    for (const bool kiu : {false, true}) {
+        m.mods.angels_aim.shown = kiu;
+        CHECK(GameValueRows(m, Tab::Controls) == std::vector<Id>{Id::Recoil});
+    }
+    for (const int aiming : {0, 1, 2}) {
+        m.gyro_aim = aiming;
+        const auto rows = GameValueRows(m, Tab::Mods);
+        CHECK(rows.size() == kiu_only.size() - 1 + (aiming != 0 ? 1 : 0)); // and Recoil's, on view
+        for (const Id id : kiu_only) {
+            if (id != Id::CalibrateAim) { // not a per-game setting: no value of its own to count
+                CHECK(has(rows, id));
+            }
         }
     }
-    CHECK(ControlsScopeRows(false).size() + 15 == ControlsScopeRows().size()); // all but Check Aim
-    CHECK(ControlsScopeRows(true) == ControlsScopeRows());
 }
 
 // AzaharFrame bfidr: while the display runs at a rate Black Frame Insertion does not flash at,
@@ -4955,8 +4945,8 @@ TEST_CASE("Tab menu: Angel's Aim is Recommended only in Kid Icarus: Uprising", "
     CHECK(chosen_plain.px != chosen_badge.px);
 }
 
-// AzaharFrame kiu132: the Angel's Aim segment's settings: every Kid Icarus: Uprising / Angel's
-// Aim option in one list in groups, the same Id (the same setting) as its other place.
+// AzaharFrame kiu132: the Angel's Aim page: every Kid Icarus: Uprising / Angel's Aim option in its
+// groups.
 namespace {
 MenuModel KiuModel(bool mapped, int mode) {
     MenuModel m = Sample();
@@ -4968,55 +4958,46 @@ MenuModel KiuModel(bool mapped, int mode) {
     m.scope = 1;
     m.gyro_aim = 2; // Direct Aim: every Aiming row on
     m.recoil = m.weapon_in_hand = m.muzzle_flash = m.projectiles = true;
-    m.kiu_bottom_screen = 1; // Persistent: Size, Opacity and Reset too
+    m.kiu_bottom_screen = 1; // In View, moved: Size, Opacity and Reset too
+    m.kiu_bottom_moved = true;
     return m;
 }
-std::vector<Id> HubIds(const MenuModel& m) {
+std::vector<Id> PageIds(const MenuModel& m) {
     std::vector<Id> ids;
-    for (const AngelsAimRowGroup& g : AngelsAimGroups(m)) {
-        ids.insert(ids.end(), g.rows.begin(), g.rows.end());
+    for (const AimGroup g : AimFrontGroups(m)) {
+        const AimPage p = AimPageRows(m, g);
+        ids.insert(ids.end(), p.rows.begin(), p.rows.end());
+        ids.insert(ids.end(), p.more.begin(), p.more.end());
     }
     return ids;
 }
-bool Has(const std::vector<Id>& ids, Id id) {
-    return std::find(ids.begin(), ids.end(), id) != ids.end();
-}
 } // namespace
 
-TEST_CASE("Angel's Aim settings: every option of its other places, in groups",
-          "[frame_xr][tabmenu][kiu132]") {
+TEST_CASE("Angel's Aim settings: every option, in groups", "[frame_xr][tabmenu][kiu132]") {
     const MenuModel m = KiuModel(true, 4);
-    const auto groups = AngelsAimGroups(m);
-    REQUIRE(groups.size() == 4);
-    CHECK(groups[0].kind == AngelsAimGroupKind::Aiming);
-    CHECK(groups[1].kind == AngelsAimGroupKind::View);
-    CHECK(groups[2].kind == AngelsAimGroupKind::BottomScreen);
-    CHECK(groups[3].kind == AngelsAimGroupKind::Weapon);
-    CHECK(std::string(AngelsAimGroupName(AngelsAimGroupKind::ModsAndPack)) == "Mods & Pack");
-    const auto hub = HubIds(m);
-    for (const Id id : AimingRows(m)) { // the Controls tab's Aiming rows, all of them
+    const auto page = PageIds(m);
+    for (const Id id : AimingRows(m)) {
         INFO(LabelFor(id));
-        CHECK(Has(hub, id));
+        CHECK(Has(page, id) == (id != Id::GyroSensitivity)); // with Gyro Aim
     }
-    for (const Id id : AngelsAimFirstPersonRows(m)) { // the Settings tab's first-person rows
+    for (const Id id : AngelsAimFirstPersonRows(m)) {
         INFO(LabelFor(id));
-        CHECK(Has(hub, id));
+        CHECK(Has(page, id));
     }
-    for (const Id id : {Id::WristSide, Id::ImmersiveMode, Id::AngelsAimSettings,
-                        Id::TriggerLayout, Id::CalibrateAim, Id::KiuReticleSize}) {
+    for (const Id id : {Id::TriggerLayout, Id::CalibrateAim, Id::KiuReticleSize}) {
         INFO(LabelFor(id));
-        CHECK(Has(hub, id));
+        CHECK(Has(page, id));
     }
     // Each once.
-    std::vector<Id> sorted = hub;
+    std::vector<Id> sorted = page;
     std::sort(sorted.begin(), sorted.end());
     CHECK(std::adjacent_find(sorted.begin(), sorted.end()) == sorted.end());
     // The weapon's rows in Weapon, the aim's in Aiming.
-    CHECK(Has(groups[3].rows, Id::Recoil));
-    CHECK(Has(groups[3].rows, Id::ProjectileSpeed));
-    CHECK(Has(groups[0].rows, Id::TurnZone));
-    CHECK(Has(groups[2].rows, Id::KiuBottomReset));
-    // The scope's count and Use Global Values for All: the segment's per-game rows (not Wrist
+    CHECK(Has(AimPageRows(m, AimGroup::Weapon).rows, Id::Recoil));
+    CHECK(Has(AimPageRows(m, AimGroup::Weapon).more, Id::ProjectileSpeed));
+    CHECK(Has(AimPageRows(m, AimGroup::Aiming).more, Id::TurnZone));
+    CHECK(Has(AimPageRows(m, AimGroup::BottomScreen).rows, Id::KiuBottomReset));
+    // The scope's count and Use Global Values for All: the page's per-game rows (not Wrist
     // Side, which is global).
     MenuModel g = m;
     g.game_value[static_cast<std::size_t>(Id::KiuBottomScreen)] = true;
@@ -5025,113 +5006,81 @@ TEST_CASE("Angel's Aim settings: every option of its other places, in groups",
     CHECK(GameValueRows(g, Tab::Mods) == std::vector<Id>{Id::KiuBottomScreen, Id::WeaponScale});
 }
 
-TEST_CASE("Angel's Aim settings: Kid Icarus only, first person in the European game",
+TEST_CASE("Angel's Aim settings: Kid Icarus only, first person where it is mapped",
           "[frame_xr][tabmenu][kiu132]") {
     // Another game, or none: no segment, no groups, no Kid Icarus-only row anywhere.
     MenuModel other = KiuModel(true, 4);
     other.mods.angels_aim = {};
-    CHECK(AngelsAimGroups(other).empty());
+    CHECK(AimFrontGroups(other).empty());
     CHECK(AngelsAimFirstPersonRows(other).empty());
     for (const Id id : AimingRows(other)) {
         INFO(LabelFor(id));
         CHECK_FALSE(KiuOnlyControlsRow(id));
     }
     CHECK(ModsSegmentsShown(other.mods).size() == 3);
-    // Kid Icarus in another region: its rows, but not first person's (it is mapped for the
-    // European game only), in the segment and on the Settings tab alike.
+    // A copy that is not mapped: its rows, but not first person's.
     const MenuModel usa = KiuModel(false, 4);
     CHECK(AngelsAimFirstPersonRows(usa).empty());
-    const auto hub = HubIds(usa);
-    CHECK(Has(hub, Id::WeaponInHand));
-    CHECK(Has(hub, Id::TriggerLayout));
-    CHECK(Has(hub, Id::WristSide));
-    CHECK_FALSE(Has(hub, Id::KiuBottomScreen));
-    CHECK_FALSE(Has(hub, Id::KiuReticleSize));
-    // Another mode: the first-person rows go from both places, Immersive Mode stays.
+    const auto page = PageIds(usa);
+    CHECK(Has(page, Id::WeaponInHand));
+    CHECK(Has(page, Id::TriggerLayout));
+    CHECK_FALSE(Has(page, Id::KiuBottomScreen));
+    CHECK_FALSE(Has(page, Id::KiuReticleSize));
+    // Another mode: the first-person rows go.
     const MenuModel wide = KiuModel(true, 1);
     CHECK(AngelsAimFirstPersonRows(wide).empty());
-    CHECK(Has(HubIds(wide), Id::ImmersiveMode));
-    CHECK_FALSE(Has(HubIds(wide), Id::KiuOverShoulder));
-    // The Settings tab draws the same first-person rows (European game, mode 4 only).
-    for (const auto& [mm, expect] : {std::pair{KiuModel(true, 4), true},
-                                     std::pair{KiuModel(false, 4), false},
-                                     std::pair{other, false}}) {
+    CHECK_FALSE(Has(PageIds(wide), Id::KiuOverShoulder));
+    // The Settings tab draws none of them.
+    for (const MenuModel& mm : {KiuModel(true, 4), usa, wide, other}) {
         Drawn d;
         MenuView v;
         v.tab = Tab::Settings;
         v.section = SettingsSection::Immersive;
         d.Draw(mm, v);
-        CHECK((FindHit(d, Id::KiuBottomScreen, 0) != nullptr) == expect);
+        CHECK(FindHit(d, Id::KiuBottomScreen, 0) == nullptr);
     }
 }
 
-TEST_CASE("Angel's Aim settings: drawn in the segment, each control a target",
+TEST_CASE("Angel's Aim settings: drawn on the page, each control a target",
           "[frame_xr][tabmenu][kiu132]") {
-    const MenuModel m = KiuModel(true, 4);
+    MenuModel m = KiuModel(true, 4);
     Drawn d;
-    Audit a;
     MenuView v;
     v.tab = Tab::Mods;
     v.mods_segment = ModsSegment::AngelsAim;
-    std::vector<Target> seen;
-    std::vector<Id> sliders;
-    float max_scroll = 0.0f;
-    for (float scroll = 0.0f; scroll <= 6000.0f; scroll += 48.0f) {
-        v.scroll[static_cast<std::size_t>(Tab::Mods)] = scroll;
-        d.Draw(m, v);
-        max_scroll = d.menu.MaxScroll();
-        for (const auto& h : d.menu.Hits()) {
-            if (h.r.y0 >= 0.0f && h.r.y1 <= kPanelH) {
-                seen.push_back(h.t);
-            }
-        }
-        for (const auto& s : d.menu.Layout().sliders) {
-            sliders.push_back(s.id);
-        }
-        if (static_cast<int>(scroll) % 480 == 0) {
-            a.Draw(m, v);
-            a.Check("Mods, Angel's Aim, its settings");
-        }
-        if (scroll >= max_scroll) {
-            break;
-        }
-    }
-    CHECK(max_scroll > 2000.0f); // the groups make the page long: one list to scroll
-    const auto hit = [&](Id id, int index) {
-        return std::find(seen.begin(), seen.end(), Target{id, index}) != seen.end();
-    };
-    CHECK(hit(Id::Scope, 0));
-    CHECK(hit(Id::Scope, 1));
+    d.Draw(m, v);
+    CHECK(HasHit(d, Id::Scope, 0));
+    CHECK(HasHit(d, Id::Scope, 1));
+    CHECK(HasHit(d, Id::ImmersiveMode, -1));
+    const auto hit = [&](Id id, int index) { return DrawAimPage(d, m, v, id, index); };
     CHECK(hit(Id::GyroAim, 1));
     CHECK(hit(Id::TriggerLayout, 0));
     CHECK(hit(Id::KiuBottomScreen, 2));
     CHECK(hit(Id::KiuSnapTurn, 4));
-    CHECK(hit(Id::WristSide, 1));
     CHECK(hit(Id::Recoil, -1));
-    CHECK(hit(Id::KiuOverShoulder, FrameXr::Menu::kGameCameraOffered ? 2 : 1)); // AzaharFrame kiu133: Camera's last choice
-    CHECK(hit(Id::ImmersiveMode, -1));
+    CHECK(hit(Id::KiuOverShoulder, FrameXr::Menu::kGameCameraOffered ? 2 : 1)); // Camera's last
     CHECK(hit(Id::KiuBottomReset, -1));
-    CHECK(hit(Id::AngelsAimSettings, -1));
-    CHECK(hit(Id::AngelsAimReport, -1));
+    AimPageOpen(v, static_cast<int>(AimGroup::About));
+    d.Draw(m, v);
+    CHECK(HasHit(d, Id::AngelsAimReport, -1));
+    // The sliders: each has its track, Aiming's with their stops as on the Controls tab.
     for (const Id id : {Id::GyroSensitivity, Id::KiuBottomSize, Id::KiuReticleSize,
                         Id::WeaponScale, Id::ProjectileSpeed}) {
         INFO(LabelFor(id));
-        CHECK(Has(sliders, id));
+        m.gyro_aim = id == Id::GyroSensitivity ? 1 : 2;
+        REQUIRE(hit(id, kLabelIndex));
+        const auto& sliders = d.menu.Layout().sliders;
+        CHECK(std::any_of(sliders.begin(), sliders.end(), [&](const auto& t) { return t.id == id; }));
     }
-    // Immersive Mode's menu opens over the segment, its items targets.
+    // Immersive Mode's menu opens over the front view, its items targets.
+    AimPageOpen(v, -1);
     v.open_menu = Id::ImmersiveMode;
-    bool opened = false;
-    for (float scroll = 0.0f; scroll <= max_scroll && !opened; scroll += 48.0f) {
-        v.scroll[static_cast<std::size_t>(Tab::Mods)] = scroll;
-        d.Draw(m, v);
-        opened = FindHit(d, Id::ImmersiveMode, 3) != nullptr;
-    }
-    CHECK(opened);
+    d.Draw(m, v);
+    CHECK(FindHit(d, Id::ImmersiveMode, 3) != nullptr);
 }
 
 // AzaharFrame kiu133: Camera (First Person, Third Person, Game's Camera) and, in the two
-// views from outside Pit, Pit Opacity: in the Settings tab's first-person rows and the hub's
-// View group, the same rows.
+// views from outside Pit, Pit Opacity: in the first-person rows and the page's View group.
 TEST_CASE("Tab menu: Angel's Aim's Camera and Pit Opacity", "[frame_xr][tabmenu][kiu133]") {
     CHECK(LabelFor(Id::KiuPitOpacity) == "Pit Opacity");
     CHECK(!ExplainFor(Id::KiuPitOpacity).empty());
@@ -5149,9 +5098,7 @@ TEST_CASE("Tab menu: Angel's Aim's Camera and Pit Opacity", "[frame_xr][tabmenu]
         const auto fp = AngelsAimFirstPersonRows(m);
         CHECK(Has(fp, Id::KiuOverShoulder));
         CHECK(Has(fp, Id::KiuPitOpacity) == (view != 0));
-        const auto groups = AngelsAimGroups(m);
-        REQUIRE(groups.size() == 4);
-        CHECK(Has(groups[1].rows, Id::KiuPitOpacity) == (view != 0));
+        CHECK(Has(AimPageRows(m, AimGroup::View).rows, Id::KiuPitOpacity) == (view != 0));
         // The row right under Camera.
         const auto at = std::find(fp.begin(), fp.end(), Id::KiuOverShoulder);
         if (view != 0) {
@@ -5175,9 +5122,7 @@ TEST_CASE("Tab menu: Hide Off Hand", "[frame_xr][tabmenu][kiuhands]") {
     CHECK(MenuModel{}.kiu_hide_off_hand == 0);
     MenuModel m = KiuModel(true, 4);
     CHECK(Has(AngelsAimFirstPersonRows(m), Id::KiuHideOffHand));
-    const auto groups = AngelsAimGroups(m);
-    REQUIRE(groups.size() == 4);
-    CHECK(groups[1].rows.back() == Id::KiuHideOffHand); // View's last
+    CHECK(AimPageRows(m, AimGroup::Weapon).rows.back() == Id::KiuHideOffHand); // Weapon's last
     m.mods.angels_aim.mapped = false; // not the European game
     CHECK_FALSE(Has(AngelsAimFirstPersonRows(m), Id::KiuHideOffHand));
     CHECK_FALSE(Has(AngelsAimFirstPersonRows(KiuModel(true, 1)), Id::KiuHideOffHand));
