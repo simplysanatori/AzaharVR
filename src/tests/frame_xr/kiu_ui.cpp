@@ -2,9 +2,11 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
+#include <array>
 #include <cmath>
 #include <map>
 #include <utility>
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include "frame_xr/immersive_layout.h"
 #include "frame_xr/kiu_first_person.h"
@@ -146,6 +148,7 @@ TEST_CASE("Kid Icarus UI: what the battle UI shows", "[frame_xr][kiu1s]") {
         m.words[kUi + Ui::kIllustration] = 0;
         m.words[kPortraits] = 0;
         CHECK(Ui::Read(m).pictures);
+        CHECK_FALSE(Ui::Read(m).illustration); // the portraits alone
         for (const uint32_t bad : {0u, 0x14200002u, 0xE0000000u}) {
             m.words[kUi + Ui::kPortraits] = bad;
             CHECK_FALSE(Ui::Read(m).pictures);
@@ -409,5 +412,52 @@ TEST_CASE("Kid Icarus UI: the menu panel's two screens", "[frame_xr][kiu1s]") {
         CHECK(top_bottom - bottom_top < 4.0f);
         CHECK(p.up_deg + half(p.top_width_deg, 5.0f / 3.0f) < 30.0f);
         CHECK(p.down_deg + half(p.width_deg, 4.0f / 3.0f) < 30.0f);
+        // Clear of each other by a degree, the letters of both to read (0.7 degrees and more).
+        CHECK(MenuGapDeg(p) == Catch::Approx(top_bottom - bottom_top).margin(0.01));
+        CHECK(MenuGapDeg(p) >= 1.0f);
+        CHECK(LetterDeg(p.width_deg, 320.0f) >= 0.9f);
+        CHECK(LetterDeg(p.top_width_deg, 400.0f) >= 0.7f);
+        // The one pointed at: its middle below the eyes, its top edge not above them by much.
+        CHECK(bottom_top < 4.0f);
     }
+}
+TEST_CASE("Kid Icarus UI: a panel left where the head was is upright", "[frame_xr][kiu1s]") {
+    using namespace FirstPerson;
+    const auto mul = [](std::array<float, 4> a, std::array<float, 4> b) {
+        return std::array<float, 4>{a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+                                    a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+                                    a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+                                    a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]};
+    };
+    const auto about = [](int axis, float deg) {
+        std::array<float, 4> q{0, 0, 0, std::cos(0.5f * deg * 0.01745329f)};
+        q[static_cast<std::size_t>(axis)] = std::sin(0.5f * deg * 0.01745329f);
+        return q;
+    };
+    const auto same = [](std::array<float, 4> a, std::array<float, 4> b) {
+        const float dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+        return std::abs(std::abs(dot) - 1.0f) < 1e-4f;
+    };
+    const auto no_roll = [](std::array<float, 4> q) { return NoRoll(q[0], q[1], q[2], q[3]); };
+    CHECK(same(no_roll({0, 0, 0, 1}), {0, 0, 0, 1}));
+    // Turned 40 left, looking 20 down, the head tilted 25: the tilt goes, the rest stays.
+    const auto level = mul(about(1, 40.0f), about(0, -20.0f));
+    CHECK(same(no_roll(mul(level, about(2, 25.0f))), level));
+    CHECK(same(no_roll(level), level));
+    // Looking at the floor: no further down than kPanelPitchDeg.
+    CHECK(same(no_roll(mul(about(1, -70.0f), about(0, -85.0f))),
+               mul(about(1, -70.0f), about(0, -kPanelPitchDeg))));
+}
+TEST_CASE("Kid Icarus UI: the pause panel's layer through a battle", "[frame_xr][kiu1s]") {
+    using namespace FirstPerson;
+    using enum PortraitState;
+    CHECK(LayerFor(Off, false, true) == Off);
+    CHECK(LayerFor(Off, true, false) == Off); // no battle
+    CHECK(LayerFor(Off, true, true) == Ready);
+    CHECK(LayerFor(Up, true, true) == Up);
+    CHECK(LayerFor(Ready, false, true) == Ready);
+    // Paused, the panel has the layer; the wrist screen, while it is up, has it instead.
+    CHECK_FALSE(PortraitsHere(Ready, false, true, false));
+    CHECK(PausePanelShown(true, false));
+    CHECK_FALSE(PausePanelShown(true, true));
 }

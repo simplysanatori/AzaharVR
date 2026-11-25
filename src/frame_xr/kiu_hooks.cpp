@@ -504,8 +504,14 @@ void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
     const bool is_paused = s.ui_pause.Update(now.paused);
     Kiu::FirstPerson::SetBattleUi(page && is_page, pause && is_paused && battle);
     const bool pictures = s.ui_pictures.Update(now.pictures);
-    Kiu::FirstPerson::SetPortraits(Kiu::FirstPerson::PortraitsFor(
-        portraits, battle, pictures, now.paused || s.ui_pause.On()));
+    // The pause panel's layer is there all through a battle too (LayerFor).
+    Kiu::FirstPerson::SetPortraits(Kiu::FirstPerson::LayerFor(
+        Kiu::FirstPerson::PortraitsFor(portraits, battle, pictures,
+                                       now.paused || s.ui_pause.On()),
+        pause, battle));
+    if (!menu_screens) {
+        s.ui_menu = {}; // switched off with a menu up: nothing kept for the next time
+    }
     const int menu = menu_screens ? s.ui_menu.Update(now.menu) : Ui::kNoMenu;
     if (menu != s.menu_up) {
         LOG_INFO(Frontend, "xr: Kid Icarus hooks: menu {} -> {}", s.menu_up, menu);
@@ -525,7 +531,7 @@ void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
                  now.known && !now.shown ? "not shown" : "", now.page ? "a page" : "",
                  now.paused ? " paused" : "",
                  now.talk ? (now.talk_below ? " talk (bottom)" : " talk (top)") : "",
-                 now.pictures ? " pictures" : "",
+                 now.illustration ? " an illustration" : now.pictures ? " pictures" : "",
                  now.vertex_base, now.index_offset);
     }
     s.ui = now;

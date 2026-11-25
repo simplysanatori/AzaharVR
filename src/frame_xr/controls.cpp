@@ -2059,7 +2059,8 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                 // LockedTargetFor); the bottom screen is not touched by this controller then.
                 const bool lock =
                     Settings::values.vr_light_gun_lock.GetValue() && !gyro_aim_frame.clutch &&
-                    !Immersive::GameMenu(); // AzaharFrame kiu1s: no aim to hold, it points
+                    !Immersive::GameMenu() && // AzaharFrame kiu1s: no aim to hold, it points
+                    !shown.pause_panel;
                 if (hand.active) {
                     // AzaharFrame kiuinteg: along the weapon's own axis as held (the owner's
                     // option A), or the controller's line with AZAHARFRAME_ANGELS_AIM_RAY=hand.
@@ -2384,15 +2385,17 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     // Screen's 320 x 240 pixels and whether a trigger reached the game with it (it never should).
     // AzaharFrame kiupanel: also once it is hidden (a touch it ends).
     // AzaharFrame kiu1s: and of the menu panel.
-    if (shown.bottom_on_wrist || wrist_wanted || shown.screens_fixed) {
+    if (shown.bottom_on_wrist || wrist_wanted || shown.screens_fixed || shown.pause_panel) {
         for (int i = 0; i < out.touch_event_count; i++) {
             const Input::TouchEvent& e = out.touch_events[static_cast<std::size_t>(i)];
             if (e.type != Input::TouchEventType::Moved && wrist_logs < 200) {
                 wrist_logs++;
                 LOG_INFO(Frontend,
                          "xr: Angel's Aim: {} touch {} at {:.1f}, {:.1f} (ZL {}, ZR {}, L {})",
-                         shown.screens_fixed && !shown.bottom_on_wrist ? "menu panel"
-                                                                       : "wrist screen",
+                         shown.bottom_on_wrist  ? "wrist screen"
+                         : shown.screens_fixed ? "menu panel"
+                         : shown.pause_panel   ? "pause panel"
+                                               : "wrist screen",
                          e.type == Input::TouchEventType::Pressed ? "pressed" : "released", e.x,
                          e.y, out.controls.Get(Input::Control::TriggerL) ? 1 : 0,
                          out.controls.Get(Input::Control::TriggerR) ? 1 : 0,
@@ -2545,7 +2548,8 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                               weapon_shown, aim_hit);
         if (gyro_aim_frame.checking) {
             beam = {Input::LaserSight(gyro_aim_frame.mode, true, aim_hit), true};
-        } else if ((gyro_aim_frame.clutch || Immersive::GameMenu()) && // AzaharFrame kiu1s
+        } else if ((gyro_aim_frame.clutch || Immersive::GameMenu() ||
+                    shown.pause_panel) && // AzaharFrame kiu1s
                    gyro_aim_frame.mode == Input::GyroAimMode::LightGun) {
             beam = {}; // AzaharFrame kiuaim3: aim freed: the usual beam, to point anywhere
         }
@@ -2620,6 +2624,9 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         } else if (Immersive::HoldingScreen()) {
             // A grip holds the immersive screen: no swap or hide meanwhile (a swap would cancel
             // the move). The reset is the 1 s hold, as everywhere (AzaharFrame controls).
+        } else if (cmd.swap_screens && shown.screens_fixed && !screen_view.bottom_focus()) {
+            // AzaharFrame kiu1s: the menu panel's large screen is the one to touch: no swap.
+            LOG_INFO(Frontend, "xr: no swap on the game's menu panel");
         } else if (cmd.swap_screens) {
             effect = screen_view.Swap(managed); // right stick click, tap
             LOG_INFO(Frontend, "xr: {} screen in focus",

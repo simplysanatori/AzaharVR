@@ -144,6 +144,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <string_view>
@@ -425,6 +426,22 @@ constexpr bool WholePage(bool battle, bool battle_page) {
 }
 /// The pause panel: degrees below straight ahead, across, and how far away (metres).
 inline constexpr float kPauseDownDeg = 4.0f, kPauseWidthDeg = 36.0f;
+/// The way the head looks without its roll (x, y, z, w; x right, y up, -z ahead), at most
+/// kPanelPitchDeg up or down: a panel left where the head was stays upright and in reach.
+inline constexpr float kPanelPitchDeg = 50.0f;
+inline std::array<float, 4> NoRoll(float qx, float qy, float qz, float qw) {
+    constexpr float kDeg = 3.14159265358979f / 180.0f;
+    // -z turned by q.
+    const float fx = -2.0f * (qx * qz + qw * qy), fy = -2.0f * (qy * qz - qw * qx),
+                fz = -(1.0f - 2.0f * (qx * qx + qy * qy));
+    const float flat = std::sqrt(fx * fx + fz * fz);
+    const float yaw = flat > 1e-4f ? std::atan2(-fx, -fz) : 0.0f;
+    const float pitch =
+        std::clamp(std::atan2(fy, flat), -kPanelPitchDeg * kDeg, kPanelPitchDeg * kDeg);
+    const float cy = std::cos(0.5f * yaw), sy = std::sin(0.5f * yaw);
+    const float cp = std::cos(0.5f * pitch), sp = std::sin(0.5f * pitch);
+    return {cy * sp, sy * cp, -sy * sp, cy * cp}; // yaw * pitch
+}
 /// Shown: paused, unless the Secondary Screen is up on the wrist (that one takes the touches).
 constexpr bool PausePanelShown(bool paused, bool wrist_up) {
     return paused && !wrist_up;
@@ -439,6 +456,13 @@ constexpr PortraitState PortraitsFor(bool wanted, bool battle, bool pictures, bo
     return !wanted || !battle     ? PortraitState::Off
            : pictures && !paused ? PortraitState::Up
                                  : PortraitState::Ready;
+}
+/// The same layer is the pause panel's (AZAHARFRAME_KIU_PAUSE_PANEL=1): there, shrunk, through a
+/// battle, so pausing adds no layer either (a screen's layer that comes moves every quad after it
+/// to another overlay for a refresh, layer_slots.h).
+constexpr PortraitState LayerFor(PortraitState portraits, bool pause_wanted, bool battle) {
+    return portraits == PortraitState::Off && pause_wanted && battle ? PortraitState::Ready
+                                                                     : portraits;
 }
 void SetPortraits(PortraitState state);
 PortraitState Portraits();
@@ -482,16 +506,32 @@ void SetMenu(int menu, bool panel);
 int MenuUp();
 bool MenuPanel();
 /// The menu's two screens, where the head was as the first menu came up: the Secondary Screen's
-/// middle (degrees below straight ahead) and width, the Primary Screen's (above) and width.
+/// middle (degrees below straight ahead) and width, the Primary Screen's (above) and width. The
+/// Secondary Screen is the one pointed at: large, its middle a little below the eyes, where a
+/// hand at rest points; the Primary Screen is read only, above it and clear of it.
 struct MenuPlace {
     float down_deg, width_deg;
     float up_deg, top_width_deg;
 };
-inline constexpr MenuPlace kMenuPlace{9.0f, 40.0f, 16.5f, 30.0f};
+inline constexpr MenuPlace kMenuPlace{12.0f, 40.0f, 14.5f, 32.0f};
 /// The Fiend's Cauldron, where both screens say something: the Primary Screen the larger one.
-inline constexpr MenuPlace kMenuPlaceCauldron{13.0f, 34.0f, 12.0f, 38.0f};
+inline constexpr MenuPlace kMenuPlaceCauldron{14.0f, 34.0f, 11.75f, 38.0f};
 constexpr MenuPlace MenuPlaceFor(int menu) {
     return menu == Ui::kMenuCauldron ? kMenuPlaceCauldron : kMenuPlace;
+}
+/// How high a panel `width_deg` wide is, in degrees (it faces the eye).
+inline float PanelHighDeg(float width_deg, float aspect) {
+    constexpr float kDeg = 3.14159265358979f / 180.0f;
+    return 2.0f / kDeg * std::atan(std::tan(0.5f * width_deg * kDeg) / aspect);
+}
+/// The clear band between the two screens, in degrees (below 0: they overlap).
+inline float MenuGapDeg(const MenuPlace& p, float top_aspect = 400.0f / 240.0f) {
+    return (p.up_deg - 0.5f * PanelHighDeg(p.top_width_deg, top_aspect)) -
+           (-p.down_deg + 0.5f * PanelHighDeg(p.width_deg, 320.0f / 240.0f));
+}
+/// The game's letters (9 pixels high) on a screen `pixels` wide shown `width_deg` wide, in degrees.
+constexpr float LetterDeg(float width_deg, float pixels) {
+    return 9.0f * width_deg / pixels;
 }
 bool CutscenesOnScreen();
 /// AzaharFrame kiu140: the HUD moved into the view (HUD, vr_kiu_hud, or AZAHARFRAME_KIU_HUD=0|1).

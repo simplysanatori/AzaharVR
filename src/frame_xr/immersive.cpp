@@ -355,6 +355,9 @@ struct State {
     bool live = false;           ///< a game shows its screens and the session is visible
     bool engaged = false;        ///< immersive this frame
     bool menu_place = false; ///< AzaharFrame kiu1s: the menu panel goes where the head is now
+    bool pause_place = false; ///< AzaharFrame kiu1s: the pause panel too
+    bool pause_seen = false;  ///< AzaharFrame kiu1s: the pause panel was asked for last frame
+    XrPosef pause_head{{0, 0, 0, 1}, {0, 0, 0}}; ///< where it is: the head then, upright
     bool bottom_toggled = false; ///< the bottom screen's visibility flipped (the bumper chord)
     bool focus_bottom = false;   ///< the bottom screen is in focus (SetBottomFocused)
     bool menu_open = false;      ///< the in-game menu shows (immersive modes 2 and 3 pause)
@@ -2262,6 +2265,21 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
     out.bottom_size = placement.bottom_size;
     out.show_bottom = BottomShown();
     out.full_mode = g.live && IsViewMode(g.mode); // AzaharFrame flash2
+    // AzaharFrame kiu1s: the pause panel is asked for (only in the view: outside it, a pause
+    // that ends and another that starts are not taken for one).
+    const bool pause_asked = g.engaged && IsViewMode(g.mode) && KiuFirstPerson() && g.view.valid &&
+                             Kiu::FirstPerson::PausePanel();
+    if (pause_asked && (!g.pause_seen || (g.pause_place && g.view.time >= g.recentre_time))) {
+        const std::array<float, 4> q = Kiu::FirstPerson::NoRoll(
+            g.view.head.orientation.x, g.view.head.orientation.y, g.view.head.orientation.z,
+            g.view.head.orientation.w);
+        g.pause_head = {{q[0], q[1], q[2], q[3]}, g.view.head.position};
+        g.pause_place = false;
+    }
+    if (pause_asked != g.pause_seen) {
+        g.pause_seen = pause_asked;
+        LOG_INFO(Frontend, "xr: Angel's Aim: the pause panel {}", pause_asked ? "up" : "away");
+    }
 
     if (g.engaged && !IsViewMode(g.mode)) {
         // Mode 1: fixed in the room, ahead of where the head was when the game started (or the
@@ -2357,25 +2375,20 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
         }
         bottom_as_drawn = bottom.mode != Kiu::FirstPerson::BottomScreen::Off; // kiu140
         // AzaharFrame kiu1s: paused (test switch): the Secondary Screen in front, to point at. It
-        // stays where the head was as the game paused, so it is still to read and to point at.
-        static bool pause_seen = false;
-        static XrPosef pause_head{};
-        const bool pause = KiuFirstPerson() && g.view.valid && Kiu::FirstPerson::PausePanel();
-        if (pause != pause_seen) {
-            pause_seen = pause;
-            pause_head = g.view.head;
-            LOG_INFO(Frontend, "xr: Angel's Aim: the pause panel {}", pause ? "up" : "away");
-        }
+        // stays where the head was as the game paused (upright: NoRoll), so it is still to read
+        // and to point at; a re-centre brings it in front again.
+        const bool pause = pause_asked;
         const bool pause_panel = Kiu::FirstPerson::PausePanelShown(pause, wrist_up);
         if (pause_panel) {
             const Kiu::FirstPerson::PanelInView p = Kiu::FirstPerson::PersistentInView(
                 0.0f, Kiu::FirstPerson::kPauseDownDeg, Kiu::FirstPerson::kPauseWidthDeg,
                 320.0f / 240.0f);
-            out.bottom_pose = Compose(pause_head, XrPosef{{p.qx, p.qy, p.qz, p.qw},
-                                                          {p.x, p.y, p.z}});
+            out.bottom_pose = Compose(g.pause_head, XrPosef{{p.qx, p.qy, p.qz, p.qw},
+                                                            {p.x, p.y, p.z}});
             out.bottom_size = {p.width, p.height};
             out.show_bottom = true;
             out.bottom_pointable = true;
+            out.pause_panel = true;
             out.bottom_persistent = false; // the grips do not move it
             out.bottom_alpha = 1.0f;
             bottom_as_drawn = true;
@@ -2427,8 +2440,9 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
     }
     // AzaharFrame kiu1s: one of the game's menus (test switch): the Secondary Screen as a large
     // panel in front and the Primary Screen above it, where the head was as the first menu came up
-    // (level: the way it was turned only), so both are still to read and to point at. The wrist
-    // screen, while it is up, is the Secondary Screen here too.
+    // (level: the way it was turned only), so both are still to read and to point at. The panel
+    // stays the Secondary Screen while a wrist is turned up (the wrist screen is placed anew each
+    // frame of a battle, so it is at its place again after).
     static bool menu_seen = false;
     static XrPosef menu_head{};
     const bool menu_panel =
@@ -2456,11 +2470,8 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
         out.top_size[1] = out.top_size[0];
         out.screens_fixed = true;
         at(place.down_deg, place.width_deg, 320.0f / 240.0f, out.bottom_pose, out.bottom_size);
-        if (wrist_up) {
-            out.bottom_on_wrist = true;
-            out.bottom_pose = g.wrist_pose;
-            out.bottom_size = g.wrist_size;
-        }
+        out.bottom_pointable = true;
+        out.bottom_alpha = 1.0f;
     }
     const float top_distance = out.top_space == view_space || (g.engaged && IsViewMode(g.mode))
                                    ? g.solved.distance
@@ -2750,7 +2761,7 @@ void OnRecentred(XrTime change_time) {
     // to the default size, "farther away"); the rest pose is taken from the first head pose
     // located at or after the change.
     g.rest.Recentre(change_time);
-    g.menu_place = true; // AzaharFrame kiu1s
+    g.menu_place = g.pause_place = true; // AzaharFrame kiu1s
 }
 
 bool OnResetPanels(bool stick_hold) {
@@ -2760,7 +2771,7 @@ bool OnResetPanels(bool stick_hold) {
     // as SteamVR's recenter does (the owner: a hold after a resize lost the size). Reset
     // Position also puts the Immersive Offset back to the middle: everything to the defaults.
     g.rest.Recentre(0);
-    g.menu_place = true; // AzaharFrame kiu1s
+    g.menu_place = g.pause_place = true; // AzaharFrame kiu1s
     g.poses.Clear(); // AzaharFrame heldquad
     // AzaharFrame aa6dof2: Angel's Aim draws the screen at true size whatever its placement and
     // offset are, so Reset Position only re-centres there; the game's saved placement and

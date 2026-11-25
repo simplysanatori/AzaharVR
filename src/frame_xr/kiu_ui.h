@@ -146,9 +146,10 @@ int Menu(const Reader& m, const MenuClasses& c) {
 }
 
 /// The bottom pass draws the talk's portraits or an illustration (its own tests; `ctx` is a battle
-/// UI's context, its pass drawing). The boss's card is not one of them.
+/// UI's context, its pass drawing). The boss's card is not one of them. `illustration`: the
+/// illustration's share of the picture is above 0.
 template <class Reader>
-bool Pictures(const Reader& m, uint32_t ctx) {
+bool Pictures(const Reader& m, uint32_t ctx, bool* illustration_up = nullptr) {
     const uint32_t ui = ctx + kBottom;
     uint32_t flags = 0, portraits = 0, share = 0, pieces = 0;
     if (!m.Read32(ui, flags) || (flags & kBottomOther) != 0 || !m.Read32(ui + kPortraits, portraits) ||
@@ -163,6 +164,9 @@ bool Pictures(const Reader& m, uint32_t ctx) {
     }
     const float illustration = asked ? std::bit_cast<float>(share) : 0.0f;
     if (illustration > 0.0f) {
+        if (illustration_up != nullptr) {
+            *illustration_up = true;
+        }
         return true;
     }
     uint32_t state = 0, places = 0;
@@ -179,6 +183,7 @@ struct State {
     bool talk = false;     ///< a line of the talk is on view
     bool talk_below = false; ///< on the bottom screen
     bool pictures = false;   ///< the bottom screen's portraits or illustration are drawn
+    bool illustration = false; ///< an illustration among them
     int menu = kNoMenu;      ///< the menu up outside a battle
     uint32_t context = 0;
     uint32_t vertex_base = 0, index_offset = 0; ///< of the context's draws
@@ -216,7 +221,7 @@ State Read(const Reader& m, const MenuClasses& menus = kMenuEur) {
     s.paused = s.shown && (pause & kPauseShown) != 0;
     s.talk = s.shown && (shown & 0xFF) != 0 && (shown & 0xFF00) != 0 && line != 0;
     s.talk_below = s.talk && (shown >> 24) == 1;
-    s.pictures = s.shown && (flags & kFlagOtherBottom) == 0 && Pictures(m, ctx);
+    s.pictures = s.shown && (flags & kFlagOtherBottom) == 0 && Pictures(m, ctx, &s.illustration);
     uint32_t base = 0, index = 0;
     if (m.Read32(ctx + kVertexBase, base) && m.Read32(ctx + kIndexOffset, index) &&
         base >= 0x18000000u && base < 0x30000000u && (base & 7u) == 0 && QuadsFor(index) != 0) {
