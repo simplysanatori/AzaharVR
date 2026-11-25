@@ -422,8 +422,9 @@ inline bool IsVeil(const Vertex* v, std::size_t n) {
     }
     return n == 12 && a0 < -1.0f && a1 > 1.0f;
 }
-/// The veil again, with no border: the same extent, its middle as dark, all four sides fading to
-/// nothing. 54 vertices (a triangle list); `alpha`: 0 on the rim, 1 inside.
+/// The veil again, with no border: as wide, its middle as dark, all four sides fading to nothing.
+/// Its height is about the words' (0.7 to 0.9 down): the game's hangs off the screen's foot. 54 vertices (a triangle list); `alpha`: 0 on the rim, 1 inside.
+inline constexpr float kVeilAbove = 0.12f, kVeilHigh = 0.5f;
 struct VeilVertex {
     Vertex v;
     float alpha;
@@ -438,6 +439,8 @@ inline std::array<VeilVertex, 54> SoftVeil(const Vertex* in, std::size_t n) {
     }
     const float z = in[0].z / in[0].w, w = in[0].w;
     constexpr float kSide = 0.3f, kEnd = 0.3f; // of the width, of the height
+    u1 += kVeilAbove;
+    u0 = std::max(u0, u1 - kVeilHigh);
     const float us[4] = {u0, u0 + kEnd * (u1 - u0), u1 - kEnd * (u1 - u0), u1};
     const float as[4] = {a0, a0 + kSide * (a1 - a0), a1 - kSide * (a1 - a0), a1};
     const auto at = [&](int i, int j) {

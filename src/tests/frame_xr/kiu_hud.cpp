@@ -2,6 +2,7 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
+#include <algorithm>
 #include <cmath>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -396,12 +397,18 @@ TEST_CASE("Kid Icarus HUD: the hub's cards go with its words; the veil has no bo
     REQUIRE(IsVeil(veil, 12));
     CHECK_FALSE(IsVeil(bag, 3));
     const auto soft = SoftVeil(veil, 12);
-    float inside = 0.0f;
+    float inside = 0.0f, dark_low = 1e9f, dark_high = -1e9f;
     for (const auto& q : soft) {
         const float up = q.v.x / w, at = q.v.y / w;
-        const bool rim = up < -1.319f || up > -0.671f || at < -1.359f || at > 1.239f;
+        const bool rim = up < -1.049f || up > -0.551f || at < -1.359f || at > 1.239f;
         CHECK(q.alpha == (rim ? 0.0f : 1.0f));
         inside += q.alpha;
+        if (!rim) {
+            dark_low = std::min(dark_low, up);
+            dark_high = std::max(dark_high, up);
+        }
     }
+    CHECK(dark_low == Approx(-0.9f)); // the words, 0.7 to 0.9 down, are over its dark part
+    CHECK(dark_high == Approx(-0.7f));
     CHECK(inside == 6.0f + 4 * 3.0f + 4 * 2.0f); // the middle, the sides, two a corner
 }
