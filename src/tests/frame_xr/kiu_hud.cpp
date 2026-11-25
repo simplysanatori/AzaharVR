@@ -3,10 +3,13 @@
 // Refer to the license.txt file included.
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include "video_core/kiu_hud.h"
+#include "video_core/kiu_hud_fade.h"
+#include "video_core/vr_view_matrix.h"
 
 using Catch::Approx;
 using namespace VideoCore::KiuHud;
@@ -330,7 +333,7 @@ TEST_CASE("Kid Icarus HUD: a page's draw, quad by quad the same way; the dim sta
 
 TEST_CASE("Kid Icarus HUD: a menu's 2D in the view, in the HUD's frame", "[frame_xr][kiuhud]") {
     Wanted w;
-    const Place hud = At(w), p = PageInView(w, kTanX, kTanY, -5.0f * kRad);
+    const Place hud = At(w), p = PageInView(w, kTanX, kTanY);
     REQUIRE(p.on);
     REQUIRE(p.page);
     CHECK(p.half_across == hud.half_across);
@@ -340,13 +343,13 @@ TEST_CASE("Kid Icarus HUD: a menu's 2D in the view, in the HUD's frame", "[frame
         Vertex v[3] = {{-0.8f, 1.0f, 0, 1}, {-0.7f, 1.0f, 0, 1}, {-0.8f, 0.9f, 0, 1}};
         CHECK(MovePage(v, 3, p, f, f) == 3);
         CHECK(std::atan(v[0].y / v[0].w / f * kTanX) / kRad == Approx(30.0f).margin(0.01f));
-        const float up = std::atan(v[0].x / v[0].w / f * kTanY) / kRad - 5.0f;
+        const float up = std::atan(v[0].x / v[0].w / f * kTanY) / kRad; // in the game camera's frame
         CHECK(up < kMiddleDeg);
         CHECK(up > kMiddleDeg - 20.0f);
     }
     w.size = 150;
-    CHECK(PageInView(w, kTanX, kTanY, 0.0f).half_across > p.half_across);
-    CHECK_FALSE(PageInView(w, 0.0f, kTanY, 0.0f).on);
+    CHECK(PageInView(w, kTanX, kTanY).half_across > p.half_across);
+    CHECK_FALSE(PageInView(w, 0.0f, kTanY).on);
 }
 
 TEST_CASE("Kid Icarus HUD: the hub's cards go with its words; the veil has no border",
@@ -364,7 +367,7 @@ TEST_CASE("Kid Icarus HUD: the hub's cards go with its words; the veil has no bo
     room.depth_test = false;
     CHECK_FALSE(MayBeCard(room));
 
-    const Place p = PageInView(Wanted{}, kTanX, kTanY, 0.0f);
+    const Place p = PageInView(Wanted{}, kTanX, kTanY);
     REQUIRE(p.page);
     REQUIRE(p.cards);
     CHECK_FALSE(PagePlace(4.0f, 4.0f).cards);
@@ -411,4 +414,224 @@ TEST_CASE("Kid Icarus HUD: the hub's cards go with its words; the veil has no bo
     CHECK(dark_low == Approx(-0.9f)); // the words, 0.7 to 0.9 down, are over its dark part
     CHECK(dark_high == Approx(-0.7f));
     CHECK(inside == 6.0f + 4 * 3.0f + 4 * 2.0f); // the middle, the sides, two a corner
+}
+
+// AzaharFrame kiuhs3a: HUD Opacity (video_core/kiu_hud_fade.h).
+TEST_CASE("Kid Icarus HUD: HUD Opacity is the bar's and the score's only",
+          "[frame_xr][kiuhud][kiuhs3a]") {
+    namespace F = VideoCore::KiuHudFade;
+    CHECK(F::OpacityFor(100, true) == 1.0f);
+    CHECK(F::OpacityFor(50, true) == 0.5f);
+    CHECK(F::OpacityFor(0, true) == 0.2f);
+    CHECK(F::OpacityFor(250, true) == 1.0f);
+    CHECK(F::OpacityFor(50, false) == 1.0f); // a page, the hub, Game's Own
+    const auto quad = [](Vertex* v, float u0, float u1, float y0, float y1) {
+        const float up[6] = {u0, u1, u0, u1, u1, u0};
+        const float at[6] = {y0, y0, y1, y0, y1, y1};
+        for (int i = 0; i < 6; ++i) {
+            v[i] = {up[i], at[i], 0.1f, 1.0f};
+        }
+    };
+    const Place p = At();
+    const auto piece = [&](float opacity, const Place& place, float u0, float u1, float y0,
+                           float y1) {
+        Vertex v[6];
+        quad(v, u0, u1, y0, y1);
+        const Group g = MovePiece(v, 6, place, 2.5f, 1.5f);
+        return F::PieceFor(opacity, place, g, v, 6, 2.5f, 1.5f);
+    };
+    CHECK(piece(0.5f, p, 0.7f, 1.0f, 0.3f, 1.0f).Fades());   // the bar
+    CHECK(piece(0.5f, p, 0.6f, 1.0f, -1.0f, -0.6f).Fades()); // the score
+    CHECK_FALSE(piece(1.0f, p, 0.7f, 1.0f, 0.3f, 1.0f).Fades());
+    CHECK_FALSE(piece(0.5f, p, -0.2f, 0.3f, -0.3f, 0.3f).Fades());  // the middle's
+    CHECK_FALSE(piece(0.5f, p, -1.0f, -0.6f, -0.3f, 0.3f).Fades()); // the lower part's
+    CHECK_FALSE(piece(0.5f, PagePlace(2.0f, 2.0f), 0.7f, 1.0f, 0.3f, 1.0f).Fades());
+
+    // What is kept holds every piece, wherever the HUD is put.
+    for (const int size : {40, 100, 200}) {
+        for (const bool linked : {true, false}) {
+            for (const float height : {-30.0f, 0.0f, 22.0f, 40.0f}) {
+                Wanted w;
+                w.size = size;
+                w.linked = linked;
+                w.height = w.bar_height = height;
+                w.score_height = -height;
+                const Place at = PlaceFor(w, 1.9f, 1.15f, -0.09f);
+                for (const auto& q : {std::array{0.7f, 1.0f, 0.28f, 1.02f}, // the bar
+                                      std::array{0.55f, 1.05f, -1.02f, -0.55f}}) {
+                    const F::Piece got = piece(0.5f, at, q[0], q[1], q[2], q[3]);
+                    REQUIRE(got.Fades());
+                    const F::Box& in = got.groups[got.group == Group::Bar ? 0 : 1];
+                    CHECK(in.x0 < got.box.x0);
+                    CHECK(in.x1 > got.box.x1);
+                    CHECK(in.y0 < got.box.y0);
+                    CHECK(in.y1 > got.box.y1);
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("Kid Icarus HUD: HUD Opacity's pixels", "[frame_xr][kiuhud][kiuhs3a]") {
+    namespace F = VideoCore::KiuHudFade;
+    const F::Pixels all{0, 0, 1600, 3200};
+    const F::Box b{-0.5f, -0.25f, 0.5f, 0.75f};
+    CHECK(F::ToPixels(b, 0, 0, 1600, 3200, all) == F::Pixels{400, 1200, 800, 1600});
+    CHECK(F::ToPixels(b, 0, 3200, 1600, -3200, all) == F::Pixels{400, 400, 800, 1600}); // turned
+    CHECK(F::ToPixels({-3.0f, -3.0f, 3.0f, 3.0f}, 0, 0, 1600, 3200, all) == all);
+    CHECK(F::ToPixels({1.5f, 0.0f, 2.0f, 1.0f}, 0, 0, 1600, 3200, all).Empty()); // out of the view
+    CHECK(F::ToPixels(F::Box{}, 0, 0, 1600, 3200, all).Empty());
+    const F::Pixels l{0, 0, 10, 10}, r{8, 4, 10, 10}, apart{30, 0, 5, 5};
+    CHECK(F::Intersect(l, r) == F::Pixels{8, 4, 2, 6});
+    CHECK(F::Intersect(l, apart).Empty());
+    CHECK(F::Union(l, r) == F::Pixels{0, 0, 18, 14});
+    CHECK(F::Union(F::Pixels{}, r) == r);
+}
+
+TEST_CASE("Kid Icarus HUD: the direction marks stay whole, at the edges of the game's own frame",
+          "[frame_xr][kiuhs3]") {
+    // The game's table (EUR 0x92F374): two corners of each place, pixels from the top left, and the
+    // atlas there. The corners' and the sides' go 8 pixels past the frame.
+    struct Mark {
+        float x0, y0, x1, y1, s0, t0, s1, t1;
+    };
+    constexpr Mark kMarks[8] = {
+        {112, 0, 288, 7, 0.0f, 0.96484375f, 0.6875f, 0.9375f},             // top
+        {283, 0, 408, 59, 0.45703125f, 0.54296875f, -0.03125f, 0.7734375f}, // top right
+        {392, 63, 408, 177, 0.0f, 0.96875f, 0.4453125f, 1.03125f},         // right
+        {283, 181, 408, 240, 0.45703125f, 0.54296875f, -0.03125f, 0.7734375f},
+        {112, 233, 288, 240, 0.0f, 0.9375f, 0.6875f, 0.96484375f}, // bottom
+        {-8, 181, 117, 240, -0.03125f, 0.7734375f, 0.45703125f, 0.54296875f},
+        {-8, 63, 8, 177, 0.0f, 1.03125f, 0.4453125f, 0.96875f}, // left
+        {-8, 0, 117, 59, -0.03125f, 0.7734375f, 0.45703125f, 0.54296875f}};
+    Wanted low;
+    low.height = 0.0f; // the health bar and the score clear of the frame's top
+    const Place p = At(low);
+    const auto quad = [](const Mark& m, MarkVertex* out) {
+        const auto at = [&](bool right, bool low) {
+            const float x = right ? m.x1 : m.x0, y = low ? m.y1 : m.y0;
+            return MarkVertex{{1.0f - y / 120.0f, 1.0f - x / 200.0f, 0.1f, 1.0f},
+                              right ? m.s1 : m.s0,
+                              low ? m.t1 : m.t0};
+        };
+        const MarkVertex c[4] = {at(false, false), at(true, false), at(false, true), at(true, true)};
+        const int order[6] = {0, 1, 2, 1, 3, 2};
+        for (int k = 0; k < 6; ++k) {
+            out[k] = c[order[k]];
+        }
+    };
+    MarkVertex all[48];
+    for (int i = 0; i < 8; ++i) {
+        quad(kMarks[i], all + 6 * i);
+    }
+    REQUIRE(MoveMarks(all, 48, p, 1.3f, 1.2f));
+    for (int i = 0; i < 8; ++i) {
+        MarkVertex one[6];
+        quad(kMarks[i], one);
+        REQUIRE(MoveMarks(one, 6, p, 1.3f, 1.2f)); // alone or with the others: the same place
+        for (int k = 0; k < 6; ++k) {
+            const auto& m = one[k];
+            REQUIRE(m.v.x == all[6 * i + k].v.x);
+            REQUIRE(m.v.y == all[6 * i + k].v.y);
+            REQUIRE(m.s == all[6 * i + k].s);
+            REQUIRE(m.v.w == 2.0f);
+            const Mark& g = kMarks[i];
+            const float x = std::clamp(k == 1 || k == 3 || k == 4 ? g.x1 : g.x0, 0.0f, 400.0f);
+            const float y = k == 2 || k == 4 || k == 5 ? g.y1 : g.y0;
+            // Its degrees are those of the game's own frame: 45 high, 5:3, straight ahead.
+            const float up = std::tan(22.5f * kRad) * (1.0f - y / 120.0f);
+            const float aside = std::tan(22.5f * kRad) * (400.0f / 240.0f) * (x / 200.0f - 1.0f);
+            REQUIRE(-m.v.y / 2.0f / 1.3f * kTanX == Approx(aside).margin(1e-4));
+            REQUIRE(m.v.x / 2.0f / 1.2f * kTanY - std::tan(5.0f * kRad) == Approx(up).margin(1e-4));
+            // The picture is cut with the place, nothing squeezed.
+            const float along = (x - g.x0) / (g.x1 - g.x0);
+            REQUIRE(m.s == Approx(g.s0 + (g.s1 - g.s0) * along).margin(1e-4));
+            REQUIRE(m.v.z == 0.2f);
+        }
+    }
+    REQUIRE(MayBeMarks({true, false, true, true, 0x218E1300, 12, 256, 256, 9}));
+    REQUIRE_FALSE(MayBeMarks({true, false, true, true, 0x218B1300, 12, 256, 256, 13}));
+    REQUIRE_FALSE(MayBeMarks({true, false, true, true, 0x218E1300, 54, 256, 256, 9}));
+    REQUIRE(IsMarkColor(242 / 255.0f, 132 / 255.0f, 35 / 255.0f));
+    REQUIRE_FALSE(IsMarkColor(1.0f, 1.0f, 1.0f));
+    MarkVertex deep[6];
+    quad(kMarks[0], deep);
+    deep[3].v.w = deep[1].v.w = 2.0f;
+    REQUIRE_FALSE(MoveMarks(deep, 6, p, 1.0f, 1.0f));
+    quad(kMarks[0], deep);
+    deep[3].v.x += 0.1f; // not two triangles of one quad
+    REQUIRE_FALSE(MoveMarks(deep, 6, p, 1.0f, 1.0f));
+    // The HUD at the frame's top (its default height): the top mark clear of it, the rest as before.
+    for (const float height : {16.0f, 20.0f, 22.0f, 24.0f}) {
+        Wanted w;
+        w.height = height;
+        const Place up = At(w);
+        MarkVertex top[6];
+        quad(kMarks[0], top);
+        REQUIRE(MoveMarks(top, 6, up, 1.0f, 1.0f));
+        CHECK((top[2].v.x / 2.0f > up.bar_up + up.half_up || // above the bar, or under it
+               top[0].v.x / 2.0f <= up.bar_up + up.half_up * (2.0f * kGroupUp - 1.0f)));
+        CHECK(top[0].v.x / 2.0f <= 1.0f);
+        CHECK(up.edge_up - up.edge_half_up == Approx(p.edge_up - p.edge_half_up));
+        CHECK(up.edge_half_across == p.edge_half_across);
+    }
+    Wanted above;
+    above.height = 40.0f; // over the frame's top, not across it
+    CHECK(At(above).edge_half_up == Approx(p.edge_half_up));
+    Live live;
+    live.Set(p);
+    REQUIRE(live.Get().edge_half_up == p.edge_half_up);
+    REQUIRE(live.Get().edge_up == p.edge_up);
+}
+
+TEST_CASE("Kid Icarus HUD: the hub's 2D is a point of its room", "[frame_xr][kiuhs3]") {
+    // The game's projection (45 degrees high, 5:3, the top screen turned, near 10 as its sprites
+    // have it) and a view; the patched one turns and leans.
+    const float t = std::tan(22.5f * kRad);
+    const float proj[4][4] = {{0, 1 / t, 0, 0}, {-0.6f / t, 0, 0, 0}, {0, 0, 0.001f, 10.0f}, {0, 0, -1, 0}};
+    const float c = std::cos(0.4f), s = std::sin(0.4f);
+    const float view[3][4] = {{c, 0, s, 3}, {0, 1, 0, -12}, {-s, 0, c, 40}};
+    const auto turned = [&](float yaw, float lean, float (&out)[3][4]) {
+        const float a = std::cos(yaw), b = std::sin(yaw);
+        for (int j = 0; j < 4; ++j) {
+            out[0][j] = a * view[0][j] + b * view[2][j];
+            out[1][j] = view[1][j];
+            out[2][j] = -b * view[0][j] + a * view[2][j];
+        }
+        out[0][3] += lean;
+    };
+    const auto at = [&](float yaw, float lean, const Vertex& placed) {
+        float patched[3][4], h[4][4];
+        turned(yaw, lean, patched);
+        REQUIRE(VideoCore::Immersive::ClipCorrection(proj, view, patched, h));
+        return InRoom(placed, h, proj[2][2], proj[2][3]);
+    };
+    const Vertex placed{0.2f, -0.6f, -1.0f, 2.0f}; // w 2, as MovePage puts it; x up, y to the left
+    const Vertex still = at(0.0f, 0.0f, placed);
+    CHECK(still.x / still.w == Approx(0.1f).margin(1e-4));
+    CHECK(still.y / still.w == Approx(-0.3f).margin(1e-4));
+    CHECK(still.w == Approx(kRoomDistance));
+    CHECK(still.z / still.w == Approx(-0.5f));
+    // Its place is that of a point of the room there, whatever the turn and the lean.
+    for (const float yaw : {-0.5f, 0.0f, 0.7f}) {
+        for (const float lean : {-4.0f, 0.0f, 2.5f}) {
+            const Vertex v = at(yaw, lean, placed);
+            const float d = kRoomDistance;
+            const float x = 0.3f * t / 0.6f * d, y = 0.1f * t * d, z = -d; // in the game's camera
+            const float a = std::cos(yaw), b = std::sin(yaw);
+            const float cx = a * x + b * z + lean, cz = -b * x + a * z;
+            CHECK(v.w == Approx(-cz).margin(1e-3));
+            CHECK(v.x == Approx(y / t).margin(1e-2));
+            CHECK(v.y == Approx(-0.6f / t * cx).margin(1e-2));
+        }
+    }
+    // A vertex whose depth comes out 1 is not one the shader takes for the game's flat ones.
+    const float one[4][4] = {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1.0f / kRoomDistance}};
+    const Vertex v = InRoom(placed, one, 0.001f, 10.0f);
+    CHECK(std::abs(v.w - 1.0f) > 1e-3f);
+    CHECK(v.x / v.w == Approx(0.1f * kRoomDistance));
+    CHECK(PageInView(Wanted{}, kTanX, kTanY).room);
+    CHECK_FALSE(PagePlaceInBattle(kTanX, kTanY).room);
+    CHECK_FALSE(PagePlace(4.0f, 4.0f).room);
+    CHECK_FALSE(At().room); // a battle's HUD stays with the head
 }

@@ -31,6 +31,8 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     nds_depth.h
     nds_gl_edge.h
     nds_gl_renderer.cpp
+    nds_gl_seal.cpp
+    nds_gl_seal.h
     nds_gl_stereo.cpp
     nds_gl_stereo.h
     nds_resolution.cpp
@@ -49,6 +51,9 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     second_screen.h
     shadow_eye.cpp
     shadow_eye.h
+    widescreen.cpp
+    widescreen.h
+    widescreen_index.cpp
 )
 
 create_target_directory_groups(frame_cores)

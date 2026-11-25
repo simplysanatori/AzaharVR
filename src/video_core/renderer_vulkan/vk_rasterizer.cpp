@@ -78,7 +78,8 @@ RasterizerVulkan::RasterizerVulkan(Memory::MemorySystem& memory, Pica::PicaCore&
                      TextureBufferSize(instance)},
       texture_lf_buffer{instance, scheduler, vk::BufferUsageFlagBits::eUniformTexelBuffer,
                         TextureBufferSize(instance)},
-      async_shaders{Settings::values.async_shader_compilation.GetValue()} {
+      async_shaders{Settings::values.async_shader_compilation.GetValue()},
+      kiu_hud_fade{instance, scheduler, renderpass_cache, update_queue} { // AzaharFrame kiuhs3a
 
     vertex_buffers.fill(stream_buffer.Handle());
 
@@ -147,6 +148,7 @@ RasterizerVulkan::RasterizerVulkan(Memory::MemorySystem& memory, Pica::PicaCore&
 RasterizerVulkan::~RasterizerVulkan() = default;
 
 void RasterizerVulkan::TickFrame() {
+    kiu_hud_fade.Finish(); // AzaharFrame kiuhs3a
     ++powers_tick; // AzaharFrame kiupowers
     kiu_talk.Tick(); // AzaharFrame kiutalk
     scheduler.WaitWorker();
@@ -674,8 +676,49 @@ void RasterizerVulkan::NoteKiuPowersDraw() {
     }
 }
 
+void RasterizerVulkan::ClearKiuPicture(bool world, const Common::Rectangle<u32>& rect) {
+    if (Pica::f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f != 240.0f ||
+        Pica::f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f != 400.0f) {
+        return;
+    }
+    const PAddr depth = regs.framebuffer.framebuffer.GetDepthBufferPhysicalAddress();
+    const bool clear = kiu_pictures.First(depth, world);
+    if (VideoCore::Immersive::g_draw_log.load(std::memory_order_relaxed)) { // test aid
+        LOG_INFO(Render, "kiu clear: depth {:08X} world {} cleared {}", depth, world, clear);
+    }
+    if (!clear) {
+        return;
+    }
+    scheduler.Record([rect](vk::CommandBuffer cmdbuf) {
+        const vk::ClearAttachment attachment = {
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .colorAttachment = 0,
+            .clearValue = {.color = {.float32 = std::array<float, 4>{}}},
+        };
+        const vk::ClearRect area = {
+            .rect =
+                {
+                    .offset = {static_cast<s32>(rect.left), static_cast<s32>(rect.bottom)},
+                    .extent = {rect.GetWidth(), rect.GetHeight()},
+                },
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        };
+        cmdbuf.clearAttachments(attachment, area);
+    });
+}
+
 bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     MICROPROFILE_SCOPE(Vulkan_Drawing);
+    // AzaharFrame kiuhs3a: HUD Opacity: another draw, or another target, after the pieces.
+    const bool hud_fades = !accelerate && hud_piece.Fades();
+    const u32 color_address = regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress();
+    if (kiu_hud_fade.Active() && !(hud_fades && kiu_hud_fade.On(color_address))) {
+        if (VideoCore::Immersive::g_draw_log.load(std::memory_order_relaxed)) {
+            LOG_INFO(Render, "kiu draw: the HUD's fade ends");
+        }
+        kiu_hud_fade.Finish();
+    }
     SyncDrawState();
     if (accelerate && is_indexed &&
         VideoCore::KiuPowers::g_live.strip.load(std::memory_order_relaxed)) { // kiupowers
@@ -745,6 +788,19 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         fs_data_dirty = true;
     }
 
+    // AzaharFrame kiuhs3a: HUD Opacity: what is behind a piece is kept (not in a pass yet, or the
+    // pass of the pieces before it).
+    if (hud_fades && framebuffer->color_id && framebuffer->color_level == 0 &&
+        !framebuffer->shadow_rendering) {
+        const auto viewport = fb_helper.Viewport();
+        if (VideoCore::Immersive::g_draw_log.load(std::memory_order_relaxed)) {
+            LOG_INFO(Render, "kiu draw: the HUD's fade, {}", kiu_hud_fade.Active() ? "on" : "begins");
+        }
+        kiu_hud_fade.Begin(hud_piece, color_address, framebuffer,
+                           res_cache.GetSurface(framebuffer->color_id), draw_rect, viewport.x,
+                           viewport.y, viewport.width, viewport.height);
+    }
+
     // Sync and bind the texture surfaces
     SyncTextureUnits(framebuffer);
     SyncUtilityTextures(framebuffer);
@@ -796,6 +852,14 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
     // Begin rendering
     renderpass_cache.BeginRendering(framebuffer, draw_rect);
+    if (using_color_fb && VideoCore::KiuClear::g_on.load(std::memory_order_relaxed)) {
+        // AzaharFrame kiuhs3: the world's, or one of its draws shaded on the CPU (which comes first
+        // is not always the same); the 2D's are not depth tested.
+        ClearKiuPicture(vr_immersive_mode == 3 &&
+                            ((accelerate && vr_world_uniforms) ||
+                             regs.framebuffer.output_merger.depth_test_enable != 0),
+                        draw_rect);
+    }
 
     // Configure viewport and scissor
     const auto viewport = fb_helper.Viewport();
@@ -1000,41 +1064,53 @@ void RasterizerVulkan::BindTextureCube(const Pica::TexturingRegs::FullTextureCon
 }
 
 void RasterizerVulkan::FlushAll() {
+    kiu_hud_fade.Finish(); // AzaharFrame kiuhs3a
     res_cache.FlushAll();
 }
 
 void RasterizerVulkan::FlushRegion(PAddr addr, u32 size) {
+    kiu_hud_fade.Finish(); // AzaharFrame kiuhs3a
     res_cache.FlushRegion(addr, size);
 }
 
 void RasterizerVulkan::InvalidateRegion(PAddr addr, u32 size) {
+    kiu_hud_fade.Finish(); // AzaharFrame kiuhs3a
     res_cache.InvalidateRegion(addr, size);
 }
 
 void RasterizerVulkan::FlushAndInvalidateRegion(PAddr addr, u32 size) {
+    kiu_hud_fade.Finish(); // AzaharFrame kiuhs3a
     res_cache.FlushRegion(addr, size);
     res_cache.InvalidateRegion(addr, size);
 }
 
 void RasterizerVulkan::ClearAll(bool flush) {
+    kiu_hud_fade.Finish(); // AzaharFrame kiuhs3a
     res_cache.ClearAll(flush);
 }
 
 bool RasterizerVulkan::AccelerateDisplayTransfer(const Pica::DisplayTransferConfig& config) {
+    kiu_hud_fade.Finish(); // AzaharFrame kiuhs3a
     return res_cache.AccelerateDisplayTransfer(config);
 }
 
 bool RasterizerVulkan::AccelerateTextureCopy(const Pica::DisplayTransferConfig& config) {
+    kiu_hud_fade.Finish(); // AzaharFrame kiuhs3a
     return res_cache.AccelerateTextureCopy(config);
 }
 
 bool RasterizerVulkan::AccelerateFill(const Pica::MemoryFillConfig& config) {
+    kiu_hud_fade.Finish(); // AzaharFrame kiuhs3a
+    if (VideoCore::KiuClear::g_on.load(std::memory_order_relaxed)) { // AzaharFrame kiuhs3
+        kiu_pictures.Fill(config.GetStartAddress(), config.GetEndAddress());
+    }
     return res_cache.AccelerateFill(config);
 }
 
 bool RasterizerVulkan::AccelerateDisplay(const Pica::FramebufferConfig& config,
                                          PAddr framebuffer_addr, u32 pixel_stride,
                                          ScreenInfo& screen_info) {
+    kiu_hud_fade.Finish(); // AzaharFrame kiuhs3a
     if (framebuffer_addr == 0) [[unlikely]] {
         return false;
     }

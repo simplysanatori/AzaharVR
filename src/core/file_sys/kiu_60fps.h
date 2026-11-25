@@ -335,4 +335,25 @@ Turned TurnTo(const Build& build, bool sixty, Read&& read, WriteCode&& write_cod
     return Turned::Yes;
 }
 
+/// AzaharFrame kiuhs3a: the toast that the setting, changed in a run, counts from the next start:
+/// once a change, wherever it is noticed first (the menu, at once; else the next VBlank).
+struct RestartToast {
+    enum class Say {
+        Nothing,
+        For60,
+        For30,
+        TakeBack, ///< back at what the run started with: the one showing goes
+    };
+    bool said = false;
+    /// `started`, `wanted`: 60 as the run started, and now.
+    constexpr Say Next(bool started, bool wanted) {
+        const bool other = started != wanted;
+        if (other == said) {
+            return Say::Nothing;
+        }
+        said = other;
+        return !other ? Say::TakeBack : (wanted ? Say::For60 : Say::For30);
+    }
+};
+
 } // namespace FileSys::Kiu60

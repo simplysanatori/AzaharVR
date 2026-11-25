@@ -8,6 +8,7 @@
 #include <cmath>
 
 #include "common/logging/log.h"
+#include "frame_xr/kiu_first_person.h" // AzaharFrame kiuhs3a
 #include "frame_xr/kiu_powers_live.h"
 #include "frame_xr/power_layers.h"
 #include "frame_xr/session.h"
@@ -29,7 +30,7 @@ XrPosef ToXr(const Input::Posef& p) {
             {p.position.x, p.position.y, p.position.z}};
 }
 
-/// With the HUD: seen this far away (the HUD is at the far screen's depth).
+/// With the HUD: seen this far away (AZAHARFRAME_KIU_WORDS_PLANE=0, as it was: one quad).
 constexpr float kHudDistance = 8.0f;
 
 /// First person's screen, as a head sees it.
@@ -37,8 +38,14 @@ struct Screen {
     Input::Posef eye[2]{}; ///< its pose for each eye, LOCAL
     Input::Vec3f head{};   ///< between the eyes
     float half_x = 0.0f, half_y = 0.0f; ///< metres
+    float half[2][2]{}; ///< an eye's own
     float tan_x = 1.0f, tan_y = 1.0f;
 
+    /// AzaharFrame kiuhs3a: what is at these coordinates of an eye's screen: as far as the bar and
+    /// the score, and facing as they do (they have no disparity on the screen: desktop dumps).
+    P::Place In(const P::Rect& r, int e) const {
+        return P::OnScreen(r, eye[e], half[e][0], half[e][1]);
+    }
     /// What is at these screen coordinates, seen from between the eyes.
     P::Place At(const P::Rect& r) const {
         const Input::Vec3f at{0.5f * (r.left + r.right) * half_x, 0.5f * (r.down + r.up) * half_y,
@@ -68,8 +75,12 @@ Screen ScreenFrom(const PowerLayers::In& in) {
         eyes[e] = in.head.views_valid ? ToInput(in.head.eye[e]).position : head.position;
     }
     s.head = (eyes[0] + eyes[1]) * 0.5f;
-    s.half_x = 0.5f * in.top_size.width;
-    s.half_y = 0.5f * in.top_size.height;
+    s.half_x = 0.5f * in.top_size[0].width;
+    s.half_y = 0.5f * in.top_size[0].height;
+    for (int e = 0; e < 2; ++e) {
+        s.half[e][0] = 0.5f * in.top_size[e].width;
+        s.half[e][1] = 0.5f * in.top_size[e].height;
+    }
     const Input::Vec3f front = Input::Rotate(s.eye[0].orientation, {0.0f, 0.0f, 1.0f});
     const float d = std::abs(Input::Dot(s.eye[0].position - eyes[0], front));
     s.tan_x = s.half_x / std::max(d, 0.01f);
@@ -88,9 +99,12 @@ void PowerLayers::Destroy() {
 
 std::vector<Quad> PowerLayers::Update(Runtime& rt, const In& in) {
     struct {
-        Quad powers, dots;
+        Quad powers[2], dots[2];
     } out;
     const P::Settings settings = Kiu::Powers::SettingsNow();
+    // AzaharFrame kiuhs3a: with the HUD a quad an eye (the left's, the right's), else one.
+    const bool per_eye = settings.at != P::At::Hand && Kiu::FirstPerson::WordsPlane();
+    const int eyes = per_eye ? 2 : 1;
     const float dt =
         time_ != 0 ? static_cast<float>(std::min<XrTime>(in.time - time_, 100'000'000)) * 1e-9f : 0;
     time_ = in.time;
@@ -131,11 +145,17 @@ std::vector<Quad> PowerLayers::Update(Runtime& rt, const In& in) {
     const KP::PixelRect strip = in.bottom != XR_NULL_HANDLE
                                     ? KP::StripIn(in.bottom_width, in.bottom_height)
                                     : KP::PixelRect{};
-    const auto set = [](Quad& q, XrSwapchain chain, XrRect2Di rect) {
-        q.swapchain = chain;
-        q.image_rect = rect;
-        q.flags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
-        q.visible = false;
+    const auto set = [&](Quad (&quads)[2], XrSwapchain chain, XrRect2Di rect) {
+        for (int e = 0; e < eyes; ++e) {
+            Quad& q = quads[e];
+            q.swapchain = chain;
+            q.image_rect = rect;
+            q.flags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+            q.eye = !per_eye ? XR_EYE_VISIBILITY_BOTH
+                    : e == 0 ? XR_EYE_VISIBILITY_LEFT
+                             : XR_EYE_VISIBILITY_RIGHT;
+            q.visible = false;
+        }
     };
     if (strip.width != 0) {
         set(out.powers, in.bottom,
@@ -149,8 +169,8 @@ std::vector<Quad> PowerLayers::Update(Runtime& rt, const In& in) {
     KP::g_alpha.store(show.powers, std::memory_order_relaxed);
     KP::g_below.store(settings.at != P::At::Hand, std::memory_order_relaxed);
 
-    const bool powers_up = show.powers > 0.0f && out.powers.swapchain != XR_NULL_HANDLE;
-    const bool dots_up = show.dots > 0.0f && out.dots.swapchain != XR_NULL_HANDLE;
+    const bool powers_up = show.powers > 0.0f && out.powers[0].swapchain != XR_NULL_HANDLE;
+    const bool dots_up = show.dots > 0.0f && out.dots[0].swapchain != XR_NULL_HANDLE;
     const Input::Posef head = ToInput(in.head.head);
     const Screen screen = powers_up || dots_up ? ScreenFrom(in) : Screen{};
     VideoCore::KiuHud::Place hud = hud_now;
@@ -178,17 +198,21 @@ std::vector<Quad> PowerLayers::Update(Runtime& rt, const In& in) {
     };
     if (powers_up) {
         constexpr float kAspect = static_cast<float>(KP::kWide) / static_cast<float>(KP::kHigh);
-        P::Place p;
         if (settings.at == P::At::Hand) {
-            p = P::OverHand(hands.off, head.position, settings.up_m, settings.width_deg, kAspect,
-                            powers_width_, face(powers_face_));
+            const P::Place p = P::OverHand(hands.off, head.position, settings.up_m,
+                                           settings.width_deg, kAspect, powers_width_,
+                                           face(powers_face_));
+            powers_width_ = p.width;
+            put(out.powers[0], p);
         } else {
-            p = screen.At(with_hud(static_cast<float>(KP::kWide), static_cast<float>(KP::kHigh),
-                                   static_cast<float>(KP::kRowHigh)));
+            const P::Rect r = with_hud(static_cast<float>(KP::kWide), static_cast<float>(KP::kHigh),
+                                       static_cast<float>(KP::kRowHigh));
+            for (int e = 0; e < eyes; ++e) {
+                put(out.powers[e], per_eye ? screen.In(r, e) : screen.At(r));
+            }
+            powers_width_ = 0.0f; // the hand's
             powers_face_.Reset();
         }
-        powers_width_ = settings.at == P::At::Hand ? p.width : 0.0f; // not the HUD's
-        put(out.powers, p);
     } else {
         powers_width_ = 0.0f;
         powers_face_.Reset();
@@ -201,25 +225,32 @@ std::vector<Quad> PowerLayers::Update(Runtime& rt, const In& in) {
         constexpr float kAspect =
             static_cast<float>(P::kDotsWide) / static_cast<float>(P::kDotsHigh);
         constexpr float kWide = static_cast<float>(P::kDotsWide) / static_cast<float>(P::kDotPx);
-        P::Place p;
-        float shift = 0.0f; // of the image's width, to the right
+        // `shift`: of the image's width, to the right
+        const auto put_dots = [&](Quad& q, P::Place p, float shift) {
+            p.pose.position =
+                p.pose.position + Input::Rotate(p.pose.orientation, {shift * p.width, 0.0f, 0.0f});
+            put(q, p);
+        };
         if (settings.at == P::At::Hand) {
-            p = P::OverHand(hands.off, head.position, settings.up_m,
+            const P::Place p =
+                P::OverHand(hands.off, head.position, settings.up_m,
                             P::kDotDeg * settings.width_deg / 13.6f * kWide, kAspect, dots_width_,
                             face(dots_face_));
-            shift = 0.5f * (1.0f - part);
+            dots_width_ = p.width;
+            put_dots(out.dots[0], p, 0.5f * (1.0f - part));
         } else {
             constexpr float kDot = P::kHudDotPx / P::kHudScale;
-            p = screen.At(with_hud(kDot * kWide, kDot * kWide / kAspect, kDot * kWide / kAspect));
-            shift = settings.at == P::At::Score    ? 1.0f - part
-                    : settings.at == P::At::Middle ? 0.5f * (1.0f - part)
-                                                   : 0.0f;
+            const P::Rect r =
+                with_hud(kDot * kWide, kDot * kWide / kAspect, kDot * kWide / kAspect);
+            for (int e = 0; e < eyes; ++e) {
+                put_dots(out.dots[e], per_eye ? screen.In(r, e) : screen.At(r),
+                         settings.at == P::At::Score    ? 1.0f - part
+                         : settings.at == P::At::Middle ? 0.5f * (1.0f - part)
+                                                        : 0.0f);
+            }
+            dots_width_ = 0.0f; // the hand's
             dots_face_.Reset();
         }
-        dots_width_ = settings.at == P::At::Hand ? p.width : 0.0f; // not the HUD's
-        p.pose.position =
-            p.pose.position + Input::Rotate(p.pose.orientation, {shift * p.width, 0.0f, 0.0f});
-        put(out.dots, p);
     } else {
         dots_width_ = 0.0f;
         dots_face_.Reset();
@@ -245,10 +276,10 @@ std::vector<Quad> PowerLayers::Update(Runtime& rt, const In& in) {
                  2.0f * std::atan(0.5f * q.size.width / d) * 57.2958f,
                  2.0f * std::atan(0.5f * q.size.height / d) * 57.2958f, d);
     };
-    say(powers_up, logged_powers_, "powers", out.powers);
-    say(dots_up, logged_dots_, "dots", out.dots);
+    say(powers_up, logged_powers_, "powers", out.powers[0]);
+    say(dots_up, logged_dots_, "dots", out.dots[0]);
     std::vector<Quad> quads;
-    for (const Quad* q : {&out.powers, &out.dots}) {
+    for (const Quad* q : {&out.powers[0], &out.powers[1], &out.dots[0], &out.dots[1]}) {
         if (q->swapchain != XR_NULL_HANDLE) {
             quads.push_back(*q);
         }

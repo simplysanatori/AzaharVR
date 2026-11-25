@@ -9,8 +9,10 @@
 #include <string>
 #include <vector>
 #include <catch2/catch_test_macros.hpp>
+#include "frame_xr/immersive_layout.h"
 #include "frame_xr/kiu_powers.h"
 #include "frame_xr/vis/power_menu.h"
+#include "video_core/kiu_hud.h"
 #include "video_core/kiu_powers.h"
 
 using namespace FrameXr;
@@ -405,6 +407,77 @@ TEST_CASE("Kid Icarus powers: with the HUD, clear of its pieces", "[frame_xr][ki
     CHECK(std::abs(degrees(moved.down, moved.up, tan_y) - degrees(bar.down, bar.up, tan_y) + 5.0f) <
           0.01f);
     CHECK(P::Moved(bar, tan_x, tan_y, 40.0f, 40.0f).up <= 1.0f + 1e-5f);
+}
+
+// AzaharFrame kiuhs3a: the power menu in the bar's and the score's plane, and how far its sliders
+// go: clear above and clear below both.
+TEST_CASE("Kid Icarus powers: on the HUD, its depth and the sliders' reach",
+          "[frame_xr][kiuhs3a]") {
+    namespace KH = VideoCore::KiuHud;
+    namespace L = FrameXr::Immersive::Layout;
+    constexpr float kDeg = 3.14159265f / 180.0f;
+    constexpr float kHalfIpd = 0.0339f;
+    L::HeadLocked s;
+    s.tan_half_y = std::tan(56.0f * kDeg);
+    s.aspect = std::tan(63.0f * kDeg) / s.tan_half_y;
+    s.pitch_rad = -5.1f * kDeg;
+    s.distance = 4.57f;
+    const float tan_x = s.tan_half_y * s.aspect, tan_y = s.tan_half_y;
+    const auto angle = [](const Input::Vec3f& a, const Input::Vec3f& b) {
+        const Input::Vec3f c{a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
+        return std::atan2(Input::Length(c), Input::Dot(a, b)) / kDeg;
+    };
+    for (const bool linked : {true, false}) {
+        for (const P::At at : {P::At::Bar, P::At::Middle, P::At::Score}) {
+            for (const float height : {10.0f, 22.0f, 30.0f}) {
+                INFO("linked " << linked << " at " << static_cast<int>(at) << " height " << height);
+                KH::Wanted w;
+                w.linked = linked;
+                w.height = w.bar_height = w.score_height = height;
+                P::Settings set;
+                set.powers = true;
+                set.at = at;
+                w.link_gap = P::HudGap(set);
+                const KH::Place hud = KH::PlaceFor(w, tan_x, tan_y, s.pitch_rad);
+                const P::Rect place = P::WithHud(at, hud, tan_x, tan_y, 136.0f, 80.0f, 42.0f);
+                // The same point of both eyes' screens, as the bar and the score: the same depth.
+                Input::Vec3f ray[2];
+                for (int eye = 0; eye < 2; eye++) {
+                    const Input::Posef screen = L::FullQuadInView(s, 3, eye, kHalfIpd, kHalfIpd);
+                    const P::Place q =
+                        P::OnScreen(place, screen, 0.5f * s.width(), 0.5f * s.height());
+                    CHECK(q.pose.orientation.x == screen.orientation.x); // faces as the screen
+                    CHECK(q.pose.orientation.w == screen.orientation.w);
+                    CHECK(std::abs(q.width - 0.5f * (place.right - place.left) * s.width()) <
+                          1e-4f);
+                    ray[eye] = Input::Normalized(q.pose.position -
+                                                 Input::Vec3f{L::EyeX(eye, kHalfIpd), 0, 0});
+                }
+                CHECK(angle(ray[0], ray[1]) < 0.005f); // was 0.49 degrees (one quad, 8 m away)
+                // The sliders' ends, in degrees.
+                const auto up_deg = [&](float v) {
+                    return std::atan(v * tan_y) / kDeg + s.pitch_rad / kDeg;
+                };
+                const float hud_top =
+                    up_deg(std::max(hud.bar_up, hud.score_up) + hud.half_up);
+                const float hud_bottom = up_deg(std::min(hud.bar_up, hud.score_up) +
+                                                hud.half_up * P::kBarBottom);
+                const P::Rect high = P::Moved(place, tan_x, tan_y, 0.0f, 40.0f);
+                const P::Rect low = P::Moved(place, tan_x, tan_y, 0.0f, -40.0f);
+                CHECK(up_deg(high.down) > hud_top + 1.0f);
+                CHECK(up_deg(low.up) < hud_bottom - 20.0f);
+                CHECK(high.up <= 1.0f + 1e-5f);
+                // Just over the bar and the score: a slider's stop a degree or so clear.
+                bool above = false;
+                for (int d = 0; d <= 40 && !above; d++) {
+                    const P::Rect r =
+                        P::Moved(place, tan_x, tan_y, 0.0f, static_cast<float>(d));
+                    above = up_deg(r.down) > hud_top && up_deg(r.down) < hud_top + 1.6f;
+                }
+                CHECK(above);
+            }
+        }
+    }
 }
 
 TEST_CASE("Kid Icarus powers: a card over the hand faces the eyes", "[frame_xr][kiupowers]") {

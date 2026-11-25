@@ -129,6 +129,7 @@ std::string SliderText(Id id, float value) {
         id == Id::KiuBottomSize || id == Id::KiuBottomOpacity || id == Id::KiuReticleSize ||
         id == Id::KiuTalkPortraitsOpacity || // AzaharFrame kiuaim
         id == Id::KiuPowerMenuOpacity || // AzaharFrame kiuaim
+        id == Id::KiuHudOpacity || // AzaharFrame kiuhs3a
         id == Id::KiuPitOpacity) { // AzaharFrame kiugyro: "10%" (kiufix: the strengths, the scale; kiuopacity: the opacities; kiuweap2: the flash's size)
         return Format("%.0f%%", value);
     }
@@ -313,6 +314,9 @@ Row RowFor(Id id, const MenuModel& m) {
         break;
     case Id::KiuHudSize: // AzaharFrame kiu140
         slider(m.kiu_hud_size);
+        break;
+    case Id::KiuHudOpacity: // AzaharFrame kiuhs3a
+        slider(m.kiu_hud_opacity);
         break;
     case Id::KiuArm: // AzaharFrame kiu140
         segmented(std::clamp(m.kiu_arm, 0, 1));
@@ -784,6 +788,7 @@ SettingsSection SectionOf(Id id) {
     case Id::KiuCutscenes: // AzaharFrame kiu140
     case Id::KiuHud: // AzaharFrame kiu140
     case Id::KiuHudSize: // AzaharFrame kiu140
+    case Id::KiuHudOpacity: // AzaharFrame kiuhs3a
     case Id::KiuArm: // AzaharFrame kiu140
     case Id::KiuHudLinked: // AzaharFrame kiu140
     case Id::KiuHudAcross: // AzaharFrame kiu140
@@ -901,6 +906,7 @@ bool PerGameSetting(Id id) {
     case Id::KiuCutscenes: // AzaharFrame kiu140
     case Id::KiuHud: // AzaharFrame kiu140
     case Id::KiuHudSize: // AzaharFrame kiu140
+    case Id::KiuHudOpacity: // AzaharFrame kiuhs3a
     case Id::KiuArm: // AzaharFrame kiu140
     case Id::KiuHudLinked: // AzaharFrame kiu140
     case Id::KiuHudAcross: // AzaharFrame kiu140
@@ -1086,6 +1092,7 @@ std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& m) {
     rows.push_back(Id::KiuHud);
     if (m.kiu_hud != 0) { // AzaharFrame kiu140
         rows.push_back(Id::KiuHudSize);
+        rows.push_back(Id::KiuHudOpacity); // AzaharFrame kiuhs3a
     }
     if (kPitArmOffered) {
         rows.push_back(Id::KiuArm);
@@ -1613,6 +1620,8 @@ std::string LabelFor(Id id) {
         return kKiuHudRow;
     case Id::KiuHudSize: // AzaharFrame kiu140
         return kKiuHudSizeRow;
+    case Id::KiuHudOpacity: // AzaharFrame kiuhs3a
+        return kKiuHudOpacityRow;
     case Id::KiuArm: // AzaharFrame kiu140
         return kKiuArmRow;
     case Id::KiuHudLinked: // AzaharFrame kiu140
@@ -2138,6 +2147,8 @@ std::string ExplainFor(Id id) {
         return kKiuHudTip;
     case Id::KiuHudSize: // AzaharFrame kiu140
         return kKiuHudSizeTip;
+    case Id::KiuHudOpacity: // AzaharFrame kiuhs3a
+        return kKiuHudOpacityTip;
     case Id::KiuArm: // AzaharFrame kiu140
         return kKiuArmTip;
     case Id::KiuHudLinked: // AzaharFrame kiu140
@@ -2365,7 +2376,7 @@ SliderRange SliderFor(Id id) {
         return {50.0f, 200.0f, 10.0f};
     }
     if (id == Id::KiuBottomOpacity || id == Id::KiuTalkPortraitsOpacity ||
-        id == Id::KiuPowerMenuOpacity) { // 20 to 100 %, as Weapon Opacity
+        id == Id::KiuPowerMenuOpacity || id == Id::KiuHudOpacity) { // 20 to 100 %, as Weapon Opacity
         return {20.0f, 100.0f, 10.0f};
     }
     if (id == Id::KiuPitOpacity) { // AzaharFrame kiu133: 20 to 100 %, as the other opacities
@@ -2534,7 +2545,7 @@ void TabMenu::DrawRail(Kit& kit, const MenuModel& model, const MenuView& view) {
         const Rect r{0.0f, y, kRailW, y + item_h};
         const Target t{Id::TabButton, i};
         const bool active = static_cast<int>(view.tab) == i;
-        const char* label = static_cast<Tab>(i) == Tab::Mods && !Is3ds(model.core)
+        const char* label = static_cast<Tab>(i) == Tab::Mods && !model.core.has_mods
                                 ? "Cheats"
                                 : kTabs[static_cast<std::size_t>(i)].label;
         kit.RailItem(r, kTabs[static_cast<std::size_t>(i)].icon, label, active, StateOf(view, t));

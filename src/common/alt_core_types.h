@@ -73,7 +73,7 @@ struct Capabilities {
     bool has_immersive_modes = true;
     bool has_touch = true;
     bool has_gyro = true;
-    bool has_mods = true;
+    bool has_mods = true; ///< a DS game: there is a widescreen mod for it
     bool has_texture_packs = true;
     bool has_3ds_cheats = true;
     bool has_alt_cheats = false;

@@ -177,6 +177,49 @@ TEST_CASE("The rail: its order, whatever the tabs' values", "[frame_xr][tabmenu]
     CHECK(RailTabs(m) == ds);
 }
 
+TEST_CASE("The Mods tab: a DS game's, with a mod and without", "[frame_xr][tabmenu]") {
+    Kit kit{1.0f};
+    frame_xr::ui::Canvas canvas;
+    TabMenu menu;
+    canvas.Init(static_cast<int>(kPanelW), static_cast<int>(kPanelH));
+    const auto drawn = [&](const MenuModel& m, ModsSegment segment, ModsPage page, Id id) {
+        MenuView view;
+        view.tab = Tab::Mods;
+        view.mods_segment = segment;
+        view.mods_page = page;
+        kit.Begin(canvas);
+        menu.Draw(kit, m, view);
+        std::vector<int> out;
+        for (const auto& h : menu.Hits()) {
+            if (h.t.id == id) {
+                out.push_back(h.t.index);
+            }
+        }
+        return out;
+    };
+    const std::vector<int> cheats_mods{static_cast<int>(ModsSegment::Cheats),
+                                       static_cast<int>(ModsSegment::Mods)};
+    MenuModel m = Game(CoreCaps::ForNDS());
+    m.mods.angels_aim.shown = true; // of the 3DS game before
+    m.mods.ctgp7.shown = true;
+    m.mods.mods.catalog = CatalogState::Ready;
+    for (const ModsSegment segment : {ModsSegment::Cheats, ModsSegment::Mods, ModsSegment::Textures,
+                                      ModsSegment::Ctgp7, ModsSegment::AngelsAim}) {
+        m.core.has_mods = false;
+        CHECK(drawn(m, segment, ModsPage::Loaded, Id::ModsSegment).empty());
+        CHECK(drawn(m, segment, ModsPage::Loaded, Id::InstallMods).empty());
+        m.core.has_mods = true;
+        CHECK(drawn(m, segment, ModsPage::Loaded, Id::ModsSegment) == cheats_mods);
+        CHECK(drawn(m, segment, ModsPage::Loaded, Id::InstallMods).size() ==
+              (segment == ModsSegment::Mods ? 1 : 0));
+        CHECK(drawn(m, segment, ModsPage::Install, Id::InstallFromZip).empty());
+    }
+    CHECK(drawn(m, ModsSegment::Mods, ModsPage::Install, Id::ModsBack).size() == 1);
+    const MenuModel n3ds = Game(CoreCaps::ForN3DS());
+    CHECK(drawn(n3ds, ModsSegment::Mods, ModsPage::Loaded, Id::ModsSegment).size() == 3);
+    CHECK(drawn(n3ds, ModsSegment::Mods, ModsPage::Install, Id::InstallFromZip).size() == 1);
+}
+
 TEST_CASE("The Position tab's rows", "[frame_xr][tabmenu]") {
     CHECK(RowIds(Tab::Position, Game(CoreCaps::ForN3DS())) ==
           std::vector<Id>{Id::ScreenLayout, Id::ScreenGap, Id::HideBottomScreen, Id::MoveScreens,

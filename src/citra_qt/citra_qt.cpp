@@ -65,6 +65,7 @@
 #include "citra_qt/camera/still_image_camera.h"
 #ifdef ENABLE_ALT_CORES
 #include "citra_qt/frame_alt_cheats.h" // lane/cheats-dl
+#include "citra_qt/frame_alt_mods.h"
 #include "frame_cores/alt_core_host.h"
 #include "frame_cores/profile_input.h"
 #include "frame_cores/rom_info.h"
@@ -3839,6 +3840,7 @@ void GMainWindow::FramePushAltCheats() {
     }
     FrameAltCheats::Fill(alt_core_host->GetRomInfo().title_id, model); // lane/cheats-dl
     FrameXr::SetInGameMenuCheats(model);
+    FrameAltMods::Publish(*alt_core_host);
 #endif
 }
 
@@ -5432,14 +5434,13 @@ void GMainWindow::OnResumeGame(bool first_start) {
 }
 
 void GMainWindow::OnRestartGame() {
+    bool running = system.IsPoweredOn();
 #ifdef ENABLE_ALT_CORES
-    if (alt_core_host && alt_core_host->IsRunning()) {
-        alt_core_host->Reset();
-        FrameAutosaveBoot(); // as a 3DS game's restart
-        return;
-    }
+    // Started again, as a 3DS game is: a reset of the console alone would keep the second screen
+    // and console mode the game was started with.
+    running = running || (alt_core_host && alt_core_host->IsRunning());
 #endif
-    if (!system.IsPoweredOn()) {
+    if (!running) {
         return;
     }
     // Make a copy since BootGame edits game_path
@@ -5919,6 +5920,14 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case C::OptimizeStop:
     case C::UseOriginalPack:
     case C::RemoveOriginalPack:
+#ifdef ENABLE_ALT_CORES
+        if (AltGameRunning()) {
+            FrameAltMods::Command(r, *alt_core_host, [this]() -> FrameCores::AltCoreHost* {
+                return AltGameRunning() ? alt_core_host.get() : nullptr;
+            });
+            return;
+        }
+#endif
         if (g_frame_mods) {
             g_frame_mods->Command(r);
         }
@@ -6273,6 +6282,9 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         break;
     case S::KiuHudSize: // AzaharFrame kiu140
         set(v.vr_kiu_hud_size, std::clamp<u32>(u, 40, 200));
+        break;
+    case S::KiuHudOpacity: // AzaharFrame kiuhs3a
+        set(v.vr_kiu_hud_opacity, std::clamp<u32>(u, 20, 100));
         break;
     case S::KiuArm: // AzaharFrame kiu140
         set(v.vr_kiu_arm, std::clamp<u32>(u, 0, 1));

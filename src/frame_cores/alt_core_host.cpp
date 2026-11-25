@@ -604,6 +604,10 @@ struct AltCoreHost::Impl {
         if (last_frame.primary.HasPicture()) {
             now.top_width = last_frame.primary.width / std::max(last_frame.primary.scale, 1u);
             now.top_height = last_frame.primary.height / std::max(last_frame.primary.scale, 1u);
+            if (Common::AltCore::IsDs(caps.kind)) { // a widescreen mod's shape, not the picture's
+                now.top_width = static_cast<u32>(
+                    std::lround(static_cast<float>(now.top_height) * caps.screens.top_aspect));
+            }
         }
         if (last_frame.secondary.HasPicture()) {
             now.bottom_width =

@@ -193,6 +193,7 @@ add_executable(tests
     video_core/pica_types.cpp
     video_core/shader.cpp
     video_core/right_eye_disabler.cpp # AzaharFrame feshimmer
+    video_core/kiu_clear.cpp # AzaharFrame kiuhs3
     video_core/kiu_sprite_turn.cpp # AzaharFrame kiu2d
     video_core/transfer_overlap.cpp # AzaharFrame feshimmer
     video_core/rasterizer_cache_clear.cpp # AzaharFrame savemem
@@ -219,7 +220,8 @@ if (TARGET frame_cores)
     target_sources(tests PRIVATE frame_cores/alt_cores_tests.cpp frame_cores/microphone_tests.cpp
         frame_cores/second_screen_tests.cpp frame_cores/frame_driver_tests.cpp
         frame_cores/nds_stereo_tests.cpp
-        frame_cores/pokedaisy_driver_tests.cpp frame_cores/cheat_db_tests.cpp)
+        frame_cores/pokedaisy_driver_tests.cpp frame_cores/cheat_db_tests.cpp
+        frame_cores/widescreen_tests.cpp)
     target_link_libraries(tests PRIVATE frame_cores)
     # An object of its own: the tests have no melonDS headers
     add_library(nds_resolution_tests OBJECT EXCLUDE_FROM_ALL frame_cores/nds_resolution_tests.cpp)

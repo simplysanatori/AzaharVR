@@ -21,8 +21,10 @@ add_library(video_core STATIC EXCLUDE_FROM_ALL
     vr_auto_shape.h # AzaharFrame fixes7
     vr_hud_spacing.h # AzaharFrame hudmove
     vr_view_matrix.h # AzaharFrame
+    kiu_clear.h # AzaharFrame kiuhs3
     kiu_hud.h # AzaharFrame kiu140
     kiu_powers.h # AzaharFrame kiupowers
+    kiu_hud_fade.h # AzaharFrame kiuhs3a
     kiu_talk.h # AzaharFrame kiutalk
     kiu_sheets.h # AzaharFrame kiu140
     kiu_view_tap.h # AzaharFrame kiuvr
@@ -225,6 +227,8 @@ if (ENABLE_VULKAN)
         $<$<BOOL:${ENABLE_ALT_CORES}>:renderer_vulkan/alt_xr_renderer.h>
         $<$<NOT:$<BOOL:${ENABLE_LIBRETRO}>>:renderer_vulkan/renderer_vulkan_xr.cpp>
         $<$<NOT:$<BOOL:${ENABLE_LIBRETRO}>>:renderer_vulkan/renderer_vulkan_kiu_talk.cpp> # AzaharFrame kiutalk
+        renderer_vulkan/vk_kiu_hud_fade.cpp
+        renderer_vulkan/vk_kiu_hud_fade.h
         renderer_vulkan/vk_kiu_talk.cpp
         renderer_vulkan/vk_kiu_talk.h
         $<$<NOT:$<BOOL:${ENABLE_LIBRETRO}>>:renderer_vulkan/vk_xr_target.cpp>

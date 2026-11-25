@@ -71,4 +71,9 @@ void OnGameBoot();
 /// state (kiu_first_person.h OnGameBoot); writes no setting.
 void OnGameSettings(uint64_t title_id);
 
+/// AzaharFrame kiuhs3a: any thread: vr_kiu_60fps may have changed while Kid Icarus runs: says so
+/// in a toast (kiu_60fps.h RestartToast). The menu, at the change (the game is paused under it),
+/// and the hook.
+void NoteSixtyFps();
+
 } // namespace FrameXr::Kiu::Hooks

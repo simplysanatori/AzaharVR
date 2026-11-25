@@ -28,7 +28,7 @@ public:
         bool bottom_shown = false; ///< the Bottom Screen is on view
         bool bottom_persistent = false;
         XrPosef top_pose[2]{{{0, 0, 0, 1}, {0, 0, 0}}, {{0, 0, 0, 1}, {0, 0, 0}}};
-        XrExtent2Df top_size{0.0f, 0.0f};
+        XrExtent2Df top_size[2]{{0.0f, 0.0f}, {0.0f, 0.0f}};
         bool top_in_view = false; ///< VIEW space, else LOCAL
         ViewPose head;
         XrTime time = 0;
@@ -36,8 +36,9 @@ public:
         XrSwapchain bottom = XR_NULL_HANDLE;
         uint32_t bottom_width = 0, bottom_height = 0;
     };
-    /// The powers' and the dots' quads that have an image, in LOCAL space. One with `visible` off
-    /// only keeps its place in the list (layer_slots.h).
+    /// The powers' and the dots' quads that have an image, in LOCAL space: with the HUD one an eye,
+    /// in the plane of its screen (AzaharFrame kiuhs3a). One with `visible` off only keeps its
+    /// place in the list (layer_slots.h).
     std::vector<Quad> Update(Runtime& rt, const In& in);
 
 private:

@@ -38,6 +38,7 @@
 #include "core/custom_tex/download.h"
 #include "core/custom_tex/layers.h" // AzaharFrame texlayers
 #include "core/custom_tex/optimize.h" // AzaharFrame ui3
+#include "core/frontend/alt_screens.h"
 #include "core/mods/transfer.h" // AzaharFrame fixes7
 #include "core/mods/library.h"
 #include "core/mods/zip_install.h" // AzaharFrame zipinstall
@@ -1093,6 +1094,9 @@ void FrameMods::TurnBackOn() {
 }
 
 void FrameMods::PublishMods() {
+    if (Layout::GetAltScreens()) { // a DS game's are shown (frame_alt_mods.cpp)
+        return;
+    }
     FrameXr::SetInGameMenuModsList(mods);
 }
 

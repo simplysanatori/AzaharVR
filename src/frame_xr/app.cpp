@@ -37,6 +37,7 @@
 #include "common/settings.h" // AzaharFrame vrqol: Background
 #include "common/stall_telemetry.h"
 #include "common/thread.h"
+#include "core/file_sys/kiu_60fps.h" // AzaharFrame kiuhs3a
 #include "frame_xr/kiu_first_person.h" // AzaharFrame kiuview
 #include "frame_xr/auto_shape.h" // AzaharFrame fixes7
 #include "frame_xr/controls.h"
@@ -688,6 +689,10 @@ void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
     dr_second.screen_factor =
         bfi_second.screen_n ? bfi_second.screen_sum / bfi_second.screen_n : 0.0;
     dr_second.bfi_asked = frames > 0 && bfi_second.asked * 2 >= frames;
+    // AzaharFrame kiuhs3a: its floor (g_run is Kid Icarus's, as its last run had it).
+    dr_second.sixty_fps = FileSys::Kiu60::BuildFor(GameTitleId()) != nullptr &&
+                          FileSys::Kiu60::g_run.load(std::memory_order_relaxed) ==
+                              FileSys::Kiu60::Run::At60;
     // AzaharFrame bfidr: the perf line's window, from the values taken above.
     const bool flashed = dr_second.bfi;
     const uint32_t late_lit = bfi_second.late_lit;
@@ -1405,10 +1410,12 @@ void Runtime::FrameLoop() {
                 const bool top_shown = draw.swapped ? draw.top_visible : shown.show_top;
                 const bool bottom_shown =
                     draw.swapped || (shown.show_bottom && draw.bottom_visible);
-                const bool bottom_is_stereo =
-                    LayerChain(static_cast<std::size_t>(VideoCore::XrScreen::Bottom)).both_eyes;
+                // AzaharFrame kiuhs3a: the portraits are a layer an eye.
+                const bool bottom_two =
+                    LayerChain(static_cast<std::size_t>(VideoCore::XrScreen::Bottom)).both_eyes ||
+                    (shown.bottom_per_eye && !shown.bottom_preview && !draw.swapped);
                 const std::size_t screens_now = (top_shown ? (top_is_stereo ? 2 : 1) : 0) +
-                                                (bottom_shown ? (bottom_is_stereo ? 2 : 1) : 0);
+                                                (bottom_shown ? (bottom_two ? 2 : 1) : 0);
                 const bool room =
                     !wanted || !ui ||
                     backing_room.Next(MotionClarity::BackingRoom::Fits(
@@ -1738,7 +1745,8 @@ void Runtime::FrameLoop() {
                 powers_in.bottom_persistent = shown.bottom_persistent;
                 powers_in.top_pose[0] = shown.top_pose[0];
                 powers_in.top_pose[1] = shown.top_pose[1];
-                powers_in.top_size = shown.top_size[0];
+                powers_in.top_size[0] = shown.top_size[0];
+                powers_in.top_size[1] = shown.top_size[1];
                 powers_in.top_in_view = shown.top_space == view_space;
                 const ScreenChain& chain =
                     LayerChain(static_cast<std::size_t>(VideoCore::XrScreen::Bottom));
@@ -1832,8 +1840,17 @@ void Runtime::FrameLoop() {
                 const auto add_bottom = [&] {
                     if (shown.show_bottom && draw.bottom_visible) {
                         preview_take = shown.bottom_preview; // AzaharFrame kiuaim
-                        add_bottom_screen(shown.bottom_pose, shown.bottom_size,
-                                          shown.bottom_preview ? 0.0f : draw.bottom_curve);
+                        const float curve = shown.bottom_preview ? 0.0f : draw.bottom_curve;
+                        if (shown.bottom_per_eye && !shown.bottom_preview) {
+                            // AzaharFrame kiuhs3a: the portraits: a layer an eye.
+                            add_screen(VideoCore::XrScreen::Bottom, local_space, shown.bottom_pose,
+                                       shown.bottom_size, XR_EYE_VISIBILITY_LEFT, curve);
+                            add_screen(VideoCore::XrScreen::Bottom, local_space,
+                                       shown.bottom_pose_right, shown.bottom_size_right,
+                                       XR_EYE_VISIBILITY_RIGHT, curve);
+                        } else {
+                            add_bottom_screen(shown.bottom_pose, shown.bottom_size, curve);
+                        }
                         preview_take = false;
                     }
                 };
@@ -1960,12 +1977,14 @@ void Runtime::FrameLoop() {
             powers_in.time = fs.predictedDisplayTime;
             for (const Quad& q : power_layers.Update(*this, powers_in)) {
                 const uint64_t chain = reinterpret_cast<uint64_t>(q.swapchain);
+                // AzaharFrame kiuhs3a: with the HUD a quad an eye, the right's a place of its own.
+                const int32_t kind = q.eye == XR_EYE_VISIBILITY_RIGHT ? 1 : 0;
                 Quad stand_in = q;
                 stand_in.visible = true;
-                layer_slots.Reserve(LayerSlots::Group::Extra, chain, 0, 0,
+                layer_slots.Reserve(LayerSlots::Group::Extra, chain, kind, 0,
                                     SlotQuad{local_space, stand_in});
                 if (q.visible) {
-                    layer_slots.Add(LayerSlots::Group::Extra, chain, 0, 0,
+                    layer_slots.Add(LayerSlots::Group::Extra, chain, kind, 0,
                                     SlotQuad{local_space, q});
                 }
             }

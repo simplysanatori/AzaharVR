@@ -3402,6 +3402,49 @@ int main(int argc, char** argv) {
         dm.game_title = "Metroid Fusion";
         ok &= shot("depth-gba-2-level-2", dm, settings(SettingsSection::Graphics));
     }
+    { // AzaharVR: a DS game's Mods tab, its widescreen mod (--only wide-)
+        MenuModel wm = pg;
+        wm.core = CoreCaps::ForNDS();
+        wm.core.has_mods = true; // as NdsCore says it
+        wm.game_title = "Mario Kart DS";
+        wm.immersive_mode = 0;
+        MenuView wv{};
+        wv.tab = Tab::Mods;
+        wv.mods_segment = ModsSegment::Textures; // of a 3DS game: Cheats here
+        ok &= shot("wide-1-cheats", wm, wv);
+        wv.mods_segment = ModsSegment::Mods;
+        wm.mods.mods = {};
+        ok &= shot("wide-2-none", wm, wv);
+        ModRow row;
+        row.id = "widescreen";
+        row.name = "Widescreen (16:10)";
+        row.author = "TWiLight Menu++ Contributors";
+        row.url = "https://github.com/DS-Homebrew/TWiLightMenu";
+        row.managed = true;
+        row.active = true;
+        ModOffer offer;
+        offer.id = row.id;
+        offer.name = row.name;
+        offer.author = row.author;
+        offer.url = row.url;
+        offer.notes = "By RadDude McCoolguy, fintogive, KazoWAR, Vague Rant, gamemasterplc, Rocket "
+                      "Robz, ChampionLeake, DeadSkullzJr, spellboundtriangle, LedyBacer, "
+                      "CheatFreak47, deisuke1234 and icup321.";
+        wm.mods.mods.catalog = CatalogState::Ready;
+        wm.mods.mods.available = {offer};
+        wv.mods_page = ModsPage::Install;
+        ok &= shot("wide-3-install", wm, wv);
+        wm.mods.mods.available[0].note = "Install Failed: No Connection";
+        wm.mods.mods.available[0].error = true;
+        ok &= shot("wide-4-failed", wm, wv);
+        wm.mods.mods.available[0] = offer;
+        wm.mods.mods.available[0].state = OfferState::Installed;
+        wm.mods.mods.loaded = {row};
+        wm.mods.mods.needs_restart = true;
+        ok &= shot("wide-5-installed", wm, wv);
+        wv.mods_page = ModsPage::Loaded;
+        ok &= shot("wide-6-loaded", wm, wv);
+    }
     { // AzaharFrame docs: the README's pictures (--only readme-)
         MenuModel rm = m;
         rm.mods.cheats = ReadmeCheatsOot3d();

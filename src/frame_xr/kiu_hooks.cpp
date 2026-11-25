@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cmath>
 #include <memory>
+#include <mutex> // AzaharFrame kiuhs3a
 #include <numbers>
 #include <string>
 #include "common/frame_emu_poll.h"
@@ -37,6 +38,7 @@
 #include "frame_xr/kiu_talk.h" // AzaharFrame kiutalk
 #include "video_core/kiu_hud.h" // AzaharFrame kiu1s
 #include "video_core/kiu_powers.h" // AzaharFrame kiupowers
+#include "video_core/kiu_clear.h" // AzaharFrame kiuhs3
 #include "video_core/kiu_sheets.h" // AzaharFrame kiu140
 #include "video_core/kiu_view_tap.h" // AzaharFrame kiuvr: the view register's tap
 
@@ -65,6 +67,7 @@ constexpr const char* kSwitchGroupKeep = "AZAHARFRAME_KIU_GROUP_KEEP";
 constexpr const char* kSwitchNoFollow = "AZAHARFRAME_KIU_NO_FOLLOW";
 constexpr const char* kSwitchNoPlayerShadow = "AZAHARFRAME_KIU_NO_PLAYER_SHADOW"; // kiuperf
 constexpr const char* kSwitchFp2d = "AZAHARFRAME_KIU_FP_2D"; // AzaharFrame kiu2d
+constexpr const char* kSwitchClear = "AZAHARFRAME_KIU_CLEAR"; // AzaharFrame kiuhs3
 constexpr const char* kSwitchReticleSize = "AZAHARFRAME_KIU_RETICLE_SIZE"; // AzaharFrame kiu131
 constexpr const char* kSwitchReticleTexture = "AZAHARFRAME_KIU_RETICLE_TEX";
 constexpr const char* kSwitchSheets = "AZAHARFRAME_KIU_SHEETS"; // AzaharFrame kiu140
@@ -669,6 +672,9 @@ void CutsceneOff(State& s) {
 /// rate is brought to it, and the setting changed while the game runs says that it counts from the
 /// next start.
 std::atomic<bool> g_sixty{false};
+std::atomic<bool> g_sixty_off{false}; ///< AzaharFrame kiuhs3a: State::sixty_off
+std::mutex g_sixty_mutex;
+FileSys::Kiu60::RestartToast g_sixty_toast; ///< under g_sixty_mutex
 
 bool SixtyWanted() {
     const auto asked = Switch(FileSys::Kiu60::kSwitch);
@@ -682,7 +688,6 @@ void SixtyFps(State& s, uint64_t title, GuestMemory& mem) {
     if (!build) {
         return;
     }
-    const bool sixty = g_sixty.load(std::memory_order_relaxed);
     const K60::Run run = K60::g_run.load(std::memory_order_relaxed);
     if (!s.sixty_off && run != K60::Run::Leave) {
         const K60::Turned turned = K60::TurnTo(
@@ -700,15 +705,8 @@ void SixtyFps(State& s, uint64_t title, GuestMemory& mem) {
             s.sixty_off = true; // the loader's line says where, or a mod did it
         }
     }
-    static bool said = false; // emulation thread
-    const bool other = SixtyWanted() != sixty;
-    if (other != said && !s.sixty_off && run != K60::Run::Leave) {
-        said = other;
-        if (other) {
-            ShowToastText(sixty ? Menu::kKiu60FpsOffToast : Menu::kKiu60FpsOnToast,
-                          ToastTime::Long);
-        }
-    }
+    g_sixty_off.store(s.sixty_off, std::memory_order_relaxed);
+    NoteSixtyFps();
 }
 
 void Hook(int64_t ticks) {
@@ -721,6 +719,7 @@ void Hook(int64_t ticks) {
         CutsceneOff(s); // AzaharFrame kiu140
         PowersStrip(false); // AzaharFrame kiupowers
         VideoCore::Immersive::g_soft_draw_turn.store(false, std::memory_order_relaxed); // kiu2d
+        VideoCore::KiuClear::g_on.store(false, std::memory_order_relaxed); // kiuhs3
         VideoCore::Immersive::g_reticle_texture.store(0, std::memory_order_relaxed); // kiu131
         VideoCore::KiuSheets::g_mode.store(VideoCore::KiuSheets::Mode::Off,
                                            std::memory_order_relaxed); // kiu140
@@ -740,6 +739,7 @@ void Hook(int64_t ticks) {
         Kiu::FirstPerson::SetGameCode(0, false); // AzaharFrame kiumode
         Kiu::FirstPerson::SupplyRegisters(false);
         VideoCore::Immersive::g_soft_draw_turn.store(false, std::memory_order_relaxed); // kiu2d
+        VideoCore::KiuClear::g_on.store(false, std::memory_order_relaxed); // kiuhs3
         VideoCore::Immersive::g_reticle_texture.store(0, std::memory_order_relaxed); // kiu131
         VideoCore::KiuSheets::g_mode.store(VideoCore::KiuSheets::Mode::Off,
                                            std::memory_order_relaxed); // kiu140
@@ -838,6 +838,12 @@ void Hook(int64_t ticks) {
     const auto fp2d_text = Switch(kSwitchFp2d);
     VideoCore::Immersive::g_soft_draw_turn.store(
         KH::GroupWanted(first_person, fp2d_text ? fp2d_text->c_str() : nullptr),
+        std::memory_order_relaxed);
+    // AzaharFrame kiuhs3: what nothing draws in the picture (video_core/kiu_clear.h);
+    // AZAHARFRAME_KIU_CLEAR=0 leaves what was there, for an A/B.
+    const auto clear_text = Switch(kSwitchClear);
+    VideoCore::KiuClear::g_on.store(
+        KH::GroupWanted(first_person, clear_text ? clear_text->c_str() : nullptr),
         std::memory_order_relaxed);
     // AzaharFrame kiu140: the cloud sheets' soft rim (video_core/kiu_sheets.h).
     {
@@ -1264,10 +1270,38 @@ void OnGameBoot() {
 
 void OnGameSettings(uint64_t /*title_id*/) {
     // AzaharFrame kiu60: what this run plays at; the setting changed later counts from the next.
-    g_sixty.store(SixtyWanted(), std::memory_order_relaxed);
+    {
+        std::scoped_lock lock{g_sixty_mutex};
+        g_sixty.store(SixtyWanted(), std::memory_order_relaxed);
+        g_sixty_toast = {}; // AzaharFrame kiuhs3a
+    }
     // AzaharFrame kiumode: every game, before its presets: the last run's code check and
     // registers are forgotten (no setting is written).
     Kiu::FirstPerson::OnGameBoot();
+}
+
+void NoteSixtyFps() {
+    namespace K60 = FileSys::Kiu60;
+    if (!K60::BuildFor(GameTitleId()) ||
+        K60::g_run.load(std::memory_order_relaxed) == K60::Run::Leave ||
+        g_sixty_off.load(std::memory_order_relaxed)) {
+        return;
+    }
+    std::scoped_lock lock{g_sixty_mutex};
+    const bool started = g_sixty.load(std::memory_order_relaxed);
+    switch (g_sixty_toast.Next(started, SixtyWanted())) {
+    case K60::RestartToast::Say::For60:
+        ShowToastText(Menu::kKiu60FpsOnToast, ToastTime::Long);
+        break;
+    case K60::RestartToast::Say::For30:
+        ShowToastText(Menu::kKiu60FpsOffToast, ToastTime::Long);
+        break;
+    case K60::RestartToast::Say::TakeBack:
+        HideToastText(started ? Menu::kKiu60FpsOffToast : Menu::kKiu60FpsOnToast);
+        break;
+    case K60::RestartToast::Say::Nothing:
+        break;
+    }
 }
 
 } // namespace FrameXr::Kiu::Hooks

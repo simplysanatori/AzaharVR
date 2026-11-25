@@ -636,6 +636,49 @@ inline PanelInView PortraitPlace(bool right, float words_deg = kPortraitWordsDeg
                                 static_cast<float>(kPortraitCut.height));
 }
 
+/// AzaharFrame kiuhs3a: the portraits in the plane of the Primary Screen's picture, where the words
+/// are (kiu_hud.h MoveSubtitle: the same place in both eyes' pictures): a quad an eye, each a part of
+/// that eye's screen, so they are as far as the words and face as they do, whatever the depth.
+/// In the screen's own coordinates (-1 to 1, right and up).
+struct InPlane {
+    float u = 0.0f, v = 0.0f;           ///< its middle
+    float half_u = 0.0f, half_v = 0.0f; ///< its half sizes
+};
+inline constexpr float kInPlaneMostDeg = 72.0f; ///< no farther aside of the screen's middle
+/// `p` (facing the eye, in the head's frame) in the plane of a screen `pitch_rad` up from straight
+/// ahead with these half angles: its middle in the same direction, its height as many degrees; its
+/// width foreshortened as the plane's, as the words are.
+inline InPlane ToPlane(const PanelInView& p, float pitch_rad, float tan_half_x, float tan_half_y) {
+    InPlane out;
+    const float d = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+    if (!(d > 1e-4f) || !(tan_half_x > 0.05f) || !(tan_half_y > 0.05f) ||
+        !std::isfinite(pitch_rad)) {
+        return out;
+    }
+    const float c = std::cos(pitch_rad), s = std::sin(pitch_rad);
+    float x = p.x / d;
+    float y = (p.y * c + p.z * s) / d;
+    float ahead = -(p.z * c - p.y * s) / d;
+    const float least = std::cos(kInPlaneMostDeg * 3.14159265358979f / 180.0f);
+    if (ahead < least) { // held at the cone's edge, the same way aside
+        const float side = std::max(std::sqrt(x * x + y * y), 1e-4f);
+        const float k = std::sqrt(1.0f - least * least) / side;
+        x *= k;
+        y *= k;
+        ahead = least;
+    }
+    const float away = 1.0f / ahead; // in screen distances
+    out.u = x * away / tan_half_x;
+    out.v = y * away / tan_half_y;
+    out.half_u = 0.5f * p.width / d * away / tan_half_x;
+    out.half_v = 0.5f * p.height / d * away / tan_half_y;
+    return out;
+}
+/// The portraits (and the power menu with the HUD) in that plane: live switch
+/// AZAHARFRAME_KIU_WORDS_PLANE (0: as before, the portraits 0.8 m away, the power menu 8 m).
+inline constexpr const char* kSwitchWordsPlane = "AZAHARFRAME_KIU_WORDS_PLANE";
+bool WordsPlane();
+
 /// AzaharFrame kiuview: AZAHARFRAME_KIU_FP_FIELD, a share of the view's angle (0.5 to 1).
 inline constexpr int kMinFieldPercent = 50;
 /// AZAHARFRAME_KIU_FP_FIELD's text as a share: null or unreadable 1, else the percent within

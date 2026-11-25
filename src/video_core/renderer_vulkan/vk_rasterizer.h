@@ -4,7 +4,9 @@
 
 #pragma once
 
+#include "video_core/kiu_clear.h" // AzaharFrame kiuhs3
 #include "video_core/kiu_powers.h" // AzaharFrame kiupowers
+#include "video_core/renderer_vulkan/vk_kiu_hud_fade.h" // AzaharFrame kiuhs3a
 #include "video_core/renderer_vulkan/vk_kiu_talk.h" // AzaharFrame kiutalk
 #include "video_core/rasterizer_accelerated.h"
 #include "video_core/renderer_vulkan/vk_descriptor_update_queue.h"
@@ -110,6 +112,9 @@ public:
 private:
     /// AzaharFrame kiupowers: keeps the bar's quads of a draw of the bottom screen.
     void NoteKiuPowersDraw();
+    /// AzaharFrame kiuhs3: the picture's colour cleared before its first world draw (kiu_clear.h), in the
+    /// render pass just begun.
+    void ClearKiuPicture(bool world, const Common::Rectangle<u32>& rect);
 
     /// Syncs pipeline state from PICA registers
     void SyncDrawState();
@@ -193,7 +198,9 @@ private:
     u64 powers_tick = 0, powers_drawn = 0; ///< TickFrames; the one of the sprites' last draw
     u32 powers_offset = UINT32_MAX;        ///< the last draw's place in the batch's indices
     static constexpr std::size_t kMostPowersSprites = 64; ///< the bar has 25
+    VideoCore::KiuClear::Pictures kiu_pictures; ///< AzaharFrame kiuhs3
     KiuTalkDraws kiu_talk; ///< AzaharFrame kiutalk
+    KiuHudFade kiu_hud_fade; ///< AzaharFrame kiuhs3a
 };
 
 } // namespace Vulkan
