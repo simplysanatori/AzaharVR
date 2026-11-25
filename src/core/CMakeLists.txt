@@ -89,6 +89,8 @@ add_library(citra_core STATIC EXCLUDE_FROM_ALL
     ctgp7/ctgp7.h # AzaharFrame ctgp7
     homebrew/emerald3ds.cpp # AzaharFrame emerald
     homebrew/emerald3ds.h # AzaharFrame emerald
+    homebrew/handheld_catalogue.cpp # AzaharVR homebrew
+    homebrew/handheld_catalogue.h
     frame_cgfx.cpp # AzaharFrame kiuguns
     frame_cgfx.h # AzaharFrame kiuguns
     frame_controller_models.cpp # AzaharFrame cpphelpers

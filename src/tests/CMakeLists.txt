@@ -147,6 +147,7 @@ add_executable(tests
     core/homebrew_emerald3ds.cpp # AzaharFrame emerald
     core/emerald_detect.cpp # AzaharFrame emhb
     core/homebrew_update_check.cpp # AzaharFrame ui3
+    core/homebrew_handheld.cpp # AzaharVR homebrew
     core/savestate_frame.cpp # AzaharFrame savestate
     core/savestate_memory.cpp # AzaharFrame savemem
     core/autosave_frame.cpp # AzaharFrame autosave

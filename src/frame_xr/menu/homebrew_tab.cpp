@@ -137,6 +137,9 @@ std::vector<Id> HomebrewButtons(const HomebrewItem& item) {
         out = {Id::HomebrewPlay, Id::HomebrewUpdate};
     } else {
         out = {Id::HomebrewPlay, Id::HomebrewCheck, Id::HomebrewReinstall};
+        if (!item.can_check) { // AzaharVR homebrew: a package pinned by its checksum
+            out.erase(out.begin() + 1);
+        }
     }
     if (item.can_uninstall) { // AzaharFrame emhb
         out.push_back(Id::HomebrewUninstall);

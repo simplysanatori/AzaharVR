@@ -36,7 +36,10 @@ Reply GetPinned(const std::string& url, std::size_t max_body);
 /// plus a margin.
 std::string Download(const std::string& url, const std::string& dest,
                      const std::function<bool(u64, u64)>& progress,
-                     u64 max_bytes = 128ULL * 1024 * 1024);
+                     u64 max_bytes = 128ULL * 1024 * 1024, bool (*only_hosts)(std::string_view) = nullptr);
+
+/// AzaharVR homebrew: `only_hosts` (host names, no scheme) replaces the GitHub hosts as what the
+/// download and each of its redirects may use (core/homebrew/handheld_catalogue.h).
 
 /// Whether a host ("https://github.com") may be fetched from.
 bool HostAllowed(std::string_view host);

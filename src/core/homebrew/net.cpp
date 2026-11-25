@@ -220,12 +220,15 @@ Hop GetOnce(const std::string& host, const std::string& path,
 /// Follows redirects among the allowed hosts. "" on success.
 std::string Fetch(std::string url, const std::function<bool(u64 total)>& start,
                   const std::function<bool(const char*, std::size_t)>& sink, int* status,
-                  bool pinned_hosts = false) {
+                  bool pinned_hosts = false, bool (*only_hosts)(std::string_view) = nullptr) {
     for (int hops = 0; hops < 8; ++hops) {
         std::string host, path;
         if (!SplitUrl(url, host, path) ||
-            !(HostAllowed(host) || (pinned_hosts && PinnedHostAllowed(host)))) {
-            return "Download refused: not a GitHub address";
+            !(only_hosts != nullptr
+                  ? only_hosts(std::string_view(host).substr(std::string_view("https://").size()))
+                  : (HostAllowed(host) || (pinned_hosts && PinnedHostAllowed(host))))) {
+            return only_hosts != nullptr ? "Download refused: not an allowed address"
+                                         : "Download refused: not a GitHub address";
         }
         const Hop hop = GetOnce(host, path, start, sink);
         *status = hop.status;
@@ -300,7 +303,8 @@ Reply GetPinned(const std::string& url, std::size_t max_body) {
 }
 
 std::string Download(const std::string& url, const std::string& dest,
-                     const std::function<bool(u64, u64)>& progress, u64 max_bytes) {
+                     const std::function<bool(u64, u64)>& progress, u64 max_bytes,
+                     bool (*only_hosts)(std::string_view)) {
     const std::string part = dest + ".part";
     std::FILE* file = nullptr;
     u64 total = 0, done = 0;
@@ -334,7 +338,7 @@ std::string Download(const std::string& url, const std::string& dest,
             done += len;
             return progress(done, total);
         },
-        &status);
+        &status, false, only_hosts);
     if (file != nullptr) {
         if (std::fclose(file) != 0) {
             write_failed = true;
