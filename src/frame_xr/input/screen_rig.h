@@ -152,6 +152,9 @@ struct Cylinder {
 };
 Cylinder CylinderFor(const Posef& screen, float width, float height, float radius);
 
+/// Where a point `right` metres along a screen from its middle is, facing as the screen does there.
+Posef Along(const Posef& screen, float right, float radius);
+
 // ---- AzaharFrame move: Detach Screens ---------------------------------------------------------
 //
 // Settings::values.vr_move_screens (global, read every frame): 0 Off, the second slot follows the

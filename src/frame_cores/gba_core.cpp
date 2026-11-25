@@ -113,6 +113,7 @@ struct GbaCore::Impl {
         services.picture = [this] {
             return DriverPicture{emu.fb, kGbaWidth, kGbaHeight, kGbaWidth}; // XBGR8888
         };
+        services.layer_shift = [this] { return right_eye.FarthestShift(); };
         services.rom_path = rom_path;
         services.game_dir = paths.game_dir;
 

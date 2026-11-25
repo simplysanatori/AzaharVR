@@ -107,6 +107,7 @@ struct ScreenChain {
     /// AzaharFrame projscreen: the index of the image released last (`index` moves on as soon as
     /// the renderer acquires the next one); under screens_mutex.
     uint32_t shown_index = 0;
+    float layer_shift = 0.0f; ///< the top screen's: XrContentPose's of the image released last
 };
 
 /// Where one display frame's time went (milliseconds), from one xrWaitFrame return to the next.

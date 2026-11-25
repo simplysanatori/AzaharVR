@@ -146,6 +146,7 @@ struct GbCore::Impl {
         services.picture = [this] {
             return DriverPicture{fb.data(), width, height, stride}; // XBGR8888
         };
+        services.layer_shift = [this] { return shadow.FarthestShift(); };
         services.rom_path = rom_path;
         services.game_dir = paths.game_dir;
 

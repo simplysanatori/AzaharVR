@@ -59,7 +59,10 @@ struct FrameOutput {
     /// The Primary Screen for the right eye (Layer Depth); none: both eyes see `primary`. The same
     /// size as `primary`.
     Vulkan::AltScreenImage primary_right{};
-    float layer_shift = 0.0f; ///< its farthest layer's, a share of the width (layer_depth.h)
+    /// The farthest layer's in `primary_right`, a share of the width (layer_depth.h), below 0 while
+    /// inverted; every layer's is between 0 and it. The same in a frame that has both eyes see
+    /// `primary`: as much is cut off the pictures.
+    float layer_shift = 0.0f;
     Vulkan::AltScreenImage overlay{}; ///< over the whole Primary Screen, alpha premultiplied
     std::vector<int16_t> audio_pcm; ///< Interleaved stereo PCM16 (L, R, L, R, ...)
     float rumble = 0.0f;            ///< Haptic motor intensity [0.0, 1.0]

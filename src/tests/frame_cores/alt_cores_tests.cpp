@@ -2146,7 +2146,7 @@ TEST_CASE("Layer Depth goes by the driver", "[frame_cores]") {
                 plain.Run();
                 CHECK((game.Left() != plain.Left()));
                 CHECK((game.Right() == game.Left()));
-                CHECK(game.out.layer_shift == 0.0f);
+                CHECK(game.out.layer_shift == plain.out.layer_shift);
             }
             job.paint = -1;
             game.Run();
@@ -2184,10 +2184,11 @@ TEST_CASE("Layer Depth goes by the driver", "[frame_cores]") {
     pixels.back() ^= 1; // the driver shows another picture
     runner.SetRightEye(right, game, 0.5f, out);
     CHECK(out.primary_right.pixels == out.primary.pixels);
-    CHECK(out.layer_shift == 0.0f);
+    CHECK(out.layer_shift == 0.5f); // cut as the frames around it
     frame();
     runner.SetRightEye({moved.data(), 8, 8, 16}, game, 0.5f, out); // another size
     CHECK(out.primary_right.pixels == out.primary.pixels);
+    CHECK(out.layer_shift == 0.0f);
     frame();
     runner.SetRightEye(right, {}, 0.5f, out);
     CHECK(out.primary_right.pixels == out.primary.pixels);
