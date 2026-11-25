@@ -93,6 +93,11 @@ public:
         }
         return sprite_pipeline;
     }
+    /// Multiplies what the pass has by the opacity (DrawKiuPowers: the strip as a whole, so what
+    /// is behind another piece does not show through it). After SpritePipeline.
+    vk::Pipeline OpacityPipeline() const {
+        return opacity_pipeline;
+    }
 
 private:
     struct SpillSlot {
@@ -112,7 +117,8 @@ private:
     };
 
     void CreateRenderPass();
-    vk::Pipeline CreatePipeline(vk::ShaderModule fragment, bool blended);
+    enum class Blend { None, Over, Scale };
+    vk::Pipeline CreatePipeline(vk::ShaderModule fragment, Blend blend);
     void CreateSpritePipeline(); ///< AzaharFrame kiupowers
     void CreateCopyObjects();
     bool CreateSpill(Screen& screen);
@@ -142,6 +148,7 @@ private:
     vk::PipelineLayout pipeline_layout;
     vk::ShaderModule sprite_shader; ///< AzaharFrame kiupowers
     vk::Pipeline sprite_pipeline;
+    vk::Pipeline opacity_pipeline;
     std::array<Screen, kScreens> screens;
     // The handoff thread's copy of a spilled frame into the swapchain images.
     vk::CommandPool copy_pool;
