@@ -13,11 +13,13 @@
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "common/math_util.h"
+#include "common/scope_exit.h"
 #include "common/settings.h"
 #include "common/xr_pacer.h"
 #include "core/frontend/alt_screens.h"
 #include "core/frontend/emu_window.h"
 #include "video_core/host_shaders/vulkan_present_vert.h"
+#include "video_core/renderer_vulkan/alt_graphics.h"
 #include "video_core/renderer_vulkan/alt_pipeline.h"
 #include "video_core/renderer_vulkan/alt_present.h"
 #include "video_core/renderer_vulkan/alt_window_target.h"
@@ -104,6 +106,7 @@ struct AltXrRenderer::Impl {
     std::unique_ptr<AltWindowTarget> secondary_target; ///< Separate Windows, made when first used
     std::chrono::steady_clock::time_point window_presented{};
     u64 previous_frame_tick = 0;
+    u64 copy_tick = 0; ///< when a core's picture was last copied in this Present (0: not)
     bool presented_vr = false; ///< the last Present's output
     bool ready = false;
 
@@ -244,7 +247,9 @@ struct AltXrRenderer::Impl {
     void EnsureUploads(std::initializer_list<const AltScreenImage*> images) {
         u64 frame = 0;
         for (const AltScreenImage* image : images) {
-            frame += u64{image->width} * image->height * sizeof(u32);
+            if (image->image == 0) {
+                frame += u64{image->width} * image->height * sizeof(u32);
+            }
         }
         if (frame * 3 <= upload_size) {
             return;
@@ -337,6 +342,69 @@ struct AltXrRenderer::Impl {
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .image = dst_image,
+                .subresourceRange = range,
+            };
+            cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                                   vk::PipelineStageFlagBits::eFragmentShader, {}, {}, {}, to_read);
+        });
+        return true;
+    }
+
+    /// A screen's newest picture, from the GPU or the CPU.
+    bool TakeImage(ScreenTexture& tex, const AltScreenImage& img) {
+        if (img.image == 0) {
+            return UploadImage(tex, img);
+        }
+        if (img.alive.expired()) { // what drew it is gone (a paused game): its last stays
+            return static_cast<bool>(tex.image);
+        }
+        if (!EnsureTexture(tex, img.width, img.height)) {
+            return false;
+        }
+        copy_tick = scheduler->CurrentTick();
+        scheduler->Record([src = vk::Image{reinterpret_cast<VkImage>(img.image)}, dst = tex.image,
+                           layer = img.layer, w = img.width,
+                           h = img.height](vk::CommandBuffer cmdbuf) {
+            constexpr vk::ImageSubresourceRange range = {
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            };
+            const vk::MemoryBarrier drawn = {
+                .srcAccessMask = vk::AccessFlagBits::eMemoryWrite,
+                .dstAccessMask = vk::AccessFlagBits::eTransferRead,
+            };
+            const vk::ImageMemoryBarrier to_dst = {
+                .srcAccessMask = {},
+                .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
+                .oldLayout = vk::ImageLayout::eUndefined,
+                .newLayout = vk::ImageLayout::eTransferDstOptimal,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = dst,
+                .subresourceRange = range,
+            };
+            cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eColorAttachmentOutput |
+                                       vk::PipelineStageFlagBits::eTransfer |
+                                       vk::PipelineStageFlagBits::eFragmentShader,
+                                   vk::PipelineStageFlagBits::eTransfer, {}, drawn, {}, to_dst);
+            const vk::ImageCopy region = {
+                .srcSubresource = {vk::ImageAspectFlagBits::eColor, 0, layer, 1},
+                .dstSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+                .extent = {w, h, 1},
+            };
+            cmdbuf.copyImage(src, vk::ImageLayout::eGeneral, dst,
+                             vk::ImageLayout::eTransferDstOptimal, region);
+            const vk::ImageMemoryBarrier to_read = {
+                .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+                .dstAccessMask = vk::AccessFlagBits::eShaderRead,
+                .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+                .newLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = dst,
                 .subresourceRange = range,
             };
             cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
@@ -643,9 +711,19 @@ bool AltXrRenderer::NeedsPresent() const {
 
 bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage& secondary,
                             const AltScreenImage& overlay, bool skippable) {
-    if (!impl || !impl->ready || !primary.pixels || primary.width == 0 || primary.height == 0) {
+    if (!impl || !impl->ready || !primary.HasPicture()) {
         return false;
     }
+    // A copy of the core's picture goes to the GPU before the core's next work there does.
+    impl->copy_tick = 0;
+    SCOPE_EXIT({
+        if (impl->copy_tick != 0 && impl->scheduler) {
+            if (impl->copy_tick == impl->scheduler->CurrentTick()) {
+                impl->scheduler->Flush();
+            }
+            impl->scheduler->WaitWorker();
+        }
+    });
     impl->EnsureUploads({&primary, &secondary, &overlay});
     impl->presented_vr = impl->XrShowsScreens();
     if (!impl->presented_vr) {
@@ -656,8 +734,8 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
             std::chrono::steady_clock::now() - impl->window_presented < kSkippableInterval) {
             return true;
         }
-        if (!impl->UploadImage(impl->primary_tex, primary) ||
-            (secondary.pixels && !impl->UploadImage(impl->secondary_tex, secondary))) {
+        if (!impl->TakeImage(impl->primary_tex, primary) ||
+            (secondary.HasPicture() && !impl->TakeImage(impl->secondary_tex, secondary))) {
             return false;
         }
         impl->PresentToWindow(impl->UploadOverlay(overlay));
@@ -675,8 +753,7 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
             *impl->present_pipeline_layout);
     }
 
-    const bool has_secondary =
-        secondary.pixels != nullptr && secondary.width > 0 && secondary.height > 0;
+    const bool has_secondary = secondary.HasPicture();
     if (has_secondary) {
         impl->secondary_extent = TargetExtent(secondary);
     } // else hidden (the GBA map in a menu): its size stays
@@ -693,10 +770,10 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
         return false;
     }
 
-    if (!impl->UploadImage(impl->primary_tex, primary)) {
+    if (!impl->TakeImage(impl->primary_tex, primary)) {
         return false;
     }
-    if (has_secondary && !impl->UploadImage(impl->secondary_tex, secondary)) {
+    if (has_secondary && !impl->TakeImage(impl->secondary_tex, secondary)) {
         return false;
     }
 
@@ -738,6 +815,12 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
 
 bool AltXrRenderer::IsReady() const {
     return impl && impl->ready;
+}
+
+AltGraphics AltXrRenderer::Graphics() const {
+    const Instance& instance = *impl->instance;
+    return {instance.GetPhysicalDevice(), instance.GetDevice(), instance.GetGraphicsQueue(),
+            instance.GetGraphicsQueueFamilyIndex(), &impl->scheduler->submit_mutex};
 }
 
 } // namespace Vulkan

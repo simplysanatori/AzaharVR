@@ -39,6 +39,7 @@
 #include "common/logging/log.h"
 #include "frame_cores/nds_resolution.h"
 #include "frame_cores/rom_info.h"
+#include "video_core/renderer_vulkan/alt_graphics.h"
 
 namespace FrameCores {
 namespace {
@@ -186,6 +187,7 @@ std::string FormatArCodeHex(const std::vector<melonDS::u32>& words) {
 struct NdsCore::Impl {
     std::unique_ptr<melonDS::NDS> nds;
     NdsResolution resolution;
+    std::optional<Vulkan::AltGraphics> graphics;
     bool is_dsi = false;
     bool loaded = false;
 
@@ -236,6 +238,13 @@ struct NdsCore::Impl {
         settings.HiresCoordinates = false;
         settings.BetterPolygons = false;
         nds->GetRenderer().SetRenderSettings(settings);
+    }
+
+    NdsHiresMaker HiresMaker() const {
+        if (opts.ds_renderer) {
+            return opts.ds_renderer;
+        }
+        return graphics ? VulkanNdsHires(*graphics) : NdsHiresMaker{};
     }
 
     void SetResolutionCaps() {
@@ -472,7 +481,7 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
                                   opts.use_bios && HasDsiFiles(paths.bios_dir), opts);
     impl->is_dsi = use_dsi;
     impl->caps = Common::AltCore::Capabilities::ForNDS(use_dsi);
-    impl->resolution = NdsResolution(opts.ds_renderer ? opts.ds_renderer : DefaultNdsHires());
+    impl->resolution = NdsResolution(impl->HiresMaker());
     impl->SetResolutionCaps();
 
     // Prepare battery save if already on disk
@@ -722,6 +731,7 @@ bool NdsCore::SaveStateToMemory(std::vector<uint8_t>& out) {
         return false;
     }
     melonDS::Savestate state(melonDS::Savestate::DEFAULT_SIZE);
+    const NdsResolution::CapturesStay captures{impl->resolution, *impl->nds};
     const bool ok = impl->nds->DoSavestate(&state) && !state.Error; // the renderer told by it
     if (!ok || state.Length() == 0) {
         out.clear();
@@ -899,6 +909,16 @@ void NdsCore::SetConsoleMode(bool dsi) {
 
 void NdsCore::SetResolution(uint32_t factor, uint32_t ceiling) {
     impl->resolution.SetFactor(factor, ceiling);
+}
+
+void NdsCore::SetGraphics(const Vulkan::AltGraphics* graphics) {
+    impl->graphics = graphics ? std::optional{*graphics} : std::nullopt;
+    impl->resolution.SetMaker(impl->HiresMaker(), impl->nds.get(), impl->opts.threaded_3d);
+    impl->SetResolutionCaps();
+}
+
+void NdsCore::ReadPictures(FrameOutput& frame) {
+    impl->resolution.ReadScreens(frame.primary, frame.secondary);
 }
 
 void NdsCore::OnSignalStop(int reason) {

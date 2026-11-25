@@ -19,10 +19,13 @@
 namespace melonDS {
 class NDS;
 }
+namespace Vulkan {
+struct AltGraphics;
+}
 
 namespace FrameCores {
 
-class NdsHiresRenderer;
+struct NdsHiresRenderer;
 
 struct CorePaths {
     std::string data_dir;  ///< Root user data folder
@@ -123,6 +126,10 @@ public:
     /// Internal Resolution from the next frame on, and the highest it may become by Dynamic
     /// Resolution (has_internal_resolution).
     virtual void SetResolution(uint32_t /*factor*/, uint32_t /*ceiling*/) {}
+    /// The presenter's graphics, to draw with over 1x; null: they go now.
+    virtual void SetGraphics(const Vulkan::AltGraphics* /*graphics*/) {}
+    /// The pixels of pictures that are the GPU's (AltScreenImage::image) into `frame`.
+    virtual void ReadPictures(FrameOutput& /*frame*/) {}
     /// The Secondary Screen's next page (GBA games), from the next frame.
     virtual void TurnPage() {}
     virtual void SetMicBlow(bool /*on*/) {}

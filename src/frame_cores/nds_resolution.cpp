@@ -17,6 +17,20 @@ namespace FrameCores {
 
 namespace {
 
+// melonDS's marks of which blocks of VRAM are a display capture that is in the renderer's textures
+// (GPU.cpp's CBFlag). They outlive a renderer (GPU::SetRenderer), and are private to it.
+using CaptureMarks = melonDS::u16 (&)[16];
+CaptureMarks Marks(melonDS::GPU& gpu);
+template <auto Member>
+struct MarksOf {
+    friend CaptureMarks Marks(melonDS::GPU& gpu) {
+        return gpu.*Member;
+    }
+};
+template struct MarksOf<&melonDS::GPU::VRAMCaptureBlockFlags>;
+constexpr melonDS::u16 kIsCapture = 1 << 15;
+constexpr melonDS::u16 kSynced = 1 << 13; ///< also in VRAM
+
 /// A frame's 3D is drawn before the frame, and its line 0's sprites: a renderer put in place
 /// between two frames draws them itself.
 void DrawAhead(melonDS::NDS& nds) {
@@ -60,15 +74,20 @@ void NdsResolution::Apply(melonDS::NDS& nds, bool threaded) {
             Fail(why);
             return;
         }
-        auto* const made = renderer.get();
-        nds.SetRenderer(std::move(renderer));
+        const auto* const made = renderer->renderer.get();
+        nds.SetRenderer(std::move(renderer->renderer));
         if (&nds.GetRenderer() != made) { // melonDS put its own there, without its settings
             Fail("the renderer could not start");
             PutSoftware(nds, threaded);
             return;
         }
-        hires = made;
+        hires = renderer->control;
         scale = 1;
+        // Its textures hold no captures yet; melonDS leaves the marks of those it copied to VRAM
+        // for the CPU before.
+        for (auto& mark : Marks(nds.GPU)) {
+            mark = 0;
+        }
     }
     if (to > 1 && !hires->SetScale(to)) {
         Fail("the renderer cannot draw at " + std::to_string(to) + "x");
@@ -101,8 +120,39 @@ bool NdsResolution::GetScreens(Vulkan::AltScreenImage& top, Vulkan::AltScreenIma
     return true;
 }
 
-NdsHiresMaker DefaultNdsHires() {
-    return {};
+void NdsResolution::ReadScreens(Vulkan::AltScreenImage& top, Vulkan::AltScreenImage& bottom) {
+    if (hires) {
+        hires->ReadScreens(top, bottom);
+    }
+}
+
+void NdsResolution::SetMaker(NdsHiresMaker to, melonDS::NDS* nds, bool threaded) {
+    if (hires && nds) {
+        PutSoftware(*nds, threaded);
+    }
+    Detach();
+    maker = std::move(to);
+    leave = false;
+    failed = false;
+}
+
+NdsResolution::CapturesStay::CapturesStay(const NdsResolution& resolution, melonDS::NDS& nds_) {
+    if (resolution.hires) {
+        nds = &nds_;
+        std::copy_n(Marks(nds->GPU), flags.size(), flags.begin());
+    }
+}
+
+NdsResolution::CapturesStay::~CapturesStay() {
+    if (!nds) {
+        return;
+    }
+    for (std::size_t i = 0; i < flags.size(); i++) {
+        if ((flags[i] & kIsCapture) != 0) {
+            Marks(nds->GPU)[i] = flags[i] | kSynced;
+        }
+    }
+    nds->GetRenderer().DrawSprites(0); // the coming frame's, which the renderer forgot
 }
 
 } // namespace FrameCores

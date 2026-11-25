@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -14,24 +15,39 @@
 
 #include "video_core/renderer_vulkan/alt_xr_renderer.h"
 
+namespace Vulkan {
+struct AltGraphics;
+}
+
 namespace FrameCores {
 
 /// The most a DS game is drawn at, as Internal Resolution's menu
 inline constexpr uint32_t kMaxNdsScale = 8;
 
-/// A renderer that draws a DS game over the console's 256x192, on both screens. Which graphics it
-/// draws with is its own business. All of it on the thread that runs the game.
-class NdsHiresRenderer : public melonDS::Renderer {
+/// What NdsResolution asks of a renderer over 1x, beside what melonDS asks of it. All of it under
+/// the host's lock, as the game.
+class NdsHires {
 public:
-    using melonDS::Renderer::Renderer;
+    virtual ~NdsHires() = default;
 
     /// Between two frames, 2 to kMaxNdsScale; what is in VRAM by display capture stays. False: it
     /// cannot (no memory), and is not used any more.
     virtual bool SetScale(uint32_t scale) = 0;
 
-    /// The last frame's screens. Their pixels stay until the next frame's are ready, also while
-    /// the game is paused or its console is off. False: it cannot draw any more.
+    /// The last frame's screens, which stay until the next frame's are ready. False: it cannot draw
+    /// any more.
     virtual bool GetScreens(Vulkan::AltScreenImage& top, Vulkan::AltScreenImage& bottom) = 0;
+
+    /// The last frame's screens' pixels, where GetScreens gives images of the GPU's.
+    virtual bool ReadScreens(Vulkan::AltScreenImage& /*top*/, Vulkan::AltScreenImage& /*bottom*/) {
+        return true;
+    }
+};
+
+/// The same object twice: melonDS's renderer, and the control of it.
+struct NdsHiresRenderer {
+    std::unique_ptr<melonDS::Renderer> renderer;
+    NdsHires* control = nullptr;
 };
 
 /// Null with why when there is none here.
@@ -40,7 +56,7 @@ using NdsHiresMaker =
 
 /**
  * Which renderer a DS game has: melonDS's software renderer at 1x, so that 1x is always the same
- * picture, and over it a NdsHiresRenderer, made when first needed. If that cannot be made or stops
+ * picture, and over it one with NdsHires, made when first needed. If that cannot be made or stops
  * working the game goes on at 1x, with the reason in the log, and is not asked again.
  */
 class NdsResolution {
@@ -72,6 +88,24 @@ public:
     /// The last frame's screens over 1x. False: they are in melonDS's framebuffers.
     bool GetScreens(Vulkan::AltScreenImage& top, Vulkan::AltScreenImage& bottom);
 
+    /// Their pixels, for what is not drawn by the GPU.
+    void ReadScreens(Vulkan::AltScreenImage& top, Vulkan::AltScreenImage& bottom);
+
+    /// Another maker, none: the renderer over 1x goes first, as its graphics are about to.
+    void SetMaker(NdsHiresMaker maker, melonDS::NDS* nds, bool threaded);
+
+    /// A state is made of the console: what is in VRAM by capture is copied out for it, and stays
+    /// as sharp on the screen as it was.
+    class CapturesStay {
+    public:
+        CapturesStay(const NdsResolution& resolution, melonDS::NDS& nds);
+        ~CapturesStay();
+
+    private:
+        melonDS::NDS* nds = nullptr;
+        std::array<uint16_t, 16> flags{};
+    };
+
     /// The console, and with it the renderer, is gone.
     void Detach() {
         hires = nullptr;
@@ -82,7 +116,7 @@ private:
     void Fail(const std::string& why);
 
     NdsHiresMaker maker;
-    NdsHiresRenderer* hires = nullptr; ///< the console's renderer
+    NdsHires* hires = nullptr; ///< the console's renderer
     uint32_t wanted = 1;
     uint32_t ceiling = 1;
     uint32_t scale = 1;
@@ -90,7 +124,7 @@ private:
     bool leave = false; ///< `hires` does not work any more
 };
 
-/// This build's renderer over 1x; empty: none.
-NdsHiresMaker DefaultNdsHires();
+/// melonDS's hi-res renderer on the presenter's graphics.
+NdsHiresMaker VulkanNdsHires(const Vulkan::AltGraphics& graphics);
 
 } // namespace FrameCores

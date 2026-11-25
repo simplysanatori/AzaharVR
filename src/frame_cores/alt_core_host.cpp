@@ -30,6 +30,7 @@
 #include "frame_cores/gb_core.h"
 #include "frame_cores/gba_core.h"
 #include "frame_cores/nds_core.h"
+#include "video_core/renderer_vulkan/alt_graphics.h"
 #include "video_core/renderer_vulkan/alt_xr_renderer.h"
 
 namespace FrameCores {
@@ -291,7 +292,8 @@ struct AltCoreHost::Impl {
     }
 
     /// The Primary Screen's last picture for an autosave's entry, BGRA. core_mutex held.
-    std::vector<u8> PictureLocked(u32& width, u32& height) const {
+    std::vector<u8> PictureLocked(u32& width, u32& height) {
+        core->ReadPictures(last_frame);
         const auto& screen = last_frame.primary;
         if (!screen.pixels || screen.width == 0 || screen.height == 0) {
             return {};
@@ -594,11 +596,11 @@ struct AltCoreHost::Impl {
     /// game's menu) keeps its place and its last picture.
     void NoteScreens() {
         Layout::AltScreens now = screens;
-        if (last_frame.primary.pixels) {
+        if (last_frame.primary.HasPicture()) {
             now.top_width = last_frame.primary.width / std::max(last_frame.primary.scale, 1u);
             now.top_height = last_frame.primary.height / std::max(last_frame.primary.scale, 1u);
         }
-        if (last_frame.secondary.pixels) {
+        if (last_frame.secondary.HasPicture()) {
             now.bottom_width =
                 last_frame.secondary.width / std::max(last_frame.secondary.scale, 1u);
             now.bottom_height =
@@ -613,7 +615,7 @@ struct AltCoreHost::Impl {
     }
 
     void Present(bool skippable) {
-        if (renderer && renderer->IsReady() && last_frame.primary.pixels) {
+        if (renderer && renderer->IsReady() && last_frame.primary.HasPicture()) {
             renderer->Present(last_frame.primary, last_frame.secondary, last_frame.overlay,
                               skippable);
         }
@@ -858,6 +860,8 @@ bool AltCoreHost::Boot(const std::string& rom_path, const std::string& data_dir,
             impl->core.reset();
             return false;
         }
+        const Vulkan::AltGraphics graphics = impl->renderer->Graphics();
+        impl->core->SetGraphics(&graphics);
     }
 
     impl->caps = impl->core->GetCapabilities();
@@ -970,6 +974,13 @@ void AltCoreHost::Stop() {
     impl->audio.Shutdown();
 
     if (impl->renderer) {
+        {
+            std::lock_guard lock(impl->core_mutex);
+            impl->last_frame = FrameOutput{};
+            if (impl->core) {
+                impl->core->SetGraphics(nullptr);
+            }
+        }
         impl->renderer->Shutdown();
         impl->renderer.reset();
     }
@@ -1024,6 +1035,9 @@ void AltCoreHost::Redraw() {
 
 void AltCoreHost::WithScreens(const std::function<void(const FrameOutput&)>& use) const {
     std::lock_guard lock(impl->core_mutex);
+    if (impl->core) {
+        impl->core->ReadPictures(impl->last_frame);
+    }
     use(impl->last_frame);
 }
 

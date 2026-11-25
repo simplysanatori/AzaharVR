@@ -29,6 +29,7 @@
 #include "video_core/renderer_vulkan/alt_present.h"
 #include "video_core/vr_dynamic_resolution.h"
 
+using FrameCores::NdsHires;
 using FrameCores::NdsHiresRenderer;
 using FrameCores::NdsResolution;
 using Vulkan::AltScreenImage;
@@ -50,10 +51,10 @@ struct Log {
 };
 
 /// melonDS's software renderer, its picture blown up
-class Blown : public NdsHiresRenderer {
+class Blown : public melonDS::Renderer, public NdsHires {
 public:
     Blown(melonDS::NDS& nds, Log& log)
-        : NdsHiresRenderer(nds.GPU), log{log}, soft{std::make_unique<melonDS::SoftRenderer>(nds)} {
+        : melonDS::Renderer(nds.GPU), log{log}, soft{std::make_unique<melonDS::SoftRenderer>(nds)} {
         log.made++;
     }
     ~Blown() override {
@@ -145,7 +146,11 @@ FrameCores::NdsHiresMaker Maker(Log& log) {
             why = "no graphics here";
             return nullptr;
         }
-        return std::make_unique<Blown>(nds, log);
+        auto renderer = std::make_unique<Blown>(nds, log);
+        auto made = std::make_unique<NdsHiresRenderer>();
+        made->control = renderer.get();
+        made->renderer = std::move(renderer);
+        return made;
     };
 }
 
@@ -168,16 +173,16 @@ void Put32(std::vector<uint8_t>& rom, std::size_t at, uint32_t value) {
 
 /// Shows VRAM A, where the ARM9 counts down 16-bit colours.
 std::vector<uint8_t> CountingRom() {
-    std::vector<uint8_t> rom(0x8000, 0);
+    std::vector<uint8_t> rom(0x10000, 0); // its code after the secure area
     std::memcpy(rom.data(), "RESTEST", 7);
     std::memcpy(rom.data() + 0x0C, "HRTE01", 6);
-    const std::array<uint32_t, 14> header{0x4000,     0x02000000, 0x02000000, 0x100, 0x4200,
+    const std::array<uint32_t, 14> header{0x8000,     0x02000000, 0x02000000, 0x100, 0x8200,
                                           0x02380000, 0x02380000, 0x100,      0,     0,
                                           0,          0,          0,          0};
     for (std::size_t i = 0; i < header.size(); i++) {
         Put32(rom, 0x20 + i * 4, header[i]);
     }
-    Put32(rom, 0x80, 0x8000);
+    Put32(rom, 0x80, 0x10000);
     Put32(rom, 0x84, 0x4000);
     const std::array<uint32_t, 11> arm9{
         0xE3A00301, // mov r0, #0x04000000
@@ -193,9 +198,9 @@ std::vector<uint8_t> CountingRom() {
         0xEAFFFFFE, // b .
     };
     for (std::size_t i = 0; i < arm9.size(); i++) {
-        Put32(rom, 0x4000 + i * 4, arm9[i]);
+        Put32(rom, 0x8000 + i * 4, arm9[i]);
     }
-    Put32(rom, 0x4200, 0xEAFFFFFE);
+    Put32(rom, 0x8200, 0xEAFFFFFE);
     uint16_t crc = 0xFFFF;
     for (std::size_t i = 0; i < 0x15E; i++) {
         crc ^= rom[i];
@@ -487,13 +492,11 @@ TEST_CASE("DS resolution: a game's setting, its states and its sizes", "[frame_c
     host.Stop();
     CHECK(log.made == log.gone);
 
-    // This build's own renderer, when it has none
-    if (!FrameCores::DefaultNdsHires()) {
-        setting = {4, 4};
-        REQUIRE(host.Boot(rom.string(), data, /*headless_for_test=*/true, {}));
-        CHECK_FALSE(host.GetCapabilities().has_internal_resolution);
-        REQUIRE(host.StepFrames(2));
-        CHECK(host.LastFrame().primary.scale == 1);
-        host.Stop();
-    }
+    // No graphics to draw with
+    setting = {4, 4};
+    REQUIRE(host.Boot(rom.string(), data, /*headless_for_test=*/true, {}));
+    CHECK_FALSE(host.GetCapabilities().has_internal_resolution);
+    REQUIRE(host.StepFrames(2));
+    CHECK(host.LastFrame().primary.scale == 1);
+    host.Stop();
 }
