@@ -563,6 +563,7 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.vr_top_aspect);
     ReadGlobalSetting(Settings::values.vr_screen_gap);
     ReadGlobalSetting(Settings::values.vr_screen_layout); // AzaharFrame layout; AzaharVR: per game too
+    ReadGlobalSetting(Settings::values.vr_screen_curve); // AzaharFrame curve; AzaharVR: per game too
     ReadGlobalSetting(Settings::values.vr_immersive_game_fov);
     ReadGlobalSetting(Settings::values.vr_immersive_match_camera); // AzaharFrame depth
     // AzaharFrame fovonce: Off | Set Once | Always; a config with only the old switch keeps its
@@ -761,8 +762,6 @@ void QtConfig::ReadVrValues() {
         ReadGlobalSetting(Settings::values.vr_immersive_offset_x); // AzaharFrame vrsize
         ReadGlobalSetting(Settings::values.vr_immersive_offset_y);
         ReadGlobalSetting(Settings::values.vr_last_ipd_mm); // AzaharFrame ipd
-        ReadGlobalSetting(Settings::values.vr_screen_curve); // AzaharFrame curve
-        Settings::ForEachConsoleGlobalSetting([this](auto& s) { ReadGlobalSetting(s); });
         ReadGlobalSetting(Settings::values.vr_move_screens);  // AzaharFrame menu
         ReadGlobalSetting(Settings::values.vr_hint_reticle_shown);
         ReadGlobalSetting(Settings::values.vr_hint_mouse_shown);
@@ -1435,6 +1434,7 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.vr_top_aspect);
     WriteGlobalSetting(Settings::values.vr_screen_gap);
     WriteGlobalSetting(Settings::values.vr_screen_layout); // AzaharFrame layout; AzaharVR: per game too
+    WriteGlobalSetting(Settings::values.vr_screen_curve); // AzaharFrame curve; AzaharVR: per game too
     WriteGlobalSetting(Settings::values.vr_immersive_game_fov);
     WriteGlobalSetting(Settings::values.vr_immersive_match_camera_mode); // AzaharFrame fovonce
     if (!global) {
@@ -1556,8 +1556,6 @@ void QtConfig::SaveVrValues() {
         WriteGlobalSetting(Settings::values.vr_immersive_offset_x); // AzaharFrame vrsize
         WriteGlobalSetting(Settings::values.vr_immersive_offset_y);
         WriteGlobalSetting(Settings::values.vr_last_ipd_mm); // AzaharFrame ipd
-        WriteGlobalSetting(Settings::values.vr_screen_curve); // AzaharFrame curve
-        Settings::ForEachConsoleGlobalSetting([this](auto& s) { WriteGlobalSetting(s); });
         WriteGlobalSetting(Settings::values.vr_move_screens);  // AzaharFrame menu
         WriteGlobalSetting(Settings::values.vr_hint_reticle_shown);
         WriteGlobalSetting(Settings::values.vr_hint_mouse_shown);

@@ -256,6 +256,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::ScreenGap;
     case Id::ScreenLayout:
         return MenuSetting::ScreenLayout;
+    case Id::ScreenCurve:
+        return MenuSetting::ScreenCurve;
     case Id::ImmersiveMode:
         return MenuSetting::ImmersiveMode;
     case Id::MarginX: // AzaharFrame fovaxis
@@ -1539,7 +1541,7 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         break;
     case Id::ScreenCurve:
         r.value = static_cast<int>(kCurveSteps[std::min<std::size_t>(u, kCurveSteps.size() - 1)]);
-        Apply(Settings::Graphics(Common::AltCore::GroupOf(GetCoreCapabilities().kind)).screen_curve, static_cast<u32>(r.value), false);
+        Apply(Settings::Graphics(Common::AltCore::GroupOf(GetCoreCapabilities().kind)).screen_curve, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::ScreenCurve;
         break;
     case Id::ScreenLayout: // AzaharFrame layout

@@ -33,6 +33,9 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::ScreenLayout:
         f(Settings::RunningGraphics().screen_layout);
         return true;
+    case Id::ScreenCurve:
+        f(Settings::RunningGraphics().screen_curve);
+        return true;
     case Id::ImmersiveMode:
         f(v.vr_immersive_mode);
         return true;

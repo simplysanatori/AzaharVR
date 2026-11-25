@@ -434,6 +434,8 @@ TEST_CASE("Per-Game: Trigger Layout's key, Original by default", "[frame_xr][kiu
 TEST_CASE("Per-Game: Screen Layout's key", "[frame_xr][tabmenu]") {
     const AllGlobal restore;
     auto& layout = Settings::values.vr_screen_layout;
+    CHECK(FrameXr::PerGame::KeysOf(Id::ScreenCurve) ==
+          std::vector<std::string>{"vr_screen_curve"}); // AzaharVR: per game too
     CHECK(FrameXr::PerGame::KeysOf(Id::ScreenLayout) ==
           std::vector<std::string>{"vr_screen_layout"});
     CHECK(layout.GetDefault() == 0u);
@@ -502,7 +504,7 @@ TEST_CASE("Per-Game: a moved row keeps its key", "[frame_xr][tabmenu]") {
         CHECK(FrameXr::PerGame::KeysOf(id) == keys);
     }
     // Global ones: no key of a game's file
-    for (const Id id : {Id::FaceButtons, Id::ScreenCurve, Id::MoveScreens, Id::Background}) {
+    for (const Id id : {Id::FaceButtons, Id::MoveScreens, Id::Background}) {
         CHECK(FrameXr::PerGame::KeysOf(id).empty());
         CHECK_FALSE(FrameXr::Menu::PerGameSetting(id));
     }

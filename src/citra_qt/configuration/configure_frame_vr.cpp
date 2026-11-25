@@ -743,7 +743,7 @@ void ConfigureFrameVr::SetConfiguration() {
             std::min<u32>(Settings::values.vr_wrist_side.GetValue(), 1))); // AzaharFrame kiu131
         window_scale_combo->setCurrentIndex(std::clamp(
             (static_cast<int>(Settings::values.vr_window_scale.GetValue()) - 100 + 25) / 50, 0, 2));
-        curve_combo->setCurrentIndex(CurveIndex(Settings::values.vr_screen_curve.GetValue()));
+        curve_combo->setCurrentIndex(CurveIndex(Settings::values.vr_screen_curve.GetValue(true)));
         screen_layout_combo->setCurrentIndex(
             std::min<int>(static_cast<int>(Settings::values.vr_screen_layout.GetValue(true)), 1));
         offset_reset_pending = false;
@@ -938,9 +938,13 @@ void ConfigureFrameVr::ApplyConfiguration() {
         Settings::values.vr_wrist_side.SetValue(
             static_cast<u32>(wrist_side_combo->currentIndex())); // AzaharFrame kiu131
         // AzaharFrame curve: kept as it is while the item shown is still its nearest one.
-        if (CurveIndex(Settings::values.vr_screen_curve.GetValue()) != curve_combo->currentIndex()) {
-            Settings::values.vr_screen_curve.SetValue(
-                static_cast<u32>(curve_combo->currentData().toInt()));
+        // The global value, also while the running game has its own.
+        auto& curve = Settings::values.vr_screen_curve;
+        if (CurveIndex(curve.GetValue(true)) != curve_combo->currentIndex()) {
+            const bool game_own = !curve.UsingGlobal();
+            curve.SetGlobal(true);
+            curve.SetValue(static_cast<u32>(curve_combo->currentData().toInt()));
+            curve.SetGlobal(!game_own);
         }
         // Kept as it is when the item shown is still the nearest one (a value typed into the file).
         const int percent = window_scale_combo->currentData().toInt();

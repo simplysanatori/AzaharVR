@@ -411,7 +411,6 @@ void RestoreGlobalState(bool is_powered_on) {
     values.gba_rotate_pages.SetGlobal(true);
     values.gba_map_refresh.SetGlobal(true);
     ForEachConsoleSetting([](auto& setting) { setting.SetGlobal(true); });
-    ForEachConsoleGlobalSetting([](auto& setting) { setting.SetGlobal(true); });
 }
 
 namespace {

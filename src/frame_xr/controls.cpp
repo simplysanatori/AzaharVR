@@ -1503,8 +1503,12 @@ void VrUi::StepScreenCurve(int dir) {
     LOG_INFO(Frontend, "xr: screen curve {} degrees (main slot radius {:.2f} m at the top size)",
              after, Rig::CurveRadius(now.top_size.width, after));
     std::scoped_lock lock{hooks_mutex};
-    if (hooks.vr_setting_changed) {
-        hooks.vr_setting_changed();
+    // the game's own curve goes to its file, as Screen Layout's does
+    const auto& changed = Settings::RunningGraphics().screen_curve.UsingGlobal()
+                              ? hooks.vr_setting_changed
+                              : hooks.game_setting_changed;
+    if (changed) {
+        changed();
     }
 }
 

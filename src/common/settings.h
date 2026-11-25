@@ -1274,8 +1274,8 @@ struct Values {
                                                         "gba_texture_filter"};
     SwitchableSetting<u32, true> layer_depth{0, 0, 3, "layer_depth"};
     SwitchableSetting<bool> invert_depth{false, "invert_depth"};
-    // Position: Screen Layout, Screen Gap, Hide Secondary Screen (per game too) and Screen Curve
-    // (global only), as vr_screen_layout, vr_screen_gap, vr_hide_bottom_screen and
+    // Position: Screen Layout, Screen Gap, Hide Secondary Screen and Screen Curve (a global value
+    // and a game's own), as vr_screen_layout, vr_screen_gap, vr_hide_bottom_screen and
     // vr_screen_curve are the 3DS's.
     SwitchableSetting<bool> ds_vr_hide_bottom_screen{false, "ds_vr_hide_bottom_screen"};
     SwitchableSetting<u32, true> ds_vr_screen_layout{0, 0, 1, "ds_vr_screen_layout"};
@@ -1304,7 +1304,7 @@ struct ConsoleGraphics {
     SwitchableSetting<u32, true>& screen_layout;
     SwitchableSetting<u32, true>& screen_gap;
     SwitchableSetting<bool>& hide_bottom_screen;
-    SwitchableSetting<u32, true>& screen_curve; // global only: no game's own value
+    SwitchableSetting<u32, true>& screen_curve;
 };
 
 ConsoleGraphics Graphics(ConsoleGroup group);
@@ -1335,12 +1335,6 @@ void ForEachConsoleSetting(F&& f) {
     f(v.gba_vr_screen_layout);
     f(v.gba_vr_screen_gap);
     f(v.gba_vr_hide_bottom_screen);
-}
-
-/// The same for the settings that have no game's own value (Screen Curve).
-template <typename F>
-void ForEachConsoleGlobalSetting(F&& f) {
-    auto& v = values;
     f(v.ds_vr_screen_curve);
     f(v.gba_vr_screen_curve);
 }

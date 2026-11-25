@@ -33,6 +33,7 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_top_aspect);
     f(v.vr_screen_gap);
     f(v.vr_screen_layout);
+    f(v.vr_screen_curve); // AzaharVR: per game too
     f(v.vr_immersive_mode);
     f(v.vr_immersive_positional_game_scaler);
     f(v.vr_immersive_world_scale); // AzaharFrame natural

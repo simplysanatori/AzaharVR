@@ -71,9 +71,7 @@ void SetOwn(ConsoleGroup group, bool per_game, u32 n) {
         set(g.layer_depth, 1 + n);
         set(g.invert_depth, true);
     }
-    if (!per_game) {
-        g.screen_curve.SetValue(30 + 15 * n); // global only
-    }
+    set(g.screen_curve, 30 + 15 * n);
 }
 
 /// Every group back to its defaults, global.
@@ -222,7 +220,7 @@ TEST_CASE("Console settings: a game's own value is its group's alone, through Qt
                 CHECK(g.layer_depth.UsingGlobal() == !mine);
                 CHECK(g.invert_depth.UsingGlobal() == !mine);
             }
-            CHECK(g.screen_curve.UsingGlobal()); // Screen Curve has no game's own value
+            CHECK(g.screen_curve.UsingGlobal() == !mine);
         }
         const Snapshot read = Take();
         const Group& mine = read[static_cast<std::size_t>(changed)];
@@ -237,9 +235,7 @@ TEST_CASE("Console settings: a game's own value is its group's alone, through Qt
                 CHECK(read[i] == global_values[i]);
             }
         }
-        // nothing of the curves in a game's file
-        const QString text = Text(game_file.toStdString());
-        CHECK(!text.contains(QStringLiteral("screen_curve")));
+        CHECK(mine.curve == 30);
         // the next group's loop starts without this game's file
         QFile::remove(game_file);
     }
