@@ -2200,12 +2200,22 @@ void Runtime::FrameLoop() {
 
 // ---- Public API ------------------------------------------------------------
 
+namespace {
+StartProblem g_start_problem = StartProblem::None; // AzaharVR
+} // namespace
+
+StartProblem LastStartProblem() {
+    return g_start_problem;
+}
+
 bool Start(const StartOptions& options) {
     if (g_runtime) {
         return true;
     }
     auto rt = std::make_unique<Runtime>();
+    g_start_problem = StartProblem::None;
     if (!rt->CreateInstance(options)) {
+        g_start_problem = rt->start_problem; // AzaharVR
         LOG_ERROR(Frontend, "xr: no XR instance; running flat");
         return false;
     }

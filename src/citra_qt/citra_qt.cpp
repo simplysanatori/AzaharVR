@@ -216,6 +216,7 @@ Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin);
 #ifdef AZAHARVR_PC // AzaharVR: EnsureControllerModels; the Frame's font
 #include <QFont>
 #include <QFontDatabase>
+#include <QProcess>
 #include "citra_qt/frame_tools.h"
 #include "frame_xr/picker/logo_loader.h"
 #include "frame_xr/vis/controller_models.h"
@@ -240,9 +241,13 @@ Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin);
 
 namespace {
 // --vr: the OpenXR instance (frame_xr) for the whole run, starting in VR; --flat: the same,
-// starting flat (no session until the VR / flat chord).
+// starting flat (no session until the VR / flat chord). Without either, OpenXR is left alone.
 bool g_frame_xr_requested = false;
 bool g_frame_xr_start_flat = false;
+// AzaharVR: PC: why VR could not start in this run (the VR button's tooltip).
+FrameXr::StartProblem g_frame_xr_problem = FrameXr::StartProblem::None;
+// AzaharVR: PC: the arguments to start the app with again once it has closed (RestartOnExit).
+std::optional<QStringList> g_frame_restart_args;
 // The launcher's profile for flat without XR (SDL). With XR both modes use the Frame profile.
 constexpr char kFlatGamepadProfile[] = "Flat Gamepad";
 // Switches between VR and flat (writes the mode file); the XR thread's answer, the mode now.
@@ -259,7 +264,9 @@ QPushButton* g_frame_vr_button = nullptr;
 QPushButton* g_frame_flat_button = nullptr;
 void UpdateFrameVrButton() {
     if (g_frame_vr_button) {
-        const bool show = FrameXr::IsStarted() && !FrameXr::WantsVr() && !FrameXr::VrShowing();
+        // AzaharVR: on a PC also without OpenXR: it then starts the app again in VR.
+        const bool show = FrameXr::IsStarted() ? !FrameXr::WantsVr() && !FrameXr::VrShowing()
+                                               : Common::FrameProduct::kPc;
         g_frame_vr_button->setVisible(show);
         g_frame_vr_button->setEnabled(show);
     }
@@ -268,6 +275,93 @@ void UpdateFrameVrButton() {
         g_frame_flat_button->setVisible(show);
         g_frame_flat_button->setEnabled(show);
     }
+}
+// AzaharVR: PC: why VR could not start, for the player.
+QString FrameVrProblemText(FrameXr::StartProblem problem) {
+    switch (problem) {
+    case FrameXr::StartProblem::None:
+        break;
+    case FrameXr::StartProblem::NotVulkan:
+        return GMainWindow::tr("VR needs Vulkan. Change the Graphics API and try again.");
+    case FrameXr::StartProblem::NoLoader:
+#ifdef _WIN32
+        return GMainWindow::tr("openxr_loader.dll is missing. Unzip Azahar VR again.");
+#else
+        return GMainWindow::tr("The OpenXR loader is not installed.");
+#endif
+    case FrameXr::StartProblem::NoRuntime:
+        return GMainWindow::tr("Set SteamVR as the OpenXR runtime and try again.");
+    case FrameXr::StartProblem::NoHeadset:
+        return GMainWindow::tr("No headset found. Connect it in SteamVR and try again.");
+    case FrameXr::StartProblem::Vulkan:
+        return GMainWindow::tr("VR could not start on this graphics card. See the log.");
+    }
+    return {};
+}
+// AzaharVR: PC: VR was asked for and could not start: say why, once the window shows.
+void ShowFrameVrProblem(GMainWindow* window, FrameXr::StartProblem problem) {
+    g_frame_xr_problem = problem;
+    if (g_frame_vr_button) {
+        g_frame_vr_button->setToolTip(FrameVrProblemText(problem));
+    }
+    QTimer::singleShot(0, window, [window, problem] {
+        QMessageBox::information(window, GMainWindow::tr("VR Not Available"),
+                                 FrameVrProblemText(problem));
+    });
+}
+// AzaharVR: PC: closes the app and starts it again in VR. VR needs its own Vulkan device from
+// OpenXR, so it cannot begin in a run that started without.
+void RestartInVr(GMainWindow* window, const QString& game) {
+    g_frame_restart_args = QStringList{QStringLiteral("--vr")};
+    if (!game.isEmpty()) {
+        g_frame_restart_args->append(game);
+    }
+    LOG_INFO(Frontend, "xr: starting again in VR");
+    if (!window->close()) {
+        g_frame_restart_args.reset(); // the player chose to stay
+    }
+}
+// AzaharVR: starts the app again when it goes out of scope, if asked to. Made before the window,
+// so that the window has saved its settings by then.
+struct RestartOnExit {
+    ~RestartOnExit() {
+        if (g_frame_restart_args) {
+            QProcess::startDetached(QCoreApplication::applicationFilePath(),
+                                    *g_frame_restart_args);
+        }
+    }
+};
+// AzaharVR: PC: the profile for this run, one for VR and one for a normal start, so neither
+// overwrites the other. A normal start without one (1.3.0 replaced it) gets the keyboard back.
+void ChoosePcInputProfile(bool vr) {
+    auto& values = Settings::values;
+    if (InputCommon::FrameXr::ProfileUsesFrameXr(values.current_input_profile) == vr) {
+        return;
+    }
+    if (const auto index = InputCommon::FrameXr::FindProfile(values.input_profiles, vr)) {
+        Settings::LoadProfile(*index);
+    } else {
+        Settings::CreateProfile(vr ? "VR" : "Keyboard");
+        auto& profile = values.current_input_profile;
+        if (vr) {
+            InputCommon::FrameXr::ApplyDefaultProfile(profile);
+        } else {
+            for (int i = 0; i < Settings::NativeButton::NumButtons; ++i) {
+                profile.buttons[i] =
+                    InputCommon::GenerateKeyboardParam(QtConfig::default_buttons[i]);
+            }
+            for (int i = 0; i < Settings::NativeAnalog::NumAnalogs; ++i) {
+                const auto& keys = QtConfig::default_analogs[i];
+                profile.analogs[i] = InputCommon::GenerateAnalogParamFromKeys(
+                    keys[0], keys[1], keys[2], keys[3], keys[4], 0.5f);
+            }
+            profile.motion_device =
+                "engine:motion_emu,update_period:100,sensitivity:0.01,tilt_clamp:90.0";
+        }
+        Settings::SaveProfile(values.current_input_profile_index);
+    }
+    LOG_INFO(Frontend, "input profile {} ({})", values.current_input_profile.name,
+             vr ? "VR" : "normal start");
 }
 std::function<void(bool vr)> g_frame_xr_mode_changed;
 // SIGTERM / SIGINT: stop the game and quit, so the XR session ends cleanly.
@@ -1192,13 +1286,35 @@ GMainWindow::GMainWindow(Core::System& system_)
 #ifdef AZAHARVR_PC // AzaharVR: the controller models from the player's SteamVR, once
     FrameTools::EnsureControllerModels(FrameXr::Vis::ControllerModelDir());
 #endif
+    // AzaharVR: logged either way, so a log of a run without VR says that none was asked for.
+    LOG_INFO(Frontend, "xr: start: {}",
+             !g_frame_xr_requested ? "no OpenXR (no --vr)" : g_frame_xr_start_flat ? "flat" : "VR");
+    if (Common::FrameProduct::kPc && !g_frame_xr_requested) {
+        ChoosePcInputProfile(false);
+        system.ApplySettings();
+        UpdateFrameVrButton();
+    }
     if (g_frame_xr_requested) {
         FrameXr::StartOptions xr_options;
         xr_options.window_type = FrameXrWindowSystemType();
         xr_options.vr = !g_frame_xr_start_flat;
+        FrameXr::StartProblem problem = FrameXr::StartProblem::None;
         if (Settings::values.graphics_api.GetValue() != Settings::GraphicsAPI::Vulkan) {
             LOG_ERROR(Frontend, "xr: --vr needs the Vulkan renderer; running flat");
-        } else if (FrameXr::Start(xr_options)) {
+            problem = FrameXr::StartProblem::NotVulkan;
+        } else if (!FrameXr::Start(xr_options)) {
+            problem = FrameXr::LastStartProblem();
+        }
+        if (Common::FrameProduct::kPc) { // AzaharVR
+            const bool started = FrameXr::IsStarted();
+            ChoosePcInputProfile(started);
+            if (!started) {
+                system.ApplySettings();
+                ShowFrameVrProblem(this, problem);
+                UpdateFrameVrButton();
+            }
+        }
+        if (FrameXr::IsStarted()) {
             // AzaharFrame flat3: flat lays the window out its own way (Large Screen to start
             // with); VR keeps the configured layout, which places the touch screen.
             Settings::frame_flat_layout.active = !FrameXr::VrShowing();
@@ -2582,7 +2698,11 @@ void GMainWindow::InitializeWidgets() {
     g_frame_vr_button->setStyleSheet(
         QStringLiteral("QPushButton { font-weight: bold; color: #1a9fff; }"));
     g_frame_vr_button->setVisible(false);
-    connect(g_frame_vr_button, &QPushButton::clicked, this, [] {
+    connect(g_frame_vr_button, &QPushButton::clicked, this, [this] {
+        if (!FrameXr::IsStarted()) { // AzaharVR: PC
+            RestartInVr(this, emulation_running ? game_path : QString{});
+            return;
+        }
         LOG_INFO(Frontend, "xr: flat: the status bar's VR button");
         if (g_frame_xr_switch) {
             g_frame_xr_switch(true);
@@ -9476,6 +9596,9 @@ int LaunchQtFrontend(int argc, char* argv[]) {
     // Register Qt image interface
     system.RegisterImageInterface(std::make_shared<QtImageInterface>());
 
+#ifdef ENABLE_FRAME_XR
+    const RestartOnExit restart_on_exit; // AzaharVR
+#endif
     GMainWindow main_window(system);
 
     // Register frontend applets

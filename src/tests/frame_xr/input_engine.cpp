@@ -226,3 +226,15 @@ TEST_CASE("FrameXr engine: motion device", "[frame_xr]") {
         REQUIRE(udp.motion_device == "engine:cemuhookudp,port:0");
     }
 }
+
+TEST_CASE("frame_xr engine: a profile for VR and one for a normal start", "[frame_xr][pcvr]") {
+    namespace Fx = InputCommon::FrameXr;
+    Settings::InputProfile keyboard{};
+    Settings::InputProfile vr{};
+    Fx::ApplyDefaultProfile(vr);
+    REQUIRE_FALSE(Fx::FindProfile({}, true));
+    REQUIRE_FALSE(Fx::FindProfile({keyboard}, true));
+    REQUIRE_FALSE(Fx::FindProfile({vr}, false));
+    REQUIRE(Fx::FindProfile({keyboard, vr}, true) == 1);
+    REQUIRE(Fx::FindProfile({vr, keyboard, keyboard}, false) == 1);
+}
