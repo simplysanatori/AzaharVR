@@ -60,6 +60,9 @@ struct FrameOutput {
     /// size as `primary`.
     Vulkan::AltScreenImage primary_right{};
     float layer_shift = 0.0f; ///< its farthest layer's, a share of the width (layer_depth.h)
+    /// The same for the Secondary Screen, from a core asked for it (NdsCore::SetDepthOnSecondary).
+    /// No host shows it yet: the headset has no right eye's picture of the Secondary Screen.
+    Vulkan::AltScreenImage secondary_right{};
     Vulkan::AltScreenImage overlay{}; ///< over the whole Primary Screen, alpha premultiplied
     std::vector<int16_t> audio_pcm; ///< Interleaved stereo PCM16 (L, R, L, R, ...)
     float rumble = 0.0f;            ///< Haptic motor intensity [0.0, 1.0]

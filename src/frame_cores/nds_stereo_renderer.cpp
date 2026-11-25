@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstring>
 #include <memory>
+#include <vector>
 
 #include "GPU.h"
 #include "NDS.h"
@@ -26,7 +27,6 @@ using melonDS::u8;
 
 constexpr u32 kWidth = NdsDepth::kWidth;
 constexpr int kLines = 192;
-constexpr int kCaptureHoldFrames = 60; // games that capture every few frames do not flicker
 
 struct Windows {
     u8 win0;
@@ -75,7 +75,7 @@ private:
 /// by GPU3D's RenderXPos, so it does not move.
 void MoveBackgrounds(melonDS::GPU2D& engine, const NdsDepth::LayerShifts& shifts) {
     for (int bg = 0; bg < 4; ++bg) {
-        const int shift = shifts[engine.BGCnt[bg] & 3];
+        const int shift = NdsDepth::BackgroundShift(engine.BGCnt[bg], shifts);
         engine.BGXPos[bg] = NdsDepth::ShiftScroll(engine.BGXPos[bg], shift);
         if (bg >= 2) {
             const int i = bg - 2;
@@ -88,25 +88,13 @@ void MoveBackgrounds(melonDS::GPU2D& engine, const NdsDepth::LayerShifts& shifts
     }
 }
 
-bool Shows3D(const melonDS::GPU2D& engine) {
-    return (engine.DispCnt & (1u << 3)) != 0 && (engine.LayerEnable & 1) != 0;
-}
-
-/// Engine A's line is the same in both eyes: a display mode without layers, or 3D in BG0 that the
-/// right eye does not have (its line is the left eye's as a whole, since that 3D is private there).
-bool IsFlatLineA(const melonDS::GPU2D& engine, bool right_has_3d) {
-    const bool layers = ((engine.DispCnt >> 16) & 3) == 1;
-    return !layers || (Shows3D(engine) && !right_has_3d);
-}
-
 } // namespace
 
 class StereoSoft::RightEye final : public melonDS::SoftRenderer {
 public:
-    RightEye(melonDS::NDS& nds, int back_buffer) : melonDS::SoftRenderer(nds) {
+    explicit RightEye(melonDS::NDS& nds) : melonDS::SoftRenderer(nds) {
         // Never SoftRenderer's own: its GetLine would wait for lines of the left eye's thread
         Rend3D = std::make_unique<NdsRight3D>(GPU.GPU3D, *this);
-        BackBuffer = back_buffer;
         Reset(); // its buffers start undefined
     }
 
@@ -127,8 +115,9 @@ StereoSoft::StereoSoft(melonDS::NDS& nds) : melonDS::SoftRenderer(nds) {}
 
 StereoSoft::~StereoSoft() = default;
 
-void StereoSoft::SetDepth(const NdsDepth::Depth& depth_) {
+void StereoSoft::SetDepth(const NdsDepth::Depth& depth_, bool secondary_too) {
     wanted = depth_;
+    wanted_secondary = secondary_too;
 }
 
 void StereoSoft::SetRenderSettings(melonDS::RendererSettings& settings) {
@@ -149,7 +138,11 @@ void StereoSoft::PostSavestate() {
     // them. A load, and only that, has reset the texture tracking.
     const bool loaded = GPU.VRAMDirty_Texture.Mapping[0] == 0x8000;
     if (right && loaded) {
-        right->Scene().Drop();
+        right->Scene().Cut();
+        for (Screen& screen : screens) {
+            screen.scene_left.clear(); // a loaded game's pictures are others
+            screen.kept = false;
+        }
     }
 }
 
@@ -161,15 +154,16 @@ void StereoSoft::Start3DRendering() {
     if (!right) {
         return;
     }
-    // Line 215, for the frame that begins at 262: by then the depth is the wanted one, and the
-    // hold one frame shorter (BeginFrame)
-    const u32 dispcnt = GPU.GPU2D_A.DispCnt;
-    const bool in_bg0 = (dispcnt & (1u << 3)) != 0 && (dispcnt & (1u << 8)) != 0;
-    const bool shown = in_bg0 && GPU.ScreenSwap;
+    // Line 215, for the frame that begins at 262: by then the depth is the wanted one. The scene
+    // is drawn if the screen engine A is on then has a right picture.
+    const bool top = watch.SceneNeeded(GPU.ScreenSwap);
+    const int screen = watch.NextOnTop() ? 0 : 1;
     if (!wanted.on) {
         right->Scene().Stop();
-    } else if (shown && capture_hold <= 1) {
-        right->Scene().Start(wanted.scene, threaded_3d);
+    } else if (!NdsDepth::ShowsScene(GPU.GPU2D_A.DispCnt)) {
+        right->Scene().NoScene(screen);
+    } else if (top || wanted_secondary) {
+        right->Scene().Start(wanted, screen, threaded_3d);
     } else {
         right->Scene().Drop();
     }
@@ -182,25 +176,37 @@ void StereoSoft::Restart3DRendering() {
     }
 }
 
-const u32* StereoSoft::RightTop() {
-    if (!right || !right_ready) {
-        return nullptr;
-    }
-    void* top = nullptr;
-    void* bottom = nullptr;
-    right->GetFramebuffers(&top, &bottom);
-    return static_cast<const u32*>(top);
+const u32* StereoSoft::Right(int screen) const {
+    const Screen& of = screens[screen];
+    return right && of.ready ? of.picture.data() : nullptr;
 }
 
-/// The row being drawn: GetFramebuffers gives the other buffer, the finished one.
+NdsDepth::Lines StereoSoft::LastLines() const {
+    return right && (screens[0].ready || screens[1].ready) ? last_lines : NdsDepth::Lines{};
+}
+
+/// A row of the picture being drawn (GetFramebuffers gives the other buffer, the finished one):
+/// `screen` 0 is the top one.
 template <typename R>
-u32* StereoSoft::BackTopRow(R& renderer, u32 line) {
+u32* StereoSoft::BackRow(R& renderer, int screen, u32 line) {
     void* top = nullptr;
     void* bottom = nullptr;
     renderer.BackBuffer ^= 1;
     renderer.GetFramebuffers(&top, &bottom);
     renderer.BackBuffer ^= 1;
-    return static_cast<u32*>(top) + line * kWidth;
+    return static_cast<u32*>(screen == 0 ? top : bottom) + line * kWidth;
+}
+
+void StereoSoft::Forget() {
+    for (Screen& screen : screens) {
+        screen.ready = false;
+        screen.kept = false;
+        screen.scene_left.clear();
+    }
+    watch = {};
+    complete = false;
+    lines = {};
+    drawing = false; // until the next frame's first sprites
 }
 
 void StereoSoft::Reset() {
@@ -208,10 +214,7 @@ void StereoSoft::Reset() {
     if (right) {
         right->Reset();
     }
-    capture_hold = 0;
-    lines = {};
-    drawing = false; // until the next frame's first sprites
-    right_ready = false;
+    Forget();
 }
 
 void StereoSoft::Stop() {
@@ -219,31 +222,78 @@ void StereoSoft::Stop() {
     if (right) {
         right->Stop();
     }
-    right_ready = false;
+    for (Screen& screen : screens) {
+        screen.ready = false;
+    }
+}
+
+/// Line 262: the frame's lines are all drawn, its buffers not swapped yet. The right eye's
+/// pictures are taken out of its buffer, which it never swaps.
+void StereoSoft::EndFrame() {
+    complete = right && lines.drawn == kLines;
+    if (!right) {
+        return;
+    }
+    constexpr std::size_t kPixels = kWidth * kLines;
+    for (int at = 0; at < 2; ++at) {
+        Screen& screen = screens[at];
+        const bool engine_a = (at == 0) == a_on_top;
+        const bool drawn = complete && draws[engine_a ? 0 : 1];
+        const u32* left = BackRow(*this, at, 0);
+        const u32* mine = BackRow(*right, at, 0);
+        const bool same = !engine_a && !screen.scene_left.empty() &&
+                          NdsDepth::SamePicture(left, screen.scene_left.data(), kPixels);
+        if (NdsDepth::KeepsRightPicture(engine_a, !screen.scene_left.empty(), same)) {
+            screen.kept = true; // its picture stays
+            continue;
+        }
+        if (!engine_a) {
+            screen.kept = false;
+        }
+        screen.ready = drawn;
+        if (drawn) {
+            screen.picture.assign(mine, mine + kPixels);
+        }
+        if (drawn && engine_a) {
+            screen.scene_left.assign(left, left + kPixels);
+        } else {
+            screen.scene_left.clear(); // the right eye's picture of that frame is gone
+        }
+    }
+    if (complete) {
+        lines.convergence = right->Scene().Convergence();
+        last_lines = lines;
+    }
 }
 
 void StereoSoft::BeginFrame() {
     depth = wanted;
+    secondary = wanted_secondary;
+    lines = {};
     if (!depth.on) {
         right.reset();
-        capture_hold = 0;
-        drawing = false;
+        Forget();
         return;
     }
     if (!right) {
-        right = std::make_unique<RightEye>(GPU.NDS, BackBuffer);
+        right = std::make_unique<RightEye>(GPU.NDS);
     }
-    if (capture_hold > 0) {
-        --capture_hold;
-    }
-    drawing = capture_hold == 0;
-    a_on_top = GPU.ScreenSwap;
+    watch.BeginFrame(GPU.ScreenSwap);
+    a_on_top = watch.a_on_top;
+    // An engine is drawn again if its screen has a right picture. Not engine B where the game has
+    // 3D on both screens: its screen keeps the right picture of the frame before (EndFrame).
+    const int screen_a = a_on_top ? 0 : 1;
+    const int screen_b = 1 - screen_a;
+    draws[0] = screen_a == 0 || secondary;
+    draws[1] = (screen_b == 0 || secondary) && !screens[screen_b].kept;
+    drawing = draws[0] || draws[1];
 }
 
 void StereoSoft::DrawSprites(u32 line) {
     SoftRenderer::DrawSprites(line);
     if (line == 0) {
         // At line 262, before SwapBuffers: sprites are drawn a line ahead, so a frame starts here
+        EndFrame();
         BeginFrame();
     }
     if (drawing) {
@@ -261,23 +311,22 @@ void StereoSoft::DrawRightSprites(u32 line) {
 
     std::array<u16, 1024> moved = saved;
     for (std::size_t i = 0; i < moved.size(); i += 4) {
-        moved[i + 1] =
-            NdsDepth::ShiftSprite(moved[i], moved[i + 1], moved[i + 2], depth.layers);
+        moved[i + 1] = NdsDepth::ShiftSprite(moved[i], moved[i + 1], moved[i + 2], depth.layers);
     }
 
     std::memcpy(GPU.OAM, moved.data(), sizeof(moved));
-    (a_on_top ? right->Rend2D_A : right->Rend2D_B)->DrawSprites(line);
+    if (draws[0]) {
+        right->Rend2D_A->DrawSprites(line);
+    }
+    if (draws[1]) {
+        right->Rend2D_B->DrawSprites(line);
+    }
     std::memcpy(GPU.OAM, saved.data(), sizeof(saved));
 }
 
 void StereoSoft::DrawScanline(u32 line) {
-    if (right && GPU.CaptureEnable) {
-        // On from a frame's first line to its last, so no frame is half moved
-        capture_hold = kCaptureHoldFrames;
-        drawing = false;
-    }
     if (GPU.ScreenSwap != a_on_top) {
-        drawing = false; // the other engine's sprites were not drawn
+        drawing = false; // the engines' sprites were drawn for the other screens
     }
     if (!drawing) {
         SoftRenderer::DrawScanline(line);
@@ -291,18 +340,22 @@ void StereoSoft::DrawScanline(u32 line) {
 
     SoftRenderer::DrawScanline(line);
 
-    const bool flat = a_on_top && IsFlatLineA(GPU.GPU2D_A, has_3d);
+    const bool bg0_on = (GPU.GPU2D_A.LayerEnable & 1) != 0;
+    const bool flat = draws[0] && NdsDepth::IsFlatLine(GPU.GPU2D_A.DispCnt, bg0_on, has_3d);
     {
         const SavedEngine saved_a{GPU.GPU2D_A};
         const SavedEngine saved_b{GPU.GPU2D_B};
         WriteWindows(GPU.GPU2D_A, windows_a);
         WriteWindows(GPU.GPU2D_B, windows_b);
-        MoveBackgrounds(a_on_top ? GPU.GPU2D_A : GPU.GPU2D_B, depth.layers);
         // A disabled engine's line is a fill instead of layers
-        if (flat || !a_on_top) {
+        if (draws[0] && !flat) {
+            MoveBackgrounds(GPU.GPU2D_A, depth.layers);
+        } else {
             GPU.GPU2D_A.Enabled = false;
         }
-        if (a_on_top) {
+        if (draws[1]) {
+            MoveBackgrounds(GPU.GPU2D_B, depth.layers);
+        } else {
             GPU.GPU2D_B.Enabled = false;
         }
 
@@ -313,22 +366,20 @@ void StereoSoft::DrawScanline(u32 line) {
     }
 
     if (flat) {
-        std::memcpy(BackTopRow(*right, line), BackTopRow(*this, line), kWidth * sizeof(u32));
-    } else {
-        ++lines.moved;
-        lines.with_3d += a_on_top && has_3d && Shows3D(GPU.GPU2D_A);
+        const int screen = a_on_top ? 0 : 1;
+        std::memcpy(BackRow(*right, screen, line), BackRow(*this, screen, line),
+                    kWidth * sizeof(u32));
     }
+    if (!flat || draws[1]) {
+        ++lines.moved;
+    }
+    lines.with_3d += draws[0] && has_3d && NdsDepth::LineShowsScene(GPU.GPU2D_A.DispCnt, bg0_on);
     ++lines.drawn;
 }
 
 void StereoSoft::SwapBuffers() {
     SoftRenderer::SwapBuffers();
-    if (right) {
-        right->SwapBuffers();
-    }
-    right_ready = right && lines.drawn == kLines;
-    last_lines = lines;
-    lines = {};
+    complete = false;
 }
 
 } // namespace FrameCores

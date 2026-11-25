@@ -38,7 +38,17 @@ public:
     /// brings the texture memory up to date and uses up its dirty bits. The polygons, vertices and
     /// Render registers copied only change in GPU3D::VBlank (line 192, this same thread); the left
     /// eye's thread only reads them.
-    void Start(const NdsDepth::SceneShift& shift, bool threaded);
+    /// `screen`: the one the scene is for, whose view it follows (NdsDepth::ViewTrack), unless
+    /// `depth` has a fixed convergence.
+    void Start(const NdsDepth::Depth& depth, int screen, bool threaded);
+    /// The game's next scene has nothing to do with the last one.
+    void Cut();
+    /// Engine A shows no 3D in the frame, which is for this screen.
+    void NoScene(int screen);
+    /// Of the last Start; 0 before any scene.
+    melonDS::s32 Convergence() const {
+        return convergence;
+    }
     /// Until the frame is drawn. Before anything that writes texture memory.
     void Wait();
     /// Forgets the frame: no lines until the next Start.
@@ -58,15 +68,17 @@ private:
     static constexpr int kLines = 192;
     static constexpr std::size_t kVertices = 6144 * 2;
     static constexpr std::size_t kPolygons = 2048;
-    static constexpr std::size_t kMaxPolygonVertices = 10;
 
     /// Where a vertex of the game is in the scene, if it was copied in this frame
     struct Slot {
         melonDS::u32 frame = 0;
         melonDS::u32 index = 0;
+        int shift = 0;
     };
 
     void Create(bool threaded);
+    NdsDepth::SceneView Measure();
+    NdsDepth::PolygonPlace Place(const melonDS::Polygon& polygon) const;
     void FillScene(const NdsDepth::SceneShift& shift);
     bool CopyPolygon(const melonDS::Polygon& from, melonDS::Polygon& to,
                      const NdsDepth::SceneShift& shift);
@@ -75,10 +87,14 @@ private:
     std::unique_ptr<melonDS::GPU3D> scene; ///< outlives `soft`, whose thread reads it
     std::unique_ptr<melonDS::SoftRenderer3D> soft;
 
+    std::array<NdsDepth::ViewTrack, 2> tracks{}; ///< of the top and the bottom screen
+    NdsDepth::DepthLine line{};                  ///< this frame's
+    melonDS::s32 convergence = 0;
+
     bool running = false; ///< a frame was started and not yet waited for
     int taken = kLines;   ///< lines of the frame
 
-    /// Strips share vertices: each is copied once moved and, for polygons that stay, once not
+    /// Strips share vertices: each is copied once by its own w and once by its polygon's place
     std::array<std::array<Slot, 2>, kVertices> slots{};
     melonDS::u32 frame = 0;
     std::size_t vertex_count = 0;

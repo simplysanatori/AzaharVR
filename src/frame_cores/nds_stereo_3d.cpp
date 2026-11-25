@@ -21,6 +21,15 @@ using melonDS::u32;
 static_assert(std::is_trivially_copyable_v<melonDS::Vertex>);
 static_assert(std::is_trivially_copyable_v<melonDS::Polygon>);
 
+constexpr u32 kMaxVertices = 10; // of a polygon
+
+/// Not a degenerate one, which a state load can leave with its vertices unset.
+bool IsDrawn(const melonDS::Polygon* polygon) {
+    return polygon && !polygon->Degenerate && polygon->NumVertices > 0 &&
+           polygon->NumVertices <= kMaxVertices && polygon->VTop < polygon->NumVertices &&
+           polygon->VBottom < polygon->NumVertices;
+}
+
 } // namespace
 
 NdsRight3D::NdsRight3D(melonDS::GPU3D& game, melonDS::SoftRenderer& parent)
@@ -46,6 +55,7 @@ void NdsRight3D::Stop() {
     scene.reset();
     running = false;
     taken = kLines;
+    convergence = 0;
 }
 
 void NdsRight3D::Reset() {
@@ -86,7 +96,7 @@ u32* NdsRight3D::GetLine(int line) {
     return row;
 }
 
-void NdsRight3D::Start(const NdsDepth::SceneShift& shift, bool threaded) {
+void NdsRight3D::Start(const NdsDepth::Depth& depth, int screen, bool threaded) {
     if (soft && soft->IsThreaded() != threaded) {
         Stop();
     }
@@ -94,10 +104,79 @@ void NdsRight3D::Start(const NdsDepth::SceneShift& shift, bool threaded) {
         Create(threaded);
     }
     Drop(); // the thread is idle from here on
-    FillScene(shift);
+
+    const melonDS::GPU2D& engine = GPU.GPU2D_A;
+    const NdsDepth::SceneView seen = Measure();
+    NdsDepth::SceneView view{depth.convergence, 0};
+    if (depth.convergence == 0) {
+        const bool blank = NdsDepth::IsBlank(GPU.MasterBrightnessA);
+        view = tracks[screen].Follow(seen, NdsDepth::MakeSetup(engine.DispCnt, engine.BGCnt[0]),
+                                     blank);
+        if (view.convergence == 0) {
+            view.convergence = NdsDepth::kConvergence;
+        }
+    }
+    convergence = view.convergence;
+    const NdsDepth::SceneRoom room =
+        NdsDepth::MakeRoom(depth.layers, engine.DispCnt,
+                           {engine.BGCnt[0], engine.BGCnt[1], engine.BGCnt[2], engine.BGCnt[3]});
+    FillScene(NdsDepth::MakeScene(room, view));
     soft->RenderFrame();
     running = threaded;
     taken = 0;
+}
+
+void NdsRight3D::Cut() {
+    Drop();
+    tracks = {};
+}
+
+void NdsRight3D::NoScene(int screen) {
+    Drop();
+    tracks[screen].Nothing();
+}
+
+/// The world's depth line, then the view: the w of every vertex of its polygons, once per polygon
+/// it is in.
+NdsDepth::SceneView NdsRight3D::Measure() {
+    const u32 count = std::min<u32>(GPU3D.RenderNumPolygons, kPolygons);
+    line = {};
+    for (u32 i = 0; i < count; ++i) {
+        const melonDS::Polygon* polygon = GPU3D.RenderPolygonRAM[i];
+        if (!IsDrawn(polygon) || polygon->WBuffer) {
+            continue;
+        }
+        u32 nearest = 0;
+        u32 farthest = 0;
+        for (u32 v = 1; v < polygon->NumVertices; ++v) {
+            const s32 w = polygon->Vertices[v]->Position[3];
+            nearest = w < polygon->Vertices[nearest]->Position[3] ? v : nearest;
+            farthest = w > polygon->Vertices[farthest]->Position[3] ? v : farthest;
+        }
+        line.Add(polygon->Vertices[nearest]->Position[3], polygon->FinalZ[nearest],
+                 polygon->Vertices[farthest]->Position[3], polygon->FinalZ[farthest]);
+    }
+
+    NdsDepth::SceneStats stats;
+    for (u32 i = 0; i < count; ++i) {
+        const melonDS::Polygon* polygon = GPU3D.RenderPolygonRAM[i];
+        if (!IsDrawn(polygon) || !Place(*polygon).world) {
+            continue;
+        }
+        for (u32 v = 0; v < polygon->NumVertices; ++v) {
+            stats.Add(polygon->Vertices[v]->Position[3]);
+        }
+    }
+    return stats.View();
+}
+
+NdsDepth::PolygonPlace NdsRight3D::Place(const melonDS::Polygon& polygon) const {
+    std::array<s32, kMaxVertices> w{};
+    for (u32 v = 0; v < polygon.NumVertices; ++v) {
+        w[v] = polygon.Vertices[v]->Position[3];
+    }
+    return NdsDepth::PlacePolygon(w.data(), polygon.NumVertices, polygon.FinalZ[0], polygon.WBuffer,
+                                  line);
 }
 
 void NdsRight3D::FillScene(const NdsDepth::SceneShift& shift) {
@@ -124,8 +203,8 @@ void NdsRight3D::FillScene(const NdsDepth::SceneShift& shift) {
     const u32 game_count = std::min<u32>(game.RenderNumPolygons, kPolygons);
     for (u32 i = 0; i < game_count; ++i) {
         const melonDS::Polygon* from = game.RenderPolygonRAM[i];
-        if (!from || from->Degenerate) {
-            continue; // not drawn, and a state load can leave its vertices unset
+        if (!IsDrawn(from)) {
+            continue;
         }
         melonDS::Polygon& to = scene->PolygonRAM[count];
         if (CopyPolygon(*from, to, shift)) {
@@ -138,14 +217,8 @@ void NdsRight3D::FillScene(const NdsDepth::SceneShift& shift) {
 bool NdsRight3D::CopyPolygon(const melonDS::Polygon& from, melonDS::Polygon& to,
                              const NdsDepth::SceneShift& shift) {
     const std::size_t count = from.NumVertices;
-    if (count == 0 || count > kMaxPolygonVertices || from.VTop >= count || from.VBottom >= count) {
-        return false;
-    }
-    std::array<s32, kMaxPolygonVertices> w{};
-    for (std::size_t i = 0; i < count; ++i) {
-        w[i] = from.Vertices[i]->Position[3];
-    }
-    const bool moves = !NdsDepth::IsOnScreen(w.data(), count);
+    const NdsDepth::PolygonPlace place = Place(from);
+    const int placed = NdsDepth::VertexShift(shift, place.w);
 
     to = from;
     for (std::size_t i = 0; i < count; ++i) {
@@ -153,18 +226,17 @@ bool NdsRight3D::CopyPolygon(const melonDS::Polygon& from, melonDS::Polygon& to,
         if (game_index >= kVertices) {
             return false;
         }
-        Slot& slot = slots[game_index][moves ? 1 : 0];
-        if (slot.frame != frame) {
+        const int by =
+            place.each ? NdsDepth::VertexShift(shift, from.Vertices[i]->Position[3]) : placed;
+        Slot& slot = slots[game_index][place.each ? 0 : 1];
+        if (slot.frame != frame || slot.shift != by) {
             if (vertex_count == kVertices) {
                 return false;
             }
-            slot = {frame, static_cast<u32>(vertex_count++)};
+            slot = {frame, static_cast<u32>(vertex_count++), by};
             melonDS::Vertex& copy = scene->VertexRAM[slot.index];
             copy = *from.Vertices[i];
-            if (moves) {
-                copy.FinalPosition[0] = NdsDepth::ShiftVertexX(
-                    copy.FinalPosition[0], NdsDepth::VertexShift(shift, copy.Position[3]));
-            }
+            copy.FinalPosition[0] = NdsDepth::ShiftVertexX(copy.FinalPosition[0], by);
         }
         to.Vertices[i] = &scene->VertexRAM[slot.index];
     }

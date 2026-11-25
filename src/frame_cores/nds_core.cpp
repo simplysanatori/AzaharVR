@@ -187,6 +187,8 @@ struct NdsCore::Impl {
     std::unique_ptr<melonDS::NDS> nds;
     StereoSoft* stereo = nullptr; ///< `nds`'s renderer, once the game has had Layer Depth
     float max_layer_shift = Common::LayerDepth::kNoLimit;
+    int32_t depth_convergence = 0; ///< 0: each scene's own
+    bool depth_on_secondary = false;
     bool is_dsi = false;
     bool loaded = false;
 
@@ -232,8 +234,11 @@ struct NdsCore::Impl {
 
     NdsDepth::Depth Depth() const {
         // A turned screen's pixels would move up and down on it
-        return rotation_deg == 0 ? NdsDepth::MakeDepth(opts.layer_depth, max_layer_shift)
-                                 : NdsDepth::Depth{};
+        if (rotation_deg != 0) {
+            return {};
+        }
+        const bool inverted = Common::LayerDepth::Get().inverted.load(std::memory_order_relaxed);
+        return NdsDepth::MakeDepth(opts.layer_depth, max_layer_shift, inverted, depth_convergence);
     }
 
     /// Between frames.
@@ -246,7 +251,7 @@ struct NdsCore::Impl {
             ApplyRenderSettings();
         }
         if (stereo) {
-            stereo->SetDepth(depth);
+            stereo->SetDepth(depth, depth_on_secondary);
         }
     }
 
@@ -650,6 +655,7 @@ void NdsCore::RunFrame(FrameOutput& out) {
     out.primary = {};
     out.secondary = {};
     out.primary_right = {};
+    out.secondary_right = {};
     out.layer_shift = 0.0f;
     out.audio_pcm.clear();
     out.rumble = 0.0f;
@@ -696,8 +702,14 @@ void NdsCore::RunFrame(FrameOutput& out) {
             // Always one, so that the headset's screens are not made again each time a game has no
             // right picture
             out.primary_right = out.primary;
-            if (const melonDS::u32* right = impl->stereo->RightTop()) {
+            if (const melonDS::u32* right = impl->stereo->Right(0)) {
                 out.primary_right.pixels = right;
+            }
+            if (impl->depth_on_secondary) {
+                out.secondary_right = out.secondary;
+                if (const melonDS::u32* right = impl->stereo->Right(1)) {
+                    out.secondary_right.pixels = right;
+                }
             }
             out.layer_shift = static_cast<float>(depth.layers[3]) / NdsDepth::kWidth;
         }
@@ -917,6 +929,15 @@ void NdsCore::SetLayerDepth(uint32_t level) {
 
 void NdsCore::SetMaxLayerShift(float share) {
     impl->max_layer_shift = share;
+}
+
+void NdsCore::SetDepthConvergence(float w) {
+    impl->depth_convergence =
+        w > 0.0f ? static_cast<int32_t>(std::min(w, 4095.0f) * NdsDepth::kOneW) : 0;
+}
+
+void NdsCore::SetDepthOnSecondary(bool on) {
+    impl->depth_on_secondary = on;
 }
 
 NdsDepth::Lines NdsCore::DepthLines() const {
