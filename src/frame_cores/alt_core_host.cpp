@@ -609,7 +609,7 @@ struct AltCoreHost::Impl {
     void Present(bool skippable) {
         if (renderer && renderer->IsReady() && last_frame.primary.pixels) {
             renderer->Present(last_frame.primary, last_frame.secondary, last_frame.overlay,
-                              skippable);
+                              last_frame.primary_right, skippable);
         }
     }
 

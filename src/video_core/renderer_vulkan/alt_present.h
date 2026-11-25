@@ -7,6 +7,7 @@
 #include <array>
 #include "common/common_types.h"
 #include "common/vector_math.h"
+#include "video_core/xr_content_pose.h"
 
 // What both of AltXrRenderer's outputs (the XR screens, the window) send the 3DS's present shaders.
 namespace Vulkan {
@@ -32,9 +33,30 @@ struct AltPresentUniformData {
 static_assert(sizeof(AltPresentUniformData) == 112,
               "AltPresentUniformData must match present shader push constants");
 
-/// The overlay's texture among the present shader's three: the right eye's, which these games
-/// never have.
+/// The Primary Screen's texture among the present shader's three. The right eye's own picture
+/// (Layer Depth) is at this slot too, in a set of its own.
+constexpr u32 kAltPrimarySlot = 0;
+/// The overlay's: the 3DS's right eye's, which these games never use.
 constexpr u32 kAltOverlaySlot = 1;
+
+struct AltEyeSize {
+    u32 width = 0;
+    u32 height = 0;
+    constexpr bool operator==(const AltEyeSize&) const = default;
+};
+
+/// The XR swapchains of the Primary Screen's eyes, left then right, for one eye's `size`. Mono: the
+/// right one is never shown (`unused`). Packed: both eyes are in the left one, as the 3DS's.
+constexpr std::array<AltEyeSize, 2> AltEyeSwapchains(AltEyeSize size, AltEyeSize unused,
+                                                     bool stereo, bool packed) {
+    if (!stereo) {
+        return {size, unused};
+    }
+    if (!packed) {
+        return {size, size};
+    }
+    return {AltEyeSize{size.width, 2 * size.height + VideoCore::kXrPackedGap}, AltEyeSize{}};
+}
 
 /// A screen's quad. Upright (not `landscape`): turned 90 degrees anticlockwise, as the 3DS's
 /// screens. An overlay is drawn by the same quad, so it covers the screen exactly.
