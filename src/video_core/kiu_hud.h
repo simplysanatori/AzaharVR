@@ -50,6 +50,7 @@ struct Wanted {
 struct Place {
     bool on = false;
     bool page = false; ///< not the HUD: a page's 2D, whole, over the game's own frame (PagePlace)
+    bool cards = false; ///< the hub's: its cards go with its 2D (MayBeCard)
     float half_across = 1.0f, half_up = 1.0f;
     float middle_up = 0.0f;
     float bar_across = 0.0f, bar_up = 0.0f;
@@ -149,7 +150,7 @@ inline Place PagePlaceInBattle(float tan_half_x, float tan_half_y) {
 /// height: in the view and readable, where the game's own frame is 2.8 to 5 times smaller there.
 inline Place PageInView(const Wanted& w, float tan_half_x, float tan_half_y, float pitch_rad) {
     Place p = PlaceFor(w, tan_half_x, tan_half_y, pitch_rad);
-    p.page = p.on;
+    p.page = p.cards = p.on;
     return p;
 }
 
@@ -221,6 +222,7 @@ enum class As : uint8_t {
     WithScore, ///< whole, with the score (the console's battery)
     Subtitle,
     Page,      ///< a page's (the results, a menu): the page's frame, every quad alike
+    Card,      ///< a menu's, drawn as a card in its room (the hub's veil and heart bag): as Page
 };
 /// `in_batch`: the draw is the battle UI's own (InBatch); `batch_known`: its batch is known at all;
 /// `page`: the 2D on view is a page, not the HUD; `reticle`: the hand's reticle, never the HUD's.
@@ -368,11 +370,90 @@ inline bool MoveSubtitle(Vertex* v, std::size_t n, const Place& p, float factor_
     return n != 0;
 }
 
+/// AzaharFrame kiuhud: the hub's veil and heart bag: cards in front of the room's camera (a census
+/// of the hub: 64 x 64, RGBA4, blended, depth tested, 6 or 12 vertices at one distance, 40 units;
+/// nothing else of the room is), where their words and number are flat 2D.
+constexpr bool MayBeCard(const Draw& d) {
+    return d.top_viewport && d.depth_test && d.blended && d.textured && d.width == 64 &&
+           d.height == 64 && d.format == 4 && (d.vertices == 6 || d.vertices == 12);
+}
+/// Its vertices: in front, all at one distance, not flat.
+inline bool IsCard(const Vertex* v, std::size_t n) {
+    for (std::size_t i = 0; i < n; ++i) {
+        if (!(v[i].w > 1.5f) || std::abs(v[i].w - v[0].w) > 0.02f * v[0].w ||
+            !std::isfinite(v[i].x) || !std::isfinite(v[i].y)) {
+            return false;
+        }
+    }
+    return n != 0;
+}
+/// To the page's frame. `nearest`: the depth (z over w) nothing is in front of; the room must not
+/// hide a card that follows the view, and what was in front of what stays so.
+inline constexpr float kCardDepth = 0.02f;
+inline void MoveCard(Vertex* t, std::size_t n, const Place& p, float factor_across,
+                     float factor_up, float nearest) {
+    for (std::size_t i = 0; i < n; ++i) {
+        Vertex& v = t[i];
+        const float w = v.w;
+        const float z = nearest + (v.z / w - nearest) * kCardDepth;
+        const float u = p.middle_up + p.half_up * (v.x / w);
+        const float a = p.half_across * (v.y / w);
+        v = {w * u * factor_up, w * a * factor_across, w * z, w};
+    }
+}
+/// A card across more than the frame (the veil): its ends and its foot are off the game's screen.
+inline bool IsVeil(const Vertex* v, std::size_t n) {
+    float a0 = 1e9f, a1 = -1e9f;
+    for (std::size_t i = 0; i < n; ++i) {
+        a0 = std::min(a0, v[i].y / v[i].w);
+        a1 = std::max(a1, v[i].y / v[i].w);
+    }
+    return n == 12 && a0 < -1.0f && a1 > 1.0f;
+}
+/// The veil again, with no border: the same extent, its middle as dark, all four sides fading to
+/// nothing. 54 vertices (a triangle list); `alpha`: 0 on the rim, 1 inside.
+struct VeilVertex {
+    Vertex v;
+    float alpha;
+};
+inline std::array<VeilVertex, 54> SoftVeil(const Vertex* in, std::size_t n) {
+    float u0 = 1e9f, u1 = -1e9f, a0 = 1e9f, a1 = -1e9f;
+    for (std::size_t i = 0; i < n; ++i) {
+        u0 = std::min(u0, in[i].x / in[i].w);
+        u1 = std::max(u1, in[i].x / in[i].w);
+        a0 = std::min(a0, in[i].y / in[i].w);
+        a1 = std::max(a1, in[i].y / in[i].w);
+    }
+    const float z = in[0].z / in[0].w, w = in[0].w;
+    constexpr float kSide = 0.3f, kEnd = 0.3f; // of the width, of the height
+    const float us[4] = {u0, u0 + kEnd * (u1 - u0), u1 - kEnd * (u1 - u0), u1};
+    const float as[4] = {a0, a0 + kSide * (a1 - a0), a1 - kSide * (a1 - a0), a1};
+    const auto at = [&](int i, int j) {
+        const bool rim = i == 0 || i == 3 || j == 0 || j == 3;
+        return VeilVertex{{us[i] * w, as[j] * w, z * w, w}, rim ? 0.0f : 1.0f};
+    };
+    std::array<VeilVertex, 54> out;
+    std::size_t k = 0;
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            // A corner's cut runs from its inner point out, so it fades round.
+            const bool other = (i == 0) == (j == 2) && i != 1 && j != 1;
+            const int tri[6][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 0}, {1, 1}, {0, 1}};
+            const int alt[6][2] = {{0, 0}, {1, 0}, {0, 1}, {1, 0}, {1, 1}, {0, 1}};
+            for (int c = 0; c < 6; ++c) {
+                const auto& q = other ? alt[c] : tri[c];
+                out[k++] = at(i + q[0], j + q[1]);
+            }
+        }
+    }
+    return out;
+}
+
 /// The place in force. One writer (the XR thread, once a frame), read by the emulation thread a
 /// draw; a read across a write mixes two frames' numbers, which are the same or next to it.
 struct Live {
     std::array<std::atomic<float>, 10> f{};
-    std::atomic<bool> on{false}, page{false};
+    std::atomic<bool> on{false}, page{false}, cards{false};
 
     void Set(const Place& p) {
         const float v[10] = {p.half_across, p.half_up,      p.middle_up, p.bar_across,
@@ -382,12 +463,14 @@ struct Live {
             f[i].store(v[i], std::memory_order_relaxed);
         }
         page.store(p.page, std::memory_order_relaxed);
+        cards.store(p.cards, std::memory_order_relaxed);
         on.store(p.on, std::memory_order_release);
     }
     Place Get() const {
         Place p;
         p.on = on.load(std::memory_order_acquire);
         p.page = page.load(std::memory_order_relaxed);
+        p.cards = cards.load(std::memory_order_relaxed);
         float* const v[10] = {&p.half_across, &p.half_up,      &p.middle_up, &p.bar_across,
                              &p.bar_up,      &p.score_across, &p.score_up,  &p.subtitle_up,
                              &p.subtitle_half_across, &p.subtitle_half_up};

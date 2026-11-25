@@ -344,3 +344,61 @@ TEST_CASE("Kid Icarus HUD: a menu's 2D in the view, in the HUD's frame", "[frame
     CHECK(PageInView(w, kTanX, kTanY, 0.0f).half_across > p.half_across);
     CHECK_FALSE(PageInView(w, 0.0f, kTanY, 0.0f).on);
 }
+
+TEST_CASE("Kid Icarus HUD: the hub's cards go with its words; the veil has no border",
+          "[frame_xr][kiuhud]") {
+    Draw d;
+    d.top_viewport = d.depth_test = d.blended = d.textured = true;
+    d.vertices = 6;
+    d.width = d.height = 64;
+    d.format = 4;
+    CHECK(MayBeCard(d));
+    Draw room = d;
+    room.vertices = 24;
+    CHECK_FALSE(MayBeCard(room));
+    room = d;
+    room.depth_test = false;
+    CHECK_FALSE(MayBeCard(room));
+
+    const Place p = PageInView(Wanted{}, kTanX, kTanY, 0.0f);
+    REQUIRE(p.page);
+    REQUIRE(p.cards);
+    CHECK_FALSE(PagePlace(4.0f, 4.0f).cards);
+    CHECK_FALSE(PagePlaceInBattle(kTanX, kTanY).cards);
+
+    // The bag's middle and a digit at the same place of the frame land on the same place.
+    const float w = 40.0f;
+    Vertex bag[3] = {{-0.65f * w, -0.8f * w, -0.5f * w, w},
+                     {-0.80f * w, -1.0f * w, -0.5f * w, w},
+                     {-0.10f * w, -0.6f * w, -0.5f * w, w}};
+    REQUIRE(IsCard(bag, 3));
+    MoveCard(bag, 3, p, 3.0f, 4.0f, -1.0f);
+    Vertex digit[6] = {{-0.65f, -0.8f, 0, 1}, {-0.6f, -0.8f, 0, 1}, {-0.65f, -0.7f, 0, 1},
+                       {-0.6f, -0.8f, 0, 1},  {-0.6f, -0.7f, 0, 1}, {-0.65f, -0.7f, 0, 1}};
+    REQUIRE(MovePage(digit, 6, p, 3.0f, 4.0f) == 6);
+    CHECK(bag[0].x / bag[0].w == Approx(digit[0].x / digit[0].w));
+    CHECK(bag[0].y / bag[0].w == Approx(digit[0].y / digit[0].w));
+    CHECK(bag[0].w == w);
+    CHECK(bag[0].z / w == Approx(-1.0f + 0.5f * kCardDepth)); // in front of the room
+
+    Vertex room_quad[2] = {{0, 0, 0, 131.0f}, {0, 0, 0, 206.0f}};
+    CHECK_FALSE(IsCard(room_quad, 2)); // not at one distance
+    Vertex flat_quad[2] = {{0, 0, 0, 1.0f}, {0, 0, 0, 1.0f}};
+    CHECK_FALSE(IsCard(flat_quad, 2));
+
+    Vertex veil[12];
+    for (int i = 0; i < 12; ++i) {
+        veil[i] = {(i % 2 ? -0.67f : -1.32f) * w, (i % 3 ? 1.24f : -1.36f) * w, -0.5f * w, w};
+    }
+    REQUIRE(IsVeil(veil, 12));
+    CHECK_FALSE(IsVeil(bag, 3));
+    const auto soft = SoftVeil(veil, 12);
+    float inside = 0.0f;
+    for (const auto& q : soft) {
+        const float up = q.v.x / w, at = q.v.y / w;
+        const bool rim = up < -1.319f || up > -0.671f || at < -1.359f || at > 1.239f;
+        CHECK(q.alpha == (rim ? 0.0f : 1.0f));
+        inside += q.alpha;
+    }
+    CHECK(inside == 6.0f + 4 * 3.0f + 4 * 2.0f); // the middle, the sides, two a corner
+}

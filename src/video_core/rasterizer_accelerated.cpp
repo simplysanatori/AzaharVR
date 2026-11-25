@@ -443,6 +443,10 @@ VideoCore::KiuHud::As RasterizerAccelerated::HudDraw() const {
                     VideoCore::KiuHud::InBatch(
                         batch, regs.pipeline.vertex_attributes.GetPhysicalBaseAddress(),
                         regs.pipeline.index_array.offset, d.vertices);
+    if (VideoCore::KiuHud::g_live.cards.load(std::memory_order_relaxed) &&
+        VideoCore::KiuHud::MayBeCard(d)) {
+        return As::Card;
+    }
     return VideoCore::KiuHud::Decide(d, in, batch.quads != 0,
                                      VideoCore::KiuHud::g_live.page.load(std::memory_order_relaxed),
                                      reticle != 0 && d.textured && d.texture == reticle);
@@ -622,6 +626,36 @@ void RasterizerAccelerated::AddSheetRim() {
     }
 }
 
+void RasterizerAccelerated::MoveCard(const VideoCore::KiuHud::Place& place) {
+    namespace H = VideoCore::KiuHud;
+    std::vector<H::Vertex>& flat = hud_flat;
+    if (H::IsVeil(flat.data(), flat.size())) {
+        const auto veil = H::SoftVeil(flat.data(), flat.size());
+        HardwareVertex dark = vertex_batch[0];
+        for (const auto& v : vertex_batch) {
+            if (v.color.w > dark.color.w) {
+                dark = v;
+            }
+        }
+        vertex_batch.assign(veil.size(), dark);
+        flat.resize(veil.size());
+        for (std::size_t i = 0; i < veil.size(); ++i) {
+            flat[i] = veil[i].v;
+            vertex_batch[i].color.w *= veil[i].alpha;
+        }
+    }
+    // The end of the depth range its own test calls nearest (clip z over w is -1 to 0).
+    using C = Pica::FramebufferRegs::CompareFunc;
+    const auto func = regs.framebuffer.output_merger.depth_test_func.Value();
+    const bool greater = func == C::GreaterThan || func == C::GreaterThanOrEqual;
+    const bool rises = f24::FromRaw(regs.rasterizer.viewport_depth_range).ToFloat32() > 0.0f;
+    H::MoveCard(flat.data(), flat.size(), place, vr_factor, vr_factor_y,
+                greater == rises ? 0.0f : -1.0f);
+    for (std::size_t i = 0; i < flat.size(); ++i) {
+        vertex_batch[i].position = {flat[i].x, flat[i].y, flat[i].z, flat[i].w};
+    }
+}
+
 void RasterizerAccelerated::TurnSoftwareVertices() {
     // AzaharFrame kiu140: a cloud sheet's soft rim; the turn below takes it with the sheet.
     if (!vertex_batch.empty() &&
@@ -663,7 +697,12 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
             }
         };
         const char* done = nullptr;
-        if (as == As::Page || place.page) {
+        if (as == As::Card) {
+            if (H::IsCard(flat.data(), flat.size())) {
+                MoveCard(place);
+                done = "card";
+            }
+        } else if (as == As::Page || place.page) {
             // A page (whatever the draw was taken for a VBlank ago): every quad to its frame.
             done = H::MovePage(flat.data(), flat.size(), place, vr_factor, vr_factor_y) != 0
                        ? "page"
@@ -690,7 +729,9 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
             HudCensus(done ? done : "the 2D's, left (the whole frame, or not flat)");
         }
         if (done) {
-            put();
+            if (as != As::Card) {
+                put();
+            }
             return;
         }
         if (as == As::Piece) { // the battle UI's own over the whole frame (a fade): not the world's
