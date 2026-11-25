@@ -13,11 +13,30 @@
 #include <fmt/format.h>
 #include <json.hpp>
 #include "common/file_util.h"
+#include "common/string_util.h"
 #include "core/homebrew/net.h"
 
 namespace Homebrew::Handheld {
 
 namespace {
+
+// The paths here are UTF-8. On Windows std::filesystem takes a std::string for the ANSI code page,
+// so they go through these on the way in and out (as frame_cores/utf8_path.h); elsewhere nothing.
+#ifdef _WIN32 // AzaharVR
+std::filesystem::path FsPath(const std::string& utf8) {
+    return std::filesystem::path(Common::UTF8ToUTF16W(utf8));
+}
+std::string FsUtf8(const std::filesystem::path& path) {
+    return Common::UTF16ToUTF8(path.generic_wstring());
+}
+#else
+std::filesystem::path FsPath(const std::string& utf8) {
+    return std::filesystem::path(utf8);
+}
+std::string FsUtf8(const std::filesystem::path& path) {
+    return path.string();
+}
+#endif
 
 bool IsLowerHex(std::string_view s) {
     return std::all_of(s.begin(), s.end(), [](char c) {
@@ -385,7 +404,7 @@ std::string EntryDir(const std::string& root, const Entry& entry) {
     if (root.empty() || !ValidSlug(entry.slug)) {
         return {};
     }
-    return (std::filesystem::path(root) / entry.slug).string();
+    return FsUtf8(FsPath(root) / entry.slug);
 }
 
 std::string EntryPath(const std::string& root, const Entry& entry) {
@@ -393,15 +412,15 @@ std::string EntryPath(const std::string& root, const Entry& entry) {
     if (dir.empty() || !ValidFileName(entry.filename, entry.system)) {
         return {};
     }
-    return (std::filesystem::path(dir) / entry.filename).string();
+    return FsUtf8(FsPath(dir) / entry.filename);
 }
 
 std::string VerifyFile(const std::string& path, const Entry& entry) {
     std::error_code ec;
-    if (!std::filesystem::is_regular_file(path, ec)) {
+    if (!std::filesystem::is_regular_file(FsPath(path), ec)) {
         return "The file is missing";
     }
-    const auto size = std::filesystem::file_size(path, ec);
+    const auto size = std::filesystem::file_size(FsPath(path), ec);
     if (ec || size != entry.size) {
         return "The file's size is not the one listed";
     }
@@ -421,7 +440,7 @@ std::string Install(const std::string& root, const Entry& entry,
         return "Download refused: not an allowed address";
     }
     std::error_code ec;
-    std::filesystem::create_directories(dir, ec);
+    std::filesystem::create_directories(FsPath(dir), ec);
     if (ec) {
         return "The folder could not be made";
     }
@@ -450,10 +469,10 @@ std::string Remove(const std::string& root, const Entry& entry) {
         return "Nothing to remove";
     }
     std::error_code ec;
-    if (std::filesystem::is_symlink(dir, ec)) {
+    if (std::filesystem::is_symlink(FsPath(dir), ec)) {
         return "Nothing to remove"; // never follow a link out of the folder
     }
-    std::filesystem::remove_all(dir, ec);
+    std::filesystem::remove_all(FsPath(dir), ec);
     return ec ? "The files could not be removed" : std::string{};
 }
 

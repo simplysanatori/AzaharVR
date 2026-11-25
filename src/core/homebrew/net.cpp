@@ -323,7 +323,11 @@ std::string Download(const std::string& url, const std::string& dest,
             if (file != nullptr) {
                 std::fclose(file);
             }
+#ifdef _WIN32 // AzaharVR: the name is UTF-8, fopen would take it as the ANSI code page
+            file = _wfopen(Common::UTF8ToUTF16W(part).c_str(), L"wb");
+#else
             file = std::fopen(part.c_str(), "wb");
+#endif
             return file != nullptr && progress(0, total);
         },
         [&](const char* data, std::size_t len) {
@@ -364,7 +368,12 @@ std::string Download(const std::string& url, const std::string& dest,
 }
 
 std::string FileSha256(const std::string& path) {
+#ifdef _WIN32 // AzaharVR: the name is UTF-8
+    std::ifstream in;
+    OpenFStream(in, path, std::ios::binary);
+#else
     std::ifstream in(path, std::ios::binary);
+#endif
     if (!in) {
         return {};
     }

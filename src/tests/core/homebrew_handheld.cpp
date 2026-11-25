@@ -305,6 +305,29 @@ TEST_CASE("Handheld homebrew: paths stay inside the folder", "[homebrew][handhel
     CHECK(std::filesystem::exists(t.path));
 }
 
+TEST_CASE("Handheld homebrew: a folder with letters of other languages", "[homebrew][handheld]") {
+    TempDir t;
+    const std::filesystem::path folder =
+        t.path / std::filesystem::path(std::u8string(u8"José 日本語"));
+    const std::u8string folder_u8 = folder.u8string();
+    const std::string root(folder_u8.begin(), folder_u8.end()); // UTF-8, as the app's paths are
+    const std::string body = "not a real game, only test bytes";
+    H::Entry e = GoodEntry();
+    e.size = body.size();
+    e.sha256 = Homebrew::Sha256Hex(body);
+    const std::string path = H::EntryPath(root, e);
+    REQUIRE_FALSE(path.empty());
+    std::filesystem::create_directories(folder / "test-one");
+    {
+        std::ofstream(folder / "test-one" / "test.gba", std::ios::binary) << body;
+    }
+    CHECK(Homebrew::FileSha256(path) == e.sha256);
+    CHECK(H::VerifyFile(path, e).empty());
+    CHECK(H::Remove(root, e).empty());
+    CHECK_FALSE(std::filesystem::exists(folder / "test-one"));
+    CHECK(std::filesystem::exists(folder));
+}
+
 TEST_CASE("Handheld homebrew: a file is checked by size and SHA-256 before it is used",
           "[homebrew][handheld]") {
     TempDir t;

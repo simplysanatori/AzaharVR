@@ -221,7 +221,12 @@ bool WriteFile(const std::string& path, const std::string& bytes) {
 
 template <typename Line>
 void EachLine(const std::string& path, Line&& line) {
+#ifdef _WIN32 // AzaharVR: the name is UTF-8
+    std::ifstream in;
+    OpenFStream(in, path, std::ios::in);
+#else
     std::ifstream in(path);
+#endif
     std::string text;
     while (std::getline(in, text)) {
         if (!text.empty()) {

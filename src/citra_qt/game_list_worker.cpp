@@ -26,6 +26,7 @@
 #include "core/loader/loader.h"
 #ifdef ENABLE_ALT_CORES
 #include "frame_cores/rom_info.h"
+#include "frame_cores/utf8_path.h"
 #endif
 
 namespace {
@@ -90,7 +91,7 @@ void GameListWorker::AddFstEntriesToGameList(const std::string& dir_path, unsign
                 path_item->SetTile(name, info->icon_rgba, info->icon_w, info->icon_h);
                 // A DS game's code says its region, a GBA or Game Boy game's file name
                 std::vector<const char*> regions = FrameCores::RegionsOfName(
-                    std::filesystem::path(physical_name).filename().string());
+                    FrameCores::FsUtf8(FrameCores::FsPath(physical_name).filename()));
                 if (const char* code_region = FrameCores::RegionOf(*info); *code_region) {
                     regions = {code_region};
                 }

@@ -22,6 +22,7 @@
 #include "core/core.h"
 #include "frame_xr/frame_xr.h"
 #include "frame_xr/menu/homebrew_tab.h"
+#include "frame_cores/utf8_path.h"
 
 namespace {
 FrameHomebrew* g_instance = nullptr;
@@ -317,7 +318,7 @@ void FrameHomebrew::ApplyBootSettings(const QString& path) {
 void FrameHomebrew::LoadHandheldList(std::vector<HomebrewPackager*>& out) {
     namespace H = Homebrew::Handheld;
     const std::filesystem::path base =
-        std::filesystem::path(FileUtil::GetUserPath(FileUtil::UserPath::UserDir)) / "homebrew";
+        FrameCores::FsPath(FileUtil::GetUserPath(FileUtil::UserPath::UserDir)) / "homebrew";
     std::ifstream in(base / "handheld-catalogue.json", std::ios::binary);
     if (!in) {
         return;
@@ -334,6 +335,7 @@ void FrameHomebrew::LoadHandheldList(std::vector<HomebrewPackager*>& out) {
         LOG_WARNING(Frontend, "homebrew: an entry of the DS / GBA list was left out: {}", why);
     }
     for (const H::Entry& entry : list.entries) {
-        out.push_back(new FrameHandheldHomebrew(entry, (base / "handheld").string(), this));
+        out.push_back(
+            new FrameHandheldHomebrew(entry, FrameCores::FsUtf8(base / "handheld"), this));
     }
 }

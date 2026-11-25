@@ -20,6 +20,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include "common/logging/log.h"
+#include "frame_cores/utf8_path.h"
 
 namespace H = Homebrew::Handheld;
 
@@ -89,8 +90,10 @@ void FrameHandheldHomebrew::Rescan() {
     }
     const std::string path = H::EntryPath(root, entry);
     std::error_code ec;
-    const bool is_file = !path.empty() && std::filesystem::is_regular_file(path, ec);
-    present = is_file && std::filesystem::file_size(path, ec) == entry.size && !ec;
+    const bool is_file =
+        !path.empty() && std::filesystem::is_regular_file(FrameCores::FsPath(path), ec);
+    present = is_file && std::filesystem::file_size(FrameCores::FsPath(path), ec) == entry.size &&
+              !ec;
     broken = is_file && !present;
     verified = false;
     if (present) {
