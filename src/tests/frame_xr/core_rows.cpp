@@ -4,6 +4,7 @@
 
 // Which rows of the in-game menu each console has (frame_xr/menu/core_rows.h).
 
+#include <algorithm>
 #include <set>
 #include <string>
 #include <vector>
@@ -27,7 +28,7 @@ const std::set<Id> kCommon{
     Id::WindowScale,      Id::FaceButtons,        Id::ShowControllers,
     Id::ControllersInFront, Id::FastForwardSpeed, Id::FastForwardAudio,
     Id::MoreSettings,     Id::SwitchToFlat,       Id::HelpHeader,    Id::ReportProblem,
-    Id::AboutApp};
+    Id::AboutApp,         Id::ExperimentalHeader};
 
 std::set<Id> With(std::set<Id> ids, const std::set<Id>& more) {
     ids.insert(more.begin(), more.end());
@@ -266,6 +267,197 @@ TEST_CASE("Core rows: a section's target keeps its own value", "[frame_xr][tabme
     CHECK(sections == std::vector<int>{static_cast<int>(SettingsSection::Console), // first
                                        static_cast<int>(SettingsSection::General),
                                        static_cast<int>(SettingsSection::Graphics)});
+}
+
+namespace {
+std::vector<Id> General(bool saves = kAltAutosave) {
+    std::vector<Id> ids{Id::Background, Id::WindowScale, Id::FastForwardSpeed,
+                        Id::FastForwardAudio};
+    if (saves) {
+        ids.insert(ids.end(),
+                   {Id::SavesHeader, Id::Autosave, Id::AutosaveEvery, Id::AutosaveKeep});
+    }
+    ids.insert(ids.end(), {Id::MoreSettings, Id::HelpHeader, Id::ReportProblem, Id::AboutApp});
+    return ids;
+}
+
+/// The Controls tab's own rows, by section, each row's Id found as it is drawn.
+std::set<Id> ControlsRows(const MenuModel& m, ControlsSection section) {
+    MenuView v;
+    v.tab = Tab::Controls;
+    v.controls_section = section;
+    std::set<Id> ids = Drawn(m, v);
+    for (const Id id : {Id::TabButton, Id::Scope, Id::ScopeMore, Id::ControlsSection,
+                        Id::ControlsPage, Id::EditControls, Id::Scrollbar, Id::None}) {
+        ids.erase(id);
+    }
+    return ids;
+}
+const std::set<Id> kButtons{Id::FaceButtons, Id::ShowControllers, Id::ControllersInFront};
+const std::set<Id> kPointing{Id::TouchpadTouch, Id::BottomScreenReticle, Id::ReticleSpeed,
+                             Id::ReticleAtEdge, Id::ReticleCenter,       Id::ReticleStick};
+} // namespace
+
+TEST_CASE("Sections: a 3DS game's rows, in order", "[frame_xr][tabmenu]") {
+    MenuModel m = Game(CoreCaps::ForN3DS());
+    m.immersive_mode = 2;
+    m.motion_clarity_immersive = m.motion_clarity_normal = true;
+    m.bottom_screen_reticle = 2;
+    m.scale_mode = 0;
+    CHECK(RowIds(Tab::Settings, m, SettingsSection::Console).empty());
+    CHECK(RowIds(Tab::Settings, m, SettingsSection::General) == General(true));
+    CHECK(RowIds(Tab::Settings, m, SettingsSection::Graphics) ==
+          std::vector<Id>{Id::Depth3d, Id::InternalResolution, Id::DynamicResolution,
+                          Id::TextureFilter, Id::AsyncShaders, Id::AccurateImageCopies,
+                          Id::ExperimentalHeader, Id::MotionClarityNormal, Id::MatchBottomNormal});
+    const std::vector<Id> immersive{
+        Id::ImmersiveMode,  Id::FillView,      Id::WorldScale,         Id::FollowScreen,
+        Id::ScaleMode,      Id::ScaleX,        Id::ScaleY,             Id::MarginX,
+        Id::MarginY,        Id::GameFov,       Id::MatchCamera,        Id::ExperimentalHeader,
+        Id::ScreenAsPanel,  Id::HudSpacingX,   Id::HudSpacingY,        Id::MotionClarity,
+        Id::MatchBottom};
+    CHECK(RowIds(Tab::Settings, m, SettingsSection::Immersive) == immersive);
+    CHECK(ControlsRows(m, ControlsSection::Buttons) == kButtons);
+    CHECK(ControlsRows(m, ControlsSection::Pointing) == kPointing);
+    CHECK(ControlsRows(m, ControlsSection::Motion) ==
+          std::set<Id>{Id::MotionControls, Id::GyroAim, Id::GyroSensitivity});
+    // Kid Icarus: Uprising, out of Angel's Aim mode: its weapon rows are Aiming's, Immersive the
+    // same; in it, the first-person rows right under Immersive Mode.
+    m.mods.angels_aim.shown = m.mods.angels_aim.recommended = true;
+    m.gyro_aim = 2;
+    CHECK(RowIds(Tab::Settings, m, SettingsSection::Immersive) == immersive);
+    const std::vector<Id> aiming = AimingRows(m);
+    std::set<Id> motion{aiming.begin(), aiming.end()};
+    motion.insert(Id::MotionControls);
+    std::set<Id> drawn = ControlsRows(m, ControlsSection::Motion);
+    drawn.erase(Id::CalibrateAimReset);
+    CHECK(drawn == motion);
+    CHECK(motion.contains(Id::WeaponInHand));
+    CHECK(ControlsRows(m, ControlsSection::Buttons) == kButtons);
+    CHECK(ControlsRows(m, ControlsSection::Pointing) == kPointing);
+    m.immersive_mode = 4;
+    std::vector<Id> angels = immersive;
+    const std::vector<Id> first = AngelsAimFirstPersonRows(m);
+    REQUIRE(!first.empty());
+    angels.insert(angels.begin() + 1, first.begin(), first.end());
+    CHECK(RowIds(Tab::Settings, m, SettingsSection::Immersive) == angels);
+}
+
+TEST_CASE("Sections: a DS, a Game Boy Advance and a Game Boy game's rows, in order",
+          "[frame_xr][tabmenu]") {
+    const MenuModel ds = Game(CoreCaps::ForNDS());
+    CHECK(RowIds(Tab::Settings, ds, SettingsSection::Console) ==
+          std::vector<Id>{Id::DsMicBlow, Id::DsLidToggle, Id::DsTouchEnabled, Id::DsConsoleMode,
+                          Id::ImportSave});
+    const MenuModel gba = Game(CoreCaps::ForGBA());
+    CHECK(RowIds(Tab::Settings, gba, SettingsSection::Console) ==
+          std::vector<Id>{Id::GbaSolarLevel, Id::ImportSave});
+    const MenuModel gb = Game(CoreCaps::ForGB());
+    CHECK(RowIds(Tab::Settings, gb, SettingsSection::Console) == std::vector<Id>{Id::ImportSave});
+    for (const MenuModel& m : {ds, gba, gb}) {
+        INFO("console " << static_cast<int>(m.core.kind));
+        CHECK(RowIds(Tab::Settings, m, SettingsSection::General) == General());
+        // Neither section is there for the header's sake alone
+        CHECK(RowIds(Tab::Settings, m, SettingsSection::Graphics).empty());
+        CHECK(RowIds(Tab::Settings, m, SettingsSection::Immersive).empty());
+        CHECK(ControlsRows(m, ControlsSection::Buttons) == kButtons);
+        // A section the console does not have is drawn as Buttons
+        CHECK(ControlsRows(m, ControlsSection::Motion) == kButtons);
+        CHECK(!ControlsSectionShown(ControlsSection::Motion, m.core));
+        CHECK(ControlsSectionShown(ControlsSection::Buttons, m.core));
+        CHECK(ControlsSectionShown(ControlsSection::Pointing, m.core) == m.core.has_touch);
+    }
+    MenuModel reticle = ds;
+    reticle.bottom_screen_reticle = 1;
+    CHECK(ControlsRows(reticle, ControlsSection::Pointing) == kPointing);
+    CHECK(!ControlsSectionShown(ControlsSection::Count, CoreCaps::ForN3DS()));
+}
+
+TEST_CASE("Sections: what links to a row goes to it", "[frame_xr][tabmenu]") {
+    // Load State's Autosave: Off, Settings: the Saves group's own header, in every console
+    for (const CoreCaps& core : {CoreCaps::ForN3DS(), CoreCaps::ForNDS(), CoreCaps::ForGBA(),
+                                 CoreCaps::ForGB()}) {
+        const MenuModel m = Game(core);
+        const auto rows = RowIds(Tab::Settings, m, SettingsSection::General);
+        const int before = RowsBefore(Id::SavesHeader, SettingsSection::General, m);
+        REQUIRE(before < static_cast<int>(rows.size()));
+        CHECK(rows[static_cast<std::size_t>(before)] == Id::SavesHeader);
+        CHECK(before == 4);
+        Kit kit{1.0f};
+        frame_xr::ui::Canvas canvas;
+        TabMenu menu;
+        canvas.Init(static_cast<int>(kPanelW), static_cast<int>(kPanelH));
+        kit.Begin(canvas);
+        MenuView v = SettingsView(SettingsSection::General);
+        v.scroll[static_cast<std::size_t>(Tab::Settings)] = static_cast<float>(before) * kRowH;
+        menu.Draw(kit, m, v);
+        std::set<Id> shown;
+        for (const auto& h : menu.Hits()) {
+            shown.insert(h.t.id);
+        }
+        CHECK(shown.contains(Id::Autosave));
+        CHECK(shown.contains(Id::AutosaveKeep));
+    }
+    // Angel's Aim's Aiming Settings: the Motion section, Aiming at the top of the list
+    MenuModel m = Game(CoreCaps::ForN3DS());
+    m.mods.angels_aim.shown = true;
+    m.gyro_aim = 2;
+    m.recoil = m.weapon_in_hand = true;
+    Kit kit{1.0f};
+    frame_xr::ui::Canvas canvas;
+    TabMenu menu;
+    canvas.Init(static_cast<int>(kPanelW), static_cast<int>(kPanelH));
+    MenuView v;
+    v.tab = Tab::Controls;
+    kit.Begin(canvas);
+    menu.Draw(kit, m, v);
+    CHECK(!menu.Layout().controls); // Buttons: no scroll to take from it
+    v.controls_section = ControlsSection::Motion;
+    kit.Begin(canvas);
+    menu.Draw(kit, m, v);
+    REQUIRE(menu.Layout().controls);
+    v.scroll[static_cast<std::size_t>(Tab::Controls)] = menu.Layout().aiming_scroll;
+    kit.Begin(canvas);
+    menu.Draw(kit, m, v);
+    bool aiming = false, motion = false;
+    for (const auto& h : menu.Hits()) {
+        if (h.t.id == Id::GyroAim && h.t.index == kLabelIndex) {
+            aiming = h.r.y0 <= menu.Layout().bar.list.y0 + 8.0f;
+        }
+        motion |= h.t.id == Id::MotionControls;
+    }
+    CHECK(aiming);
+    CHECK(!motion);
+}
+
+TEST_CASE("Sections: the scope's count follows the rows", "[frame_xr][tabmenu][scope]") {
+    MenuModel m = Game(CoreCaps::ForN3DS());
+    for (int i = 0; i < kIdCount; i++) {
+        m.game_value[static_cast<std::size_t>(i)] = PerGameSetting(static_cast<Id>(i));
+    }
+    m.immersive_mode = 2;
+    m.motion_clarity_immersive = m.motion_clarity_normal = true;
+    m.scale_mode = 0;
+    CHECK(GameValueRows(m, Tab::Position) ==
+          std::vector<Id>{Id::ScreenLayout, Id::HideBottomScreen, Id::ScreenShape});
+    CHECK(GameValueRows(m, Tab::Settings, SettingsSection::General) ==
+          std::vector<Id>{Id::FastForwardAudio, Id::Autosave, Id::AutosaveEvery,
+                          Id::AutosaveKeep});
+    const auto controls = GameValueRows(m, Tab::Controls);
+    for (const Id id : {Id::ShowControllers, Id::ControllersInFront, Id::MotionControls,
+                        Id::TouchpadTouch, Id::GyroAim}) {
+        INFO(LabelFor(id));
+        CHECK(std::count(controls.begin(), controls.end(), id) == 1);
+    }
+    CHECK(std::count(controls.begin(), controls.end(), Id::FaceButtons) == 0); // global
+    // DS: the Console section's own, and no row of Motion's
+    m.core = CoreCaps::ForNDS();
+    for (const Id id : GameValueRows(m, Tab::Controls)) {
+        CHECK(id != Id::MotionControls);
+        CHECK(id != Id::GyroAim);
+    }
+    CHECK(GameValueRows(m, Tab::Settings, SettingsSection::Console) ==
+          std::vector<Id>{Id::DsTouchEnabled, Id::DsConsoleMode});
 }
 
 TEST_CASE("Core rows: Use Global Values counts only the console's rows", "[frame_xr][tabmenu]") {
