@@ -779,7 +779,7 @@ RunResult Run(const std::string& tool, const std::vector<std::string>& args, int
         }
     }
     // Windows' tools write CR LF; the listings are read line by line as on Linux
-    r.output.erase(std::remove(r.output.begin(), r.output.end(), ''), r.output.end());
+    r.output.erase(std::remove(r.output.begin(), r.output.end(), '\r'), r.output.end());
     DWORD code = 0;
     if (!killed && GetExitCodeProcess(pi.hProcess, &code)) {
         r.status = static_cast<int>(code);
