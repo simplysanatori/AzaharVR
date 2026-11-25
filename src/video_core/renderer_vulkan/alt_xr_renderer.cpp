@@ -584,7 +584,7 @@ struct AltXrRenderer::Impl {
         }
         copy_tick = scheduler->CurrentTick();
         scheduler->Record([src = vk::Image{reinterpret_cast<VkImage>(img.image)},
-                           dst = tex.picture.image, layer = img.layer, w = img.width,
+                           dst = tex.picture.image, layer = img.layer, x = img.x, w = img.width,
                            h = img.height](vk::CommandBuffer cmdbuf) {
             constexpr vk::ImageSubresourceRange range = {
                 .aspectMask = vk::ImageAspectFlagBits::eColor,
@@ -613,6 +613,7 @@ struct AltXrRenderer::Impl {
                                    vk::PipelineStageFlagBits::eTransfer, {}, drawn, {}, to_dst);
             const vk::ImageCopy region = {
                 .srcSubresource = {vk::ImageAspectFlagBits::eColor, 0, layer, 1},
+                .srcOffset = {static_cast<s32>(x), 0, 0},
                 .dstSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
                 .extent = {w, h, 1},
             };
@@ -952,10 +953,10 @@ bool AltXrRenderer::NeedsPresent() const {
            (vr && impl->StereoTurnedOff());
 }
 
-bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage& secondary,
-                            const AltScreenImage& overlay, const AltScreenImage& primary_right,
-                            bool skippable) {
-    if (!impl || !impl->ready || !primary.HasPicture()) {
+bool AltXrRenderer::Present(const AltScreenImage& whole, const AltScreenImage& secondary,
+                            const AltScreenImage& overlay, const AltScreenImage& whole_right,
+                            float layer_shift, bool skippable) {
+    if (!impl || !impl->ready || !whole.HasPicture()) {
         return false;
     }
     // A copy of the core's picture goes to the GPU before the core's next work there does.
@@ -968,7 +969,7 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
             impl->scheduler->WaitWorker();
         }
     });
-    impl->EnsureUploads({&primary, &secondary, &overlay, &primary_right});
+    impl->EnsureUploads({&whole, &secondary, &overlay, &whole_right});
     impl->presented_vr = impl->XrShowsScreens();
     if (!impl->presented_vr) {
         if (!impl->window_target) {
@@ -978,8 +979,8 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
             std::chrono::steady_clock::now() - impl->window_presented < kSkippableInterval) {
             return true;
         }
-        impl->PickScales(primary, secondary, overlay.HasPicture() || impl->overlay_tex.view);
-        if (!impl->TakeImage(impl->primary_tex, primary) ||
+        impl->PickScales(whole, secondary, overlay.HasPicture() || impl->overlay_tex.view);
+        if (!impl->TakeImage(impl->primary_tex, whole) ||
             (secondary.HasPicture() && !impl->TakeImage(impl->secondary_tex, secondary))) {
             return false;
         }
@@ -987,7 +988,11 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
         return true;
     }
     VideoCore::XrScreenSink* const sink = impl->sink;
-    const bool stereo = AltShowsStereo(primary, primary_right);
+    const bool stereo = AltShowsStereo(whole, whole_right);
+    if (!stereo) {
+        layer_shift = 0.0f;
+    }
+    const auto [primary, primary_right] = AltCutEyes(whole, whole_right, layer_shift);
     if (impl->StereoTurnedOff() && stereo) {
         sink->SetTopStereo(true);
     }
@@ -1040,7 +1045,7 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
 
     // Failed: the right eye gets the left one's picture. All uploads before the sets: a texture made
     // again submits.
-    const bool has_right = stereo && impl->UploadImage(impl->right_tex, primary_right);
+    const bool has_right = stereo && impl->TakeImage(impl->right_tex, primary_right);
     const bool has_overlay = impl->UploadOverlay(overlay);
     const vk::Pipeline plain = impl->xr_target->Pipeline();
     const vk::Pipeline top = has_overlay ? impl->OverlayPipeline() : plain;
@@ -1054,7 +1059,9 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
     Common::XrPacer::Get().game_swaps.fetch_add(1, std::memory_order_relaxed);
 
     std::array<XrPresentTarget::Target, XrPresentTarget::kScreens> targets{};
-    if (!impl->xr_target->BeginFrame(targets, VideoCore::XrContentPose{})) {
+    VideoCore::XrContentPose content{};
+    content.layer_shift = layer_shift;
+    if (!impl->xr_target->BeginFrame(targets, content)) {
         impl->scheduler->Flush();
         return false;
     }

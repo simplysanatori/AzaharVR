@@ -1922,8 +1922,6 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     Input::ScreenQuads quads = screen_view.Layout(main_slot, secondary_slot, managed);
     // AzaharFrame curve: the pointer, the touch and the drag hit the screens as they are drawn.
     BendScreens(quads, shown);
-    // Layer Depth moved the picture this far when it was drawn: a joined touch screen with it.
-    quads.bottom.pose.position = quads.bottom.pose.position + joined_shift;
     Input::PanelGeometry panels;
     panels.top = quads.top;
     panels.bottom = quads.bottom;

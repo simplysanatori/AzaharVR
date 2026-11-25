@@ -369,6 +369,17 @@ Cylinder CylinderFor(const Posef& screen, float width, float height, float radiu
     return c;
 }
 
+Posef Along(const Posef& screen, float right, float radius) {
+    if (!(radius > 0.0f)) {
+        return {screen.orientation, Transform(screen, Vec3f{right, 0.0f, 0.0f})};
+    }
+    const float angle = right / radius;
+    const Quatf turn{0.0f, std::sin(-angle / 2), 0.0f, std::cos(-angle / 2)};
+    return {Multiply(screen.orientation, turn),
+            Transform(screen, Vec3f{radius * std::sin(angle), 0.0f,
+                                    radius * (1.0f - std::cos(angle))})};
+}
+
 // ---- AzaharFrame move: Detach Screens ---------------------------------------------------------
 
 uint32_t ClampDetach(uint32_t mode) {

@@ -132,10 +132,6 @@ public:
         float bottom_curve = 0.0f;
     };
     ScreenDraw ScreenDrawFor(const Immersive::ScreenLayers& shown) const;
-    /// What a joined second screen was moved by as it was drawn (Layer Depth), for the touch.
-    void NoteJoinedShift(const Input::Vec3f& shift) {
-        joined_shift = shift;
-    }
     /// AzaharFrame flash, XR thread after Frame: the game is played on view: running, no VR menu
     /// (or the pause it holds), no game keyboard. Motion Clarity flashes only then (menus and a
     /// paused game stay steady).
@@ -237,7 +233,6 @@ private:
     Input::ScreenRig::DpadNudger nudger;
     /// AzaharFrame curve: the runtime takes cylinder layers (XR_KHR_composition_layer_cylinder).
     bool cylinder_ok = false;
-    Input::Vec3f joined_shift{}; ///< what the last frame's joined second screen was moved by
     bool normal_dragging = false; ///< a grip held the normal screens last frame (for the log)
     // AzaharFrame move: Detach Screens (input/screen_rig.h), XR thread only.
     Input::ScreenRig::FreeGrab free_grab;

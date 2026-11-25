@@ -166,6 +166,15 @@ XrCompositionLayerCylinderKHR MakeCylinder(XrSpace space, const Quad& q, float r
     return layer;
 }
 
+XrPosef AlongScreen(const XrPosef& pose, float right, float curve) {
+    const Input::Posef at = Input::ScreenRig::Along(
+        {{pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w},
+         {pose.position.x, pose.position.y, pose.position.z}},
+        right, curve);
+    return {{at.orientation.x, at.orientation.y, at.orientation.z, at.orientation.w},
+            {at.position.x, at.position.y, at.position.z}};
+}
+
 // AzaharFrame flash: a quad after the screens and its space, for the fixed layer positions.
 struct SlotQuad {
     XrSpace space = XR_NULL_HANDLE;
@@ -1485,8 +1494,23 @@ void Runtime::FrameLoop() {
                                  : d.show ? d.why
                                           : MotionClarity::Why::Off);
             }
-            const auto add_screen = [&](VideoCore::XrScreen s, XrSpace space, const XrPosef& pose,
+            const auto add_screen = [&](VideoCore::XrScreen s, XrSpace space, XrPosef pose,
                                         XrExtent2Df size, XrEyeVisibility eye, float curve) {
+                // AzaharFrame doubling: a packed top screen is one swapchain, the left eye in
+                // the upper half and the right eye in the lower one (kXrPackedGap between).
+                const bool top = s != VideoCore::XrScreen::Bottom;
+                // AzaharFrame flash3: LayerChain: while a swapchain made anew has no picture, the
+                // old one with its last picture (no blink of the compositor's background).
+                const ScreenChain& chain = LayerChain(static_cast<std::size_t>(
+                    packed_now && top ? VideoCore::XrScreen::TopLeft : s));
+                if (top && chain.layer_shift != 0.0f) { // Layer Depth: a part of the picture
+                    pose = AlongScreen(pose,
+                                       size.width * Common::LayerDepth::Offset(
+                                                        s == VideoCore::XrScreen::TopRight,
+                                                        chain.layer_shift),
+                                       curve);
+                    size.width *= 1.0f - Common::LayerDepth::Cut(chain.layer_shift);
+                }
                 if (core_caps.kind != Common::AltCore::CoreKind::N3DS) {
                     ask_eye_pixels();
                     const ViewPose vp = LatestViewPose();
@@ -1501,13 +1525,6 @@ void Runtime::FrameLoop() {
                                std::tan(fov.angleRight) - std::tan(fov.angleLeft),
                                eye_px_h > 0 ? static_cast<float>(eye_px_w) : 0.0f));
                 }
-                // AzaharFrame doubling: a packed top screen is one swapchain, the left eye in
-                // the upper half and the right eye in the lower one (kXrPackedGap between).
-                const bool top = s != VideoCore::XrScreen::Bottom;
-                // AzaharFrame flash3: LayerChain: while a swapchain made anew has no picture, the
-                // old one with its last picture (no blink of the compositor's background).
-                const ScreenChain& chain = LayerChain(static_cast<std::size_t>(
-                    packed_now && top ? VideoCore::XrScreen::TopLeft : s));
                 // AzaharFrame integ9: the toast's inputs take the screen whether or not its layer
                 // is left out this refresh (SINGLE_FLASH), so the toast's depth holds still.
                 const ToastDepth::ScreenUse use =
@@ -1714,11 +1731,14 @@ void Runtime::FrameLoop() {
             // (immersive is paused then); a hidden screen is not added. (AzaharFrame flash: `draw`
             // is taken above, for Motion Clarity.)
             top_immersive = !draw.swapped && !shown.top_pointable; // AzaharFrame ctrlfront
+            const float top_cut = Common::LayerDepth::Cut(
+                LayerChain(static_cast<std::size_t>(VideoCore::XrScreen::TopLeft)).layer_shift);
             screens_swapped = draw.swapped;
             label_top_ok = !draw.swapped && shown.show_top && shown.top_pointable &&
                            shown.top_space == local_space;
             label_top_pose = shown.top_pose[0];
             label_top_size = shown.top_size[0];
+            label_top_size.width *= 1.0f - top_cut;
             // AzaharFrame shaderbadge: the screen in the main slot (the bottom one while it is in
             // focus), else the immersive top screen.
             // AzaharFrame fixes7: and whether that screen is on view with a picture (the badge
@@ -1740,7 +1760,7 @@ void Runtime::FrameLoop() {
                 badge_anchor.pictures = has_picture(VideoCore::XrScreen::TopLeft);
                 badge_anchor.screen = true;
                 badge_anchor.screen_pose = shown.top_pose[0];
-                badge_anchor.screen_size = shown.top_size[0];
+                badge_anchor.screen_size = label_top_size;
                 badge_anchor.curve = draw.top_curve;
             } else if (shown.show_top) {
                 badge_anchor.pictures = has_picture(VideoCore::XrScreen::TopLeft);
@@ -1759,58 +1779,24 @@ void Runtime::FrameLoop() {
                     ? Input::ScreenRig::DepthScale(place.second_free ? place.second_scale
                                                                : draw.top_size.height)
                     : Input::ScreenRig::DepthScale(place.top_scale);
-            // Layer Depth (the consoles without a stereo screen)
-            float recentre = 0.0f;
-            if (!core_caps.has_stereo_3d) {
-                namespace LayerDepth = Common::LayerDepth;
+            if (!core_caps.has_stereo_3d) { // Layer Depth
                 const float width = draw.swapped ? draw.top_size.width : shown.top_size[0].width;
-                auto& depth = LayerDepth::Get();
-                depth.max_shift.store(LayerDepth::MaxShift(Immersive::IpdM(), width),
-                                      std::memory_order_relaxed);
-                if (top_is_stereo) {
-                    recentre = LayerDepth::Recentre(
-                        depth.farthest_shift.load(std::memory_order_relaxed), width);
-                }
-            }
-            const auto recentred = [recentre](XrPosef pose) {
-                if (recentre != 0.0f) {
-                    const Input::Vec3f to = Input::Transform(
-                        Input::Posef{{pose.orientation.x, pose.orientation.y, pose.orientation.z,
-                                      pose.orientation.w},
-                                     {pose.position.x, pose.position.y, pose.position.z}},
-                        Input::Vec3f{recentre, 0.0f, 0.0f});
-                    pose.position = {to.x, to.y, to.z};
-                }
-                return pose;
-            };
-            // Screen Gap: joined to it, the other screen moves with the recentred one.
-            const XrPosef& deep = draw.swapped ? draw.top_pose : shown.top_pose[0];
-            const XrPosef deep_at = recentred(deep);
-            const Input::Vec3f joined{(deep_at.position.x - deep.position.x) * place.join_share,
-                                      (deep_at.position.y - deep.position.y) * place.join_share,
-                                      (deep_at.position.z - deep.position.z) * place.join_share};
-            const auto joined_to = [&joined](XrPosef pose) {
-                pose.position.x += joined.x;
-                pose.position.y += joined.y;
-                pose.position.z += joined.z;
-                return pose;
-            };
-            if (ui) {
-                ui->NoteJoinedShift(joined);
+                Common::LayerDepth::Get().max_shift.store(
+                    Common::LayerDepth::MaxShift(Immersive::IpdM(), width),
+                    std::memory_order_relaxed);
             }
             // Quad layers are drawn in the order they are submitted, with no depth test: the
             // farther screen goes first, so the nearer one is never drawn through.
             if (draw.swapped) {
                 // The bottom screen in the main slot, the top one in the nearer secondary slot.
-                add_screen(VideoCore::XrScreen::Bottom, local_space, joined_to(draw.bottom_pose),
-                           draw.bottom_size, XR_EYE_VISIBILITY_BOTH, draw.bottom_curve);
+                add_screen(VideoCore::XrScreen::Bottom, local_space, draw.bottom_pose, draw.bottom_size,
+                           XR_EYE_VISIBILITY_BOTH, draw.bottom_curve);
                 if (draw.top_visible) {
                     if (top_is_stereo) {
-                        const XrPosef pose = recentred(draw.top_pose);
-                        add_screen(VideoCore::XrScreen::TopLeft, local_space, pose, draw.top_size,
-                                   XR_EYE_VISIBILITY_LEFT, draw.top_curve);
-                        add_screen(VideoCore::XrScreen::TopRight, local_space, pose, draw.top_size,
-                                   XR_EYE_VISIBILITY_RIGHT, draw.top_curve);
+                        add_screen(VideoCore::XrScreen::TopLeft, local_space, draw.top_pose,
+                                   draw.top_size, XR_EYE_VISIBILITY_LEFT, draw.top_curve);
+                        add_screen(VideoCore::XrScreen::TopRight, local_space, draw.top_pose,
+                                   draw.top_size, XR_EYE_VISIBILITY_RIGHT, draw.top_curve);
                     } else {
                         add_screen(VideoCore::XrScreen::TopLeft, local_space, draw.top_pose,
                                    draw.top_size, XR_EYE_VISIBILITY_BOTH, draw.top_curve);
@@ -1821,9 +1807,8 @@ void Runtime::FrameLoop() {
                 const auto add_bottom = [&] {
                     if (shown.show_bottom && draw.bottom_visible) {
                         preview_take = shown.bottom_preview; // AzaharFrame kiuaim
-                        add_screen(VideoCore::XrScreen::Bottom, local_space,
-                                   joined_to(shown.bottom_pose), shown.bottom_size,
-                                   XR_EYE_VISIBILITY_BOTH,
+                        add_screen(VideoCore::XrScreen::Bottom, local_space, shown.bottom_pose,
+                                   shown.bottom_size, XR_EYE_VISIBILITY_BOTH,
                                    shown.bottom_preview ? 0.0f : draw.bottom_curve);
                         preview_take = false;
                     }
@@ -1836,12 +1821,11 @@ void Runtime::FrameLoop() {
                     // AzaharFrame heldquad: each eye's pose and size (a held picture is resized
                     // about each eye); the toast takes eye 0's first.
                     if (top_is_stereo) {
-                        add_screen(VideoCore::XrScreen::TopLeft, shown.top_space,
-                                   recentred(shown.top_pose[0]), shown.top_size[0],
-                                   XR_EYE_VISIBILITY_LEFT, draw.top_curve);
+                        add_screen(VideoCore::XrScreen::TopLeft, shown.top_space, shown.top_pose[0],
+                                   shown.top_size[0], XR_EYE_VISIBILITY_LEFT, draw.top_curve);
                         add_screen(VideoCore::XrScreen::TopRight, shown.top_space,
-                                   recentred(shown.top_pose[1]), shown.top_size[1],
-                                   XR_EYE_VISIBILITY_RIGHT, draw.top_curve);
+                                   shown.top_pose[1], shown.top_size[1], XR_EYE_VISIBILITY_RIGHT,
+                                   draw.top_curve);
                     } else {
                         add_screen(VideoCore::XrScreen::TopLeft, shown.top_space, shown.top_pose[0],
                                    shown.top_size[0], XR_EYE_VISIBILITY_BOTH, draw.top_curve);

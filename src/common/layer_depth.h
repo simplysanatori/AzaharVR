@@ -45,10 +45,30 @@ constexpr int32_t Directed(uint32_t shift, bool inverted) {
     return inverted ? -pixels : pixels;
 }
 
-/// How far both eyes' pictures move, the same way, so that the farthest layer's two are half the
-/// shift to each side of where a game without depth has it. Metres, to the right.
-constexpr float Recentre(float farthest_shift, float width_m) {
-    return -0.5f * farthest_shift * width_m;
+/// How much of each eye's picture is left out. A layer the right eye has moved brings what is
+/// beyond the game's picture in at one edge, and what the other eye has there is in neither: each
+/// eye loses as much as the farthest layer moves, which leaves a window that stands where the
+/// nearest layer does. So nothing is cut off by an edge behind it, and no edge has anything the
+/// game does not show.
+///
+/// `shift`: FrameOutput::layer_shift. Every layer's is between 0 and it.
+constexpr float Cut(float shift) {
+    return shift < 0.0f ? -shift : shift;
+}
+
+/// The eye's right edge is cut, else its left one.
+constexpr bool CutsRightEdge(bool right_eye, float shift) {
+    return right_eye && shift < 0.0f;
+}
+
+/// Where the middle of what is left goes, a share of the picture's width to the right of the
+/// screen's middle, so that the window is in the middle of the screen and the layers are as far
+/// apart as the pictures have them.
+constexpr float Offset(bool right_eye, float shift) {
+    if (shift >= 0.0f) {
+        return 0.0f;
+    }
+    return right_eye ? 0.5f * shift : -0.5f * shift;
 }
 
 /// Between the XR thread and the emulation thread.
@@ -57,9 +77,6 @@ struct Shared {
     std::atomic<float> max_shift{kOnScreen};
     /// The frontend: Invert Depth. The cores read it every frame.
     std::atomic<bool> inverted{false};
-    /// Emulation thread: the farthest layer's shift, a share of the width, below 0 while inverted;
-    /// 0: no right picture.
-    std::atomic<float> farthest_shift{0.0f};
 };
 
 inline Shared& Get() {

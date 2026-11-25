@@ -2,8 +2,10 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
+#include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -862,6 +864,16 @@ struct Scene {
     uint32_t near_step = 0;
     /// The 3D's background every other frame only
     bool on_and_off = false;
+    /// Engine A: this background (4: the sprites) and nothing else, without windows or mosaic
+    int single = -1;
+    /// The 3D is something at w 8 across the picture and past its edges
+    bool wide = false;
+    /// The 3D is the picture behind it, in banks C and D
+    bool clear_image = false;
+    uint32_t scroll_3d = 0; ///< BG0HOFS of the 3D
+    bool blank = false;     ///< both engines' layers are off (white)
+    /// Nothing behind engine A's layers, where its backdrop is and what is behind its 3D
+    bool dark = false;
 };
 
 constexpr std::array<uint32_t, 4> kPriorities{2, 1, 3, 2}; // of BG0 to BG3
@@ -906,7 +918,15 @@ void AddEngine(WriteListGame& game, const Scene& scene, bool b) {
     }
     const uint32_t bg0 = scene.scene_3d && !b ? 1u << 3 : 0;
     // Mode 4, the layers, sprites in their window and both windows
-    game.Write32(io, scene.hud && !b ? 0x10108 : 0x1BF14 | bg0);
+    if (scene.dark && !b) {
+        game.Write16(palette, 0);
+    }
+    uint32_t control = scene.hud && !b ? 0x10108 : 0x1BF14 | bg0;
+    if (scene.single >= 0 && !b) {
+        control = 0x10014 | 0x100u << scene.single | bg0;
+        game.Write16(io + 0x4C, 0);
+    }
+    game.Write32(io, control | (scene.blank ? 0x80 : 0));
 }
 
 void MoveEngine(WriteListGame& game, const Scene& scene, bool b) {
@@ -917,7 +937,8 @@ void MoveEngine(WriteListGame& game, const Scene& scene, bool b) {
     const auto shift = [&scene](uint32_t priority) {
         return static_cast<uint32_t>(scene.moved[priority]);
     };
-    game.Write16(io + 0x10, 0u - (scene.scene_3d && !b ? 0 : shift(kPriorities[0])), b ? 1 : 0);
+    game.Write16(io + 0x10, scene.scene_3d && !b ? scene.scroll_3d : 0u - shift(kPriorities[0]),
+                 b ? 1 : 0);
     game.Write16(io + 0x14, 0u - shift(kPriorities[1]), 2);
     for (uint32_t i = 0; i < 2; ++i) {
         const uint32_t s = shift(kPriorities[2 + i]);
@@ -926,12 +947,13 @@ void MoveEngine(WriteListGame& game, const Scene& scene, bool b) {
         game.Write32(io + 0x2C + i * 0x10, 0x4321 - s * (rot_a / 2), 0x20);
     }
     for (uint32_t i = 0; i < 12; ++i) {
-        const uint32_t priority = i & 3;
+        const uint32_t priority = scene.single == 4 ? 3 : i & 3;
         const bool window = i == 11;
         const bool turned = i == 5 || i == 6;
         const uint32_t x = i * 23 + (window ? 0 : shift(priority));
         game.Write16(oam + i * 8, (i * 15) | (window ? 0x0800 : 0) | (turned ? 0x0300 : 0));
-        game.Write16(oam + i * 8 + 2, 0x8000 | x, turned ? 0 : 1);
+        game.Write16(oam + i * 8 + 2, 0x8000 | ((x - (scene.single == 4 ? 50u : 0u)) & 0x1FF),
+                     turned ? 0 : 1);
         game.Write16(oam + i * 8 + 4, (i * 4) | priority << 10 | (i & 15) << 12);
     }
     const std::array<uint32_t, 4> sprite_turn{0xE0, 0x40, 0xFFC0, 0xE0};
@@ -998,6 +1020,15 @@ void Add3D(WriteListGame& game, const Scene& scene) {
         game.Write32(0x04000540, 0);
         return;
     }
+    if (scene.wide || scene.clear_image) {
+        if (scene.wide) {
+            Projection(game, 2 * kFx, 0, 8 * kFx, 0, 0);
+            Quad(game, 2, -7 * kOne, 6 * kOne, 7 * kOne, -3 * kOne, 0, 0, 31);
+            Quad(game, 3, -2 * kOne, 0, 2 * kOne, -6 * kOne, 1, 1, 16);
+        }
+        game.Write32(0x04000540, 0);
+        return;
+    }
     if (scene.floor) {
         Projection(game, kFx, 0u - kFx, 0, 0, 0);
         Quad(game, 1, -4 * kOne, -kOne / 2, 4 * kOne, -kOne / 2, -7 * kOne, -2 * kOne, 31);
@@ -1035,7 +1066,8 @@ std::vector<uint8_t> MakeRom(const Scene& scene) {
     }
     if (scene.scene_3d) {
         game.Write16(0x04000060, 0xB8);
-        game.Write32(0x04000350, 0x3F089234); // behind it all, half transparent and in the fog
+        // Behind it all, half transparent and in the fog
+        game.Write32(0x04000350, scene.dark ? 0x3F000000 : 0x3F089234);
         game.Write16(0x04000354, 0x7FFF);
         game.Write32(0x04000358, 0x00101234);
         game.Write16(0x0400035C, 0x3000); // before everything drawn (about 0x3FFF)
@@ -1044,6 +1076,15 @@ std::vector<uint8_t> MakeRom(const Scene& scene) {
             game.Write32(0x04000360 + i * 4, 0x01010101 * (20 + i * 12));
         }
         game.Write32(0x04000580, 0xBFFF0000);
+    }
+    if (scene.clear_image) {
+        game.Write8(0x04000242, 0x80);
+        game.Write8(0x04000243, 0x80);
+        game.Noise(0x06840000, 0x20000 / 4, 0xFFFFFFFF);
+        game.Write8(0x04000242, 0x93); // C: the picture, D: how far away it is
+        game.Write8(0x04000243, 0x9B);
+        game.Write16(0x04000060, 0x4000);
+        game.Write16(0x04000356, 0x2010); // where it starts
     }
     if (scene.capture_once) {
         game.Write8(0x04000243, 0x80); // D: captures
@@ -1165,7 +1206,51 @@ struct InvertDepth {
     }
 };
 
+constexpr uint32_t kBlack = 0xFF000000;
 constexpr int kStart = 20; // frames until the pictures are set up
+
+constexpr int kNone = -1;
+
+/// The right eye's columns that the headset shows, of a picture whose farthest layer is `farthest`
+/// to the right.
+bool IsShown(int x, int farthest) {
+    return farthest < 0 ? x < kWidth + farthest : !kCutsEdge || x >= farthest;
+}
+
+/// The first pixel of the right eye's picture, where it is shown, that is not the left one's
+/// `shift` to the left of it. At the left edge the layers end, over nothing: `dark` is the left
+/// one with nothing behind its layers. `smooth`: but for this column, an edge that has some of what
+/// is behind it. `width`: of the columns there are.
+int FirstMoved(const Pixels& left, const Pixels& dark, const Pixels& right, int shift, int farthest,
+               int smooth = -1, int width = kWidth) {
+    if (left.size() != right.size() || left.size() != dark.size() ||
+        std::abs(shift) > std::abs(farthest)) {
+        return 0;
+    }
+    for (int at = 0; at < static_cast<int>(left.size()); ++at) {
+        const int x = at % kWidth;
+        if (!IsShown(x, farthest) || x == smooth || x >= width) {
+            continue;
+        }
+        const uint32_t expected =
+            x < shift ? kBlack : (x < farthest ? dark : left)[static_cast<std::size_t>(at - shift)];
+        if (right[at] != expected) {
+            return at;
+        }
+    }
+    return kNone;
+}
+
+/// The same but for the columns at the edges that only what is moved has.
+bool SameInside(const Pixels& a, const Pixels& b, int farthest) {
+    for (int at = 0; at < static_cast<int>(a.size()); ++at) {
+        const int x = at % kWidth;
+        if (x >= farthest && x < kWidth + std::min(farthest, 0) && a[at] != b[at]) {
+            return false;
+        }
+    }
+    return a.size() == b.size();
+}
 
 /// The 3D of the tests' scenes: all the backgrounds are on
 constexpr SceneRoom RoomAt(uint32_t level, bool inverted = false) {
@@ -1226,10 +1311,9 @@ TEST_CASE("NDS Layer Depth: each layer moves by its priority", "[frame_cores]") 
         game.Run();
         expected.Run();
         if (i >= kStart) {
-            REQUIRE((game.Right() == expected.Left()));
+            REQUIRE(SameInside(game.Right(), expected.Left(), Shifts(level, inverted)[3]));
             REQUIRE((game.Right() != game.Left()));
-            REQUIRE(game.out.layer_shift ==
-                    static_cast<float>(Shifts(level, inverted)[3]) / kWidth);
+            REQUIRE(game.out.layer_shift == EdgeShift(Shifts(level, inverted)[3]));
         }
     }
 }
@@ -1257,7 +1341,7 @@ TEST_CASE("NDS Layer Depth: 3D moves by its distance, what is orthographic is in
         expected.Run();
         if (i >= kStart) {
             REQUIRE(game.core.DepthLines().with_3d == 192);
-            REQUIRE((game.Right() == expected.Left()));
+            REQUIRE(SameInside(game.Right(), expected.Left(), Shifts(level, inverted)[3]));
         }
     }
 }
@@ -1280,7 +1364,7 @@ TEST_CASE("NDS Layer Depth: the convergence is the scene's own", "[frame_cores]"
         if (i >= kStart) {
             REQUIRE(game.core.DepthLines().with_3d == 192);
             REQUIRE(game.core.DepthLines().convergence == 8 * kOneW);
-            REQUIRE((game.Right() == expected.Left()));
+            REQUIRE(SameInside(game.Right(), expected.Left(), Shifts(level)[3]));
         }
     }
     // With the floor (w 2 to 7) it is nearer, and the same every frame
@@ -1446,8 +1530,8 @@ TEST_CASE("NDS Layer Depth: a right picture for the bottom screen when asked", "
         if (i >= 3) {
             REQUIRE(game.HasRight());
             REQUIRE(game.HasRightBottom());
-            REQUIRE((game.Right() == expected.Left()));
-            REQUIRE((game.RightBottom() == expected.Bottom()));
+            REQUIRE(SameInside(game.Right(), expected.Left(), Shifts(level)[3]));
+            REQUIRE(SameInside(game.RightBottom(), expected.Bottom(), Shifts(level)[3]));
             REQUIRE((game.RightBottom() != game.Bottom()));
         }
         REQUIRE((game.Left() == without.Left()));
@@ -1639,6 +1723,182 @@ TEST_CASE("NDS Layer Depth: turned on in the game", "[frame_cores]") {
     }
 }
 
+TEST_CASE("NDS Layer Depth: a picture is cut or its layers end, never both", "[frame_cores]") {
+    const LayerShifts layers{0, 3, 6, 9};
+    const LayerShifts inverted{0, -3, -6, -9};
+    CHECK(EdgeShift(-9) == -9.0f / kWidth);
+    CHECK(EdgeLayers(inverted) == LayerShifts{});
+    CHECK(EdgeShift(9) == (kCutsEdge ? 9.0f / kWidth : 0.0f));
+    CHECK(EdgeLayers(layers) == (kCutsEdge ? LayerShifts{} : layers));
+    CHECK(EdgeShift(0) == 0.0f);
+}
+
+TEST_CASE("NDS Layer Depth: a pixel ends with what it is from", "[frame_cores]") {
+    const std::array<uint16_t, 4> bgcnt{2, 0x41, 3, 0};
+    const LayerShifts shifts{0, 3, 6, 9};
+    CHECK(PixelShift(0x01, bgcnt.data(), shifts) == 6);
+    CHECK(PixelShift(0x02, bgcnt.data(), shifts) == 3);
+    CHECK(PixelShift(0x04, bgcnt.data(), shifts) == 9);
+    CHECK(PixelShift(0x08, bgcnt.data(), shifts) == 0);
+    CHECK(PixelShift(0x20, bgcnt.data(), shifts) == 9); // the backdrop
+    CHECK(PixelShift(0x10, bgcnt.data(), shifts) == 0); // sprites, also translucent ones
+    CHECK(PixelShift(0x90, bgcnt.data(), shifts) == 0);
+    CHECK(PixelShift(0x41, bgcnt.data(), shifts) == 0); // 3D is BG0 too
+}
+
+TEST_CASE("NDS Layer Depth: a picture without layers has no edge", "[frame_cores]") {
+    const uint32_t level = GENERATE(1u, 3u);
+    Game game({.blank = true}, level, true);
+    game.core.SetDepthOnSecondary(true);
+    game.Run(kStart);
+    for (int i = 0; i < 10; ++i) {
+        game.Run();
+        REQUIRE(game.HasRight());
+        REQUIRE((game.Right() == game.Left()));
+        REQUIRE((game.RightBottom() == game.Bottom()));
+    }
+}
+
+TEST_CASE("NDS Layer Depth: a layer ends where the game's picture does", "[frame_cores]") {
+    const uint32_t level = GENERATE(1u, 3u);
+    const bool inverted = GENERATE(false, true);
+    const bool a_on_top = GENERATE(true, false);
+    const InvertDepth invert{inverted};
+    const int single = GENERATE(0, 1, 2, 3, 4);
+    Game game({.a_on_top = a_on_top, .single = single}, level, true);
+    Game dark({.a_on_top = a_on_top, .single = single, .dark = true}, 0, true);
+    game.core.SetDepthOnSecondary(true);
+    game.Run(kStart);
+    dark.Run(kStart);
+    const LayerShifts shifts = Shifts(level, inverted);
+    const int shift = shifts[single == 4 ? 3 : kPriorities[single]];
+    for (int i = 0; i < 40; ++i) {
+        game.Run();
+        dark.Run();
+        INFO("single " << single << " frame " << i);
+        REQUIRE(game.out.layer_shift == EdgeShift(shifts[3]));
+        REQUIRE(FirstMoved(
+                    a_on_top ? game.Left() : game.Bottom(), a_on_top ? dark.Left() : dark.Bottom(),
+                    a_on_top ? game.Right() : game.RightBottom(), shift, shifts[3]) == kNone);
+    }
+}
+
+TEST_CASE("NDS Layer Depth: 3D past the picture's edges is not squeezed at them", "[frame_cores]") {
+    const uint32_t level = GENERATE(1u, 2u, 3u);
+    const bool inverted = GENERATE(false, true);
+    const bool clear_image = GENERATE(false, true);
+    const bool threaded = GENERATE(true, false);
+    const uint32_t scroll = GENERATE(0u, 4u, 0x1FBu);
+    const InvertDepth invert{inverted};
+    Scene scene{.scene_3d = true,
+                .single = 0,
+                .wide = !clear_image,
+                .clear_image = clear_image,
+                .scroll_3d = scroll};
+    Game game(scene, level, threaded);
+    scene.dark = true;
+    Game dark(scene, 0, threaded);
+    const SceneRoom room = MakeRoom(Shifts(level, inverted), 0x0100, {2, 0, 0, 0});
+    const int shift =
+        clear_image ? room.farthest : VertexShift(MakeScene(room, {4 * kOneW, 0}), 8 * kOneW);
+    REQUIRE((shift != 0 || inverted));
+    game.Run(kStart);
+    dark.Run(kStart);
+    for (int i = 0; i < 20; ++i) {
+        game.Run();
+        dark.Run();
+        INFO("frame " << i);
+        REQUIRE(game.core.DepthLines().with_3d == 192);
+        Pixels right = game.Right();
+        if (scroll == 4 && !inverted && !clear_image) { // beyond the game's edge is the scene's
+            for (std::size_t at = 0; at < right.size(); at += kWidth) {
+                std::fill_n(right.begin() + static_cast<std::ptrdiff_t>(at), shift, kBlack);
+            }
+        }
+        const int edge = scroll == 0x1FB ? 5 : 0; // the game's own
+        const int at =
+            FirstMoved(game.Left(), dark.Left(), right, shift, Shifts(level, inverted)[3],
+                       clear_image ? -1 : shift + edge,
+                       scroll == 4 ? kWidth - 4 + std::min(Shifts(level, inverted)[3], 0) : kWidth);
+        INFO("column " << at % kWidth << " line " << at / kWidth << " shift " << shift);
+        REQUIRE(at == kNone);
+    }
+}
+
+TEST_CASE("NDS Layer Depth: a picture is cut for what it was drawn with", "[frame_cores]") {
+    const bool both_screens = GENERATE(false, true);
+    const InvertDepth as_it_is{false};
+    const Scene scene{.both_screens = both_screens, .single = 2}; // all of it at priority 3
+    Game game(scene, 3, true);
+    Scene nothing_behind = scene;
+    nothing_behind.dark = true;
+    Game dark(nothing_behind, 0, true);
+    game.Run(kStart);
+    dark.Run(kStart);
+    auto& inverted = Common::LayerDepth::Get().inverted;
+    Pixels left_before = game.Left();
+    Pixels dark_before = dark.Left();
+    int last = 9;
+    const auto run = [&](int wanted) {
+        for (int i = 0; i < 10; ++i) {
+            game.Run();
+            dark.Run();
+            INFO("frame " << i << " wanted " << wanted);
+            REQUIRE(game.HasRight());
+            const Pixels left = game.Left();
+            const Pixels dark_left = dark.Left();
+            const auto is = [&](int shift) {
+                // In a game with 3D on both screens every other picture is of the frame before
+                return FirstMoved(left, dark_left, game.Right(), shift, shift) == kNone ||
+                       (both_screens &&
+                        FirstMoved(left_before, dark_before, game.Right(), shift, shift) == kNone);
+            };
+            const int shift =
+                game.out.layer_shift == EdgeShift(wanted) && is(wanted) ? wanted : last;
+            REQUIRE(is(shift));
+            REQUIRE(game.out.layer_shift == EdgeShift(shift));
+            REQUIRE((shift == wanted || i < 2)); // it comes soon, and stays
+            last = shift;
+            left_before = left;
+            dark_before = dark_left;
+        }
+    };
+    run(9);
+    game.core.SetLayerDepth(1);
+    run(3);
+    inverted = true;
+    run(-3);
+    game.core.SetLayerDepth(3);
+    run(-9);
+    game.core.SetMaxLayerShift(4.0f / kWidth);
+    run(Common::LayerDepth::Directed(Common::LayerDepth::LayerShift(3, 3, 3, kWidth, 4.0f / kWidth),
+                                     true));
+    inverted = false;
+    game.core.SetMaxLayerShift(Common::LayerDepth::kNoLimit);
+    run(9);
+}
+
+TEST_CASE("NDS Layer Depth: the pictures are cut the same in every frame", "[frame_cores]") {
+    const bool inverted = GENERATE(false, true);
+    const InvertDepth invert{inverted};
+    Game game({.scene_3d = true}, 3, true);
+    std::vector<uint8_t> state;
+    const auto run = [&](int frames) {
+        for (int i = 0; i < frames; ++i) {
+            game.Run();
+            REQUIRE(game.out.primary_right.HasPicture());
+            REQUIRE(game.out.layer_shift == EdgeShift(inverted ? -9 : 9));
+        }
+    };
+    run(30);
+    REQUIRE(game.core.SaveStateToMemory(state));
+    run(5);
+    game.core.Reset();
+    run(30);
+    REQUIRE(game.core.LoadStateFromMemory(state.data(), state.size()));
+    run(10);
+}
+
 TEST_CASE("NDS Layer Depth: inverted while the game runs", "[frame_cores]") {
     const bool threaded = GENERATE(true, false);
     Game game({.scene_3d = true}, 2, threaded);
@@ -1664,5 +1924,5 @@ TEST_CASE("NDS Layer Depth: inverted while the game runs", "[frame_cores]") {
         }
     }
     game.Run(3);
-    CHECK(game.out.layer_shift > 0.0f);
+    CHECK(game.out.layer_shift == EdgeShift(Shifts(2)[3]));
 }

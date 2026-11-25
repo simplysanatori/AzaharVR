@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -11,6 +12,7 @@
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include "frame_cores/driver_runner.h"
 #include "frame_cores/frame_driver.h"
@@ -572,6 +574,31 @@ TEST_CASE("The right eye's picture has the left one's place and size", "[frame_c
     CHECK_FALSE(AltShowsStereo(left, {nullptr, 240, 160}));
     CHECK_FALSE(AltShowsStereo(left, {&pixel, 240, 159}));
     CHECK_FALSE(AltShowsStereo(left, {&pixel, 160, 160}));
+}
+
+TEST_CASE("Layer Depth: the eyes' pictures without what is beyond the game's", "[frame_cores]") {
+    using namespace Vulkan;
+    const std::vector<uint32_t> pixels(256 * 160 * 2);
+    const uint32_t width = GENERATE(240u, 160u);
+    const uint32_t stride = GENERATE(0u, 256u);
+    const AltScreenImage left{pixels.data(), width, 144, stride};
+    const AltScreenImage right{pixels.data() + 256 * 160, width, 144, stride};
+    for (int cut = -9; cut <= 9; ++cut) {
+        INFO("cut " << cut);
+        const auto eyes = AltCutEyes(left, right, static_cast<float>(cut) / width);
+        const uint32_t columns = static_cast<uint32_t>(std::abs(cut));
+        for (const AltScreenImage& eye : {eyes.left, eyes.right}) {
+            CHECK(eye.width == width - columns);
+            CHECK(eye.height == 144);
+            CHECK((eye.stride_pixels ? eye.stride_pixels : eye.width) == (stride ? stride : width));
+        }
+        CHECK(eyes.left.pixels == left.pixels + columns);
+        CHECK(eyes.right.pixels == right.pixels + (cut > 0 ? columns : 0));
+        CHECK(AltShowsStereo(eyes.left, eyes.right));
+    }
+    // One eye's picture only
+    CHECK(AltCutEyes(left, {}, 0.0f).left.width == width);
+    CHECK_FALSE(AltCutEyes(left, {}, 0.0f).right.HasPicture());
 }
 
 TEST_CASE("DriverRunner: the Secondary Screen's size and touch", "[frame_cores]") {

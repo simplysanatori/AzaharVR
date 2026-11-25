@@ -88,6 +88,75 @@ void MoveBackgrounds(melonDS::GPU2D& engine, const NdsDepth::LayerShifts& shifts
     }
 }
 
+/// The private members of melonDS's renderers that RightEye2D needs. (An explicit instantiation may
+/// name them.)
+template <auto Member, typename Tag>
+struct Opened {
+    friend constexpr auto Open(Tag) {
+        return Member;
+    }
+};
+struct LineTag {};
+struct SpritesTag {};
+struct OutputTag {};
+struct CompositeTag {};
+constexpr auto Open(LineTag);
+constexpr auto Open(SpritesTag);
+constexpr auto Open(OutputTag);
+constexpr auto Open(CompositeTag);
+template struct Opened<&melonDS::SoftRenderer2D::BGOBJLine, LineTag>;
+template struct Opened<&melonDS::SoftRenderer2D::OBJLine, SpritesTag>;
+template struct Opened<&melonDS::SoftRenderer::Output2D, OutputTag>;
+template struct Opened<&melonDS::SoftRenderer2D::ColorComposite, CompositeTag>;
+
+/// The right eye's 2D, without what the game has beyond its picture's left edge (nds_depth.h,
+/// kCutsEdge).
+class RightEye2D final : public melonDS::SoftRenderer2D {
+public:
+    RightEye2D(melonDS::GPU2D& engine, melonDS::SoftRenderer& parent_)
+        : melonDS::SoftRenderer2D(engine, parent_), parent{parent_} {}
+
+    void SetShifts(const NdsDepth::LayerShifts& layers) {
+        shifts = NdsDepth::EdgeLayers(layers);
+    }
+
+    void DrawSprites(u32 line) override {
+        SoftRenderer2D::DrawSprites(line);
+        u32* const sprites = this->*Open(SpritesTag{});
+        for (int x = 0; x < shifts[3]; ++x) {
+            if (NdsDepth::IsBeyond(x, shifts[(sprites[x] >> 16) & 3])) { // OBJ_BGPrioMask
+                sprites[x] = 0;
+            }
+        }
+    }
+
+    void DrawScanline(u32 line) override {
+        SoftRenderer2D::DrawScanline(line);
+        if (!GPU2D.Enabled || GPU2D.ForcedBlank) {
+            return; // no layers
+        }
+        const u32* const drawn = this->*Open(LineTag{});
+        u32* const out = (parent.*Open(OutputTag{}))[GPU2D.Num];
+        for (int x = 0; x < shifts[3]; ++x) {
+            const u32 top = drawn[x];
+            const u32 under = drawn[x + kWidth];
+            if (IsBeyond(top, x)) {
+                out[x] = 0xFF000000;
+            } else if (IsBeyond(under, x)) {
+                out[x] = (this->*Open(CompositeTag{}))(x, top, under & 0xFF000000);
+            }
+        }
+    }
+
+private:
+    bool IsBeyond(u32 pixel, int x) const {
+        return NdsDepth::IsBeyond(x, NdsDepth::PixelShift(pixel >> 24, GPU2D.BGCnt, shifts));
+    }
+
+    melonDS::SoftRenderer& parent;
+    NdsDepth::LayerShifts shifts{};
+};
+
 } // namespace
 
 class StereoSoft::RightEye final : public melonDS::SoftRenderer {
@@ -95,7 +164,14 @@ public:
     explicit RightEye(melonDS::NDS& nds) : melonDS::SoftRenderer(nds) {
         // Never SoftRenderer's own: its GetLine would wait for lines of the left eye's thread
         Rend3D = std::make_unique<NdsRight3D>(GPU.GPU3D, *this);
+        Rend2D_A = std::make_unique<RightEye2D>(GPU.GPU2D_A, *this);
+        Rend2D_B = std::make_unique<RightEye2D>(GPU.GPU2D_B, *this);
         Reset(); // its buffers start undefined
+    }
+
+    void SetShifts(const NdsDepth::LayerShifts& layers) {
+        static_cast<RightEye2D&>(*Rend2D_A).SetShifts(layers);
+        static_cast<RightEye2D&>(*Rend2D_B).SetShifts(layers);
     }
 
     // The base class expects its own 3D renderer in these
@@ -181,6 +257,10 @@ const u32* StereoSoft::Right(int screen) const {
     return right && of.ready ? of.picture.data() : nullptr;
 }
 
+int StereoSoft::RightShift(int screen) const {
+    return screens[screen].shift;
+}
+
 NdsDepth::Lines StereoSoft::LastLines() const {
     return right && (screens[0].ready || screens[1].ready) ? last_lines : NdsDepth::Lines{};
 }
@@ -253,6 +333,7 @@ void StereoSoft::EndFrame() {
         screen.ready = drawn;
         if (drawn) {
             screen.picture.assign(mine, mine + kPixels);
+            screen.shift = depth.layers[3];
         }
         if (drawn && engine_a) {
             screen.scene_left.assign(left, left + kPixels);
@@ -278,6 +359,7 @@ void StereoSoft::BeginFrame() {
     if (!right) {
         right = std::make_unique<RightEye>(GPU.NDS);
     }
+    right->SetShifts(depth.layers);
     watch.BeginFrame(GPU.ScreenSwap);
     a_on_top = watch.a_on_top;
     // An engine is drawn again if its screen has a right picture. Not engine B where the game has

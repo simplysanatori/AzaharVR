@@ -93,36 +93,60 @@ TEST_CASE("LayerDepth: inverted, the layers are in the opposite order, as far ap
             CHECK(shift(step, true) - shift(step - 1, true) == -apart);
         }
     }
-    // The farthest layer is straight ahead either way
-    CHECK(Recentre(-9.0f / 240.0f, 2.0f) == -Recentre(9.0f / 240.0f, 2.0f));
 }
 
-TEST_CASE("LayerDepth: the farthest layer is straight ahead", "[common][layer_depth]") {
-    CHECK(Recentre(0.0f, 2.4f) == 0.0f);
-    for (const float ipd : {0.063f, 0.068f, 0.070f}) {
-        for (const float width : {0.8f, 1.6f, 2.4f, 6.0f}) {
-            const float distance = 3.0f;
-            const uint32_t px = LayerShift(3, 3, 3, 240, MaxShift(ipd, width));
-            const float share = static_cast<float>(px) / 240.0f;
-            const float move = Recentre(share, width);
-            // A point of the farthest layer in the picture's middle, on the quad in metres
-            const float left = move;
-            const float right = move + share * width;
-            CHECK(left == Approx(-right).margin(1e-6));
-            CHECK(right - left == Approx(px / 240.0 * width)); // moving both changes no depth
-            // Where the eyes' rays through the two meet: ahead, at or beyond the screen
-            const float apart = right - left;
-            if (apart < ipd * 0.9999f) {
-                const float meets = distance * ipd / (ipd - apart);
-                CHECK(meets >= distance);
-                const float t = meets / distance;
-                const float x_left = -ipd / 2 + (left + ipd / 2) * t;
-                const float x_right = ipd / 2 + (right - ipd / 2) * t;
-                CHECK(x_left == Approx(0.0f).margin(1e-3));
-                CHECK(x_right == Approx(0.0f).margin(1e-3));
+TEST_CASE("LayerDepth: what is left of the pictures is a window where the nearest layer is",
+          "[common][layer_depth]") {
+    CHECK(Cut(0.0f) == 0.0f);
+    CHECK(Offset(false, 0.0f) == 0.0f);
+    CHECK(Offset(true, 0.0f) == 0.0f);
+    for (const bool gba : {true, false}) {
+        const int width = gba ? 240 : 160;
+        const uint32_t steps = gba ? 3 : 2;
+        for (const bool inverted : {false, true}) {
+            for (uint32_t level = 0; level <= kMaxLevel; ++level) {
+                INFO("width " << width << " inverted " << inverted << " level " << level);
+                const auto moved = [&](uint32_t step) {
+                    return Directed(
+                        LayerShift(level, step, steps, static_cast<uint32_t>(width), kNoLimit),
+                        inverted);
+                };
+                const int farthest = moved(steps);
+                const float shift = static_cast<float>(farthest) / static_cast<float>(width);
+                const int cut = static_cast<int>(std::lround(Cut(shift) * width));
+                REQUIRE(cut == std::abs(farthest));
+                struct Eye {
+                    int first, last; ///< the picture's columns that are shown
+                    float left;      ///< the screen's column the first one is at
+                };
+                const auto eye = [&](bool right) {
+                    const bool at_right = CutsRightEdge(right, shift);
+                    const int first = at_right ? 0 : cut;
+                    const float middle = width * (0.5f + Offset(right, shift));
+                    return Eye{first, at_right ? width - 1 - cut : width - 1,
+                               middle - static_cast<float>(width - cut) / 2};
+                };
+                const Eye left = eye(false);
+                const Eye right = eye(true);
+                REQUIRE(left.last - left.first == right.last - right.first);
+                const int nearest = std::min(0, farthest);
+                // Nothing beyond the game's picture is in either eye's
+                for (uint32_t step = 0; step <= steps; ++step) {
+                    REQUIRE(right.first - moved(step) >= 0);
+                    REQUIRE(right.last - moved(step) < width);
+                }
+                // The window's edges are as far apart as the nearest layer's two pictures, and in
+                // the middle of the screen
+                REQUIRE(right.left - left.left == Approx(nearest).margin(1e-3));
+                REQUIRE((right.left + left.left) / 2 + static_cast<float>(width - cut) / 2 ==
+                        Approx(width / 2.0f));
+                // Both eyes have the same part of it
+                REQUIRE(right.first - nearest == left.first);
+                REQUIRE(right.last - nearest == left.last);
+                // Its pictures are as far apart on the screen as in the pictures
+                REQUIRE((right.left - right.first) - (left.left - left.first) ==
+                        Approx(0.0f).margin(1e-3));
             }
-            // A layer on the screen stays on it
-            CHECK(std::abs(move) == Approx(apart / 2));
         }
     }
 }

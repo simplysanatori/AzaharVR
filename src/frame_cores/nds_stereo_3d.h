@@ -78,6 +78,8 @@ private:
 
     void Create(bool threaded);
     NdsDepth::SceneView Measure();
+    melonDS::u32 ClearPixel(int x, int line) const;
+    void EndAtEdge(melonDS::u32* row, int line) const;
     NdsDepth::PolygonPlace Place(const melonDS::Polygon& polygon) const;
     void FillScene(const NdsDepth::SceneShift& shift);
     bool CopyPolygon(const melonDS::Polygon& from, melonDS::Polygon& to,
@@ -93,6 +95,8 @@ private:
 
     bool running = false; ///< a frame was started and not yet waited for
     int taken = kLines;   ///< lines of the frame
+    int offset = 0;       ///< how far right of their places they are drawn (NdsDepth::SceneOffset)
+    int far_shift = 0;    ///< of what is behind the scene
 
     /// Strips share vertices: each is copied once by its own w and once by its polygon's place
     std::array<std::array<Slot, 2>, kVertices> slots{};

@@ -735,6 +735,19 @@ TEST_CASE("FrameXr screen rig: a curved screen keeps its size and shape", "[fram
         REQUIRE(middle.z == Approx(-2.0f));
         REQUIRE(middle.x == Approx(0.0f).margin(1e-5f));
     }
+    // A point along it is on the arc, facing the middle of the circle.
+    for (const float right : {-0.4f, 0.0f, 0.3f}) {
+        const Posef flat = Along(Ahead(2.0f), right, 0.0f);
+        REQUIRE(flat.position.x == Approx(right).margin(1e-6f));
+        REQUIRE(flat.position.z == Approx(-2.0f));
+        const float r = CurveRadius(width, 60);
+        const Posef on = Along(Ahead(2.0f), right, r);
+        const Vec3f middle = on.position + Rotate(on.orientation, Vec3f{0, 0, r});
+        REQUIRE(middle.x == Approx(0.0f).margin(1e-5f));
+        REQUIRE(middle.z == Approx(-2.0f + r));
+        REQUIRE(std::atan2(on.position.x, -2.0f + r - on.position.z) * r ==
+                Approx(right).margin(1e-5f));
+    }
     // At the step whose radius is the distance, the centre is the viewer: 1.667 m / 2 m = 47.7
     // degrees, between the 45 and 60 degree steps.
     const float r45 = CurveRadius(width, 45);
