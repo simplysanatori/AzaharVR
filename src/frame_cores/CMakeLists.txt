@@ -31,6 +31,8 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     nds_depth.h
     nds_gl_edge.h
     nds_gl_renderer.cpp
+    nds_gl_seal.cpp
+    nds_gl_seal.h
     nds_gl_stereo.cpp
     nds_gl_stereo.h
     nds_resolution.cpp
