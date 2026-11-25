@@ -19,6 +19,7 @@
 #include "frame_cores/cheat_store.h"
 #include "frame_cores/driver_runner.h"
 #include "frame_cores/rom_info.h"
+#include "frame_cores/shadow_eye.h"
 
 extern "C" {
 #include <mgba-util/audio-buffer.h>
@@ -125,12 +126,14 @@ struct GbCore::Impl {
     GbRumbleWrapper rumble{};
     Common::AltCore::InputState input{};
     DriverRunner driver;
+    ShadowEye shadow;
 
     void StartDriver(DriverKind kind, const DriverRunner::Known& known) {
         DriverServices services;
         services.core = core;
         services.step = [this](uint32_t keys) {
             // Bits 0..7 match GB_KEY_A..GB_KEY_DOWN 1:1; the GBA's R and L are none of them.
+            shadow.Run(keys & 0xFFu);
             core->setKeys(core, keys & 0xFFu);
             core->runFrame(core);
         };
@@ -148,6 +151,11 @@ struct GbCore::Impl {
         RomInfo info;
         info.kind = Common::AltCore::CoreKind::GB;
         driver.Start(kind, known, std::move(services), info, opts, save_path, caps);
+
+        shadow.SetDepth(opts.layer_depth);
+        if (opts.layer_depth > 0 && driver.PrimaryIsGame()) {
+            shadow.Start(core, width, height);
+        }
     }
 
     std::vector<CheatEntry> custom_cheats; ///< the cheats the player added (kept beside the save)
@@ -346,6 +354,7 @@ void GbCore::Unload() {
     if (!impl) {
         return;
     }
+    impl->shadow.Stop();
     impl->driver.Stop();
     if (impl->core) {
         impl->core->unloadROM(impl->core);
@@ -374,6 +383,7 @@ void GbCore::SetInput(const Common::AltCore::InputState& input) {
 
 void GbCore::RunFrame(FrameOutput& out) {
     impl->driver.RunFrame(impl->input, out, impl->caps);
+    impl->driver.SetRightEye(impl->shadow.Picture(), out);
 }
 
 uint32_t GbCore::AudioSampleRate() const {
