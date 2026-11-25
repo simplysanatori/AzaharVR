@@ -140,6 +140,20 @@ constexpr std::array<AltEyeSize, 2> AltEyeSwapchains(AltEyeSize size, AltEyeSize
     return {AltEyeSize{size.width, 2 * size.height + VideoCore::kXrPackedGap}, AltEyeSize{}};
 }
 
+/// The two halves of a target with both eyes' pictures in it, left then right, drawn in one render
+/// pass. (XrPresentTarget's own are the Primary Screen's.)
+template <typename Target>
+constexpr std::array<Target, 2> AltEyeHalves(const Target& whole) {
+    Target left = whole;
+    left.height = (whole.height - VideoCore::kXrPackedGap) / 2;
+    left.end_pass = false;
+    Target right = left;
+    right.offset_y = whole.offset_y + left.height + VideoCore::kXrPackedGap;
+    right.begin_pass = false;
+    right.end_pass = true;
+    return {left, right};
+}
+
 /// A screen's quad. Upright (not `landscape`): turned 90 degrees anticlockwise, as the 3DS's
 /// screens. An overlay is drawn by the same quad, so it covers the screen exactly.
 constexpr std::array<AltScreenVertex, 4> AltScreenQuad(float x, float y, float w, float h,

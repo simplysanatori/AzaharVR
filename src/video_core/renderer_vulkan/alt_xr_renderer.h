@@ -108,12 +108,17 @@ public:
     /// screen is active. `overlay` (premultiplied alpha, RGBA) covers the whole Primary Screen as
     /// it is shown, whatever its size; without a picture nothing is drawn for it. `primary_right`
     /// (the size of `primary`, the overlay over it too) is the headset's right eye's; without a
-    /// picture both eyes see `primary`. `layer_shift` is what the headset's are cut for (AltCutEyes).
-    /// The window shows neither. With `skippable` (fast forward) the window may miss frames its
+    /// picture both eyes see `primary`. `layer_shift` is what the headset's are cut for
+    /// (AltCutEyes). `secondary_right` and `secondary_shift` are the same for `secondary`. The
+    /// window shows none of them. With `skippable` (fast forward) the window may miss frames its
     /// display could not show anyway.
     bool Present(const AltScreenImage& primary, const AltScreenImage& secondary,
                  const AltScreenImage& overlay = {}, const AltScreenImage& primary_right = {},
-                 float layer_shift = 0.0f, bool skippable = false);
+                 float layer_shift = 0.0f, const AltScreenImage& secondary_right = {},
+                 float secondary_shift = 0.0f, bool skippable = false);
+
+    /// The headset can show `secondary_right`. False once its images could not be made, until Init.
+    bool ShowsSecondaryStereo() const;
 
     bool IsReady() const;
 

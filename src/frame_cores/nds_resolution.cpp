@@ -68,13 +68,12 @@ void NdsResolution::PutSoftware(melonDS::NDS& nds, bool threaded) {
     nds.GetRenderer().SetRenderSettings(settings);
 }
 
-void NdsResolution::Apply(melonDS::NDS& nds, bool threaded, const NdsDepth::Depth& depth,
-                          bool depth_on_secondary) {
+void NdsResolution::Apply(melonDS::NDS& nds, bool threaded, const NdsDepth::Depth& depth) {
     depth_on = depth.on;
     held = depth.on && depth_is_flat;
     const uint32_t to = Available() && !held ? wanted : 1;
     if (to == scale && !leave) {
-        if (!hires || hires->SetDepth(depth, depth_on_secondary)) {
+        if (!hires || hires->SetDepth(depth)) {
             return;
         }
         FailDepth("no second eye");
@@ -106,7 +105,7 @@ void NdsResolution::Apply(melonDS::NDS& nds, bool threaded, const NdsDepth::Dept
         depth.on ? FailDepth(why + " for both eyes") : Fail(why);
         leave = true;
     }
-    if (to > 1 && !leave && !hires->SetDepth(depth, depth_on_secondary)) {
+    if (to > 1 && !leave && !hires->SetDepth(depth)) {
         FailDepth("no second eye at " + std::to_string(to) + "x");
     }
     if (to == 1 || leave) {
@@ -147,6 +146,10 @@ bool NdsResolution::GetRight(int screen, Vulkan::AltScreenImage& right) {
     image.max_scale = right.max_scale;
     right = image;
     return true;
+}
+
+bool NdsResolution::ShowsDepth(int screen) const {
+    return hires && hires->ShowsDepth(screen);
 }
 
 int NdsResolution::RightShift() const {

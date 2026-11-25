@@ -37,7 +37,7 @@ public:
 
     /// Between two frames, after SetScale: Layer Depth. False: it has no second eye to draw (no
     /// memory), and is not used any more.
-    virtual bool SetDepth(const NdsDepth::Depth& depth, bool /*secondary_too*/) {
+    virtual bool SetDepth(const NdsDepth::Depth& depth) {
         return !depth.on;
     }
 
@@ -49,6 +49,10 @@ public:
     /// False: the left one is for both.
     virtual bool GetRight(int /*screen*/, Vulkan::AltScreenImage& /*right*/) {
         return false;
+    }
+    /// The screen's picture is one for each eye, also when GetRight has none (ShownDepth).
+    virtual bool ShowsDepth(int screen) const {
+        return screen == 0;
     }
     /// The farthest layer's shift in it, in pixels of the DS.
     virtual int RightShift() const {
@@ -96,8 +100,7 @@ public:
     void SetFactor(uint32_t factor, uint32_t ceiling);
 
     /// Between two frames. `threaded` is the software renderer's, and so is the depth at 1x.
-    void Apply(melonDS::NDS& nds, bool threaded, const NdsDepth::Depth& depth = {},
-               bool depth_on_secondary = false);
+    void Apply(melonDS::NDS& nds, bool threaded, const NdsDepth::Depth& depth = {});
 
     /// Nothing over 1x with Layer Depth on
     bool DepthIsFlat() const {
@@ -123,6 +126,7 @@ public:
 
     /// A screen's picture for the right eye. False: as the left one.
     bool GetRight(int screen, Vulkan::AltScreenImage& right);
+    bool ShowsDepth(int screen) const;
     int RightShift() const;
 
     /// Their pixels, for what is not drawn by the GPU.

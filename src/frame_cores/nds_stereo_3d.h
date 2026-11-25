@@ -16,6 +16,23 @@
 
 namespace FrameCores {
 
+/// Which screens' pictures are one for each eye, for the renderers of both. The top one's always is
+/// where it has depth at all. The bottom one's is from the first frame on with something to see:
+/// the headset's pictures change their layout with it, so it stays.
+class ShownDepth {
+public:
+    /// At the start of a frame. Whether engine A's and engine B's screens are. `captures`: as
+    /// NdsDepth::HasDepth.
+    std::array<bool, 2> Note(const NdsDepth::Depth& depth, const melonDS::GPU& gpu, bool a_on_top,
+                             bool captures);
+    bool operator[](int screen) const {
+        return shows[static_cast<std::size_t>(screen)];
+    }
+
+private:
+    std::array<bool, 2> shows{};
+};
+
 /**
  * The right eye's 3D for the software renderer: the game's polygons of the frame, copied with
  * their vertices moved, in a GPU3D of ours (it registers nothing and runs no commands; it is the

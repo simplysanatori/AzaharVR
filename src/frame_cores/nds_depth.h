@@ -446,6 +446,105 @@ constexpr bool IsFlatLine(uint32_t dispcnt, bool bg0_on, bool right_has_scene) {
     return !layers || (LineShowsScene(dispcnt, bg0_on) && !right_has_scene);
 }
 
+/// Settings::values.ds_depth_on: which of the DS's screens Layer Depth is for, wherever they are
+/// shown.
+enum class DepthOn : uint32_t {
+    Both,
+    Top,
+    Bottom,
+};
+
+/// The screens that have a right eye's picture; 0 is the top one. The one answer both renderers,
+/// the core and the host's picture take.
+struct Screens {
+    bool top = true;
+    bool bottom = false;
+    constexpr bool operator[](int screen) const {
+        return screen == 0 ? top : bottom;
+    }
+    constexpr bool Any() const {
+        return top || bottom;
+    }
+    constexpr bool operator==(const Screens&) const = default;
+};
+
+/// `bottom_shown`: what shows the game can show a right eye's picture of the bottom screen.
+constexpr Screens MakeScreens(uint32_t depth_on, bool bottom_shown) {
+    return {depth_on != static_cast<uint32_t>(DepthOn::Bottom),
+            depth_on != static_cast<uint32_t>(DepthOn::Top) && bottom_shown};
+}
+
+/// The height and width of a sprite on the screen.
+struct SpriteSize {
+    int width = 0;
+    int height = 0;
+};
+constexpr SpriteSize SizeOfSprite(uint16_t attr0, uint16_t attr1) {
+    constexpr SpriteSize sizes[4][4] = {
+        {{8, 8}, {16, 16}, {32, 32}, {64, 64}},
+        {{16, 8}, {32, 8}, {32, 16}, {64, 32}},
+        {{8, 16}, {8, 32}, {16, 32}, {32, 64}},
+        {},
+    };
+    SpriteSize size = sizes[attr0 >> 14][attr1 >> 14];
+    if ((attr0 & 0x300) == 0x300) { // rotated, twice the size
+        size.width *= 2;
+        size.height *= 2;
+    }
+    return size;
+}
+
+/// Whether any of a sprite is on the screen to be seen: not one switched off or parked beyond the
+/// edges, and not one that is a window.
+constexpr bool IsSpriteSeen(uint16_t attr0, uint16_t attr1) {
+    if ((attr0 & 0x300) == 0x200 || (attr0 & 0xC00) == 0x800) {
+        return false;
+    }
+    const SpriteSize size = SizeOfSprite(attr0, attr1);
+    const int y = attr0 & 0xFF;
+    const int x = attr1 & 0x1FF;
+    return (y < 192 || y + size.height > 256) && (x < kWidth || x + size.width > 512);
+}
+
+/// Whether what an engine shows stands at more than one depth: 3D, or layers moved by more than
+/// one shift. `oam`: the engine's 128 sprites, 4 words each. One that does not is drawn as without
+/// Layer Depth: there is nothing to be seen. `captures`: the right eye has display captures of its
+/// own, so video memory on the screen has the depth of the layers captured there.
+constexpr bool HasDepth(uint32_t dispcnt, bool engine_a, const uint16_t* bgcnt, const uint16_t* oam,
+                        const LayerShifts& shifts, bool captures = false) {
+    const uint32_t mode = (dispcnt >> 16) & 3;
+    if ((mode != 1 && !(captures && engine_a && mode == 2)) || (dispcnt & 0x80) != 0 ||
+        shifts[3] == 0) {
+        return false; // no layers, or none moved
+    }
+    uint32_t seen = 0; // bit n: shifts[n]
+    for (int bg = 0; bg < 4; ++bg) {
+        if ((dispcnt & (0x100u << bg)) != 0) {
+            if (bg == 0 && engine_a && (dispcnt & 8) != 0) {
+                return true;
+            }
+            seen |= 1u << (bgcnt[bg] & 3);
+        }
+    }
+    if ((dispcnt & 0x1000) != 0) {
+        for (int at = 0; at < 128 * 4; at += 4) {
+            if (IsSpriteSeen(oam[at], oam[at + 1])) {
+                seen |= 1u << ((oam[at + 2] >> 10) & 3);
+            }
+        }
+    }
+    int first = 4;
+    for (int priority = 0; priority < 4; ++priority) {
+        if ((seen & (1u << priority)) != 0) {
+            first = first == 4 ? priority : first;
+            if (shifts[priority] != shifts[first]) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 /// Which engine is on the top screen, frame by frame. A game with 3D on both screens draws it for
 /// one screen a frame: engine A changes screen every frame, the other screen shows engine B with
 /// the picture captured the frame before.
@@ -468,11 +567,11 @@ struct TopWatch {
     }
 
     /// At line 215, where the DS draws the next frame's scene: whether the right eye's is drawn
-    /// too, that is, whether engine A may be on the top screen then. A game that changes screens
-    /// after this line has not said so yet: while it changes them, always.
-    constexpr bool SceneNeeded(bool a_on_top_now) {
+    /// too, that is, whether engine A may be on a screen that has depth then. A game that changes
+    /// screens after this line has not said so yet: while it changes them, always.
+    constexpr bool SceneNeeded(bool a_on_top_now, Screens screens = {}) {
         at_215 = a_on_top_now;
-        return a_on_top_now || (!early && since_change < kRecent);
+        return screens[a_on_top_now ? 0 : 1] || (screens.Any() && !early && since_change < kRecent);
     }
 
     /// At line 215, after SceneNeeded: whether the next scene is the top screen's.
@@ -564,6 +663,7 @@ constexpr int32_t kConvergence = 4 * kOneW;
 
 struct Depth {
     bool on = false; ///< the right eye is drawn
+    Screens screens{};
     LayerShifts layers{};
     int32_t convergence = 0; ///< a fixed one for the game; 0: the scene's own view (ViewTrack)
     constexpr bool operator==(const Depth&) const = default;
@@ -573,10 +673,11 @@ struct Depth {
 /// (Common::LayerDepth::MaxShift), Invert Depth and a game's fixed convergence, if it has one, into
 /// shifts.
 constexpr Depth MakeDepth(uint32_t level, float max_shift, bool inverted = false,
-                          int32_t convergence = 0) {
+                          int32_t convergence = 0, Screens screens = {}) {
     Depth depth;
-    depth.on = level > 0 && max_shift > 0.0f;
+    depth.on = level > 0 && max_shift > 0.0f && screens.Any();
     if (depth.on) {
+        depth.screens = screens;
         for (uint32_t priority = 0; priority < 4; ++priority) {
             depth.layers[priority] = Common::LayerDepth::Directed(
                 Common::LayerDepth::LayerShift(level, priority, 3, kWidth, max_shift), inverted);

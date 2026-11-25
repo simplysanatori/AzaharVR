@@ -22,12 +22,15 @@
 #include "GPU_Soft.h"
 #include "NDS.h"
 
+#include "common/layer_depth.h"
 #include "core/autosave.h"
 #include "core/frontend/alt_screens.h"
 #include "frame_cores/alt_core_host.h"
 #include "frame_cores/ds_gl/ds_gl_state.h"
+#include "frame_cores/nds_core.h"
 #include "frame_cores/nds_gl_edge.h"
 #include "frame_cores/nds_resolution.h"
+#include "frame_cores/nds_stereo_3d.h"
 #include "video_core/renderer_vulkan/alt_present.h"
 #include "video_core/vr_dynamic_resolution.h"
 
@@ -55,6 +58,15 @@ namespace {
 
 namespace fs = std::filesystem;
 
+struct InvertDepth {
+    InvertDepth() {
+        Common::LayerDepth::Get().inverted = true;
+    }
+    ~InvertDepth() {
+        Common::LayerDepth::Get().inverted = false;
+    }
+};
+
 struct Log {
     int made = 0;
     int gone = 0;
@@ -66,6 +78,8 @@ struct Log {
     bool second_eye = false;        ///< it can draw one
     uint32_t too_big_for_both = 99; ///< with the second eye
     std::vector<int> depths;        ///< the farthest layer's shift, at each change
+    FrameCores::NdsDepth::Screens screens{};
+    bool bottom_has_depth = false;
 };
 
 /// melonDS's software renderer, its picture blown up
@@ -125,12 +139,19 @@ public:
         scale = to;
         return to < log.too_big;
     }
-    bool SetDepth(const FrameCores::NdsDepth::Depth& to, bool) override {
+    bool SetDepth(const FrameCores::NdsDepth::Depth& to) override {
         if (depth != to) {
             log.depths.push_back(to.layers[3]);
         }
         depth = to;
+        log.screens = to.screens;
         return !depth.on || (log.second_eye && scale < log.too_big_for_both);
+    }
+    bool ShowsDepth(int screen) const override {
+        return screen == 0 || log.bottom_has_depth;
+    }
+    int RightShift() const override {
+        return depth.layers[3];
     }
     bool GetRight(int screen, AltScreenImage& right) override {
         const auto& from = pixels[static_cast<std::size_t>(screen)];
@@ -622,6 +643,111 @@ TEST_CASE("Dynamic Resolution on a DS game's factor", "[frame_cores]") {
     Dr::g_drop.store(0);
     CHECK(Dr::Apply(4) == 4);
     Dr::g_drop.store(drop);
+}
+
+TEST_CASE("DS resolution: which screens' pictures are one for each eye", "[frame_cores]") {
+    using Shows = std::array<bool, 2>;
+    const auto nds = Console();
+    auto& gpu = nds->GPU;
+    const auto oam = [&gpu](int engine, uint16_t attr0) {
+        const std::array<uint16_t, 4> sprite{attr0, 20, 0x0000, 0};
+        for (std::size_t i = 0; i < 128; i++) {
+            std::memcpy(&gpu.OAM[engine * 0x400 + i * 8], sprite.data(), sizeof(sprite));
+        }
+    };
+    oam(0, 0x0200); // off
+    oam(1, 0x0200);
+    gpu.GPU2D_B.DispCnt = 0x11100; // a layer of another priority than the sprites'
+    gpu.GPU2D_B.BGCnt[0] = 3;
+    gpu.GPU2D_A.DispCnt = 0x10000;
+
+    const auto depth = [](FrameCores::NdsDepth::Screens screens) {
+        return FrameCores::NdsDepth::MakeDepth(3, 1.0f, false, 0, screens);
+    };
+    const auto both = depth({true, true});
+    FrameCores::ShownDepth shown;
+    CHECK(shown.Note(both, gpu, true, false) == Shows{true, false});
+    CHECK_FALSE(shown[1]);
+    oam(0, 100); // the other engine's sprites
+    CHECK(shown.Note(both, gpu, true, false) == Shows{true, false});
+    oam(1, 100);
+    CHECK(shown.Note(both, gpu, true, false) == Shows{true, true});
+    CHECK(shown[1]);
+    // It stays, until it is off there; and is looked for again
+    gpu.GPU2D_B.DispCnt = 0x10000;
+    CHECK(shown.Note(both, gpu, true, false) == Shows{true, true});
+    CHECK(shown.Note(depth({true, false}), gpu, true, false) == Shows{true, false});
+    CHECK(shown.Note(both, gpu, true, false) == Shows{true, false});
+    gpu.GPU2D_B.DispCnt = 0x11100;
+    CHECK(shown.Note(depth({false, true}), gpu, true, false) == Shows{false, true});
+    CHECK(shown.Note({}, gpu, true, false) == Shows{false, false});
+    // Engine A on the bottom screen
+    CHECK(shown.Note(both, gpu, false, false) == Shows{false, true});
+    gpu.GPU2D_A.DispCnt = 0x10108;
+    CHECK(shown.Note(both, gpu, false, false) == Shows{true, true});
+}
+
+TEST_CASE("DS resolution: Depth On over 1x", "[frame_cores]") {
+    using FrameCores::NdsDepth::Screens;
+    Dir tmp;
+    const fs::path rom = tmp.path / "on.nds";
+    const auto bytes = CountingRom();
+    std::ofstream(rom, std::ios::binary)
+        .write(reinterpret_cast<const char*>(bytes.data()),
+               static_cast<std::streamsize>(bytes.size()));
+    Log log;
+    log.second_eye = true;
+    FrameCores::CorePaths paths;
+    paths.data_dir = tmp.path.string();
+    paths.game_dir = (tmp.path / "g").string();
+    paths.cheat_dir = (tmp.path / "c").string();
+    FrameCores::CoreBootOptions opts{};
+    opts.ds_renderer = Maker(log);
+    opts.layer_depth = 2;
+    FrameCores::NdsCore core;
+    REQUIRE(core.Load(rom.string(), paths, opts));
+    core.SetResolution(4, 8);
+    FrameCores::FrameOutput out;
+    const auto run = [&] {
+        core.RunFrame(out);
+        core.RunFrame(out);
+        CHECK(out.primary.scale == 4);
+        return Screens{out.primary_right.HasPicture(), out.secondary_right.HasPicture()};
+    };
+    CHECK(run() == Screens{true, false});
+    core.SetDepthOnSecondary(true);
+    CHECK(run() == Screens{true, false}); // nothing to see on it
+    CHECK(log.screens == Screens{true, true});
+    log.bottom_has_depth = true;
+    CHECK(run() == Screens{true, true});
+    CHECK(out.secondary_right.width == 1024);
+    CHECK(out.secondary_right.scale == 4);
+    // The renderer of 1x, which has not seen any on it yet; over 1x again
+    for (const uint32_t factor : {1u, 4u}) {
+        log.bottom_has_depth = false;
+        core.SetResolution(factor, 8);
+        core.RunFrame(out);
+        CHECK(out.secondary.scale == factor);
+        CHECK(out.secondary_right.HasPicture());
+        CHECK(out.secondary_right.scale == factor);
+    }
+    core.Reset();
+    CHECK(run() == Screens{true, false});
+    log.bottom_has_depth = true;
+    CHECK(run() == Screens{true, true});
+    core.SetDepthOn(1);
+    CHECK(run() == Screens{true, false});
+    CHECK(log.screens == Screens{true, false});
+    core.SetDepthOn(2);
+    CHECK(run() == Screens{false, true});
+    CHECK(log.screens == Screens{false, true});
+    const InvertDepth inverted;
+    CHECK(run() == Screens{false, true});
+    CHECK(out.layer_shift == 0.0f);
+    CHECK(out.secondary_shift == -6.0f / 256.0f);
+    core.SetDepthOnSecondary(false);
+    CHECK(run() == Screens{false, false});
+    CHECK(out.secondary_shift == 0.0f);
 }
 
 TEST_CASE("DS resolution: a game's setting, its states and its sizes", "[frame_cores]") {

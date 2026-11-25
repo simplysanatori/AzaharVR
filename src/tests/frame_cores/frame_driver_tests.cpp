@@ -562,6 +562,26 @@ TEST_CASE("The right eye's picture has the left one's place and size", "[frame_c
     const auto apart = AltEyeSwapchains(eye, unused, true, false);
     CHECK(apart[0] == eye);
     CHECK(apart[1] == eye);
+    // The Secondary Screen's: as it is without depth, or both eyes in one
+    CHECK(AltEyeSwapchains(eye, {}, false, true)[0] == eye);
+    struct Target {
+        int framebuffer = 7;
+        u32 width, height, offset_y = 0, fb_height;
+        bool begin_pass = true, end_pass = true;
+    };
+    const AltEyeSize whole = AltEyeSwapchains(eye, {}, true, true)[0];
+    const Target target{.width = whole.width, .height = whole.height, .fb_height = whole.height};
+    const auto [upper, lower] = AltEyeHalves(target);
+    for (const Target& half : {upper, lower}) {
+        CHECK(half.framebuffer == 7);
+        CHECK(half.width == eye.width);
+        CHECK(half.height == eye.height);
+        CHECK(half.fb_height == whole.height);
+    }
+    CHECK(upper.offset_y == 0);
+    CHECK(lower.offset_y == eye.height + VideoCore::kXrPackedGap);
+    CHECK(lower.offset_y + lower.height == whole.height);
+    CHECK((upper.begin_pass && !upper.end_pass && !lower.begin_pass && lower.end_pass));
     const auto packed = AltEyeSwapchains(eye, unused, true, true);
     CHECK(packed[0].width == eye.width);
     CHECK((packed[0].height - VideoCore::kXrPackedGap) / 2 == eye.height); // XrPresentTarget's

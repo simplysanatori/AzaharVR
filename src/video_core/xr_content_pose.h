@@ -21,9 +21,13 @@ struct XrContentPose {
     int64_t time = 0; ///< the XrTime the pose was located for (its predicted display time)
     /// Layer Depth: the top screen's pictures are cut for this (common/layer_depth.h). 0: whole.
     float layer_shift = 0.0f;
+    /// The bottom screen's picture is one for each eye (kXrPackedGap), and what they are cut for.
+    bool bottom_stereo = false;
+    float bottom_shift = 0.0f;
 };
 
-/// The two eye images of the top screen in one swapchain (AZAHARFRAME_XR_PACKED): the left eye
+/// The two eye images of the top screen in one swapchain (AZAHARFRAME_XR_PACKED), and of the bottom
+/// screen of a DS game whose bottom screen has depth (XrContentPose::bottom_stereo): the left eye
 /// in the upper half, the right eye below it, this many pixels apart (cleared to black, so the
 /// compositor's filtering at a half's edge never picks up the other eye).
 constexpr uint32_t kXrPackedGap = 8;

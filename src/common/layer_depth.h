@@ -92,9 +92,16 @@ constexpr float Offset(bool right_eye, float shift) {
     return right_eye ? 0.5f * shift : -0.5f * shift;
 }
 
+/// The same for a screen that takes touches, whose left eye's picture is then where it is without
+/// depth: a tap lands where the left eye sees it.
+constexpr float OffsetInPlace(bool right_eye, float shift) {
+    const float half = 0.5f * Cut(shift);
+    return CutsRightEdge(right_eye, shift) ? -half : half;
+}
+
 /// Between the XR thread and the emulation thread.
 struct Shared {
-    /// XR thread: MaxShift of the Primary Screen on view.
+    /// XR thread: MaxShift of the widest screen on view that has depth (else the Primary Screen).
     std::atomic<float> max_shift{kOnScreen};
     /// The frontend: Invert Depth. The cores read it every frame.
     std::atomic<bool> inverted{false};

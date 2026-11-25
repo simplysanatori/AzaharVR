@@ -53,6 +53,7 @@ struct CoreBootOptions {
     bool rumble_pak = false;       ///< Insert DS Rumble Pak in Slot-2 when no GBA ROM
     uint32_t second_screen = 0;    ///< SecondScreen (GBA and Game Boy games)
     uint32_t layer_depth = 0;      ///< 0 off, 1 to 3: how far back the layers go
+    uint32_t depth_on = 0;         ///< NdsDepth::DepthOn (DS games)
     DriverOverride driver;
     /// Tests: what draws a DS game over 1x (NdsHiresMaker)
     std::function<std::unique_ptr<NdsHiresRenderer>(melonDS::NDS&, std::string&)> ds_renderer;
@@ -75,9 +76,10 @@ struct FrameOutput {
     /// `primary`: as much is cut off the pictures. 0: nothing is, also where the layers are ones
     /// that end in `primary_right` as they do in `primary` (LayerDepth::kCutsEdge, NdsDepth's).
     float layer_shift = 0.0f;
-    /// The same for the Secondary Screen, from a core asked for it (NdsCore::SetDepthOnSecondary).
-    /// No host shows it yet: the headset has no right eye's picture of the Secondary Screen.
+    /// The same for the Secondary Screen, from a core that has one and was told that it can be
+    /// shown (SetDepthOnSecondary), while there is something to see in it.
     Vulkan::AltScreenImage secondary_right{};
+    float secondary_shift = 0.0f;
     Vulkan::AltScreenImage overlay{}; ///< over the whole Primary Screen, alpha premultiplied
     std::vector<int16_t> audio_pcm; ///< Interleaved stereo PCM16 (L, R, L, R, ...)
     float rumble = 0.0f;            ///< Haptic motor intensity [0.0, 1.0]
@@ -154,6 +156,11 @@ public:
     virtual void SetGraphics(const Vulkan::AltGraphics* /*graphics*/) {}
     /// The pixels of pictures that are the GPU's (AltScreenImage::image) into `frame`.
     virtual void ReadPictures(FrameOutput& /*frame*/) {}
+    /// Which of the DS's screens it is for (NdsDepth::DepthOn), from the next frame.
+    virtual void SetDepthOn(uint32_t /*screens*/) {}
+    /// What shows the game can show a right eye's picture of the Secondary Screen
+    /// (FrameOutput::secondary_right), from the next frame. Off as it starts.
+    virtual void SetDepthOnSecondary(bool /*on*/) {}
     /// The Secondary Screen's next page (GBA games), from the next frame.
     virtual void TurnPage() {}
     /// An option of the driver's (GBA and Game Boy games), between frames.

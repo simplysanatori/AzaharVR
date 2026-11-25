@@ -112,6 +112,8 @@ struct AltXrRenderer::Impl {
     ScreenTexture primary_tex{};
     ScreenTexture right_tex{}; ///< the Primary Screen for the right eye
     ScreenTexture secondary_tex{};
+    ScreenTexture secondary_right_tex{}; ///< the Secondary Screen for the right eye
+    bool secondary_stereo_failed = false;
     ScreenTexture overlay_tex{};
     ScreenTexture dummy_tex{};
     AltScreenImage secondary_shape{}; ///< the last secondary picture's size and scale alone
@@ -304,7 +306,7 @@ struct AltXrRenderer::Impl {
 
     /// The whole picture into its bigger image through Texture Filter. False: not drawn.
     bool DrawFiltered(ScreenTexture& tex) {
-        const PictureScale& pick = &tex == &secondary_tex ? secondary_scale : primary_scale;
+        const PictureScale& pick = ScaleOf(tex);
         if (!pick.filtered) {
             return false;
         }
@@ -376,6 +378,11 @@ struct AltXrRenderer::Impl {
         });
     }
 
+    const PictureScale& ScaleOf(const ScreenTexture& tex) const {
+        return &tex == &secondary_tex || &tex == &secondary_right_tex ? secondary_scale
+                                                                      : primary_scale;
+    }
+
     /// The scales of both screens for the output `presented_vr` says.
     void PickScales(const AltScreenImage& primary, const AltScreenImage& secondary,
                     bool has_overlay) {
@@ -442,7 +449,7 @@ struct AltXrRenderer::Impl {
 
     /// Of a screen's (not the overlay's) texture.
     u32 TextureScale(const ScreenTexture& tex) const {
-        const PictureScale& pick = &tex == &secondary_tex ? secondary_scale : primary_scale;
+        const PictureScale& pick = ScaleOf(tex);
         return sharp_pixels && pick.texture ? std::max(pick.scale, 1u) : 1;
     }
 
@@ -775,6 +782,7 @@ struct AltXrRenderer::Impl {
         DestroyTexture(primary_tex);
         DestroyTexture(right_tex);
         DestroyTexture(secondary_tex);
+        DestroyTexture(secondary_right_tex);
         DestroyTexture(overlay_tex);
         DestroyTexture(dummy_tex);
         picture_filter.reset();
@@ -809,6 +817,7 @@ struct AltXrRenderer::Impl {
         secondary_window = nullptr;
         xr_target_generation = 0;
         sharp_pixels = false;
+        secondary_stereo_failed = false;
         primary_scale = {};
         secondary_scale = {};
     }
@@ -953,9 +962,10 @@ bool AltXrRenderer::NeedsPresent() const {
            (vr && impl->StereoTurnedOff());
 }
 
-bool AltXrRenderer::Present(const AltScreenImage& whole, const AltScreenImage& secondary,
+bool AltXrRenderer::Present(const AltScreenImage& whole, const AltScreenImage& whole_secondary,
                             const AltScreenImage& overlay, const AltScreenImage& whole_right,
-                            float layer_shift, bool skippable) {
+                            float layer_shift, const AltScreenImage& whole_secondary_right,
+                            float secondary_shift, bool skippable) {
     if (!impl || !impl->ready || !whole.HasPicture()) {
         return false;
     }
@@ -969,7 +979,7 @@ bool AltXrRenderer::Present(const AltScreenImage& whole, const AltScreenImage& s
             impl->scheduler->WaitWorker();
         }
     });
-    impl->EnsureUploads({&whole, &secondary, &overlay, &whole_right});
+    impl->EnsureUploads({&whole, &whole_secondary, &overlay, &whole_right, &whole_secondary_right});
     impl->presented_vr = impl->XrShowsScreens();
     if (!impl->presented_vr) {
         if (!impl->window_target) {
@@ -979,9 +989,10 @@ bool AltXrRenderer::Present(const AltScreenImage& whole, const AltScreenImage& s
             std::chrono::steady_clock::now() - impl->window_presented < kSkippableInterval) {
             return true;
         }
-        impl->PickScales(whole, secondary, overlay.HasPicture() || impl->overlay_tex.view);
+        impl->PickScales(whole, whole_secondary, overlay.HasPicture() || impl->overlay_tex.view);
         if (!impl->TakeImage(impl->primary_tex, whole) ||
-            (secondary.HasPicture() && !impl->TakeImage(impl->secondary_tex, secondary))) {
+            (whole_secondary.HasPicture() &&
+             !impl->TakeImage(impl->secondary_tex, whole_secondary))) {
             return false;
         }
         impl->PresentToWindow(impl->UploadOverlay(overlay));
@@ -993,6 +1004,12 @@ bool AltXrRenderer::Present(const AltScreenImage& whole, const AltScreenImage& s
         layer_shift = 0.0f;
     }
     const auto [primary, primary_right] = AltCutEyes(whole, whole_right, layer_shift);
+    // The Secondary Screen's eyes are both in its one swapchain (kXrPackedGap). What is in it goes
+    // with the picture (XrContentPose), so it is only as big again, with nothing else to change.
+    bool secondary_stereo = !impl->secondary_stereo_failed && whole_secondary.HasPicture() &&
+                            AltShowsStereo(whole_secondary, whole_secondary_right);
+    const auto [secondary, secondary_right] = AltCutEyes(whole_secondary, whole_secondary_right,
+                                                         secondary_stereo ? secondary_shift : 0.0f);
     if (impl->StereoTurnedOff() && stereo) {
         sink->SetTopStereo(true);
     }
@@ -1025,15 +1042,26 @@ bool AltXrRenderer::Present(const AltScreenImage& whole, const AltScreenImage& s
     const auto eyes = AltEyeSwapchains({eye.width, eye.height},
                                        {kDummySwapchainExtent, kDummySwapchainExtent}, stereo,
                                        impl->xr_target->Packed());
-    const std::array<vk::Extent2D, XrPresentTarget::kScreens> sizes = {
-        vk::Extent2D{eyes[0].width, eyes[0].height},
-        vk::Extent2D{eyes[1].width, eyes[1].height},
-        bottom_size,
+    const auto prepare = [&](bool both_bottom) {
+        const AltEyeSize bottom =
+            AltEyeSwapchains({bottom_size.width, bottom_size.height}, {}, both_bottom, true)[0];
+        return impl->xr_target->Prepare({
+            vk::Extent2D{eyes[0].width, eyes[0].height},
+            vk::Extent2D{eyes[1].width, eyes[1].height},
+            vk::Extent2D{bottom.width, bottom.height},
+        });
     };
     const bool uneven =
         !AltTargetEven(primary.width, primary.height, eye.width, eye.height);
-    if (!impl->xr_target->Prepare(sizes)) {
-        return false;
+    if (!prepare(secondary_stereo)) {
+        // Only the taller images fail, not the session: the game goes on without them
+        if (!secondary_stereo || !prepare(false)) {
+            return false;
+        }
+        LOG_ERROR(Render_Vulkan, "alt_xr: no images for both eyes of the Secondary Screen: both "
+                                 "see one picture until the game starts again");
+        impl->secondary_stereo_failed = true;
+        secondary_stereo = false;
     }
 
     if (!impl->TakeImage(impl->primary_tex, primary)) {
@@ -1046,6 +1074,8 @@ bool AltXrRenderer::Present(const AltScreenImage& whole, const AltScreenImage& s
     // Failed: the right eye gets the left one's picture. All uploads before the sets: a texture made
     // again submits.
     const bool has_right = stereo && impl->TakeImage(impl->right_tex, primary_right);
+    const bool has_secondary_right =
+        secondary_stereo && impl->TakeImage(impl->secondary_right_tex, secondary_right);
     const bool has_overlay = impl->UploadOverlay(overlay);
     const vk::Pipeline plain = impl->xr_target->Pipeline();
     const vk::Pipeline top = has_overlay ? impl->OverlayPipeline() : plain;
@@ -1055,12 +1085,18 @@ bool AltXrRenderer::Present(const AltScreenImage& whole, const AltScreenImage& s
         impl->CommitScreens(secondary_view, has_overlay, false, uneven);
     const vk::DescriptorSet right_set =
         has_right ? impl->CommitScreens(secondary_view, has_overlay, true, uneven) : present_set;
+    const vk::DescriptorSet secondary_right_set =
+        has_secondary_right
+            ? impl->CommitScreens(impl->secondary_right_tex.view, has_overlay, false, uneven)
+            : present_set;
 
     Common::XrPacer::Get().game_swaps.fetch_add(1, std::memory_order_relaxed);
 
     std::array<XrPresentTarget::Target, XrPresentTarget::kScreens> targets{};
     VideoCore::XrContentPose content{};
     content.layer_shift = layer_shift;
+    content.bottom_stereo = secondary_stereo;
+    content.bottom_shift = secondary_stereo ? secondary_shift : 0.0f;
     if (!impl->xr_target->BeginFrame(targets, content)) {
         impl->scheduler->Flush();
         return false;
@@ -1080,8 +1116,17 @@ bool AltXrRenderer::Present(const AltScreenImage& whole, const AltScreenImage& s
         const int layer_flags =
             (dim < 1.0f ? std::clamp(static_cast<int>(dim * 1000.0f + 0.5f), 1, 999) : 0) +
             1000 * (alpha < 1.0f ? std::clamp(static_cast<int>(alpha * 1000.0f + 0.5f), 1, 999) : 0);
-        impl->DrawQuad(targets[static_cast<std::size_t>(VideoCore::XrScreen::Bottom)], present_set,
-                       plain, 2, secondary.width, secondary.height, layer_flags);
+        const auto& bottom = targets[static_cast<std::size_t>(VideoCore::XrScreen::Bottom)];
+        if (secondary_stereo) {
+            auto [left, right] = AltEyeHalves(bottom);
+            impl->DrawQuad(left, present_set, plain, 2, secondary.width, secondary.height,
+                           layer_flags);
+            impl->DrawQuad(right, secondary_right_set, plain, 2, secondary.width, secondary.height,
+                           layer_flags);
+        } else {
+            impl->DrawQuad(bottom, present_set, plain, 2, secondary.width, secondary.height,
+                           layer_flags);
+        }
     } else {
         impl->ClearTarget(targets[static_cast<std::size_t>(VideoCore::XrScreen::Bottom)]);
     }
@@ -1097,6 +1142,10 @@ void AltXrRenderer::SetSharpPixels(bool on) {
     if (impl) {
         impl->sharp_pixels = on;
     }
+}
+
+bool AltXrRenderer::ShowsSecondaryStereo() const {
+    return ShowsInVr() && !impl->secondary_stereo_failed;
 }
 
 bool AltXrRenderer::IsReady() const {

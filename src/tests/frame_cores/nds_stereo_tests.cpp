@@ -142,7 +142,7 @@ TEST_CASE("NDS Layer Depth: by level and limit", "[frame_cores]") {
     CHECK(MakeDepth(3, kNoLimit, false, 9 * kOneW).convergence == 9 * kOneW);
 
     // The screen is not known yet: drawn, with nothing moved
-    CHECK(MakeDepth(3, kOnScreen) == Depth{true, {}, 0});
+    CHECK(MakeDepth(3, kOnScreen) == Depth{true, {}, {}, 0});
 
     // No layer, and nothing in the scene, is farther apart than the eyes
     for (const float ipd : {0.045f, 0.063f, 0.070f, 0.085f}) {
@@ -378,6 +378,22 @@ TEST_CASE("NDS Layer Depth: which lines and frames have a right picture", "[fram
             }
             REQUIRE_FALSE(below.SceneNeeded(false));
             REQUIRE_FALSE(below.NextOnTop());
+        }
+    }
+
+    SECTION("only for the screens that have depth") {
+        const Screens bottom{false, true};
+        const Screens both{true, true};
+        for (const bool on_top : {true, false}) {
+            TopWatch watch;
+            for (int frame = 0; frame < 10; ++frame) { // until it says nothing of a change
+                watch.BeginFrame(on_top);
+                static_cast<void>(watch.SceneNeeded(on_top, both));
+            }
+            CHECK(watch.SceneNeeded(on_top, both));
+            CHECK(watch.SceneNeeded(on_top, bottom) == !on_top);
+            CHECK(watch.SceneNeeded(on_top, {}) == on_top);
+            CHECK_FALSE(watch.SceneNeeded(on_top, Screens{false, false}));
         }
     }
 
@@ -866,6 +882,8 @@ struct Scene {
     bool on_and_off = false;
     /// Engine A: this background (4: the sprites) and nothing else, without windows or mosaic
     int single = -1;
+    /// With it, an empty sprite of another priority
+    bool empty_sprite = false;
     /// The 3D is something at w 8 across the picture and past its edges
     bool wide = false;
     /// The 3D is the picture behind it, in banks C and D
@@ -901,6 +919,12 @@ void AddEngine(WriteListGame& game, const Scene& scene, bool b) {
     for (uint32_t i = 0; i < 128; ++i) {
         game.Write16(oam + i * 8, 0x0200);
     }
+    if (scene.empty_sprite && !b) {
+        const uint32_t own = scene.single == 4 ? 3 : kPriorities[scene.single];
+        game.Write16(oam + 12 * 8, 100);
+        game.Write16(oam + 12 * 8 + 2, 100);
+        game.Write16(oam + 12 * 8 + 4, 1000 | (own ^ 1) << 10);
+    }
     // A window, half transparent, mosaic
     game.Write16(io + 0x44, 30 << 8 | 150);
     game.Write16(io + 0x48, 0x3F);
@@ -923,7 +947,7 @@ void AddEngine(WriteListGame& game, const Scene& scene, bool b) {
     }
     uint32_t control = scene.hud && !b ? 0x10108 : 0x1BF14 | bg0;
     if (scene.single >= 0 && !b) {
-        control = 0x10014 | 0x100u << scene.single | bg0;
+        control = 0x10014 | 0x100u << scene.single | bg0 | (scene.empty_sprite ? 0x1000 : 0);
         game.Write16(io + 0x4C, 0);
     }
     game.Write32(io, control | (scene.blank ? 0x80 : 0));
@@ -951,7 +975,9 @@ void MoveEngine(WriteListGame& game, const Scene& scene, bool b) {
         const bool window = i == 11;
         const bool turned = i == 5 || i == 6;
         const uint32_t x = i * 23 + (window ? 0 : shift(priority));
-        game.Write16(oam + i * 8, (i * 15) | (window ? 0x0800 : 0) | (turned ? 0x0300 : 0));
+        const bool off = scene.empty_sprite && !b && scene.single != 4;
+        game.Write16(oam + i * 8,
+                     off ? 0x0200 : (i * 15) | (window ? 0x0800 : 0) | (turned ? 0x0300 : 0));
         game.Write16(oam + i * 8 + 2, 0x8000 | ((x - (scene.single == 4 ? 50u : 0u)) & 0x1FF),
                      turned ? 0 : 1);
         game.Write16(oam + i * 8 + 4, (i * 4) | priority << 10 | (i & 15) << 12);
@@ -1755,8 +1781,180 @@ TEST_CASE("NDS Layer Depth: a picture without layers has no edge", "[frame_cores
         game.Run();
         REQUIRE(game.HasRight());
         REQUIRE((game.Right() == game.Left()));
-        REQUIRE((game.RightBottom() == game.Bottom()));
+        REQUIRE_FALSE(game.out.secondary_right.HasPicture());
     }
+}
+
+TEST_CASE("NDS Layer Depth: which screens", "[frame_cores]") {
+    // ds_depth_on's values
+    CHECK(MakeScreens(0, true) == Screens{true, true});
+    CHECK(MakeScreens(1, true) == Screens{true, false});
+    CHECK(MakeScreens(2, true) == Screens{false, true});
+    // Nothing shows a right eye's picture of the bottom screen
+    CHECK(MakeScreens(0, false) == Screens{true, false});
+    CHECK_FALSE(MakeScreens(2, false).Any());
+    CHECK(MakeDepth(3, Common::LayerDepth::kNoLimit, false, 0, {true, true}).screens ==
+          Screens{true, true});
+    CHECK_FALSE(MakeDepth(3, Common::LayerDepth::kNoLimit, false, 0, {false, false}).on);
+}
+
+TEST_CASE("NDS Layer Depth: what there is to see", "[frame_cores]") {
+    const LayerShifts shifts{0, 3, 6, 9};
+    const LayerShifts inverted{0, -3, -6, -9};
+    std::array<uint16_t, 512> oam{};
+    for (std::size_t i = 0; i < oam.size(); i += 4) {
+        oam[i] = 0x0200; // off
+    }
+    std::array<uint16_t, 4> bgcnt{1, 1, 3, 1};
+    const auto has = [&](uint32_t dispcnt, bool engine_a = false) {
+        return HasDepth(dispcnt, engine_a, bgcnt.data(), oam.data(), shifts);
+    };
+    constexpr uint32_t kOn = 0x10000;
+    CHECK_FALSE(has(kOn));
+    CHECK_FALSE(has(kOn | 0x100));
+    CHECK_FALSE(has(kOn | 0xB00)); // three of one priority
+    CHECK(has(kOn | 0xF00));
+    CHECK(has(kOn | 0x500));
+    CHECK_FALSE(has(0xF00));                 // the display is off
+    CHECK_FALSE(has(0x20000 | 0xF00, true)); // shows video memory
+    CHECK_FALSE(has(kOn | 0x80 | 0xF00));    // blank
+    // 3D is in front of itself, on engine A alone
+    CHECK(has(kOn | 0x108, true));
+    CHECK_FALSE(has(kOn | 0x108, false));
+    CHECK_FALSE(has(kOn | 0x208, true));
+    // Video memory on engine A's screen, with captures of both eyes in it
+    CHECK(HasDepth(0x20000 | 0xF00, true, bgcnt.data(), oam.data(), shifts, true));
+    CHECK_FALSE(HasDepth(0x20000 | 0xF00, false, bgcnt.data(), oam.data(), shifts, true));
+    CHECK_FALSE(HasDepth(0xF00, true, bgcnt.data(), oam.data(), shifts, true));
+    CHECK_FALSE(HasDepth(0x30000 | 0xF00, true, bgcnt.data(), oam.data(), shifts, true));
+    // A sprite of another priority
+    oam[8] = 100;
+    oam[9] = 20;
+    oam[10] = 0x0000;
+    CHECK(has(kOn | 0x1100));
+    CHECK_FALSE(has(kOn | 0x100)); // not shown
+    oam[10] = 0x0400;
+    CHECK_FALSE(has(kOn | 0x1100)); // the same
+    CHECK_FALSE(has(kOn | 0x1000)); // alone
+    // Inverted as well; not where the limit leaves nothing
+    bgcnt[0] = 3;
+    CHECK(HasDepth(kOn | 0x1100, false, bgcnt.data(), oam.data(), inverted));
+    CHECK_FALSE(HasDepth(kOn | 0x1100, false, bgcnt.data(), oam.data(), {}));
+    CHECK_FALSE(HasDepth(kOn | 0x108, true, bgcnt.data(), oam.data(), {}));
+    CHECK_FALSE(HasDepth(kOn | 0x600, false, std::array<uint16_t, 4>{0, 1, 0, 0}.data(), oam.data(),
+                         {0, 0, 1, 1})); // priorities 0 and 1 are at one place
+
+    SECTION("sprites parked beyond the screen") {
+        CHECK(IsSpriteSeen(0, 0));
+        CHECK(IsSpriteSeen(191, 255));
+        CHECK_FALSE(IsSpriteSeen(192, 0));
+        CHECK(IsSpriteSeen(250, 0));       // the bottom of it: 8 high
+        CHECK_FALSE(IsSpriteSeen(248, 0)); // all of it above
+        CHECK_FALSE(IsSpriteSeen(0, 256));
+        CHECK(IsSpriteSeen(0, 505));
+        CHECK_FALSE(IsSpriteSeen(0, 504));
+        CHECK(IsSpriteSeen(200, 0xC000)); // 64 high
+        CHECK_FALSE(IsSpriteSeen(192, 0xC000));
+        CHECK(IsSpriteSeen(192 | 0x300, 0xC000)); // 128
+        CHECK_FALSE(IsSpriteSeen(0x200, 0));      // off
+        CHECK_FALSE(IsSpriteSeen(0x800, 0));      // a window
+        CHECK(SizeOfSprite(0x4000, 0xC000).width == 64);
+        CHECK(SizeOfSprite(0x4000, 0xC000).height == 32);
+        CHECK(SizeOfSprite(0x8000, 0x4000).width == 8);
+        CHECK(SizeOfSprite(0x8000, 0x4000).height == 32);
+    }
+}
+
+TEST_CASE("NDS Layer Depth: on one screen", "[frame_cores]") {
+    const bool threaded = GENERATE(true, false);
+    const bool a_on_top = GENERATE(true, false);
+    const bool both_screens = GENERATE(false, true);
+    const bool inverted = GENERATE(false, true);
+    const InvertDepth invert{inverted};
+    const Scene scene{.a_on_top = a_on_top, .scene_3d = true, .both_screens = both_screens};
+    Game both(scene, 3, threaded);
+    Game one(scene, 3, threaded);
+    Game without(scene, 0, threaded);
+    both.core.SetDepthOnSecondary(true);
+    one.core.SetDepthOnSecondary(true);
+    both.Run(kStart);
+    one.Run(kStart);
+    without.Run(kStart);
+    // Changed while it runs
+    for (const uint32_t on : {1u, 2u, 0u, 2u, 1u, 0u}) {
+        one.core.SetDepthOn(on);
+        for (int i = 0; i < 24; ++i) {
+            INFO("on " << on << " frame " << i);
+            both.Run();
+            one.Run();
+            without.Run();
+            REQUIRE((one.Left() == without.Left()));
+            REQUIRE((one.Bottom() == without.Bottom()));
+            const bool top = on != 2;
+            const bool bottom = on != 1;
+            REQUIRE(one.out.primary_right.HasPicture() == top);
+            if (!bottom || i >= 3) {
+                REQUIRE(one.out.secondary_right.HasPicture() == bottom);
+            }
+            REQUIRE(one.out.layer_shift == (top ? EdgeShift(inverted ? -9 : 9) : 0.0f));
+            if (i < 6) {
+                continue; // the renderer's first frames, and a screen that has just been turned on
+            }
+            REQUIRE(one.out.secondary_shift == (bottom ? EdgeShift(inverted ? -9 : 9) : 0.0f));
+            if (top) {
+                REQUIRE((one.Right() == both.Right()));
+            }
+            if (bottom) {
+                REQUIRE((one.RightBottom() == both.RightBottom()));
+            }
+            if (!both_screens && (a_on_top ? !top : !bottom)) {
+                REQUIRE(one.core.DepthLines().with_3d == 0); // nor is it drawn (SceneNeeded)
+            }
+        }
+    }
+}
+
+TEST_CASE("NDS Layer Depth: a flat bottom screen stays one picture", "[frame_cores]") {
+    const bool threaded = GENERATE(true, false);
+    // One background on the bottom screen; on the other one everything
+    Game flat({.a_on_top = false, .single = 1}, 3, threaded);
+    flat.core.SetDepthOnSecondary(true);
+    for (int i = 0; i < 60; ++i) {
+        flat.Run();
+        REQUIRE(flat.out.primary_right.HasPicture());
+        REQUIRE_FALSE(flat.out.secondary_right.HasPicture());
+        REQUIRE(flat.out.secondary_shift == 0.0f);
+    }
+    // Once there was something to see, it has two for as long as it is on
+    Game game({.a_on_top = false}, 3, threaded);
+    game.core.SetDepthOnSecondary(true);
+    game.Run(kStart);
+    REQUIRE(game.HasRightBottom());
+    std::vector<uint8_t> state;
+    REQUIRE(game.core.SaveStateToMemory(state));
+    for (const uint32_t level : {1u, 3u, 2u}) {
+        game.core.SetLayerDepth(level);
+        if (level == 3) {
+            REQUIRE(game.core.LoadStateFromMemory(state.data(), state.size()));
+        }
+        for (int i = 0; i < 20; ++i) {
+            game.Run();
+            REQUIRE(game.out.secondary_right.HasPicture());
+        }
+    }
+    // Off (a level, or what shows it) and on again
+    game.core.SetLayerDepth(0);
+    game.Run();
+    REQUIRE_FALSE(game.out.secondary_right.HasPicture());
+    game.core.SetLayerDepth(3);
+    game.Run(4);
+    REQUIRE(game.HasRightBottom());
+    game.core.SetDepthOnSecondary(false);
+    game.Run();
+    REQUIRE_FALSE(game.out.secondary_right.HasPicture());
+    game.core.SetDepthOnSecondary(true);
+    game.Run(4);
+    REQUIRE(game.HasRightBottom());
 }
 
 TEST_CASE("NDS Layer Depth: a layer ends where the game's picture does", "[frame_cores]") {
@@ -1765,8 +1963,9 @@ TEST_CASE("NDS Layer Depth: a layer ends where the game's picture does", "[frame
     const bool a_on_top = GENERATE(true, false);
     const InvertDepth invert{inverted};
     const int single = GENERATE(0, 1, 2, 3, 4);
-    Game game({.a_on_top = a_on_top, .single = single}, level, true);
-    Game dark({.a_on_top = a_on_top, .single = single, .dark = true}, 0, true);
+    Game game({.a_on_top = a_on_top, .single = single, .empty_sprite = true}, level, true);
+    Game dark({.a_on_top = a_on_top, .single = single, .empty_sprite = true, .dark = true}, 0,
+              true);
     game.core.SetDepthOnSecondary(true);
     game.Run(kStart);
     dark.Run(kStart);

@@ -95,6 +95,27 @@ TEST_CASE("LayerDepth: inverted, the layers are in the opposite order, as far ap
     }
 }
 
+TEST_CASE("LayerDepth: a screen that takes touches has its pictures where they are",
+          "[common][layer_depth]") {
+    constexpr int kWide = 256;
+    for (const int farthest : {-9, -6, -3, -1, 0, 1, 3, 9}) {
+        const float shift = static_cast<float>(farthest) / kWide;
+        const int cut = std::abs(farthest);
+        for (const bool right : {false, true}) {
+            INFO("farthest " << farthest << " right " << right);
+            const int first = CutsRightEdge(right, shift) ? 0 : cut;
+            const float middle = kWide * (0.5f + OffsetInPlace(right, shift));
+            // A column is where it is in the whole picture, so it is what a tap there touches
+            CHECK(middle - static_cast<float>(kWide - cut) / 2 ==
+                  Approx(static_cast<float>(first)).margin(1e-4));
+        }
+        if (farthest < 0) { // as the other screen's then
+            CHECK(OffsetInPlace(false, shift) == Offset(false, shift));
+            CHECK(OffsetInPlace(true, shift) == Offset(true, shift));
+        }
+    }
+}
+
 TEST_CASE("LayerDepth: what is left of the pictures is a window where the nearest layer is",
           "[common][layer_depth]") {
     CHECK(Cut(0.0f) == 0.0f);

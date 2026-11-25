@@ -107,7 +107,14 @@ struct ScreenChain {
     /// AzaharFrame projscreen: the index of the image released last (`index` moves on as soon as
     /// the renderer acquires the next one); under screens_mutex.
     uint32_t shown_index = 0;
-    float layer_shift = 0.0f; ///< the top screen's: XrContentPose's of the image released last
+    /// Of the image released last, XrContentPose's of this screen: what its picture is cut for,
+    /// and whether it is one for each eye (the bottom screen's; the top one's is top_stereo).
+    float layer_shift = 0.0f;
+    bool both_eyes = false;
+    void NoteContent(const VideoCore::XrContentPose& content, bool bottom) {
+        layer_shift = bottom ? content.bottom_shift : content.layer_shift;
+        both_eyes = bottom && content.bottom_stereo;
+    }
 };
 
 /// Where one display frame's time went (milliseconds), from one xrWaitFrame return to the next.

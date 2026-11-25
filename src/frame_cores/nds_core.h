@@ -88,13 +88,12 @@ public:
     void SetConsoleMode(bool dsi) override;
     void SetLayerDepth(uint32_t level) override;
     void SetMaxLayerShift(float share) override;
+    void SetDepthOn(uint32_t screens) override;
+    void SetDepthOnSecondary(bool on) override;
 
     /// Layer Depth: the w of the 3D scene that stands on its layer, for a game that is to have a
     /// fixed one; 0 (as it starts): each scene's own view (NdsDepth::ViewTrack).
     void SetDepthConvergence(float w);
-    /// Layer Depth: a right picture for the Secondary Screen too (FrameOutput::secondary_right),
-    /// for a host that can show one. Off as it starts: nothing is drawn for it.
-    void SetDepthOnSecondary(bool on);
 
     /// Layer Depth's, of the last frame.
     NdsDepth::Lines DepthLines() const;

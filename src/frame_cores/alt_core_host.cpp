@@ -628,7 +628,20 @@ struct AltCoreHost::Impl {
     void Present(bool skippable) {
         if (renderer && renderer->IsReady() && last_frame.primary.HasPicture()) {
             renderer->Present(last_frame.primary, last_frame.secondary, last_frame.overlay,
-                              last_frame.primary_right, last_frame.layer_shift, skippable);
+                              last_frame.primary_right, last_frame.layer_shift,
+                              last_frame.secondary_right, last_frame.secondary_shift, skippable);
+        }
+    }
+
+    /// A paused game's redraw: the right eye's pictures are gone.
+    void DropRight(bool primary, bool secondary) {
+        if (primary) {
+            last_frame.primary_right = {};
+            last_frame.layer_shift = 0.0f;
+        }
+        if (secondary) {
+            last_frame.secondary_right = {};
+            last_frame.secondary_shift = 0.0f;
         }
     }
 
@@ -660,6 +673,7 @@ struct AltCoreHost::Impl {
         }
         core->SetInput(in);
         core->SetMaxLayerShift(MaxLayerShift());
+        core->SetDepthOnSecondary(renderer && renderer->ShowsSecondaryStereo());
         core->RunFrame(last_frame);
         if (mic_blow_frames > 0 && --mic_blow_frames == 0) {
             core->SetMicBlow(false);
@@ -1293,10 +1307,17 @@ void AltCoreHost::SetLayerDepth(uint32_t level) {
     if (impl->core) {
         impl->core->SetLayerDepth(level);
     }
-    if (level == 0) { // a paused game's redraw: the right eye's picture is gone
-        impl->last_frame.primary_right = {};
-        impl->last_frame.secondary_right = {};
-        impl->last_frame.layer_shift = 0.0f;
+    impl->DropRight(level == 0, level == 0);
+}
+
+void AltCoreHost::SetDepthOn(uint32_t screens) {
+    std::lock_guard lock(impl->core_mutex);
+    if (impl->core) {
+        impl->core->SetDepthOn(screens);
+    }
+    if (impl->caps.depth_per_screen) {
+        const NdsDepth::Screens on = NdsDepth::MakeScreens(screens, true);
+        impl->DropRight(!on.top, !on.bottom);
     }
 }
 
