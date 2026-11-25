@@ -21,9 +21,10 @@
 //                                                 other wait (40 a second)
 //     updates   add r6, r1, r0 lsr 1 -> add r6, r1, r0   one update per VBlank
 //     length    2.0f                -> 1.0f       an update is 1/60 s of game time
-// The five places are the ones named in UprisingHack's notes (patricksmill/UprisingHack,
-// GPL-3.0-or-later, kiu/analysis/FINDINGS.md "Frame rate", USA Rev 1), checked here against both
-// games' code; the words and this file are our own.
+// These five changes, places and values, are the same as UprisingHack's 60 FPS patch for USA Rev 1
+// (patricksmill/UprisingHack, GPL-3.0-or-later: kiu/scripts/make_60fps_ips.py and
+// kiu/analysis/FINDINGS.md "Frame rate"), checked here against both games' code. The touch's words
+// below, the context words and the rest of this file are our own.
 //
 // The touch (0x7DAC34; V): each update the game takes the stylus's speed over that update's touch
 // samples (one a VBlank), keeps the last two, and uses the newest one that is not zero; the speed,
