@@ -31,6 +31,7 @@
 #include "frame_cores/gb_core.h"
 #include "frame_cores/gba_core.h"
 #include "frame_cores/nds_core.h"
+#include "video_core/renderer_vulkan/alt_graphics.h"
 #include "video_core/renderer_vulkan/alt_xr_renderer.h"
 
 namespace FrameCores {
@@ -293,18 +294,23 @@ struct AltCoreHost::Impl {
     }
 
     /// The Primary Screen's last picture for an autosave's entry, BGRA. core_mutex held.
-    std::vector<u8> PictureLocked(u32& width, u32& height) const {
+    std::vector<u8> PictureLocked(u32& width, u32& height) {
+        core->ReadPictures(last_frame);
         const auto& screen = last_frame.primary;
         if (!screen.pixels || screen.width == 0 || screen.height == 0) {
             return {};
         }
-        width = screen.width;
-        height = screen.height;
-        const std::size_t stride = screen.stride_pixels ? screen.stride_pixels : width;
+        // In the console's own pixels, whatever the game is drawn at
+        const std::size_t scale = std::max(screen.scale, 1u);
+        width = std::max<u32>(static_cast<u32>(screen.width / scale), 1);
+        height = std::max<u32>(static_cast<u32>(screen.height / scale), 1);
+        const std::size_t stride = screen.stride_pixels ? screen.stride_pixels : screen.width;
         std::vector<u8> out(static_cast<std::size_t>(width) * height * 4);
         for (std::size_t y = 0; y < height; ++y) {
-            std::memcpy(out.data() + y * width * 4, screen.pixels + y * stride,
-                        static_cast<std::size_t>(width) * 4);
+            const u32* const from = screen.pixels + (y * scale + scale / 2) * stride;
+            for (std::size_t x = 0; x < width; ++x) {
+                std::memcpy(out.data() + (y * width + x) * 4, from + x * scale + scale / 2, 4);
+            }
         }
         if (!screen.bgra) {
             for (std::size_t i = 0; i < out.size(); i += 4) {
@@ -592,13 +598,15 @@ struct AltCoreHost::Impl {
     /// game's menu) keeps its place and its last picture.
     void NoteScreens() {
         Layout::AltScreens now = screens;
-        if (last_frame.primary.pixels) {
-            now.top_width = last_frame.primary.width;
-            now.top_height = last_frame.primary.height;
+        if (last_frame.primary.HasPicture()) {
+            now.top_width = last_frame.primary.width / std::max(last_frame.primary.scale, 1u);
+            now.top_height = last_frame.primary.height / std::max(last_frame.primary.scale, 1u);
         }
-        if (last_frame.secondary.pixels) {
-            now.bottom_width = last_frame.secondary.width;
-            now.bottom_height = last_frame.secondary.height;
+        if (last_frame.secondary.HasPicture()) {
+            now.bottom_width =
+                last_frame.secondary.width / std::max(last_frame.secondary.scale, 1u);
+            now.bottom_height =
+                last_frame.secondary.height / std::max(last_frame.secondary.scale, 1u);
         }
         if (now != screens) {
             screens = now;
@@ -618,7 +626,7 @@ struct AltCoreHost::Impl {
     }
 
     void Present(bool skippable) {
-        if (renderer && renderer->IsReady() && last_frame.primary.pixels) {
+        if (renderer && renderer->IsReady() && last_frame.primary.HasPicture()) {
             renderer->Present(last_frame.primary, last_frame.secondary, last_frame.overlay,
                               last_frame.primary_right, skippable);
         }
@@ -646,6 +654,10 @@ struct AltCoreHost::Impl {
         }
         page_before = page;
 
+        if (caps.has_dynamic_resolution && frontend.resolution) { // drawn by the core: DS games
+            const HostResolution resolution = frontend.resolution();
+            core->SetResolution(resolution.factor, resolution.ceiling);
+        }
         core->SetInput(in);
         core->SetMaxLayerShift(MaxLayerShift());
         core->RunFrame(last_frame);
@@ -656,6 +668,12 @@ struct AltCoreHost::Impl {
                                                        std::memory_order_relaxed);
         holding.store(last_frame.held, std::memory_order_relaxed);
 
+        if (last_frame.caps_changed) {
+            caps = core->GetCapabilities();
+            if (callbacks.on_capabilities) {
+                callbacks.on_capabilities(caps);
+            }
+        }
         if (last_frame.metrics_changed) {
             caps.screens = last_frame.updated_metrics;
             if (callbacks.on_screen_metrics) {
@@ -875,6 +893,8 @@ bool AltCoreHost::Boot(const std::string& rom_path, const std::string& data_dir,
             return false;
         }
         impl->renderer->SetSharpPixels(!Common::AltCore::IsDs(impl->rom_info.kind));
+        const Vulkan::AltGraphics graphics = impl->renderer->Graphics();
+        impl->core->SetGraphics(&graphics);
     }
 
     impl->caps = impl->core->GetCapabilities();
@@ -988,6 +1008,13 @@ void AltCoreHost::Stop() {
     impl->audio.Shutdown();
 
     if (impl->renderer) {
+        {
+            std::lock_guard lock(impl->core_mutex);
+            impl->last_frame = FrameOutput{};
+            if (impl->core) {
+                impl->core->SetGraphics(nullptr);
+            }
+        }
         impl->renderer->Shutdown();
         impl->renderer.reset();
     }
@@ -1043,6 +1070,9 @@ void AltCoreHost::Redraw() {
 
 void AltCoreHost::WithScreens(const std::function<void(const FrameOutput&)>& use) const {
     std::lock_guard lock(impl->core_mutex);
+    if (impl->core) {
+        impl->core->ReadPictures(impl->last_frame);
+    }
     use(impl->last_frame);
 }
 

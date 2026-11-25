@@ -8,6 +8,11 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     cheat_merge.h
     cheat_store.h
     core_backend.h
+    ds_gl/ds_gl.h
+    ds_gl/ds_gl_decl.h
+    ds_gl/ds_gl_vk.cpp
+    ds_gl/ds_gl_vk.h
+    ds_gl/nds_gl_captures.h
     driver_runner.cpp
     auto_fire.h
     driver_runner.h
@@ -23,6 +28,9 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     nds_core.cpp
     nds_core.h
     nds_depth.h
+    nds_gl_renderer.cpp
+    nds_resolution.cpp
+    nds_resolution.h
     nds_stereo_3d.cpp
     nds_stereo_3d.h
     nds_stereo_renderer.cpp
@@ -54,7 +62,11 @@ target_link_libraries(frame_cores
         audio_core
         video_core
     PRIVATE
+        melonds_hires
         melonds_core
+        vulkan-headers # the presenter's: one dispatcher, one layout
+        glslang
+        SPIRV
         gbads_core
         mgba
         Threads::Threads

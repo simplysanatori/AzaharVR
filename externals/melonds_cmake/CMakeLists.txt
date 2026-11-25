@@ -250,3 +250,68 @@ endif()
 if (COMMAND target_disable_warnings)
     target_disable_warnings(melonds_core)
 endif()
+
+# melonDS's hi-res renderer (GPU_OpenGL, GPU2D_OpenGL, GPU3D_OpenGL and their shaders), as upstream
+# has it. It is not given OpenGL: MELONDS_GL_HEADER names the declarations in
+# src/frame_cores/ds_gl, which frame_cores carries out on Vulkan. GPU3D_Compute.cpp is compiled
+# only because GPU_OpenGL.cpp names its class; it is never made.
+set(MELONDS_HIRES_SHADERS
+    2DLayerPreVS 2DLayerPreFS 2DSpritePreVS 2DSpritePreFS 2DSpriteVS 2DSpriteFS
+    2DCompositorVS 2DCompositorFS FinalPassVS FinalPassFS CaptureVS CaptureFS
+    CaptureDownscaleVS CaptureDownscaleFS 3DClearVS 3DClearFS 3DClearBitmapVS 3DClearBitmapFS
+    3DRenderVS 3DRenderFS 3DFinalPassVS 3DFinalPassEdgeFS 3DFinalPassFogFS
+)
+set(MELONDS_HIRES_SHADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/hires/OpenGL_shaders")
+file(MAKE_DIRECTORY "${MELONDS_HIRES_SHADER_DIR}")
+set(MELONDS_HIRES_SHADER_OUT "")
+foreach(SH_NAME ${MELONDS_HIRES_SHADERS})
+    set(SH_INPUT "${MELONDS_SRC_DIR}/OpenGL_shaders/${SH_NAME}.glsl")
+    set(SH_OUTPUT "${MELONDS_HIRES_SHADER_DIR}/${SH_NAME}.h")
+    add_custom_command(
+        OUTPUT ${SH_OUTPUT}
+        DEPENDS ${SH_INPUT}
+        COMMAND ${CMAKE_COMMAND} -D INPUT_FILE=${SH_INPUT} -D OUTPUT_FILE=${SH_OUTPUT}
+                -D VAR_NAME=${SH_NAME} -P "${MELONDS_SRC_DIR}/../cmake/MakeEmbed.cmake"
+        VERBATIM
+    )
+    list(APPEND MELONDS_HIRES_SHADER_OUT ${SH_OUTPUT})
+endforeach()
+
+add_library(melonds_hires STATIC
+    "${MELONDS_SRC_DIR}/GPU_OpenGL.cpp"
+    "${MELONDS_SRC_DIR}/GPU2D_OpenGL.cpp"
+    "${MELONDS_SRC_DIR}/GPU3D_OpenGL.cpp"
+    "${MELONDS_SRC_DIR}/GPU3D_Compute.cpp"
+    "${MELONDS_SRC_DIR}/GPU3D_TexcacheOpenGL.cpp"
+    "${MELONDS_SRC_DIR}/OpenGLSupport.cpp"
+    ${MELONDS_HIRES_SHADER_OUT}
+)
+target_compile_definitions(melonds_hires PUBLIC
+    OGLRENDERER_ENABLED
+    "MELONDS_GL_HEADER=\"ds_gl.h\""
+)
+target_include_directories(melonds_hires
+    PUBLIC "${CMAKE_SOURCE_DIR}/src/frame_cores/ds_gl"
+    PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/hires"
+)
+target_link_libraries(melonds_hires PUBLIC melonds_core)
+if (TARGET xxhash)
+    target_link_libraries(melonds_hires PRIVATE xxhash)
+else()
+    target_compile_definitions(melonds_hires PRIVATE XXH_INLINE_ALL)
+endif()
+set_target_properties(melonds_hires PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    POSITION_INDEPENDENT_CODE ON
+    INTERPROCEDURAL_OPTIMIZATION FALSE
+)
+if (MSVC)
+    target_compile_definitions(melonds_hires PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(melonds_hires PRIVATE /W0)
+else()
+    target_compile_options(melonds_hires PRIVATE -w -fwrapv)
+endif()
+if (COMMAND target_disable_warnings)
+    target_disable_warnings(melonds_hires)
+endif()
