@@ -526,7 +526,13 @@ TEST_CASE("texupdate: the optimized copy", "[texupdate]") {
         CHECK_FALSE(Optimize::IsStale(copy));
         REQUIRE(Optimize::MarkStale(copy, true));
         CHECK(Optimize::IsStale(copy));
+#ifdef _WIN32 // AzaharVR: the same folder, written with Windows' separator (as in 1.3.0)
+        REQUIRE(Optimize::SourceOf(copy));
+        CHECK(fs::path(*Optimize::SourceOf(copy)).lexically_normal() ==
+              fs::path(hd).lexically_normal());
+#else
         CHECK(Optimize::SourceOf(copy) == hd);
+#endif
         REQUIRE(Optimize::MarkStale(copy, false));
         CHECK_FALSE(Optimize::IsStale(copy));
         CHECK_FALSE(Optimize::MarkStale(t.Library().string(), true));

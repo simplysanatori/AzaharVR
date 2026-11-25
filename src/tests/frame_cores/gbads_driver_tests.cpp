@@ -32,6 +32,11 @@ extern "C" {
 #include "profiles.h"
 }
 
+#ifdef _WIN32 // AzaharVR: Threads() below
+#include <windows.h>
+#include <tlhelp32.h>
+#endif
+
 using namespace FrameCores;
 namespace fs = std::filesystem;
 using Common::LayerDepth::Eye;
@@ -919,10 +924,21 @@ bool HasLogo(const DriverPicture& picture) {
 
 std::size_t Threads() {
     std::size_t n = 0;
+#ifdef _WIN32 // AzaharVR: no /proc; this process's threads in a snapshot of all of them
+    const HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    REQUIRE(snap != INVALID_HANDLE_VALUE);
+    THREADENTRY32 entry{};
+    entry.dwSize = sizeof(entry);
+    for (BOOL more = Thread32First(snap, &entry); more; more = Thread32Next(snap, &entry)) {
+        n += entry.th32OwnerProcessID == GetCurrentProcessId() ? 1 : 0;
+    }
+    CloseHandle(snap);
+#else
     for (auto it = fs::directory_iterator("/proc/self/task"); it != fs::directory_iterator{};
          ++it) {
         ++n;
     }
+#endif
     return n;
 }
 
