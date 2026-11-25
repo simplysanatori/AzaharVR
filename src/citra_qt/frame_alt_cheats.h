@@ -25,6 +25,11 @@ namespace FrameAltCheats {
 void Start(FrameCores::AltCoreHost& host, std::function<FrameCores::AltCoreHost*()> running,
            std::function<void()> changed);
 
+/// Add Cheat (a name, then the code, on the game's keyboard in VR and in dialogs in Flat, checked
+/// for the game's system); the cheat is added, on, and saved in the game's own list.
+void Add(FrameCores::AltCoreHost& host, std::function<FrameCores::AltCoreHost*()> running,
+         std::function<void()> changed);
+
 /// The model's download state and status for the game with this key (Idle for any other).
 void Fill(std::uint64_t key, FrameXr::Menu::CheatsModel& model);
 

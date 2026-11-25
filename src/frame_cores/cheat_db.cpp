@@ -436,6 +436,82 @@ ChtParse ParseCht(std::string_view text, System system) {
     return out;
 }
 
+std::string NormalizeTyped(const std::string& text, System system, std::string& code) {
+    if (text.size() > kMaxValue) {
+        return "Line 1: Not a Code";
+    }
+    std::vector<std::string> lines;
+    int n = 0;
+    std::size_t start = 0;
+    const std::size_t max_words = system == System::Nds ? 4096 : system == System::Gba ? 64 : 128;
+    std::size_t total = 0;
+    while (start <= text.size()) {
+        const std::size_t nl = text.find('\n', start);
+        std::string_view line(text.data() + start,
+                              (nl == std::string::npos ? text.size() : nl) - start);
+        start = nl == std::string::npos ? text.size() + 1 : nl + 1;
+        ++n;
+        line = Trim(line);
+        if (line.empty()) {
+            continue;
+        }
+        const auto bad = [&] { return "Line " + std::to_string(n) + ": Not a Code"; };
+        std::vector<std::string> words;
+        for (const auto w : Words(line)) { // spaces, tabs, commas and '+' separate
+            words.emplace_back(w);
+        }
+        if (system == System::Gb || system == System::Gbc) {
+            for (const auto& w : words) {
+                if (!(w.size() == 8 && AllHex(w)) && !IsGameGenie(w)) {
+                    return bad();
+                }
+                lines.push_back(UpperWord(w));
+                ++total;
+            }
+            continue;
+        }
+        // DS and GBA: the line's words as halves (a joined word is cut at 8)
+        std::vector<std::string> halves;
+        for (const auto& w : words) {
+            if (!AllHex(w)) {
+                return bad();
+            }
+            if (w.size() == 8 || (system == System::Gba && w.size() == 4 && !halves.empty() &&
+                                  halves.size() % 2 == 1)) {
+                halves.push_back(w);
+            } else if (w.size() == 16 || (system == System::Gba && w.size() == 12)) {
+                halves.push_back(w.substr(0, 8));
+                halves.push_back(w.substr(8));
+            } else {
+                return bad();
+            }
+        }
+        if (halves.empty() || halves.size() % 2 != 0) {
+            return bad();
+        }
+        for (std::size_t i = 0; i < halves.size(); i += 2) {
+            const auto& b = halves[i + 1];
+            if (halves[i].size() != 8 || (b.size() != 8 && !(system == System::Gba && b.size() == 4))) {
+                return bad();
+            }
+            lines.push_back(UpperWord(halves[i]) + " " + UpperWord(b));
+        }
+        total += halves.size();
+    }
+    if (lines.empty()) {
+        return "Enter a Code";
+    }
+    if (total > max_words) {
+        return "Line " + std::to_string(n) + ": Not a Code";
+    }
+    code.clear();
+    for (const auto& l : lines) {
+        code += code.empty() ? "" : "\n";
+        code += l;
+    }
+    return {};
+}
+
 Result Download(const Cheats::Online::HttpGet& get, System system, std::string_view game_code,
                 std::optional<std::uint32_t> crc, std::string_view rom_stem, const Pins& pins) {
     using Cheats::Online::HttpResult;
