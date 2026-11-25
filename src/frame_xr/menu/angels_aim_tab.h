@@ -102,8 +102,8 @@ inline constexpr const char* kAngelsAimSent = "Report Sent";
 /// (tab_menu.h AngelsIntroDialog). Approved by the owner (1.3.0).
 inline constexpr const char* kAngelsIntroTitle = "Angel's Aim Is On";
 inline constexpr const char* kAngelsIntroBody =
-    "Here's what's on. Change any of it under Aiming.";
-inline constexpr const char* kAngelsIntroControls = "Show Aiming";
+    "Here's what's on. Change any of it in Angel's Aim.";
+inline constexpr const char* kAngelsIntroControls = "Show Angel's Aim";
 inline constexpr const char* kAngelsIntroOk = "OK";
 /// AzaharFrame kiufire: Trigger Layout (the page's Aiming group, with Aiming on;
 /// vr_kiu_trigger_layout). Approved by the owner (1.3.0), the tips too.
@@ -364,8 +364,8 @@ struct AimShown {
     bool more = false;
 };
 AimShown AimPageShown(const MenuModel& model, const MenuView& view);
-/// Opens the page from elsewhere in the menu (the Settings tab's link, Show Aiming): its front view
-/// (`group` -1) or a group's page.
+/// Opens the page from elsewhere in the menu (the Settings tab's link, Show Angel's Aim): its
+/// front view (`group` -1) or a group's page.
 void AimPageOpen(MenuView& view, int group);
 /// A press on one of those targets; true when the view changed (its scroll starts again).
 bool AimPagePress(const MenuModel& model, MenuView& view, int index);

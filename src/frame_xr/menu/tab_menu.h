@@ -589,7 +589,7 @@ struct MenuModel {
 
 /// AzaharFrame kiuweap2: the "Angel's Aim Is On" prompt (MenuView::angels_intro): a notice with
 /// the states of Weapon in Hand, Muzzle Flash, Projectiles, Recoil and Laser Sight, and its
-/// buttons Show Aiming (DialogExtra) and OK (DialogConfirm).
+/// buttons Show Angel's Aim (DialogExtra) and OK (DialogConfirm).
 ModsDialog AngelsIntroDialog(const MenuModel& model);
 
 enum class Page { Tabs, SaveSlots, LoadSlots };
@@ -677,7 +677,7 @@ struct MenuView {
     /// AzaharFrame ctgp7: "Requires CTGP-7" shows (an Install Mods row of a CTGP-7 mod was pressed)
     bool requires_ctgp7 = false;
     /// AzaharFrame kiuweap2: the "Angel's Aim Is On" prompt is open (AngelsIntroDialog): OK
-    /// closes it, Show Aiming closes it and opens the Angel's Aim page's Aiming group
+    /// closes it, Show Angel's Aim closes it and opens that page
     bool angels_intro = false;
     /// AzaharFrame kiuaim: the Angel's Aim page's open group (AimGroup; -1 the front view), and
     /// its More rows in place of its own (angels_aim_tab.h)
