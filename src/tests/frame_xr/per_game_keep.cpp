@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 #include <QFile>
 #include <QSettings>
@@ -416,6 +417,85 @@ TEST_CASE("Per-Game: Trigger Layout's key, Original by default", "[frame_xr][kiu
     CHECK(FrameXr::PerGame::KeysOf(Id::TriggerLayout) ==
           std::vector<std::string>{"vr_kiu_trigger_layout"});
     CHECK(Settings::values.vr_kiu_trigger_layout.GetDefault() == 0u);
+}
+
+// AzaharVR: Screen Layout per game too: the same key, and a game's file without it (every file an
+// older build wrote) follows Global.
+TEST_CASE("Per-Game: Screen Layout's key", "[frame_xr][tabmenu]") {
+    const AllGlobal restore;
+    auto& layout = Settings::values.vr_screen_layout;
+    CHECK(FrameXr::PerGame::KeysOf(Id::ScreenLayout) ==
+          std::vector<std::string>{"vr_screen_layout"});
+    CHECK(layout.GetDefault() == 0u);
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    layout.SetGlobal(true);
+    const u32 before = layout.GetValue(true);
+    for (const u32 global : {0u, 1u}) {
+        layout.SetGlobal(true);
+        layout.SetValue(global);
+        QSettings old(dir.filePath(QStringLiteral("old%1.ini").arg(global)), QSettings::IniFormat);
+        ReadGame(old, layout);
+        CHECK(layout.UsingGlobal());
+        CHECK(layout.GetValue() == global);
+        // The game's own value, and back
+        QSettings own(dir.filePath(QStringLiteral("own%1.ini").arg(global)), QSettings::IniFormat);
+        layout.SetGlobal(false);
+        layout.SetValue(1u - global);
+        WriteGame(own, layout);
+        layout.SetGlobal(true);
+        ReadGame(own, layout);
+        CHECK(layout.GetValue() == 1u - global);
+        CHECK(layout.GetValue(true) == global);
+        CHECK(FrameXr::PerGame::UseGlobalValue(Id::ScreenLayout));
+        CHECK(layout.GetValue() == global);
+        WriteGame(own, layout);
+        CHECK_FALSE(own.contains(QStringLiteral("vr_screen_layout")));
+    }
+    layout.SetGlobal(true);
+    layout.SetValue(before);
+}
+
+// AzaharVR: the rows that moved to another place of the menu write the keys they wrote before.
+TEST_CASE("Per-Game: a moved row keeps its key", "[frame_xr][tabmenu]") {
+    const std::vector<std::pair<Id, std::vector<std::string>>> kKeys{
+        {Id::MotionControls, {"vr_motion_controls"}},
+        {Id::ShowControllers, {"vr_show_controllers"}},
+        {Id::ControllersInFront, {"vr_controllers_in_front"}},
+        {Id::HideBottomScreen, {"vr_hide_bottom_screen"}},
+        {Id::ScreenShape, {"vr_top_aspect"}},
+        {Id::DsScreenRotation, {"ds_screen_rotation"}},
+        {Id::GbaSolarLevel, {"gba_solar_level"}},
+        {Id::SecondScreen, {"gba_second_screen"}},
+        {Id::AllowGameEditing, {"gba_allow_editing"}},
+        {Id::DsTouchEnabled, {"ds_touch_enabled"}},
+        {Id::DsConsoleMode, {"ds_console_mode"}},
+        {Id::MotionClarityNormal, {"vr_motion_clarity_normal"}},
+        {Id::MatchBottomNormal, {"vr_motion_clarity_match_bottom"}},
+        {Id::MotionClarity, {"vr_motion_clarity_immersive"}},
+        {Id::MatchBottom, {"vr_motion_clarity_match_bottom"}},
+        {Id::ScreenAsPanel, {"vr_screens_in_projection"}},
+        {Id::HudSpacingX, {"vr_immersive_hud_spacing_x"}},
+        {Id::HudSpacingY, {"vr_immersive_hud_spacing_y"}},
+        {Id::GameFov, {"vr_immersive_game_fov"}},
+        {Id::MatchCamera, {"vr_immersive_match_camera_mode"}},
+        {Id::WorldScale, {"vr_immersive_world_scale"}},
+        {Id::FollowScreen, {"vr_immersive_follow_screen"}},
+        {Id::ScaleMode, {"vr_immersive_scale_mode"}},
+        {Id::ScaleX, {"vr_immersive_scale_x"}},
+        {Id::ScaleY, {"vr_immersive_scale_y"}},
+        {Id::MarginX, {"vr_immersive_render_margin_x", "vr_immersive_wider_view_level"}},
+        {Id::MarginY, {"vr_immersive_render_margin_y", "vr_immersive_wider_view_level"}},
+    };
+    for (const auto& [id, keys] : kKeys) {
+        INFO(FrameXr::Menu::LabelFor(id));
+        CHECK(FrameXr::PerGame::KeysOf(id) == keys);
+    }
+    // Global ones: no key of a game's file
+    for (const Id id : {Id::FaceButtons, Id::ScreenCurve, Id::MoveScreens, Id::Background}) {
+        CHECK(FrameXr::PerGame::KeysOf(id).empty());
+        CHECK_FALSE(FrameXr::Menu::PerGameSetting(id));
+    }
 }
 
 // AzaharFrame kiumode: Angel's Aim (Immersive Mode 4) supplies Kid Icarus: Uprising's two

@@ -279,7 +279,7 @@ TEST_CASE("Core rows: Use Global Values counts only the console's rows", "[frame
         }
     }
     CHECK(GameValueRows(m, Tab::Position) ==
-          std::vector<Id>{Id::HideBottomScreen, Id::DsScreenRotation});
+          std::vector<Id>{Id::ScreenLayout, Id::DsScreenRotation, Id::HideBottomScreen});
 }
 
 TEST_CASE("Core rows: the text", "[frame_xr][tabmenu]") {

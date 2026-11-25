@@ -250,6 +250,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::HideBottomScreen;
     case Id::ScreenShape:
         return MenuSetting::ScreenShape;
+    case Id::ScreenLayout:
+        return MenuSetting::ScreenLayout;
     case Id::ImmersiveMode:
         return MenuSetting::ImmersiveMode;
     case Id::MarginX: // AzaharFrame fovaxis
@@ -1398,8 +1400,8 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         Apply(v.vr_screen_curve, static_cast<u32>(r.value), false);
         r.setting = MenuSetting::ScreenCurve;
         break;
-    case Id::ScreenLayout: // AzaharFrame layout, global
-        Apply(v.vr_screen_layout, std::min<u32>(u, 1), false);
+    case Id::ScreenLayout: // AzaharFrame layout
+        Apply(v.vr_screen_layout, std::min<u32>(u, 1), per_game);
         r.setting = MenuSetting::ScreenLayout;
         break;
     case Id::MoveScreens: // AzaharFrame menu, global

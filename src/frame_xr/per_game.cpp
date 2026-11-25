@@ -27,6 +27,9 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::ScreenShape:
         f(v.vr_top_aspect);
         return true;
+    case Id::ScreenLayout:
+        f(v.vr_screen_layout);
+        return true;
     case Id::ImmersiveMode:
         f(v.vr_immersive_mode);
         return true;

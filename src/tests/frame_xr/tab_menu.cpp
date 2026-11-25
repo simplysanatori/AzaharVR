@@ -2936,7 +2936,7 @@ TEST_CASE("Tab menu: the Per-Game count and Use Global Values for All, per tab",
     // Global-only rows are never per game
     // (AzaharFrame kiu: Motion Controls is per game now.)
     for (Id id : {Id::Background, Id::WindowScale, Id::FaceButtons,
-                  Id::FastForwardSpeed, Id::DynamicResolution, Id::ScreenLayout, Id::MoveScreens,
+                  Id::FastForwardSpeed, Id::DynamicResolution, Id::MoveScreens,
                   Id::ScreenCurve, Id::CursorSpeed}) {
         CHECK(!PerGameSetting(id));
     }
@@ -2948,7 +2948,7 @@ TEST_CASE("Tab menu: the Per-Game count and Use Global Values for All, per tab",
                   Id::MatchBottom, Id::MatchBottomNormal,
                   Id::Autosave,
                   Id::AutosaveEvery, Id::AutosaveKeep, Id::HideBottomScreen, Id::ScreenShape,
-                  Id::TouchpadTouch, Id::BottomScreenReticle, Id::ReticleSpeed,
+                  Id::ScreenLayout, Id::TouchpadTouch, Id::BottomScreenReticle, Id::ReticleSpeed,
                   Id::ReticleAtEdge, Id::MotionControls, Id::ReticleEdgeCStick}) {
         CHECK(PerGameSetting(id));
     }
@@ -2977,7 +2977,7 @@ TEST_CASE("Tab menu: the Per-Game count and Use Global Values for All, per tab",
     m.game_value[static_cast<std::size_t>(Id::ScreenShape)] = true;
     m.game_value[static_cast<std::size_t>(Id::ReticleAtEdge)] = true; // shown or not
     m.game_value[static_cast<std::size_t>(Id::BottomScreenReticle)] = true;
-    m.game_value[static_cast<std::size_t>(Id::ScreenLayout)] = true; // global only: never
+    m.game_value[static_cast<std::size_t>(Id::MoveScreens)] = true; // global only: never
     // The Settings tab: its section's
     CHECK(GameValueRows(m, Tab::Settings, SettingsSection::Graphics) ==
           std::vector<Id>{Id::Depth3d, Id::TextureFilter});
