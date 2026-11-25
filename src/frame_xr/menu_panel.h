@@ -110,6 +110,10 @@ public:
     float Height() const {
         return width_m * Menu::kPanelH / Menu::kPanelW;
     }
+    /// AzaharFrame kiuaim: the Angel's Aim page's Bottom Screen page is on view (XR thread).
+    bool AimBottomPageOpen() const {
+        return open && Menu::AimBottomPageOpen(model, view);
+    }
 
 private:
     struct Shared;

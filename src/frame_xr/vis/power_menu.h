@@ -3,18 +3,20 @@
 // Refer to the license.txt file included.
 
 // AzaharFrame kiupowers: Kid Icarus: Uprising's powers (on land) and its special attack's dots (in
-// the air) in Angel's Aim, over the off hand or in the view with the HUD (test switches, off by
-// default; KIU_HOOKS.md "Powers"). What shows and when, where it goes, and the dots' image. No
-// OpenXR calls (unit tested in src/tests/frame_xr/kiu_powers.cpp).
+// the air) in Angel's Aim, over the off hand or in the view with the HUD (vr_kiu_power_menu and its
+// opacity, off by default; KIU_HOOKS.md "Powers"). What shows and when, where it goes, and the dots'
+// image. No OpenXR calls (unit tested in src/tests/frame_xr/kiu_powers.cpp).
+//
+// Test switches; one that is set wins over the settings:
 //
 //   AZAHARFRAME_KIU_POWERS=1              the powers: the game's own icons, arrows and name
 //                                         (video_core/kiu_powers.h) over what is behind them
 //   AZAHARFRAME_KIU_POWERS_GOLD=0         without the gold piece behind the selected power
 //   AZAHARFRAME_KIU_POWER_DOTS=1          the dots
-//   AZAHARFRAME_KIU_POWERS_AT=hand        over the off hand: the powers for a while after one is
-//                                         selected or used, the dots always (the default)
-//                           |bar|right    with the HUD, always in a battle: under the health bar,
-//                                         or at the top right (under the score)
+//   AZAHARFRAME_KIU_POWERS_AT=hand        over the off hand: the powers for a while after another is
+//                                         selected, the dots always (the default)
+//                           |bar|middle|score   with the HUD, always in a battle: under the health
+//                                         bar, between it and the score, under the score
 //   AZAHARFRAME_KIU_POWERS_OPACITY=<%>    20 to 100
 //   AZAHARFRAME_KIU_POWER_DOTS_OPACITY=<%>
 //   AZAHARFRAME_KIU_POWERS_S=<seconds>    how long they stay over the hand (1.5)
@@ -35,7 +37,7 @@
 
 namespace FrameXr::Vis::Powers {
 
-enum class At : uint8_t { Hand, Bar, Right };
+enum class At : uint8_t { Hand, Bar, Middle, Score };
 
 struct Settings {
     bool powers = false, dots = false;
@@ -45,6 +47,7 @@ struct Settings {
     float stay_s = 1.5f;
     float width_deg = 13.6f;
     float up_m = 0.11f;
+    float across_deg = 0.0f, height_deg = 0.0f; ///< with the HUD: from the place, right and up
     bool operator==(const Settings&) const = default;
 };
 At AtFrom(const std::optional<std::string>& text);
@@ -53,12 +56,24 @@ float OpacityFrom(const std::optional<std::string>& text);
 /// `text` within `low` to `high`, else `fallback`.
 float NumberFrom(const std::optional<std::string>& text, float low, float high, float fallback);
 
+/// vr_kiu_power_menu's values.
+enum class Menu : uint32_t { Off, OffHand, HealthBar, Middle, Score };
+/// The test switches as they are set.
+struct Switches {
+    std::optional<std::string> powers, dots, gold, at, powers_opacity, dots_opacity, stay_s,
+        width_deg, up_m;
+};
+/// From the settings (`menu`, `opacity` in percent) and the switches: not Off is the powers and the
+/// dots, there and with that opacity; a switch that is set wins.
+Settings SettingsFor(uint32_t menu, uint32_t opacity, const Switches& sw);
+
 // ---- What shows ------------------------------------------------------------------------------
 
 inline constexpr float kFadeS = 0.25f;
 /// The aiming ray within this of the powers over the hand: faded to kAimedShare, back this long after.
 inline constexpr float kAimedDeg = 3.0f, kAimedShare = 0.15f, kAimedS = 0.4f, kAimedFadeS = 0.1f;
-inline constexpr float kDotsShare = 0.45f, kNoDotShare = 0.30f, kDotChangedS = 1.0f;
+/// The dots' opacity with a full one, with none, and how long in full after one changed.
+inline constexpr float kDotsShare = 0.80f, kNoDotShare = 0.65f, kDotChangedS = 1.0f;
 
 struct Frame {
     Kiu::Powers::State game;
@@ -91,10 +106,27 @@ struct Place {
     Input::Posef pose{};
     float width = 0.0f, height = 0.0f; ///< metres
 };
+/// Which way a card over the hand faces: to the eyes, upright whatever the hand does. It follows
+/// them once they are kLeashDeg off, so small head motion does not move it.
+inline constexpr float kLeashDeg = 2.0f, kFollowS = 0.08f;
+class Billboard {
+public:
+    /// The direction from `position` to `eye`, as held; the first after Reset at once.
+    Input::Vec3f Update(const Input::Vec3f& position, const Input::Vec3f& eye, float dt_s);
+    void Reset() {
+        held_ = false;
+    }
+
+private:
+    Input::Vec3f toward_{};
+    bool held_ = false;
+};
 /// Upright over the hand (the room's up), facing the eye, as wide as `width_deg` is there (9 to 16
 /// cm). `keep_width`: its width while it is up (0: not up), so a moving hand does not resize it.
+/// `toward`: which way it faces (Billboard's; none: straight to the eye).
 Place OverHand(const Input::Posef& aim, const Input::Vec3f& eye, float up_m, float width_deg,
-               float aspect, float keep_width = 0.0f);
+               float aspect, float keep_width = 0.0f,
+               const std::optional<Input::Vec3f>& toward = std::nullopt);
 /// The angle from `ray` to the nearest point of `p`, degrees (0 on it); 180 behind the ray.
 float AngleTo(const Input::Posef& ray, const Place& p);
 
@@ -109,13 +141,20 @@ bool Overlap(const Rect& a, const Rect& b);
 inline constexpr float kHudScale = 0.7f;
 /// The HUD's bottom edges in its frame (desktop pictures), what is kept clear of the reticle (half,
 /// degrees) and the gap.
-inline constexpr float kBarBottom = 0.70f, kScoreBottom = 0.70f;
-inline constexpr float kReticleDeg = 6.0f, kGap = 0.03f;
-/// `wide`, `high`: in the bottom screen's pixels. `tan_x`, `tan_y`: the screen's half angles.
-/// Under the bar or the score, its outer side in line with theirs; where that would cover another
-/// piece, the reticle's middle or the subtitles, over it, else beside it.
+inline constexpr float kBarBottom = 0.72f, kScoreBottom = 0.72f;
+inline constexpr float kReticleDeg = 6.0f, kGap = 0.02f;
+/// `wide`, `high`: in the bottom screen's pixels, `row` of it from the top the part that counts for
+/// the middle's height. `tan_x`, `tan_y`: the screen's half angles.
+/// Just under the bar or the score, its outer side in line with theirs, or between the two, the row
+/// level with them (no room there: under both); where that would cover another piece, the reticle's
+/// middle or the subtitles, over it, else beside it.
 Rect WithHud(At at, const VideoCore::KiuHud::Place& hud, float tan_x, float tan_y, float wide,
-             float high);
+             float high, float row);
+/// `r` moved by these degrees to the right and up, held to the screen.
+Rect Moved(Rect r, float tan_x, float tan_y, float across_deg, float height_deg);
+/// The gap the bar and the score need between them, beside their own, for the powers in the middle
+/// of the linked HUD (KiuHud::Wanted::link_gap; 0 for the other places).
+float HudGap(const Settings& s);
 
 // ---- The dots' image -------------------------------------------------------------------------
 

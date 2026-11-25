@@ -3264,3 +3264,43 @@ TEST_CASE("FrameXr immersive: the owner's Kid Icarus settings in the normal view
     REQUIRE(fp.gain_x == 1.0f);
     REQUIRE(fp.gain == 1.0f);
 }
+
+// AzaharFrame kiuaim: the real Bottom Screen kept on view while the menu's Bottom Screen page is
+// open: only then, only in Angel's Aim's game and mode, Persistent with the view, Wrist once the
+// controls placed it for the frame.
+TEST_CASE("FrameXr kiuaim: the Bottom Screen kept on view with its page", "[frame_xr][kiuaim]") {
+    using FrameXr::Immersive::Layout::PlacePreview;
+    using FrameXr::Immersive::Layout::PlacePreviewFor;
+    using FrameXr::Immersive::Layout::PlacePreviewState;
+    CHECK(std::string(FrameXr::Immersive::Layout::kKiuPlacePreviewSwitch) ==
+          "AZAHARFRAME_KIU_PLACE_PREVIEW");
+    PlacePreviewState on;
+    on.wanted = on.menu_open = on.first_person = on.view_valid = true;
+    on.bottom_mode = 1;
+    CHECK(PlacePreviewFor(on) == PlacePreview::Persistent);
+    on.wrist_placed = true; // of no account for Persistent
+    CHECK(PlacePreviewFor(on) == PlacePreview::Persistent);
+    on.bottom_mode = 2;
+    CHECK(PlacePreviewFor(on) == PlacePreview::Wrist);
+    on.wrist_placed = false; // the hand not tracked, or the wrist turned away: nothing, as in play
+    CHECK(PlacePreviewFor(on) == PlacePreview::None);
+    on.bottom_mode = 0; // Off: nothing to keep
+    on.wrist_placed = true;
+    CHECK(PlacePreviewFor(on) == PlacePreview::None);
+    // Each condition alone takes it away: the page left (or the switch off), the menu closed,
+    // another game or mode, no head pose.
+    for (int mode = 1; mode <= 2; mode++) {
+        for (int miss = 0; miss < 4; miss++) {
+            PlacePreviewState s;
+            s.wanted = miss != 0;
+            s.menu_open = miss != 1;
+            s.first_person = miss != 2;
+            s.view_valid = miss != 3;
+            s.bottom_mode = mode;
+            s.wrist_placed = true;
+            INFO("mode " << mode << " miss " << miss);
+            CHECK(PlacePreviewFor(s) == PlacePreview::None);
+        }
+    }
+    CHECK(PlacePreviewFor({}) == PlacePreview::None);
+}

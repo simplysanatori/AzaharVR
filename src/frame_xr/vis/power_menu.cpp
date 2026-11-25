@@ -8,8 +8,10 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <utility>
 
 #include "frame_xr/vis/power_menu.h"
+#include "video_core/kiu_powers.h"
 
 namespace FrameXr::Vis::Powers {
 
@@ -24,7 +26,11 @@ float Toward(float now, float target, float step) {
 } // namespace
 
 At AtFrom(const std::optional<std::string>& text) {
-    return text && *text == "bar" ? At::Bar : text && *text == "right" ? At::Right : At::Hand;
+    return !text                                  ? At::Hand
+           : *text == "bar"                       ? At::Bar
+           : *text == "middle"                    ? At::Middle
+           : *text == "score" || *text == "right" ? At::Score
+                                                  : At::Hand;
 }
 
 float NumberFrom(const std::optional<std::string>& text, float low, float high, float fallback) {
@@ -38,6 +44,33 @@ float NumberFrom(const std::optional<std::string>& text, float low, float high, 
 
 float OpacityFrom(const std::optional<std::string>& text) {
     return NumberFrom(text, 20.0f, 100.0f, 100.0f) / 100.0f;
+}
+
+Settings SettingsFor(uint32_t menu, uint32_t opacity, const Switches& sw) {
+    const bool on = menu >= static_cast<uint32_t>(Menu::OffHand) &&
+                    menu <= static_cast<uint32_t>(Menu::Score);
+    const auto share = [&](const std::optional<std::string>& text) {
+        return text ? OpacityFrom(text)
+                    : static_cast<float>(std::clamp(opacity, 20u, 100u)) / 100.0f;
+    };
+    Settings s;
+    s.powers = sw.powers ? *sw.powers == "1" : on;
+    s.dots = sw.dots ? *sw.dots == "1" : on;
+    if (!s.powers && !s.dots) {
+        return s;
+    }
+    s.gold = sw.gold != "0";
+    s.at = sw.at                                            ? AtFrom(sw.at)
+           : menu == static_cast<uint32_t>(Menu::HealthBar) ? At::Bar
+           : menu == static_cast<uint32_t>(Menu::Middle)    ? At::Middle
+           : menu == static_cast<uint32_t>(Menu::Score)     ? At::Score
+                                                            : At::Hand;
+    s.powers_opacity = share(sw.powers_opacity);
+    s.dots_opacity = share(sw.dots_opacity);
+    s.stay_s = NumberFrom(sw.stay_s, 0.5f, 30.0f, s.stay_s);
+    s.width_deg = NumberFrom(sw.width_deg, 6.0f, 30.0f, s.width_deg);
+    s.up_m = NumberFrom(sw.up_m, 0.0f, 0.3f, s.up_m);
+    return s;
 }
 
 Show::Out Show::Update(const Settings& s, const Frame& f) {
@@ -82,11 +115,40 @@ Show::Out Show::Update(const Settings& s, const Frame& f) {
     return out;
 }
 
+Input::Vec3f Billboard::Update(const Input::Vec3f& position, const Input::Vec3f& eye, float dt_s) {
+    const Input::Vec3f to = eye - position;
+    if (!(Input::Length(to) > 1e-3f)) {
+        return held_ ? toward_ : Input::Vec3f{0.0f, 0.0f, 1.0f};
+    }
+    Input::Vec3f want = Input::Normalized(to);
+    // Nearly under or over the eyes: the way it is turned is kept, so it does not spin.
+    constexpr float kLeast = 0.2f;
+    const float was = std::hypot(toward_.x, toward_.z);
+    if (held_ && was > 0.01f && std::hypot(want.x, want.z) < kLeast) {
+        want = Input::Normalized(
+            Input::Vec3f{toward_.x / was * kLeast, want.y, toward_.z / was * kLeast});
+    }
+    if (!std::exchange(held_, true)) {
+        return toward_ = want;
+    }
+    const float off = std::acos(std::clamp(Input::Dot(toward_, want), -1.0f, 1.0f)) / kDeg;
+    if (off > 90.0f) { // turned away altogether
+        return toward_ = want;
+    }
+    if (off > kLeashDeg) {
+        const float share =
+            (off - kLeashDeg) / off * (1.0f - std::exp(-std::max(dt_s, 0.0f) / kFollowS));
+        toward_ = Input::Normalized(toward_ * (1.0f - share) + want * share);
+    }
+    return toward_;
+}
+
 Place OverHand(const Input::Posef& aim, const Input::Vec3f& eye, float up_m, float width_deg,
-               float aspect, float keep_width) {
+               float aspect, float keep_width, const std::optional<Input::Vec3f>& toward) {
     Place p;
     p.pose.position = aim.position + Input::Vec3f{0.0f, up_m, 0.0f};
-    p.pose.orientation = Input::FaceViewer(p.pose.position, eye, {0.0f, 1.0f, 0.0f});
+    p.pose.orientation = Input::FaceViewer(
+        p.pose.position, toward ? p.pose.position + *toward : eye, {0.0f, 1.0f, 0.0f});
     const float distance = Input::Length(eye - p.pose.position);
     p.width = keep_width > 0.0f
                   ? keep_width
@@ -122,10 +184,11 @@ bool Overlap(const Rect& a, const Rect& b) {
 }
 
 Rect WithHud(At at, const VideoCore::KiuHud::Place& hud, float tan_x, float tan_y, float wide,
-             float high) {
+             float high, float row) {
     namespace KH = VideoCore::KiuHud;
     const float w = wide * kHudScale / 200.0f * hud.half_across;
     const float h = high * kHudScale / 120.0f * hud.half_up;
+    const float line_h = row * kHudScale / 120.0f * hud.half_up;
     const auto piece = [](float across, float up, float half_across, float half_up, float left,
                           float right, float bottom) {
         return Rect{across + half_across * left, across + half_across * right,
@@ -140,23 +203,70 @@ Rect WithHud(At at, const VideoCore::KiuHud::Place& hud, float tan_x, float tan_
     const Rect words{-hud.subtitle_half_across, hud.subtitle_half_across,
                      hud.subtitle_up - 0.2f * hud.subtitle_half_up,
                      hud.subtitle_up + 0.2f * hud.subtitle_half_up};
-    const Rect& own = at == At::Bar ? bar : score;
     const float gap = kGap * hud.half_up;
     const auto box = [&](float left, float down) { return Rect{left, left + w, down, down + h}; };
+    const auto clear = [&](const Rect& p) {
+        return !Overlap(p, bar) && !Overlap(p, score) && !Overlap(p, reticle) &&
+               !Overlap(p, words) && p.left >= -1.0f && p.right <= 1.0f && p.down >= -1.0f &&
+               p.up <= 1.0f;
+    };
+    const auto first = [&](const auto& places) {
+        for (const Rect& p : places) {
+            if (clear(p)) {
+                return p;
+            }
+        }
+        return places[0];
+    };
+    if (at == At::Middle) {
+        const Rect& one = bar.left < score.left ? bar : score;
+        const Rect& two = bar.left < score.left ? score : bar;
+        const float left = 0.5f * (one.right + two.left) - 0.5f * w;
+        const float level = 0.25f * (bar.down + bar.up + score.down + score.up) + 0.5f * line_h;
+        const float low = std::min(bar.down, score.down), top = std::max(bar.up, score.up);
+        return first(std::array<Rect, 4>{
+            box(left, level - h),
+            box(left, low - gap - h),
+            box(left, top + gap),
+            box(one.left - gap - w, level - h),
+        });
+    }
+    const Rect& own = at == At::Bar ? bar : score;
     const float line = at == At::Bar ? own.left : own.right - w;
     const float other = at == At::Bar ? own.right - w : own.left;
-    const std::array<Rect, 6> places{
-        box(line, own.down - gap - h),       box(other, own.down - gap - h),
-        box(line, own.up + gap),             box(own.right + gap, own.up - h),
-        box(own.left - gap - w, own.up - h), box(line, own.down - 2.0f * gap - h - (own.up - own.down)),
-    };
-    for (const Rect& p : places) {
-        if (!Overlap(p, bar) && !Overlap(p, score) && !Overlap(p, reticle) && !Overlap(p, words) &&
-            p.left >= -1.0f && p.right <= 1.0f && p.down >= -1.0f && p.up <= 1.0f) {
-            return p;
+    return first(std::array<Rect, 7>{
+        box(line, own.down - gap - h),
+        box(other, own.down - gap - h),
+        box(line, own.up + gap),
+        box(other, own.up + gap),
+        box(own.right + gap, own.up - h),
+        box(own.left - gap - w, own.up - h),
+        box(line, own.down - 2.0f * gap - h - (own.up - own.down)),
+    });
+}
+
+Rect Moved(Rect r, float tan_x, float tan_y, float across_deg, float height_deg) {
+    const auto shift = [](float low, float high, float t, float deg) {
+        if (deg == 0.0f) {
+            return 0.0f;
         }
+        const float at = 0.5f * (low + high), half = 0.5f * (high - low);
+        const float a = std::clamp(std::atan(at * t) + deg * kDeg, -1.2f, 1.2f);
+        const float most = std::max(1.0f - half, 0.0f);
+        return std::clamp(std::tan(a) / t, -most, most) - at;
+    };
+    const float x = shift(r.left, r.right, tan_x, across_deg);
+    const float y = shift(r.down, r.up, tan_y, height_deg);
+    return {r.left + x, r.right + x, r.down + y, r.up + y};
+}
+
+float HudGap(const Settings& s) {
+    namespace KH = VideoCore::KiuHud;
+    if ((!s.powers && !s.dots) || s.at != At::Middle) {
+        return 0.0f;
     }
-    return places[0];
+    return static_cast<float>(VideoCore::KiuPowers::kWide) * kHudScale / 200.0f + 0.06f -
+           KH::kLinkGap;
 }
 
 int DotsFor(float charge) {
@@ -188,17 +298,19 @@ void PaintDots(float charge, float opacity, std::vector<uint8_t>& rgba) {
                      linear(static_cast<float>(rgb >> 8 & 0xFF) / 255.0f),
                      linear(static_cast<float>(rgb & 0xFF) / 255.0f), a};
     };
-    const Color back = color(0x10202A, 0.60f), ring = color(0xE8F4FF, 0.80f),
-                full = color(0x1E86C8, 1.0f), shine = color(0x8FD6FF, 1.0f),
-                filling = color(0xBFE6F5, 1.0f);
-    // A dot of radius 120 and its ring 6 wide, in kDotPx.
+    const Color back = color(0x10202A, 0.60f), dark = color(0x061018, 1.0f),
+                ring = color(0xF2F9FF, 1.0f), full = color(0x1E86C8, 1.0f),
+                shine = color(0x8FD6FF, 1.0f), filling = color(0xBFE6F5, 1.0f);
+    // A dot of radius 121 in kDotPx: a light ring 7 wide on a dark one 20 wide, so one of them
+    // stands out on whatever is behind.
+    constexpr float kRing = 111.0f, kDisc = 104.0f;
     constexpr float kUnit = 246.0f / static_cast<float>(kDotPx);
     const int dots = DotsFor(charge);
     for (int d = 0; d < dots; ++d) {
         const float x0 = static_cast<float>(kDotPad + d * (kDotPx + kDotGapPx));
         const float fill = std::clamp(charge - static_cast<float>(d), 0.0f, 1.0f);
         const bool is_full = fill >= 1.0f;
-        const float level = 112.0f - 224.0f * fill; // down positive
+        const float level = kDisc - 2.0f * kDisc * fill; // down positive
         for (int py = 0; py < kDotPx; ++py) {
             for (int px = 0; px < kDotPx; ++px) {
                 const float x = (static_cast<float>(px) + 0.5f) * kUnit - 123.0f;
@@ -214,16 +326,17 @@ void PaintDots(float charge, float opacity, std::vector<uint8_t>& rgba) {
                     c = {s.r * a + c.r * (1 - a), s.g * a + c.g * (1 - a), s.b * a + c.b * (1 - a),
                          a + c.a * (1 - a)};
                 };
-                over(back, inside(r - 120.0f));
+                over(back, inside(r - kRing));
                 if (is_full) {
-                    over(full, inside(r - 112.0f));
+                    over(full, inside(r - kDisc));
                     const float e = std::sqrt((x + 22) * (x + 22) / (44.0f * 44.0f) +
                                               (y + 48) * (y + 48) / (20.0f * 20.0f));
                     over(shine, inside((e - 1.0f) * 28.0f));
                 } else if (fill > 0.0f) {
-                    over(filling, inside(r - 112.0f) * inside(level - y));
+                    over(filling, inside(r - kDisc) * inside(level - y));
                 }
-                over(ring, inside(std::abs(r - 120.0f) - 3.0f));
+                over(dark, inside(std::abs(r - kRing) - 10.0f));
+                over(ring, inside(std::abs(r - kRing) - 3.5f));
                 uint8_t* out = rgba.data() + 4 * ((kDotPad + py) * kDotsWide +
                                                   static_cast<int>(x0) + px);
                 const auto byte = [](float v) {

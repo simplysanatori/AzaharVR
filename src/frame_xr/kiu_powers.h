@@ -114,14 +114,13 @@ State Read(const Reader& m) {
     return s;
 }
 
-/// Whether the player did something with the powers between two reads (what shows them over the
-/// hand): another one selected, the name asked for again, one used.
+/// Whether the player selected another power between two reads (what shows them over the hand). Not
+/// one used, nor the list moving as one is used up or found.
 constexpr bool Touched(const State& before, const State& now) {
     if (!before.known || !now.known || before.air || now.air) {
         return false;
     }
-    return now.place != before.place || now.name_timer > before.name_timer + 0.5f ||
-           (now.used && !before.used);
+    return now.place != before.place && now.count == before.count;
 }
 /// A dot filled or was spent.
 constexpr bool DotChanged(const State& before, const State& now) {

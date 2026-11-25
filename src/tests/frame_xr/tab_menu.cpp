@@ -3292,7 +3292,7 @@ TEST_CASE("Tab menu: Trigger Layout, Kid Icarus only", "[frame_xr][tabmenu][kiuf
           "Your aiming hand's trigger only fires. The other trigger uses your power, and the "
           "bumpers pick it.");
     CHECK(ExplainOption(Id::TriggerLayout, 1) ==
-          "Both triggers fire and also press the game's own buttons, as before.");
+          "Both triggers fire and also press the game's own buttons.");
     CHECK(TriggerLayoutIndexOf(0) == 1);
     CHECK(TriggerLayoutIndexOf(1) == 0);
     CHECK(TriggerLayoutValueAt(0) == 1);

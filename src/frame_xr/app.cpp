@@ -1162,6 +1162,10 @@ void Runtime::FrameLoop() {
         // of layers its quads would have gone.
         proj = {};
         proj_fallback.clear();
+        // AzaharFrame kiuaim: Angel's Aim's Bottom Screen kept on view with the menu's Bottom
+        // Screen page: its quad, added after the menu's (below).
+        Quad preview_quad;
+        bool preview_take = false, preview_have = false;
         std::size_t proj_at = 0;
         bool proj_placed = false;
         PowerLayers::In powers_in; // AzaharFrame kiupowers
@@ -1502,6 +1506,8 @@ void Runtime::FrameLoop() {
                     pe.serial = chain.frame_serial;
                     // AzaharFrame kiuview: first person's soft edge (the top screen only).
                     pe.soft_edge = top_immersive ? Kiu::FirstPerson::EdgeShare() : 0.0f;
+                    pe.darker = // AzaharFrame kiucam
+                        top_immersive ? 1.0f - ui->CameraBrightness(fs.predictedDisplayTime) : 0.0f;
                     // projb: "Controllers in Front of Screen" as on the quad path (ctrlfront's
                     // occluders above): by depth when the choice takes this screen's slot (the
                     // immersive screen then never hides them: what it shows is far away), else
@@ -1525,6 +1531,11 @@ void Runtime::FrameLoop() {
                     if (!proj_also_quads) {
                         return;
                     }
+                }
+                if (preview_take) { // AzaharFrame kiuaim: after the menu's layers
+                    preview_quad = q;
+                    preview_have = true;
+                    return;
                 }
                 // fixa: Match Bottom Screen Brightness by the layer's colour scale.
                 const bool dimmed = !top && bottom_dim < 1.0f &&
@@ -1623,8 +1634,11 @@ void Runtime::FrameLoop() {
                 // Each eye sees its own top image on the same quad.
                 const auto add_bottom = [&] {
                     if (shown.show_bottom && draw.bottom_visible) {
+                        preview_take = shown.bottom_preview; // AzaharFrame kiuaim
                         add_screen(VideoCore::XrScreen::Bottom, local_space, shown.bottom_pose,
-                                   shown.bottom_size, XR_EYE_VISIBILITY_BOTH, draw.bottom_curve);
+                                   shown.bottom_size, XR_EYE_VISIBILITY_BOTH,
+                                   shown.bottom_preview ? 0.0f : draw.bottom_curve);
+                        preview_take = false;
                     }
                 };
                 if (shown.bottom_first) {
@@ -1760,6 +1774,9 @@ void Runtime::FrameLoop() {
             for (const Quad& q : ui_quads) {
                 slot_add(LayerSlots::Group::Ui, local_space, q);
                 panel_occluder(q);
+            }
+            if (preview_have) { // AzaharFrame kiuaim: over the menu (and its dim quad), as it is nearer
+                slot_add(LayerSlots::Group::Ui, local_space, preview_quad);
             }
             // AzaharFrame vrqol: a toast (Quick Saved ...) in front of everything.
             Quad toast;

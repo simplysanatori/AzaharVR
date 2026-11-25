@@ -2,6 +2,7 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
+#include <array>
 #include <bit>
 #include <cmath>
 #include <map>
@@ -133,14 +134,15 @@ TEST_CASE("Kid Icarus powers: what shows them", "[frame_xr][kiupowers]") {
     G::State b = a;
     b.place = 3;
     CHECK(G::Touched(a, b));
+    b.count = 4; // one used up: the list moves
+    CHECK_FALSE(G::Touched(a, b));
     b = a;
     b.name_timer = 4.0f;
-    CHECK_FALSE(G::Touched(a, b));
-    CHECK(G::Touched(b, a)); // asked for again
+    CHECK_FALSE(G::Touched(b, a)); // its name again
     b = a;
     b.used = true;
-    CHECK(G::Touched(a, b));
-    CHECK_FALSE(G::Touched(b, b));
+    b.uses = 2;
+    CHECK_FALSE(G::Touched(a, b));
     CHECK(G::DotChanged(G::Read(Air(1.99f)), G::Read(Air(2.01f))));
     CHECK(G::DotChanged(G::Read(Air(2.01f)), G::Read(Air(1.01f))));
     CHECK_FALSE(G::DotChanged(G::Read(Air(1.5f)), G::Read(Air(1.6f))));
@@ -150,7 +152,9 @@ TEST_CASE("Kid Icarus powers: what shows them", "[frame_xr][kiupowers]") {
 TEST_CASE("Kid Icarus powers: the switches", "[frame_xr][kiupowers]") {
     CHECK(P::AtFrom(std::nullopt) == P::At::Hand);
     CHECK(P::AtFrom("bar") == P::At::Bar);
-    CHECK(P::AtFrom("right") == P::At::Right);
+    CHECK(P::AtFrom("middle") == P::At::Middle);
+    CHECK(P::AtFrom("score") == P::At::Score);
+    CHECK(P::AtFrom("right") == P::At::Score);
     CHECK(P::AtFrom("left") == P::At::Hand);
     CHECK(P::OpacityFrom(std::nullopt) == 1.0f);
     CHECK(P::OpacityFrom("40") == 0.4f);
@@ -254,6 +258,19 @@ TEST_CASE("Kid Icarus powers: the dots", "[frame_xr][kiupowers]") {
     CHECK(at(middle + next, middle - 20)[3] < 170);
     CHECK(at(middle + 2 * next, middle)[3] == 0); // no third yet
     CHECK(at(0, 0)[3] == 0);
+    // The frame: light, with dark on both sides of it, the empty part of one's too.
+    for (const int x0 : {P::kDotPad, P::kDotPad + next}) {
+        const int y = P::kDotPad + P::kDotPx / 2 - 10;
+        const auto column = [&](float r) { // at this radius, left of the middle
+            return x0 + static_cast<int>(48.0f - std::sqrt(r * r / (2.5625f * 2.5625f) - 90.0f));
+        };
+        CHECK(at(column(111.0f), y)[0] > 200);
+        CHECK(at(column(118.5f), y)[0] < 60);
+        CHECK(at(column(118.5f), y)[3] > 200);
+        CHECK(at(column(103.5f), y)[0] < 60);
+        CHECK(at(column(103.5f), y)[3] > 200);
+    }
+    CHECK(P::kDotsShare >= 0.7f); // full ones stay easy to see
     P::PaintDots(1.5f, 0.5f, px);
     CHECK(at(middle, middle)[3] == 128);
     CHECK(P::DotsKey(1.50f, 1.0f) == P::DotsKey(1.51f, 1.0f));
@@ -314,9 +331,13 @@ TEST_CASE("Kid Icarus powers: with the HUD, clear of its pieces", "[frame_xr][ki
                 w.size = size;
                 w.linked = linked;
                 w.height = w.bar_height = w.score_height = height;
-                const KH::Place hud = KH::PlaceFor(w, tan_x, tan_y, 0.1f);
-                for (const P::At at : {P::At::Bar, P::At::Right}) {
-                    const P::Rect r = P::WithHud(at, hud, tan_x, tan_y, 136.0f, 64.0f);
+                for (const P::At at : {P::At::Bar, P::At::Middle, P::At::Score}) {
+                    P::Settings s;
+                    s.powers = true;
+                    s.at = at;
+                    w.link_gap = P::HudGap(s);
+                    const KH::Place hud = KH::PlaceFor(w, tan_x, tan_y, 0.1f);
+                    const P::Rect r = P::WithHud(at, hud, tan_x, tan_y, 136.0f, 80.0f, 42.0f);
                     INFO("linked " << linked << " size " << size << " height " << height << " at "
                                    << static_cast<int>(at));
                     clear(r, hud);
@@ -325,16 +346,125 @@ TEST_CASE("Kid Icarus powers: with the HUD, clear of its pieces", "[frame_xr][ki
         }
     }
     const KH::Place hud = KH::PlaceFor({}, tan_x, tan_y, 0.0f);
-    const P::Rect bar = P::WithHud(P::At::Bar, hud, tan_x, tan_y, 136.0f, 64.0f);
+    const P::Rect bar = P::WithHud(P::At::Bar, hud, tan_x, tan_y, 136.0f, 80.0f, 42.0f);
     CHECK(std::abs(bar.left - (hud.bar_across - hud.half_across)) < 1e-5f); // in line with the bar
-    const P::Rect right = P::WithHud(P::At::Right, hud, tan_x, tan_y, 136.0f, 64.0f);
+    const P::Rect right = P::WithHud(P::At::Score, hud, tan_x, tan_y, 136.0f, 80.0f, 42.0f);
     CHECK(std::abs(right.right - (hud.score_across + hud.half_across)) < 1e-5f);
     const float deg = 2.0f * std::atan(0.5f * (bar.right - bar.left) * tan_x) * 57.2958f;
     CHECK(deg > 14.5f); // about 15.7 degrees wide
     CHECK(deg < 16.5f);
     const KH::Place small = KH::PlaceFor({.size = 50}, tan_x, tan_y, 0.0f);
-    const P::Rect half = P::WithHud(P::At::Bar, small, tan_x, tan_y, 136.0f, 64.0f);
+    const P::Rect half = P::WithHud(P::At::Bar, small, tan_x, tan_y, 136.0f, 80.0f, 42.0f);
     CHECK(std::abs((half.right - half.left) - 0.5f * (bar.right - bar.left)) < 1e-4f);
+
+    // Close: under the bar and the score by a fiftieth of the frame's half height.
+    const float gap = 0.02f * hud.half_up;
+    CHECK(std::abs(bar.up - (hud.bar_up + hud.half_up * P::kBarBottom - gap)) < 1e-5f);
+    CHECK(std::abs(right.up - (hud.score_up + hud.half_up * P::kScoreBottom - gap)) < 1e-5f);
+    // In the middle: the linked HUD makes room, the row level with both.
+    P::Settings middle;
+    middle.dots = true;
+    middle.at = P::At::Middle;
+    const float more = P::HudGap(middle);
+    CHECK(more > 0.4f);
+    middle.at = P::At::Score;
+    CHECK(P::HudGap(middle) == 0.0f);
+    const KH::Place wide = KH::PlaceFor({.link_gap = more}, tan_x, tan_y, 0.0f);
+    const P::Rect m = P::WithHud(P::At::Middle, wide, tan_x, tan_y, 136.0f, 80.0f, 42.0f);
+    const float bar_right = wide.bar_across + wide.half_across * KH::kBarRight;
+    const float score_left = wide.score_across + wide.half_across * KH::kScoreLeft;
+    CHECK(m.left - bar_right > 0.0f);
+    CHECK(m.left - bar_right < 0.05f * wide.half_across);
+    CHECK(std::abs((m.left - bar_right) - (score_left - m.right)) < 1e-5f);
+    const float row = 42.0f * P::kHudScale / 120.0f * wide.half_up;
+    CHECK(std::abs((m.up - 0.5f * row) - (wide.bar_up + wide.half_up * 0.5f * (1 + P::kBarBottom))) <
+          1e-5f);
+    // Its unit's middle stays where it is asked for.
+    const float unit_left = wide.bar_across + wide.half_across * KH::kBarLeft;
+    const float unit_right = wide.score_across + wide.half_across * KH::kScoreRight;
+    CHECK(std::abs(unit_left + unit_right) < 1e-5f);
+    // Not linked, next to each other: no room, under both.
+    KH::Wanted tight;
+    tight.linked = false;
+    tight.bar_across = -10.0f;
+    tight.score_across = 8.0f;
+    const KH::Place close = KH::PlaceFor(tight, tan_x, tan_y, 0.0f);
+    const P::Rect under = P::WithHud(P::At::Middle, close, tan_x, tan_y, 136.0f, 80.0f, 42.0f);
+    CHECK(under.up < close.bar_up + close.half_up * P::kBarBottom);
+
+    // The player's own move: degrees, from the place.
+    const P::Rect same = P::Moved(bar, tan_x, tan_y, 0.0f, 0.0f);
+    CHECK(same.left == bar.left);
+    CHECK(same.up == bar.up);
+    const P::Rect moved = P::Moved(bar, tan_x, tan_y, 10.0f, -5.0f);
+    const auto degrees = [](float low, float high, float t) {
+        return std::atan(0.5f * (low + high) * t) * 57.29578f;
+    };
+    CHECK(std::abs(degrees(moved.left, moved.right, tan_x) - degrees(bar.left, bar.right, tan_x) -
+                   10.0f) < 0.01f);
+    CHECK(std::abs(degrees(moved.down, moved.up, tan_y) - degrees(bar.down, bar.up, tan_y) + 5.0f) <
+          0.01f);
+    CHECK(P::Moved(bar, tan_x, tan_y, 40.0f, 40.0f).up <= 1.0f + 1e-5f);
+}
+
+TEST_CASE("Kid Icarus powers: a card over the hand faces the eyes", "[frame_xr][kiupowers]") {
+    const Input::Vec3f hand{-0.25f, -0.3f, -0.4f};
+    P::Billboard b;
+    const Input::Vec3f first = b.Update(hand, {0, 0, 0}, 0.0f);
+    CHECK(Input::Length(first - Input::Normalized(Input::Vec3f{} - hand)) < 1e-5f);
+    // Small head motion (1 cm): as it was, to the bit.
+    const Input::Vec3f still = b.Update(hand, {0.01f, -0.005f, 0.005f}, 0.011f);
+    CHECK(still.x == first.x);
+    CHECK(still.y == first.y);
+    CHECK(still.z == first.z);
+    // The head somewhere else: it follows, to within the leash.
+    const Input::Vec3f eye{0.4f, 0.1f, 0.2f};
+    Input::Vec3f now{};
+    float last = 180.0f;
+    for (int i = 0; i < 60; ++i) {
+        now = b.Update(hand, eye, 0.011f);
+        const float off = std::acos(std::min(
+                              Input::Dot(now, Input::Normalized(eye - hand)), 1.0f)) * 57.29578f;
+        CHECK(off <= last + 1e-3f); // never past it
+        last = off;
+    }
+    CHECK(last < P::kLeashDeg + 0.2f);
+    b.Reset();
+    CHECK(Input::Length(b.Update(hand, eye, 0.011f) - Input::Normalized(eye - hand)) < 1e-5f);
+    // Upright and the same whatever the hand's own turn.
+    Input::Posef level{{0, 0, 0, 1}, hand}, tilted{{0.2f, 0.1f, 0.6f, 0.76f}, hand};
+    const P::Place p = P::OverHand(level, eye, 0.11f, 13.6f, 1.7f, 0.0f, now);
+    const P::Place q = P::OverHand(tilted, eye, 0.11f, 13.6f, 1.7f, 0.0f, now);
+    CHECK(p.pose.orientation.w == q.pose.orientation.w);
+    CHECK(p.pose.orientation.z == q.pose.orientation.z);
+    const Input::Vec3f side = Input::Rotate(p.pose.orientation, {1, 0, 0});
+    CHECK(std::abs(side.y) < 1e-4f); // no roll
+    const Input::Vec3f out = Input::Rotate(p.pose.orientation, {0, 0, 1});
+    CHECK(Input::Length(out - now) < 1e-3f);
+    // Under the eyes it does not spin.
+    P::Billboard low;
+    low.Update({0, -0.5f, -0.05f}, {0, 0, 0}, 0.0f);
+    const Input::Vec3f kept = low.Update({0.05f, -0.5f, 0.02f}, {0, 0, 0}, 0.5f);
+    CHECK(kept.z > 0.0f);
+    CHECK(std::abs(kept.x) < 0.05f);
+}
+
+TEST_CASE("Kid Icarus powers: with the HUD the name is under the row", "[frame_xr][kiupowers]") {
+    const auto at = [](KP::Part part, float top, float bottom) {
+        KP::Sprite s;
+        s.part = part;
+        s.y = {top, top, bottom, bottom};
+        return KP::BelowRow(s);
+    };
+    CHECK(at(KP::Part::Paper, 198, 240).y[0] == 160.0f); // the row at the strip's top
+    CHECK(at(KP::Part::Icon, 203, 235).y[2] == 197.0f);
+    // The bubble upside down, its tail's tip up; the name the right way up in its middle.
+    CHECK(at(KP::Part::Bubble, 191, 203).y[2] == 199.0f);
+    CHECK(at(KP::Part::Bubble, 176, 188).y[0] == 226.0f);
+    const KP::Sprite name = at(KP::Part::Name, 180, 195);
+    CHECK(name.y[0] == 207.0f);
+    CHECK(name.y[2] == 222.0f);
+    CHECK(at(KP::Part::Bubble, 165, 180).y[0] <= 240.0f); // popped up
 }
 
 TEST_CASE("Kid Icarus powers: the strip under the bottom screen's picture", "[frame_xr][kiupowers]") {
@@ -467,6 +597,42 @@ TEST_CASE("Kid Icarus powers: the bar's own fade is divided out", "[frame_xr][ki
     CHECK(KP::Unfaded(Part::Arrow, 0.5f, 0.4f) == 1.0f);
     CHECK(KP::Unfaded(Part::Bubble, 0.9f, 0.4f) == 0.9f);
     CHECK(KP::Unfaded(Part::Name, 0.3f, 0.4f) == 0.3f);
+}
+
+TEST_CASE("Kid Icarus powers: the setting, and the switches over it", "[frame_xr][kiupowers]") {
+    P::Switches none;
+    CHECK(P::SettingsFor(0, 50, none) == P::Settings{}); // Off
+    CHECK(P::SettingsFor(5, 50, none) == P::Settings{}); // not a value of it
+    const std::array<P::At, 4> places{P::At::Hand, P::At::Bar, P::At::Middle, P::At::Score};
+    for (uint32_t menu = 1; menu <= 4; ++menu) {
+        const P::Settings s = P::SettingsFor(menu, 50, none);
+        CHECK(s.powers);
+        CHECK(s.dots);
+        CHECK(s.gold);
+        CHECK(s.at == places[menu - 1]);
+        CHECK(s.powers_opacity == 0.5f);
+        CHECK(s.dots_opacity == 0.5f);
+        CHECK(s.stay_s == 1.5f);
+    }
+    CHECK(P::SettingsFor(1, 5, none).powers_opacity == 0.2f);
+    // A switch that is set wins, one by one.
+    P::Switches sw;
+    sw.powers = "1";
+    CHECK(P::SettingsFor(0, 100, sw).powers);
+    CHECK_FALSE(P::SettingsFor(0, 100, sw).dots);
+    sw.powers = "0";
+    sw.at = "right";
+    sw.dots_opacity = "40";
+    sw.gold = "0";
+    const P::Settings s = P::SettingsFor(2, 70, sw);
+    CHECK_FALSE(s.powers);
+    CHECK(s.dots);
+    CHECK(s.at == P::At::Score);
+    CHECK(s.powers_opacity == 0.7f);
+    CHECK(s.dots_opacity == 0.4f);
+    CHECK_FALSE(s.gold);
+    sw.dots = "0";
+    CHECK_FALSE(P::SettingsFor(2, 70, sw).dots);
 }
 
 TEST_CASE("Kid Icarus powers: an arrow is drawn without its edge", "[frame_xr][kiupowers]") {

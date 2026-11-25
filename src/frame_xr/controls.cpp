@@ -1152,6 +1152,18 @@ void VrUi::MenuFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
 // AzaharFrame tabmenu: the menu panel; the screens' part of its buttons is done here.
 void VrUi::TabMenuFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame& in,
                         bool have_input, std::vector<Quad>& layers) {
+    // AzaharFrame kiuaim: the Angel's Aim page with fewer rows on view, unless the switch says 0.
+    Menu::SetAimPage(
+        Menu::AimPageSwitchOn(Common::FrameTestSwitches::Value(Menu::kKiuAimPageSwitch)));
+    // AzaharFrame kiuaim: with the Bottom Screen's page open the real one stays on view: on the
+    // wrist it is placed here as in play (the page as last drawn: a frame behind at most).
+    // (The switch at 2: with any of the menu's pages, for a mock run, which presses no row.)
+    const auto preview = Common::FrameTestSwitches::Value(Immersive::Layout::kKiuPlacePreviewSwitch);
+    if (have_input && info.screens_live && Vis::WristHoldSwitchOn(preview) && // on unless off
+        (tab_menu.AimBottomPageOpen() || (preview && *preview == "2"))) {
+        Immersive::SetPlacePreview(true);
+        PlaceWristScreen(info, in);
+    }
     MenuPanel::Host host;
     host.curve_ok = cylinder_ok;
     host.passthrough_ok = PassthroughSupported();
@@ -1437,6 +1449,31 @@ void VrUi::CycleScreenLayout() {
     }
 }
 
+void VrUi::SwitchCamera(int view) {
+    if (GameTitleId() == 0 || !Kiu::FirstPerson::On()) {
+        return; // stopped meanwhile: the settings are the global ones again
+    }
+    const auto apply = [](Settings::SwitchableSetting<bool>& s, bool value) {
+        s.SetGlobal(false);
+        s.SetValue(value);
+    };
+    apply(Settings::values.vr_kiu_over_shoulder, Kiu::FirstPerson::ViewOverShoulder(view));
+    apply(Settings::values.vr_kiu_game_camera, Kiu::FirstPerson::ViewGameCamera(view));
+    const std::string name = Menu::OptionsFor(Menu::Id::KiuOverShoulder)[static_cast<size_t>(view)];
+    ShowToastText(Menu::LabelFor(Menu::Id::KiuOverShoulder) + ": " + name);
+    LOG_INFO(Frontend, "xr: Angel's Aim: right stick click: {}", name);
+    // Its file is written by the Qt side, as after the menu's row.
+    MenuRequest r;
+    r.command = MenuCommand::SetSetting;
+    r.setting = MenuSetting::KiuOverShoulder;
+    r.value = view;
+    r.per_game = true;
+    std::scoped_lock lock{hooks_mutex};
+    if (hooks.menu_request) {
+        hooks.menu_request(r);
+    }
+}
+
 void VrUi::StepScreenCurve(int dir) {
     if (!cylinder_ok) {
         ShowToastText("Screen Curve: Not Available", ToastTime::Long);
@@ -1496,6 +1533,9 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
         Immersive::SetBottomFocused(false);
     }
     WatchPlacement(info.screens_live); // AzaharFrame move
+    if (camera_switch.Due(info.display_time)) { // AzaharFrame kiucam
+        SwitchCamera(camera_switch.View());
+    }
     if (Immersive::TakeIpdSaved()) {   // AzaharFrame ipd
         SaveVrSettingSoon();
     }
@@ -1583,6 +1623,7 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
     visuals.TakeInput(info, where, window_in, have_input);
     const std::size_t layers_before = layers.size();
     stats_screens.clear(); // AzaharFrame statspos: GameFrame fills it
+    Immersive::SetPlacePreview(false); // AzaharFrame kiuaim: TabMenuFrame says when
     if (menu_shown && !(swkbd_shown && swkbd_first)) {
         MenuFrame(rt, info, window_in, have_input, layers);
     } else if (swkbd_shown) {
@@ -1742,6 +1783,74 @@ void VrUi::StartupEscapeTick(const FrameInfo& info, const Input::InputFrame& in,
     }
 }
 
+// AzaharFrame kiuwrist: Angel's Aim's Secondary Screen on the off hand's wrist (test switch
+// AZAHARFRAME_KIU_WRIST_SCREEN=1; vis/wrist_screen.h), shown while it faces the eyes. Set before
+// the screens are asked for: they put the bottom screen there for this frame.
+// AzaharFrame kiutoggles: or its setting (vr_kiu_wrist_screen); the switch, when set, wins.
+// AzaharFrame kiuaim: a function of its own, for the game's frame and for the menu's while its
+// Bottom Screen page is open (Immersive::SetPlacePreview).
+void VrUi::PlaceWristScreen(const FrameInfo& info, const Input::InputFrame& in) {
+    const ViewPose head_view = LatestViewPose();
+    // AzaharFrame kiu131: Bottom Screen: Wrist (or its old setting, or the switch), on the
+    // Wrist Side chosen, at Bottom Screen Size.
+    const Kiu::FirstPerson::BottomNow bottom = Kiu::FirstPerson::BottomScreenNow();
+    const bool wanted = Kiu::FirstPerson::AngelsAim() && head_view.valid &&
+                        bottom.mode == Kiu::FirstPerson::BottomScreen::Wrist;
+    // AzaharFrame kiuaim: from the back of the wrist, whatever Wrist Side is.
+    const Vis::WristStart start = Vis::WristStartFor(
+        static_cast<int>(Settings::values.vr_kiu_wrist_angle.GetValue()),
+        Vis::WristSideFrom(Settings::values.vr_wrist_side.GetValue()),
+        Vis::WristAbsSwitchOn(Common::FrameTestSwitches::Value(Vis::kKiuWristAbsSwitch)));
+    const Vis::WristSide side = start.side;
+    const float wrist_w = Vis::kWristScreenWidth * bottom.scale;
+    const float wrist_h = Vis::kWristScreenHeight * bottom.scale;
+    const Input::Hand hand =
+        Vis::WristScreenHand(Settings::values.vr_motion_controls.GetValue());
+    const Input::HandInput& off = in.hand[static_cast<std::size_t>(Input::HandIndex(hand))];
+    const bool beside_stats = hand == Input::Hand::Left && visuals.StatsOnWrist();
+    // AzaharFrame kiu140: past Pit's Arm, where it was drawn on that hand last frame.
+    Vis::WristAt at =
+        Vis::WristAtFor(start.angle_deg, Settings::values.vr_kiu_wrist_along.GetValue());
+    if (float radius = 0.0f;
+        pit_arm_hand == Input::HandIndex(hand) &&
+        visuals.PitForearm(Input::HandIndex(hand), &at.wrist, &at.elbow, &radius)) {
+        at.arm = true;
+        at.out_m = Vis::WristOutFor(radius);
+    }
+    const Vis::WristScreen::Out w =
+        wrist_screen.Update(wanted, off.active, off.aim, hand, beside_stats,
+                            ToInput(head_view.head).position, side, wrist_w,
+                            at, // AzaharFrame kiu140
+                            Input::Rotate(ToInput(head_view.head).orientation, {0, 1, 0}));
+    wrist_on = w.shown;
+    { // AzaharFrame kiupowers: the hands the powers go over and stay clear of
+        const Input::HandInput& aiming =
+            in.hand[static_cast<std::size_t>(Input::HandIndex(Input::OtherHand(hand)))];
+        Kiu::Powers::SetHands({off.active, off.aim, aiming.active, aiming.aim});
+    }
+    wrist_wanted = wanted; // AzaharFrame kiupanel
+    Immersive::SetWristScreen(w.shown, ToXr(w.pose), {wrist_w, wrist_h}, info.display_time);
+    if (w.changed && wrist_logs < 200) {
+        wrist_logs++;
+        const Input::Vec3f to = Input::Normalized(ToInput(head_view.head).position - w.pose.position);
+        LOG_INFO(Frontend,
+                 "xr: Angel's Aim: the Secondary Screen on the {} wrist {} (facing {:.1f} "
+                 "deg, {:.2f} m from the eyes, {:.1f} x {:.1f} deg; at {:.3f}, {:.3f}, {:.3f}, "
+                 "to the eyes {:.2f}, {:.2f}, {:.2f}; {} of the wrist, {:.2f} m wide{})",
+                 hand == Input::Hand::Left ? "left" : "right",
+                 w.shown ? "shown" : "hidden", w.facing_deg, w.distance_m,
+                 w.distance_m > 0.0f
+                     ? 2.0f * std::atan(0.5f * wrist_w / w.distance_m) * 57.2958f
+                     : 0.0f,
+                 w.distance_m > 0.0f
+                     ? 2.0f * std::atan(0.5f * wrist_h / w.distance_m) * 57.2958f
+                     : 0.0f,
+                 w.pose.position.x, w.pose.position.y, w.pose.position.z, to.x, to.y, to.z,
+                 side == Vis::WristSide::Back ? "back" : "inside", wrist_w,
+                 beside_stats ? "; beside the wrist stats" : "");
+    }
+}
+
 void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame& in,
                      bool have_input, std::vector<Quad>& layers) {
     if (!have_input || !info.screens_live) {
@@ -1757,68 +1866,7 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         Kiu::SetWanted(false, false);
         return;
     }
-    // AzaharFrame kiuwrist: Angel's Aim's Secondary Screen on the off hand's wrist (test switch
-    // AZAHARFRAME_KIU_WRIST_SCREEN=1; vis/wrist_screen.h), shown while it faces the eyes. Set
-    // before the screens are asked for: they put the bottom screen there for this frame.
-    // AzaharFrame kiutoggles: or its setting (vr_kiu_wrist_screen); the switch, when set, wins.
-    {
-        const ViewPose head_view = LatestViewPose();
-        // AzaharFrame kiu131: Bottom Screen: Wrist (or its old setting, or the switch), on the
-        // Wrist Side chosen, at Bottom Screen Size.
-        const Kiu::FirstPerson::BottomNow bottom = Kiu::FirstPerson::BottomScreenNow();
-        const bool wanted = Kiu::FirstPerson::AngelsAim() && head_view.valid &&
-                            bottom.mode == Kiu::FirstPerson::BottomScreen::Wrist;
-        const Vis::WristSide side =
-            Vis::WristSideFrom(Settings::values.vr_wrist_side.GetValue());
-        const float wrist_w = Vis::kWristScreenWidth * bottom.scale;
-        const float wrist_h = Vis::kWristScreenHeight * bottom.scale;
-        const Input::Hand hand =
-            Vis::WristScreenHand(Settings::values.vr_motion_controls.GetValue());
-        const Input::HandInput& off = in.hand[static_cast<std::size_t>(Input::HandIndex(hand))];
-        const bool beside_stats = hand == Input::Hand::Left && visuals.StatsOnWrist();
-        // AzaharFrame kiu140: past Pit's Arm, where it was drawn on that hand last frame.
-        Vis::WristAt at =
-            Vis::WristAtFor(static_cast<int>(Settings::values.vr_kiu_wrist_angle.GetValue()),
-                            Settings::values.vr_kiu_wrist_along.GetValue());
-        if (float radius = 0.0f;
-            pit_arm_hand == Input::HandIndex(hand) &&
-            visuals.PitForearm(Input::HandIndex(hand), &at.wrist, &at.elbow, &radius)) {
-            at.arm = true;
-            at.out_m = Vis::WristOutFor(radius);
-        }
-        const Vis::WristScreen::Out w =
-            wrist_screen.Update(wanted, off.active, off.aim, hand, beside_stats,
-                                ToInput(head_view.head).position, side, wrist_w,
-                                at, // AzaharFrame kiu140
-                                Input::Rotate(ToInput(head_view.head).orientation, {0, 1, 0}));
-        wrist_on = w.shown;
-        { // AzaharFrame kiupowers: the hands the powers go over and stay clear of
-            const Input::HandInput& aiming =
-                in.hand[static_cast<std::size_t>(Input::HandIndex(Input::OtherHand(hand)))];
-            Kiu::Powers::SetHands({off.active, off.aim, aiming.active, aiming.aim});
-        }
-        wrist_wanted = wanted; // AzaharFrame kiupanel
-        Immersive::SetWristScreen(w.shown, ToXr(w.pose), {wrist_w, wrist_h}, info.display_time);
-        if (w.changed && wrist_logs < 200) {
-            wrist_logs++;
-            const Input::Vec3f to = Input::Normalized(ToInput(head_view.head).position - w.pose.position);
-            LOG_INFO(Frontend,
-                     "xr: Angel's Aim: the Secondary Screen on the {} wrist {} (facing {:.1f} "
-                     "deg, {:.2f} m from the eyes, {:.1f} x {:.1f} deg; at {:.3f}, {:.3f}, {:.3f}, "
-                     "to the eyes {:.2f}, {:.2f}, {:.2f}; {} of the wrist, {:.2f} m wide{})",
-                     hand == Input::Hand::Left ? "left" : "right",
-                     w.shown ? "shown" : "hidden", w.facing_deg, w.distance_m,
-                     w.distance_m > 0.0f
-                         ? 2.0f * std::atan(0.5f * wrist_w / w.distance_m) * 57.2958f
-                         : 0.0f,
-                     w.distance_m > 0.0f
-                         ? 2.0f * std::atan(0.5f * wrist_h / w.distance_m) * 57.2958f
-                         : 0.0f,
-                     w.pose.position.x, w.pose.position.y, w.pose.position.z, to.x, to.y, to.z,
-                     side == Vis::WristSide::Back ? "back" : "inside", wrist_w,
-                     beside_stats ? "; beside the wrist stats" : "");
-        }
-    }
+    PlaceWristScreen(info, in); // AzaharFrame kiuwrist, before the screens are asked for
     ScreenPlacement place = GetScreenPlacement();
     // The screens where they are drawn this frame (immersive.cpp) are the two slots (main,
     // secondary; AzaharFrame screenswap): the focus says which screen is in which, and the
@@ -2644,6 +2692,21 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         } else if (cmd.swap_screens && shown.screens_fixed && !screen_view.bottom_focus()) {
             // AzaharFrame kiu1s: the menu panel's large screen is the one to touch: no swap.
             LOG_INFO(Frontend, "xr: no swap on the game's menu panel");
+        } else if (cmd.swap_screens &&
+                   Kiu::CameraTap::Switches(
+                       {.first_person = Kiu::FirstPerson::On(),
+                        .battle = Kiu::FirstPerson::Battle(),
+                        .cutscene = Kiu::FirstPerson::Cutscene(),
+                        .paused = Kiu::CameraTap::g_ui.paused.load(std::memory_order_relaxed),
+                        .game_menu = Kiu::CameraTap::g_ui.menu.load(std::memory_order_relaxed),
+                        .swapped = screen_view.bottom_focus(),
+                        .setting = Settings::values.vr_kiu_stick_click.GetValue()})) {
+            // AzaharFrame kiucam: Angel's Aim, in a battle.
+            const auto& v = Settings::values;
+            camera_switch.Begin(Kiu::CameraTap::NextView(Kiu::FirstPerson::ViewFor(
+                                    v.vr_kiu_over_shoulder.GetValue(),
+                                    v.vr_kiu_game_camera.GetValue())),
+                                info.display_time, in_projection);
         } else if (cmd.swap_screens) {
             effect = screen_view.Swap(managed); // right stick click, tap
             LOG_INFO(Frontend, "xr: {} screen in focus",

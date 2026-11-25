@@ -86,6 +86,16 @@
 //                                     and the shots keep the ray from before (no jump to the
 //                                     frame's edge). 0: the beam aims as anywhere else.
 //                                     vis/wrist_screen.h WristAimHold, controls.cpp.
+//   AZAHARFRAME_KIU_AIM_PAGE=0|1      AzaharFrame kiuaim: the menu's Angel's Aim page with fewer
+//                                     rows on view (default 1; menu/angels_aim_tab.h). 0: the
+//                                     page as it was, one long list.
+//   AZAHARFRAME_KIU_WRIST_ABS=0|1     AzaharFrame kiuaim: Wrist Angle counts from the back of the
+//                                     wrist (default 1). 0: from Wrist Side's place, as before.
+//   AZAHARFRAME_KIU_PLACE_PREVIEW=0|1 AzaharFrame kiuaim: the real Bottom Screen stays on view
+//                                     (frozen: the game is paused) while the menu's Bottom
+//                                     Screen page is open (default 1; immersive_layout.h
+//                                     PlacePreviewFor). 0: hidden with the menu, as before.
+//                                     2: with any page of the menu (mock runs).
 //   AZAHARFRAME_KIU_FP_TRACE=1|2      a line a second (2: a VBlank) with the transform's inputs
 //                                     and what it gives (kiu_hooks.cpp).
 //   AZAHARFRAME_KIU_FP_PROBE=<hex>    with the trace: the actor at that address, where it is in

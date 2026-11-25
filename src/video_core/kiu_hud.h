@@ -38,6 +38,7 @@ struct Wanted {
     int size = 100;
     bool linked = true;
     float across = 0.0f, height = 22.0f; ///< linked
+    float link_gap = 0.0f; ///< linked, kiupowers: more between the two, in the frame's half widths
     float bar_across = -20.0f, bar_height = 22.0f;
     float score_across = 20.0f, score_height = 22.0f;
     float subtitle_height = -18.0f;
@@ -101,10 +102,11 @@ inline Place PlaceFor(const Wanted& w, float tan_half_x, float tan_half_y, float
     if (w.linked) {
         // One unit, its middle where it is asked for: the bar, the gap, the score.
         constexpr float kBarWide = kBarRight - kBarLeft, kScoreWide = kScoreRight - kScoreLeft;
-        constexpr float kLeft = -0.5f * (kBarWide + kLinkGap + kScoreWide);
-        p.bar_across = across_at(w.across) + p.half_across * (kLeft - kBarLeft);
+        const float gap = kLinkGap + std::max(w.link_gap, 0.0f);
+        const float left = -0.5f * (kBarWide + gap + kScoreWide);
+        p.bar_across = across_at(w.across) + p.half_across * (left - kBarLeft);
         p.score_across =
-            across_at(w.across) + p.half_across * (kLeft + kBarWide + kLinkGap - kScoreLeft);
+            across_at(w.across) + p.half_across * (left + kBarWide + gap - kScoreLeft);
         p.bar_up = p.score_up = up_at(w.height) - p.half_up * kGroupUp;
     } else {
         p.bar_across = across_at(w.bar_across) - p.half_across * kBarMiddle;

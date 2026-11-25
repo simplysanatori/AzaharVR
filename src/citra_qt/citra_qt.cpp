@@ -5229,6 +5229,7 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         (r.setting == S::MeasuredGameFov || r.setting == S::WorldScaleSaved ||
          r.setting == S::KiuBottomX || r.setting == S::KiuBottomY ||
          r.setting == S::KiuBottomSize || // AzaharFrame kiu140: sized by a grip's stick
+         r.setting == S::KiuOverShoulder || // AzaharFrame kiucam: the camera by the right stick
          (r.setting == S::Depth3d && r.text == kFrameDepthShortcut));
     if (!emulation_running ||
         (!measured_fov && (!g_frame_mirror || !g_frame_mirror->MenuOpen()))) {
@@ -5829,8 +5830,29 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::KiuSubtitleSize: // AzaharFrame kiu140
         set(v.vr_kiu_subtitle_size, std::clamp<u32>(u, 50, 250));
         break;
+    case S::KiuPowerMenu: // AzaharFrame kiuaim
+        set(v.vr_kiu_power_menu, std::min<u32>(u, 4));
+        break;
+    case S::KiuPowerMenuAcross:
+        set(v.vr_kiu_power_menu_across, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuPowerMenuHeight:
+        set(v.vr_kiu_power_menu_height, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuPowerMenuOpacity:
+        set(v.vr_kiu_power_menu_opacity, std::clamp<u32>(u, 20, 100));
+        break;
+    case S::KiuStickClick: // AzaharFrame kiucam
+        set(v.vr_kiu_stick_click, std::min<u32>(u, 1));
+        break;
     case S::KiuHideOffHand: // AzaharFrame kiuhands
         set(v.vr_kiu_hide_off_hand, r.value != 0);
+        break;
+    case S::KiuTalkPortraits: // AzaharFrame kiuaim
+        set(v.vr_kiu_talk_portraits, r.value != 0);
+        break;
+    case S::KiuTalkPortraitsOpacity:
+        set(v.vr_kiu_talk_portraits_opacity, std::clamp<u32>(u, 20, 100));
         break;
     case S::KiuReticleSize:
         set(v.vr_kiu_reticle_size, std::clamp<u32>(u, 30, 150));

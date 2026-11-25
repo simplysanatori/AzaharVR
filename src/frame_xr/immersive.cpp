@@ -34,6 +34,7 @@
 #include "frame_xr/immersive_names.h" // AzaharFrame kiu
 #include "frame_xr/ipd_smoother.h" // AzaharFrame ipd
 #include "frame_xr/kiu_first_person.h" // AzaharFrame kiuvr
+#include "frame_xr/kiu_powers_live.h" // AzaharFrame kiupowers
 #include "frame_xr/input/input_frame.h"
 #include "frame_xr/presets.h" // AzaharFrame immersive: preset screen sizes
 #include "frame_xr/render_margin.h" // AzaharFrame fovaxis
@@ -361,6 +362,7 @@ struct State {
     bool bottom_toggled = false; ///< the bottom screen's visibility flipped (the bumper chord)
     bool focus_bottom = false;   ///< the bottom screen is in focus (SetBottomFocused)
     bool menu_open = false;      ///< the in-game menu shows (immersive modes 2 and 3 pause)
+    bool place_preview = false;  ///< AzaharFrame kiuaim: SetPlacePreview
     bool hide_bottom = false;    ///< "Hide Bottom Screen" (per game), read when the game starts
     /// AzaharFrame kiuwrist: the wrist screen (SetWristScreen) and the display frame it is for;
     /// `display_time`: this frame's (OnFrame).
@@ -1701,6 +1703,7 @@ void OnFrame(const FrameInfo& info) {
         wanted.bar_height = static_cast<float>(v.vr_kiu_bar_height.GetValue());
         wanted.score_across = static_cast<float>(v.vr_kiu_score_across.GetValue());
         wanted.score_height = static_cast<float>(v.vr_kiu_score_height.GetValue());
+        wanted.link_gap = Kiu::Powers::HudGapNow(); // AzaharFrame kiupowers
         wanted.subtitle_size = static_cast<int>(v.vr_kiu_subtitle_size.GetValue());
         wanted.subtitle_height = static_cast<float>(v.vr_kiu_subtitle_height.GetValue());
         const float tan_x = g.solved.tan_half_y * g.solved.aspect, tan_y = g.solved.tan_half_y;
@@ -2288,6 +2291,30 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
         g.pause_seen = pause_asked;
         LOG_INFO(Frontend, "xr: Angel's Aim: the pause panel {}", pause_asked ? "up" : "away");
     }
+    // AzaharFrame kiu131: Bottom Screen: Persistent (the talk panel's place by default, moved by
+    // the grip, sized and faded by its rows).
+    const auto place_persistent = [&](const Kiu::FirstPerson::BottomNow& bottom) {
+        const Kiu::FirstPerson::PanelInView p = Kiu::FirstPerson::PersistentInView(
+            bottom.right_deg, bottom.place.down_deg + bottom.down_deg, bottom.place.width_deg,
+            320.0f / 240.0f);
+        const XrPosef in_view{{p.qx, p.qy, p.qz, p.qw}, {p.x, p.y, p.z}};
+        out.bottom_pose = Compose(g.view.head, in_view);
+        out.bottom_size = {p.width, p.height};
+        out.show_bottom = true;
+        out.bottom_pointable = false; // AzaharFrame kiupanel: for reading only
+        out.bottom_persistent = true;
+        out.bottom_alpha = bottom.alpha;
+    };
+    // AzaharFrame kiuwrist: on the off hand's wrist, as set for this display frame.
+    const auto place_wrist = [&](const Kiu::FirstPerson::BottomNow& bottom) {
+        out.show_bottom = true;
+        out.bottom_on_wrist = true;
+        out.bottom_pointable = true; // AzaharFrame kiupanel: over the talk panel
+        out.bottom_pose = g.wrist_pose;
+        out.bottom_size = g.wrist_size;
+        out.bottom_persistent = false;
+        out.bottom_alpha = bottom.alpha; // AzaharFrame kiu131: Bottom Screen Opacity
+    };
 
     if (g.engaged && !IsViewMode(g.mode)) {
         // Mode 1: fixed in the room, ahead of where the head was when the game started (or the
@@ -2370,16 +2397,7 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
             KiuFirstPerson() ? Kiu::FirstPerson::BottomScreenNow() : Kiu::FirstPerson::BottomNow{};
         if (KiuFirstPerson() && g.view.valid &&
             bottom.mode == Kiu::FirstPerson::BottomScreen::Persistent) {
-            const Kiu::FirstPerson::PanelInView p = Kiu::FirstPerson::PersistentInView(
-                bottom.right_deg, bottom.place.down_deg + bottom.down_deg, bottom.place.width_deg,
-                320.0f / 240.0f);
-            const XrPosef in_view{{p.qx, p.qy, p.qz, p.qw}, {p.x, p.y, p.z}};
-            out.bottom_pose = Compose(g.view.head, in_view);
-            out.bottom_size = {p.width, p.height};
-            out.show_bottom = true;
-            out.bottom_pointable = false; // AzaharFrame kiupanel: for reading only
-            out.bottom_persistent = true;
-            out.bottom_alpha = bottom.alpha;
+            place_persistent(bottom);
         }
         bottom_as_drawn = bottom.mode != Kiu::FirstPerson::BottomScreen::Off; // kiu140
         // AzaharFrame kiu1s: paused (test switch): the Secondary Screen in front, to point at. It
@@ -2434,13 +2452,42 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
         // AzaharFrame kiuwrist: Angel's Aim's Secondary Screen on the off hand's wrist, set for
         // this display frame (the controls ask for this frame's screens after setting it).
         if (wrist_up && KiuFirstPerson()) {
-            out.show_bottom = true;
-            out.bottom_on_wrist = true;
-            out.bottom_pointable = true; // AzaharFrame kiupanel: over the talk panel
-            out.bottom_pose = g.wrist_pose;
-            out.bottom_size = g.wrist_size;
-            out.bottom_persistent = false;
-            out.bottom_alpha = bottom.alpha; // AzaharFrame kiu131: Bottom Screen Opacity
+            place_wrist(bottom);
+        }
+    } else if (g.live && IsViewMode(g.mode) && KiuFirstPerson()) {
+        // AzaharFrame kiuaim: paused by the menu with its Bottom Screen page open: the Bottom
+        // Screen stays where it is in play (its last picture; the game is paused), after the
+        // menu's layers, for looking only.
+        const Kiu::FirstPerson::BottomNow bottom = Kiu::FirstPerson::BottomScreenNow();
+        L::PlacePreviewState s;
+        s.wanted = g.place_preview && !Kiu::FirstPerson::MenuPanel(); // kiu1s: its own place
+        s.menu_open = g.menu_open;
+        s.first_person = true;
+        s.view_valid = g.view.valid;
+        s.bottom_mode = static_cast<int>(bottom.mode);
+        s.wrist_placed = wrist_up;
+        const L::PlacePreview preview = L::PlacePreviewFor(s);
+        if (preview == L::PlacePreview::Persistent) {
+            place_persistent(bottom);
+        } else if (preview == L::PlacePreview::Wrist) {
+            place_wrist(bottom);
+        }
+        if (preview != L::PlacePreview::None) {
+            out.bottom_pointable = false;
+            out.bottom_preview = true;
+            bottom_as_drawn = true; // as the picture on view was drawn
+        }
+        static L::PlacePreview said = L::PlacePreview::None;
+        if (preview != said) {
+            said = preview;
+            LOG_INFO(Frontend,
+                     "xr: Angel's Aim: the Bottom Screen {} with the menu's Bottom Screen page "
+                     "({:.2f} x {:.2f} m at {:.2f}, {:.2f}, {:.2f}, opacity {:.2f})",
+                     preview == L::PlacePreview::Persistent ? "stays in view"
+                     : preview == L::PlacePreview::Wrist    ? "stays on the wrist"
+                                                            : "is no longer kept on view",
+                     out.bottom_size.width, out.bottom_size.height, out.bottom_pose.position.x,
+                     out.bottom_pose.position.y, out.bottom_pose.position.z, out.bottom_alpha);
         }
     }
     // AzaharFrame kiu1s: one of the game's menus (test switch): the Secondary Screen as a large
@@ -2507,6 +2554,10 @@ bool GameMenu() { // AzaharFrame kiu1s
 
 void SetMenuOpen(bool open) {
     g.menu_open = open;
+}
+
+void SetPlacePreview(bool wanted) { // AzaharFrame kiuaim
+    g.place_preview = wanted;
 }
 
 void ToggleBottom() {

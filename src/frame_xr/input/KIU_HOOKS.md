@@ -1125,9 +1125,17 @@ view is the Game's Camera; otherwise `over_shoulder` decides
   later (another weapon, a power), he stays solid until the next model node. A depth-writing see-through draw hides his own parts behind it (a back arm), as in any
   one-pass blend.
 
+**The right stick's click (AzaharFrame kiucam, `vr_kiu_stick_click`: 0 Switch Camera, 1 Swap Screens; per game, live).** In a battle a tap switches First Person and Over the Shoulder (First Person from the Game's Camera), in both keys as the Camera row does; the Qt side writes the game's file, as for the row. Not in a cutscene, the game's pause screen or one of its menus (`kiu_ui.h`, read each VBlank), nor with the screens swapped: there it is Swap Screens (`CameraTap::Switches`). Drawn by the projection layer, the picture fades to black in 0.1 s, the camera switches, and it comes back over 0.1 s after 0.12 s of black (a factor in the screen's shader). Primary Screen as Panel has no fade: it switches at once.
+
 **1.3.0: the Game's Camera is held back.** Its view was broken on the headset (Pit far off in the air; the camp's view wrong). `Menu::kGameCameraOffered` (`menu/angels_aim_tab.h`) is false: Camera lists First Person and Over the Shoulder, and a saved `vr_kiu_game_camera` is not used. `AZAHARFRAME_KIU_GAME_CAMERA=1` still turns it on for work on it.
 
-### Powers (AzaharFrame kiupowers; test switches, off)
+### Powers (AzaharFrame kiupowers; `vr_kiu_power_menu`, off)
+
+- **Power Menu** (`vr_kiu_power_menu`: 0 Off, 1 Off Hand, 2 Health Bar, 3 Middle, 4 Score; `vr_kiu_power_menu_opacity`, 20 to 100; per game, live,
+  Angel's Aim only; no menu rows yet): the powers on land and the dots in the air, there. Over the hand the powers only while another is picked,
+  facing the eyes and upright (`Billboard`: it follows once they are 2 degrees off); with the HUD all battle, the name under the row (`BelowRow`),
+  moved by `vr_kiu_power_menu_across` and `_height` (degrees, -40 to 40, from the place). In the middle the linked HUD's two pieces make room
+  (`KiuHud::Wanted::link_gap`); not linked and too close, it is under both. `AZAHARFRAME_KIU_POWERS*` and `_POWER_DOTS*`, when set, win (`SettingsFor`).
 
 The game's power panel is at +0xB64 of the battle UI's 2D context (`[0xEE3098 + 0x140]`, `kiu_ui.h`), on the bottom screen
 (`kiu_powers.h`; its code words are checked first, EUR and USA Rev 1; USA never run).

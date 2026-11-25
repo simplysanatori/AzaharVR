@@ -81,6 +81,28 @@ constexpr float WristOutFor(float radius) {
     const float need = radius > 0.0f ? radius + kWristScreenGap - kWristScreenOut : 0.0f;
     return need > 0.0f ? need : 0.0f;
 }
+/// AzaharFrame kiuaim: Wrist Angle counts from the back of the wrist (0 the back, 180 the inside),
+/// whatever Wrist Side is (the wrist stats' alone now). Live switch AZAHARFRAME_KIU_WRIST_ABS, on
+/// unless "0", "off" or "false": then the screen starts at Wrist Side's place as before, the
+/// stored angle (from the back) turned into the one from there.
+inline constexpr const char* kKiuWristAbsSwitch = "AZAHARFRAME_KIU_WRIST_ABS";
+bool WristAbsSwitchOn(const std::optional<std::string>& value);
+/// An angle counted from Wrist Side's place as one from the back of the wrist (and back again:
+/// the two places are half a turn apart). The settings' carry-over, once a file.
+constexpr int WristAngleCarried(int angle_deg, bool inside) {
+    const int a = angle_deg < 0 ? 0 : angle_deg > 360 ? 360 : angle_deg;
+    return inside ? (a + 180) % 360 : a;
+}
+/// Where the screen starts and how far round it goes from there, for the stored angle.
+struct WristStart {
+    WristSide side = WristSide::Back;
+    int angle_deg = 0;
+};
+constexpr WristStart WristStartFor(int stored_deg, WristSide stats_side, bool from_back) {
+    return from_back ? WristStart{WristSide::Back, stored_deg}
+                     : WristStart{stats_side,
+                                  WristAngleCarried(stored_deg, stats_side == WristSide::Inside)};
+}
 /// The settings' ranges (vr_kiu_wrist_angle degrees, vr_kiu_wrist_along centimetres).
 constexpr int kWristAngleMax = 360, kWristAlongMin = -12, kWristAlongMax = 25;
 constexpr WristAt WristAtFor(int angle_deg, int along_cm) {

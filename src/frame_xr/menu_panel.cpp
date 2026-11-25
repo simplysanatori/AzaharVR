@@ -386,8 +386,22 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::KiuSubtitleHeight;
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
         return MenuSetting::KiuSubtitleSize;
+    case Id::KiuPowerMenu: // AzaharFrame kiuaim
+        return MenuSetting::KiuPowerMenu;
+    case Id::KiuPowerMenuAcross:
+        return MenuSetting::KiuPowerMenuAcross;
+    case Id::KiuPowerMenuHeight:
+        return MenuSetting::KiuPowerMenuHeight;
+    case Id::KiuPowerMenuOpacity:
+        return MenuSetting::KiuPowerMenuOpacity;
+    case Id::KiuStickClick: // AzaharFrame kiucam
+        return MenuSetting::KiuStickClick;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         return MenuSetting::KiuHideOffHand;
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+        return MenuSetting::KiuTalkPortraits;
+    case Id::KiuTalkPortraitsOpacity:
+        return MenuSetting::KiuTalkPortraitsOpacity;
     case Id::WristSide:
         return MenuSetting::WristSide;
     case Id::KiuReticleSize:
@@ -1160,7 +1174,16 @@ void MenuPanel::BuildModel(const Host& host) {
     m.kiu_score_height = static_cast<int>(v.vr_kiu_score_height.GetValue()); // AzaharFrame kiu140
     m.kiu_subtitle_height = static_cast<int>(v.vr_kiu_subtitle_height.GetValue()); // AzaharFrame kiu140
     m.kiu_subtitle_size = static_cast<int>(v.vr_kiu_subtitle_size.GetValue()); // AzaharFrame kiu140
+    m.kiu_power_menu = static_cast<int>(std::min<u32>(v.vr_kiu_power_menu.GetValue(), 4)); // AzaharFrame kiuaim
+    m.kiu_power_menu_across = static_cast<int>(v.vr_kiu_power_menu_across.GetValue());
+    m.kiu_power_menu_height = static_cast<int>(v.vr_kiu_power_menu_height.GetValue());
+    m.kiu_power_menu_opacity =
+        static_cast<int>(std::clamp<u32>(v.vr_kiu_power_menu_opacity.GetValue(), 20, 100));
+    m.kiu_stick_click = static_cast<int>(std::min<u32>(v.vr_kiu_stick_click.GetValue(), 1)); // AzaharFrame kiucam
     m.kiu_hide_off_hand = static_cast<int>(v.vr_kiu_hide_off_hand.GetValue()); // AzaharFrame kiuhands
+    m.kiu_talk_portraits = v.vr_kiu_talk_portraits.GetValue() ? 1 : 0; // AzaharFrame kiuaim
+    m.kiu_talk_portraits_opacity = static_cast<int>(
+        std::clamp<u32>(v.vr_kiu_talk_portraits_opacity.GetValue(), 20, 100));
     m.wrist_side = static_cast<int>(std::min<u32>(v.vr_wrist_side.GetValue(), 1));
     m.kiu_reticle_size =
         static_cast<int>(std::clamp<u32>(v.vr_kiu_reticle_size.GetValue(), 30, 150));
@@ -1358,6 +1381,8 @@ void MenuPanel::BuildModel(const Host& host) {
     }
     m.aim_calibrated = host.aim_calibrated; // AzaharFrame kiufix
     m.aim_calibration_ok = host.aim_calibration_ok;
+    // AzaharFrame kiuaim: the page's open group only while it can show (last: it reads the rows)
+    Menu::AimPageKeep(m, view);
     model = std::move(m);
 }
 
@@ -1778,10 +1803,45 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         Apply(v.vr_kiu_subtitle_size, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::KiuSubtitleSize;
         break;
+    case Id::KiuPowerMenu: // AzaharFrame kiuaim
+        r.value = std::clamp(value, 0, 4);
+        Apply(v.vr_kiu_power_menu, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuPowerMenu;
+        break;
+    case Id::KiuPowerMenuAcross:
+        r.value = std::clamp(value, -40, 40);
+        Apply(v.vr_kiu_power_menu_across, r.value, per_game);
+        r.setting = MenuSetting::KiuPowerMenuAcross;
+        break;
+    case Id::KiuPowerMenuHeight:
+        r.value = std::clamp(value, -40, 40);
+        Apply(v.vr_kiu_power_menu_height, r.value, per_game);
+        r.setting = MenuSetting::KiuPowerMenuHeight;
+        break;
+    case Id::KiuPowerMenuOpacity:
+        r.value = std::clamp(value, 20, 100);
+        Apply(v.vr_kiu_power_menu_opacity, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuPowerMenuOpacity;
+        break;
+    case Id::KiuStickClick: // AzaharFrame kiucam
+        r.value = std::clamp(value, 0, 1);
+        Apply(v.vr_kiu_stick_click, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuStickClick;
+        break;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         r.value = std::clamp(value, 0, 1);
         Apply(v.vr_kiu_hide_off_hand, r.value != 0, per_game);
         r.setting = MenuSetting::KiuHideOffHand;
+        break;
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+        r.value = std::clamp(value, 0, 1);
+        Apply(v.vr_kiu_talk_portraits, r.value != 0, per_game);
+        r.setting = MenuSetting::KiuTalkPortraits;
+        break;
+    case Id::KiuTalkPortraitsOpacity:
+        r.value = std::clamp(value, 20, 100);
+        Apply(v.vr_kiu_talk_portraits_opacity, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuTalkPortraitsOpacity;
         break;
     case Id::KiuReticleSize:
         r.value = std::clamp(value, 30, 150);
@@ -2690,6 +2750,9 @@ void MenuPanel::Click(Target t, Host& host) {
         controls_page = 0;
         scroll_to_aiming = true;
         break;
+    case Id::AngelsAimGroup: // AzaharFrame kiuaim: a group's row, More, Back
+        Menu::AimPagePress(model, view, t.index);
+        break;
     case Id::AngelsAimSend: // AzaharFrame kiumenus: Azahar's window, Send Report's dialog
         ask(MenuCommand::AngelsAimReport);
         break;
@@ -2775,8 +2838,11 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::KiuCutscenes: // AzaharFrame kiu140
     case Id::KiuHud: // AzaharFrame kiu140
     case Id::KiuArm: // AzaharFrame kiu140
+    case Id::KiuPowerMenu: // AzaharFrame kiuaim
     case Id::KiuHudLinked: // AzaharFrame kiu140
+    case Id::KiuStickClick: // AzaharFrame kiucam
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
     case Id::WristSide:       // Back, Inside
     case Id::WindowScale:
     case Id::MarginX: // AzaharFrame fovaxis
@@ -3011,6 +3077,9 @@ void MenuPanel::Frame(const FrameInfo& info, const Input::InputFrame& in, bool h
                    (model.mods.textures.dialog.kind != Menu::ModsDialogKind::None ||
                     !view.open_link.empty())) {
             Click({Id::DialogCancel}, host);
+        } else if (view.tab == Menu::Tab::Mods && // AzaharFrame kiuaim: a group's page, More
+                   view.mods_segment == Menu::ModsSegment::AngelsAim && Menu::AimPageOn() &&
+                   Menu::AimPageBack(model, view)) {
         } else if (mods_shown && view.mods_page == Menu::ModsPage::Install) {
             Click({Id::ModsBack}, host);
         } else if (textures_shown && view.textures_page == Menu::TexturesPage::Download) {

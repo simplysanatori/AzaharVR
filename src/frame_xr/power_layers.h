@@ -48,6 +48,7 @@ private:
     Vis::Powers::Show show_;
     bool aimed_ = false;
     float powers_width_ = 0.0f, dots_width_ = 0.0f; ///< over the hand, kept while up
+    Vis::Powers::Billboard powers_face_, dots_face_;
     XrTime time_ = 0;
     bool logged_powers_ = false, logged_dots_ = false;
 };
