@@ -132,7 +132,7 @@
 //                                     (AzaharFrame kiufp3: why kiuview never saw it on the mock).
 //                                     At FP_FIELD 100 most of the edge is outside the view.
 //   AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]
-//                                     AzaharFrame kiuview: an third-person view in first
+//                                     AzaharFrame kiuview: a third-person view in first
 //                                     person: the eye moved this many metres behind, above and
 //                                     to the right of the first-person eye (negative: in front,
 //                                     below, to the left), along the game camera's level view
@@ -224,8 +224,8 @@ constexpr bool ShotsFrom6DofFor(bool switch_on, bool first_person_on, bool angel
 bool On();
 /// AzaharFrame kiumode: Angel's Aim in effect (live): everything first person needs. Any thread.
 bool AngelsAim();
-/// AzaharFrame kiu130: the third-person view is in effect (live): first person on, and Over
-/// the Shoulder's setting (vr_kiu_over_shoulder) or AZAHARFRAME_KIU_SHOULDER (ShoulderFor: the
+/// AzaharFrame kiu130: the third-person view is in effect (live): first person on, and Third
+/// Person's setting (vr_kiu_over_shoulder) or AZAHARFRAME_KIU_SHOULDER (ShoulderFor: the
 /// switch, when set, wins), with no AZAHARFRAME_KIU_EYE_OFFSET (which wins over both). The game
 /// draws Pit with his own weapon there, so the weapon in hand is left out of the image
 /// (Vis::WeaponModelDrawnFor). Any thread.
