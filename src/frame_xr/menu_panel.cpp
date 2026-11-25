@@ -2677,7 +2677,6 @@ void MenuPanel::Click(Target t, Host& host) {
         SetSetting(t.id, 0, host);
         break;
     case Id::ScreenShape:
-    case Id::ScreenCurve:
     case Id::ImmersiveMode:
     case Id::InternalResolution: // AzaharFrame menuux
     case Id::FastForwardAudio:   // AzaharFrame kiu2
@@ -2728,8 +2727,6 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::KiuOverShoulder: // AzaharFrame kiu133: Camera
     case Id::WristSide:       // Back, Inside
     case Id::WindowScale:
-    case Id::MarginX: // AzaharFrame fovaxis
-    case Id::MarginY:
     case Id::MatchCamera: // AzaharFrame fovonce: Off | Set Once | Always
     case Id::ScaleMode:   // AzaharFrame fovscale: Stretch | Field of View
     case Id::ControllersInFront: // AzaharFrame ctrlfront: Off | Primary | Secondary | Both

@@ -93,6 +93,11 @@ std::string SliderText(Id id, float value) {
     if (id == Id::ScaleX || id == Id::ScaleY) { // AzaharFrame kiu: "+10%", "0%", "-10%"
         return Format(value > 0.5f ? "+%.0f%%" : "%.0f%%", value);
     }
+    if (id == Id::ScreenCurve || id == Id::MarginX || id == Id::MarginY) { // the stop's own text
+        const auto& stops = OptionsFor(id);
+        return stops[static_cast<std::size_t>(
+            std::clamp(std::lround(value), 0L, static_cast<long>(stops.size()) - 1))];
+    }
     if (id == Id::WorldScale) { // AzaharFrame natural: the stop's percent, "100%" too
         const int i = std::clamp(static_cast<int>(std::lround(value)), 0,
                                  static_cast<int>(Immersive::Layout::kWorldScaleStops.size()) - 1);
@@ -272,7 +277,13 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
         rows.push_back(row(Id::HideBottomScreen, RowKind::Switch, 0, m.hide_bottom_screen));
         rows.push_back(row(Id::MoveScreens, RowKind::Segmented, m.move_screens)); // AzaharFrame menu
         rows.push_back(row(Id::ScreenShape, RowKind::MenuButton, m.screen_shape));
-        rows.push_back(row(Id::ScreenCurve, RowKind::MenuButton, m.screen_curve));
+        Row curve = row(Id::ScreenCurve, RowKind::Slider);
+        const SliderRange cr = SliderFor(Id::ScreenCurve);
+        const float curve_at = std::clamp(static_cast<float>(m.screen_curve), cr.min, cr.max);
+        curve.t = (curve_at - cr.min) / (cr.max - cr.min);
+        curve.stops = static_cast<int>(cr.max - cr.min);
+        curve.value = SliderText(Id::ScreenCurve, curve_at);
+        rows.push_back(curve);
         Row offset = row(Id::ImmersiveOffset, RowKind::Offset);
         offset.value = m.immersive_offset;
         offset.on = m.immersive_offset_set;
@@ -428,7 +439,13 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
         if (m.scale_mode == 0) {
             for (const auto& [id, level] : {std::pair{Id::MarginX, m.margin_x},
                                             std::pair{Id::MarginY, m.margin_y}}) {
-                rows.push_back(full(row(id, RowKind::Segmented, level)));
+                Row r = full(row(id, RowKind::Slider));
+                const SliderRange sr = SliderFor(id);
+                const float v = std::clamp(static_cast<float>(level), sr.min, sr.max);
+                r.t = (v - sr.min) / (sr.max - sr.min);
+                r.stops = static_cast<int>(sr.max - sr.min);
+                r.value = SliderText(id, v);
+                rows.push_back(r);
             }
         }
         Row fov = full(row(Id::GameFov, RowKind::Slider));
@@ -1773,6 +1790,9 @@ SliderRange SliderFor(Id id) {
     }
     if (id == Id::WorldScale) { // AzaharFrame natural: Layout::kWorldScaleStops' indexes
         return {0.0f, static_cast<float>(Immersive::Layout::kWorldScaleStops.size() - 1), 1.0f};
+    }
+    if (id == Id::ScreenCurve || id == Id::MarginX || id == Id::MarginY) { // OptionsFor's stops
+        return {0.0f, static_cast<float>(OptionsFor(id).size() - 1), 1.0f};
     }
     if (id == Id::CursorSpeed) { // AzaharFrame padsui: five steps, Normal in the middle
         return {0.0f, 4.0f, 1.0f};

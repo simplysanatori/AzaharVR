@@ -741,10 +741,11 @@ int main(int argc, char** argv) {
     v.hover = {Id::ScreenCurve, kLabelIndex};
     ok &= shot("2-position", m, v);
 
-    v.hover = {Id::ScreenCurve, 5};
-    v.open_menu = Id::ScreenCurve;
-    ok &= shot("2c-position-curve-menu", m, v);
-    v.open_menu = Id::None;
+    v.hover = {Id::ScreenCurve, -1};
+    v.dragging = Id::ScreenCurve;
+    v.drag_t = 5.0f / 6.0f;
+    ok &= shot("2c-position-curve-held", m, v);
+    v.dragging = Id::None;
 
     v.hover = {Id::ScreenShape, 3};
     v.open_menu = Id::ScreenShape;

@@ -213,8 +213,8 @@ TEST_CASE("Tab menu: hit testing", "[frame_xr][tabmenu]") {
         v.scroll[static_cast<int>(Tab::Settings)] = scroll;
         d.Draw(m, v);
         for (const auto& h : d.menu.Hits()) {
-            CHECK(!(h.t.id == Id::MarginX && h.t.index >= 0));
-            CHECK(!(h.t.id == Id::MarginY && h.t.index >= 0));
+            CHECK(!(h.t.id == Id::MarginX && h.t.index != kLabelIndex));
+            CHECK(!(h.t.id == Id::MarginY && h.t.index != kLabelIndex));
             label |= h.t.id == Id::MarginX && h.t.index == kLabelIndex;
         }
         if (scroll >= d.menu.MaxScroll()) {
@@ -241,7 +241,7 @@ TEST_CASE("Tab menu: sliders map the beam to their range", "[frame_xr][tabmenu]"
     MenuView v;
     v.tab = Tab::Settings;
     v.section = SettingsSection::Immersive; // AzaharFrame autosave
-    v.scroll[static_cast<int>(Tab::Settings)] = 10000.0f;
+    v.scroll[static_cast<int>(Tab::Settings)] = 5.0f * kRowH;
     d.Draw(Sample(), v);
     const MenuLayout& layout = d.menu.Layout();
     const MenuLayout::SliderTrack* fov = nullptr;
@@ -257,7 +257,7 @@ TEST_CASE("Tab menu: sliders map the beam to their range", "[frame_xr][tabmenu]"
     const float mid = layout.SliderAt(Id::GameFov, (s.x0 + s.x1) * 0.5f);
     CHECK(mid > 0.45f);
     CHECK(mid < 0.55f);
-    CHECK(layout.SliderAt(Id::MarginX, s.x0) < 0.0f);
+    CHECK(layout.SliderAt(Id::ScaleMode, s.x0) < 0.0f); // no slider
 }
 
 // AzaharFrame depth3d
@@ -1420,6 +1420,50 @@ TEST_CASE("Tab menu: an Internal Resolution the menu does not offer still shows"
         }
         INFO(factor);
         CHECK(drawn);
+    }
+}
+
+TEST_CASE("Tab menu: Screen Curve and Render Margin are sliders over their stops",
+          "[frame_xr][tabmenu]") {
+    const std::vector<std::string> curve{"Off", "15\u00b0", "30\u00b0", "45\u00b0",
+                                         "60\u00b0", "75\u00b0", "90\u00b0"};
+    const std::vector<std::string> margin{"Off", "1.1x", "1.2x", "1.3x", "1.4x"};
+    CHECK(OptionsFor(Id::ScreenCurve) == curve);
+    for (const Id id : {Id::ScreenCurve, Id::MarginX, Id::MarginY}) {
+        const auto& stops = id == Id::ScreenCurve ? curve : margin;
+        INFO(LabelFor(id));
+        CHECK(OptionsFor(id) == stops);
+        const SliderRange r = SliderFor(id);
+        CHECK(r.min == 0.0f);
+        CHECK(r.max == static_cast<float>(stops.size() - 1));
+        CHECK(r.step == 1.0f);
+        for (std::size_t i = 0; i < stops.size(); i++) {
+            Audit a;
+            MenuModel m = Sample();
+            m.screen_curve = static_cast<int>(i);
+            m.margin_x = m.margin_y = static_cast<int>(i);
+            MenuView v;
+            v.tab = id == Id::ScreenCurve ? Tab::Position : Tab::Settings;
+            v.section = SettingsSection::Immersive;
+            for (float scroll = 0.0f;; scroll += kRowH) {
+                v.scroll[static_cast<std::size_t>(v.tab)] = scroll;
+                a.Draw(m, v);
+                a.Check("sliders over stops");
+                const auto& hits = a.menu.Hits();
+                if (std::any_of(hits.begin(), hits.end(), [id](const auto& h) {
+                        return h.t == Target{id};
+                    })) {
+                    break;
+                }
+                REQUIRE(scroll < a.menu.MaxScroll());
+            }
+            CHECK(a.Drew(stops[i]));
+            // Held at the stop
+            v.dragging = id;
+            v.drag_t = static_cast<float>(i) / r.max;
+            a.Draw(m, v);
+            CHECK(a.Drew(stops[i]));
+        }
     }
 }
 
@@ -3928,7 +3972,7 @@ TEST_CASE("Tab menu: every selected segment keeps its check", "[frame_xr][tabmen
     kit.Begin(canvas);
     const std::vector<std::vector<std::string>> rows{
         OptionsFor(Id::MatchCamera), {"Off", "Once", "Always"}, {"Off", "10%", "20%", "30%"},
-        {"1x", "10x", "100x"}, OptionsFor(Id::MarginX)};
+        {"1x", "10x", "100x"}, {"Off", "1.1x", "1.2x", "1.3x", "1.4x"}};
     // rel120: and where the equal segments do not fit (Mouse Mode beside Reset to Default).
     std::vector<std::pair<std::vector<std::string>, float>> sized;
     for (const auto& opts : rows) {
