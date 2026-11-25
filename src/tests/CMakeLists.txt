@@ -75,11 +75,16 @@ add_executable(tests
     ../frame_xr/vis/help_layout.cpp # AzaharFrame screenswap
     ../frame_xr/vis/model_file.cpp # AzaharFrame vrvis
     ../frame_xr/vis/stats_place.cpp # AzaharFrame statspos
+    ../frame_xr/vis/power_menu.cpp # AzaharFrame kiupowers
     ../frame_xr/vis/wrist_screen.cpp # AzaharFrame kiuwrist
     frame_xr/kiu_wrist_screen.cpp # AzaharFrame kiuwrist
     frame_xr/kiu_panel_hold.cpp # AzaharFrame kiu140
     frame_xr/kiu_cutscene.cpp # AzaharFrame kiu140
     frame_xr/kiu_hud.cpp # AzaharFrame kiu140
+    frame_xr/kiu_powers.cpp # AzaharFrame kiupowers
+    frame_xr/kiu_talk.cpp # AzaharFrame kiutalk
+    frame_xr/kiu_ui.cpp # AzaharFrame kiu1s
+    frame_xr/kiu_camera_tap.cpp # AzaharFrame kiucam
     frame_xr/kiu_sheets.cpp # AzaharFrame kiu140
     frame_xr/kiu_panel.cpp # AzaharFrame kiupanel
     frame_xr/vis.cpp # AzaharFrame vrvis

@@ -8,8 +8,10 @@
 // the handle, and the plate's triangles come last. The model here is a few triangles made in the
 // test: no real one is in the tree.
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -421,4 +423,461 @@ TEST_CASE("Hand file: two hands at once, each with its own pose, the right the l
     const float det = rf[0] * (rf[5] * rf[10] - rf[6] * rf[9]) - rf[4] * (rf[1] * rf[10] - rf[2] * rf[9]) +
                       rf[8] * (rf[1] * rf[6] - rf[2] * rf[5]);
     CHECK(det < 0.0f);
+}
+
+// ---- tracked fingers ----
+
+namespace {
+
+struct Q {
+    float x = 0.0f, y = 0.0f, z = 0.0f, w = 1.0f;
+};
+Q operator*(const Q& a, const Q& b) {
+    return {a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y, a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+            a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w, a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z};
+}
+Q Turn(int axis, float degrees) {
+    const float h = degrees * 0.00872664626f, s = std::sin(h);
+    return {axis == 0 ? s : 0.0f, axis == 1 ? s : 0.0f, axis == 2 ? s : 0.0f, std::cos(h)};
+}
+PitVec3 Rotated(const Q& q, const PitVec3& v) {
+    const Q o = q * Q{v[0], v[1], v[2], 0.0f} * Q{-q.x, -q.y, -q.z, q.w};
+    return {o.x, o.y, o.z};
+}
+
+/// A left hand's 26 joints as a runtime has them: the palm along -z with its back +y and its thumb
+/// +x, the knuckles fanned, the wrist's own frame on the line to the middle metacarpal joint (as
+/// OpenXR says: 24 degrees off the palm), the four fingers fanned, each rolled a little.
+struct Tracked {
+    std::array<float, 5> bend{};       ///< a joint's more bend, degrees (thumb to little)
+    std::array<float, 4> side{6, -4, -14, -24}; ///< index to little, toward the thumb positive
+    float wrist_yaw = 24.0f;
+    Q turned{};
+    PitVec3 moved{};
+
+    std::array<PitJointPose, kPitXrJoints> Joints(bool right = false) const {
+        std::array<Q, kPitXrJoints> q{};
+        std::array<PitVec3, kPitXrJoints> at{};
+        q[kPitWrist] = Turn(1, -wrist_yaw);
+        q[kPitPalm] = q[kPitMiddleMetacarpal];
+        at[kPitPalm] = {0.005f, 0.0f, -0.05f};
+        const std::array<PitVec3, 4> meta{{{0.014f, 0.002f, -0.015f}, {0.007f, 0.002f, -0.016f}, {-0.006f, 0.0f, -0.016f}, {-0.018f, -0.002f, -0.015f}}};
+        const std::array<PitVec3, 4> knuckle{{{0.030f, 0.014f, -0.086f}, {0.009f, 0.016f, -0.086f}, {-0.011f, 0.014f, -0.081f}, {-0.030f, 0.010f, -0.072f}}};
+        const std::array<float, 4> roll{3, 7, -3, 13};
+        for (std::size_t f = 0; f < 4; f++) {
+            const auto base = static_cast<std::size_t>(kPitIndexMetacarpal) + f * 5;
+            q[base] = Turn(1, -8.0f + 8.0f * static_cast<float>(f)) * Turn(0, 10.0f);
+            at[base] = meta[f];
+            const float b = bend[f + 1];
+            q[base + 1] = Turn(0, -b) * Turn(1, -side[f]) * Turn(2, roll[f]);
+            at[base + 1] = knuckle[f];
+            q[base + 2] = q[base + 1] * Turn(0, -b);
+            q[base + 3] = q[base + 2] * Turn(0, -b);
+            q[base + 4] = q[base + 3];
+            const std::array<float, 3> length{0.043f, 0.026f, 0.022f};
+            for (std::size_t k = 0; k < 3; k++) {
+                const PitVec3 along = Rotated(q[base + 1 + k], {0, 0, -length[k]});
+                for (std::size_t c = 0; c < 3; c++) {
+                    at[base + 2 + k][c] = at[base + 1 + k][c] + along[c];
+                }
+            }
+        }
+        q[kPitThumbMetacarpal] = Turn(0, -30.0f) * Turn(1, -30.0f) * Turn(2, -90.0f);
+        q[kPitThumbProximal] = q[kPitThumbMetacarpal] * Turn(0, -bend[0]);
+        q[kPitThumbDistal] = q[kPitThumbTip] = q[kPitThumbProximal] * Turn(0, -bend[0]);
+        std::array<PitJointPose, kPitXrJoints> out;
+        for (std::size_t j = 0; j < out.size(); j++) {
+            const Q o = turned * q[j];
+            const PitVec3 p = Rotated(turned, at[j]);
+            out[j].orientation = {o.x, o.y, o.z, o.w};
+            out[j].position = {p[0] + moved[0], p[1] + moved[1], p[2] + moved[2]};
+            if (right) { // x turned over
+                out[j].orientation = {o.x, -o.y, -o.z, o.w};
+                out[j].position[0] = -out[j].position[0];
+            }
+        }
+        return out;
+    }
+};
+
+/// A hand file with all its fingers, straight along +x, `apart` metres between them, `thick` each.
+PitModel Hand(float apart, float thick) {
+    Maker m;
+    m.joints = {{-1, kPitForearm, 1, {-0.15f, 0, 0}, 0}, {0, kPitWrist, 1, {0, 0, 0}, 0}};
+    for (int f = 0; f < 4; f++) {
+        const float z = (1.2f - static_cast<float>(f)) * apart;
+        const int role = kPitIndexMetacarpal + 5 * f;
+        const auto first = static_cast<int>(m.joints.size());
+        const float knuckle = f == 3 ? 0.070f : 0.074f;
+        m.joints.push_back({1, role, 1, {0.01f, 0, z * 0.5f}, 0});
+        m.joints.push_back({first, role + 1, 0, {knuckle, 0.003f, z}, thick});
+        m.joints.push_back({first + 1, role + 2, 0, {knuckle + 0.042f, 0.003f, z}, thick});
+        m.joints.push_back({first + 2, role + 3, 0, {knuckle + 0.060f, 0.003f, z}, thick});
+        m.joints.push_back({first + 3, role + 4, 0, {knuckle + 0.078f, 0.003f, z}, thick});
+    }
+    const auto thumb = static_cast<int>(m.joints.size());
+    m.joints.push_back({1, kPitThumbMetacarpal, 0, {0.01f, -0.015f, 0.02f}, thick});
+    m.joints.push_back({thumb, kPitThumbProximal, 0, {0.045f, -0.03f, 0.05f}, thick});
+    m.joints.push_back({thumb + 1, kPitThumbDistal, 0, {0.085f, -0.035f, 0.05f}, thick});
+    // A vertex on the index finger's first bone and one on its second, beside it.
+    m.vertices[3] = {{0.10f, 0.003f, 1.2f * apart + thick}, 3};
+    m.vertices[4] = {{0.125f, 0.003f, 1.2f * apart - thick}, 4};
+    PitModel out;
+    std::string error;
+    REQUIRE(ParsePitModel(m.Bytes(), out, error));
+    return out;
+}
+
+std::size_t JointOf(const PitModel& m, int role) {
+    for (std::size_t i = 0; i < m.joints.size(); i++) {
+        if (m.joints[i].role == role) {
+            return i;
+        }
+    }
+    FAIL("no such joint");
+    return 0;
+}
+/// Where a joint's bone points (its frame's -z) and where it is, with these bones.
+PitVec3 Points(const PitModel& m, std::span<const PitMat34> bones, int role) {
+    const std::size_t i = JointOf(m, role);
+    const auto& f = m.joints[i].frame;
+    const PitMat34& b = bones[i];
+    const PitVec3 d{-f[2], -f[5], -f[8]};
+    return {b[0] * d[0] + b[1] * d[1] + b[2] * d[2], b[4] * d[0] + b[5] * d[1] + b[6] * d[2],
+            b[8] * d[0] + b[9] * d[1] + b[10] * d[2]};
+}
+float AngleOf(const PitVec3& a, const PitVec3& b) {
+    return 57.2957795f * std::acos(std::clamp(a[0] * b[0] + a[1] * b[1] + a[2] * b[2], -1.0f, 1.0f));
+}
+std::vector<PitMat34> Shown(const PitModel& m, const Tracked& t, bool gap = false, bool right = false) {
+    PitTracked fingers;
+    REQUIRE(PitTrackedFromJoints(t.Joints(right), right, fingers));
+    return PitModelEvaluateTracked(m, fingers, nullptr, gap);
+}
+
+} // namespace
+
+TEST_CASE("Tracked fingers: an open hand is the file's open hand, whatever the runtime's wrist says",
+          "[kiuhand][kiuhands]") {
+    const PitModel m = Hand(0.025f, 0.010f);
+    for (const float yaw : {0.0f, 24.0f, -40.0f}) {
+        Tracked t;
+        t.wrist_yaw = yaw;
+        t.turned = Turn(1, 70.0f) * Turn(0, 25.0f) * Turn(2, -130.0f);
+        t.moved = {1.0f, -0.4f, 2.0f};
+        const auto bones = Shown(m, t);
+        // Down the fingers: within a few degrees of straight, the middle one straight ahead.
+        CHECK(AngleOf(Points(m, bones, kPitMiddleProximal), {1, 0, 0}) < 8.0f);
+        for (int f = 0; f < 4; f++) {
+            const PitVec3 d = Points(m, bones, kPitIndexProximal + 5 * f);
+            CHECK(std::abs(std::atan2(-d[1], d[0])) * 57.3f < 8.0f);
+        }
+        // Fanned: each finger further to the little finger's side (-z) than the one before it.
+        float last = 1.0f;
+        for (int f = 0; f < 4; f++) {
+            const float z = Points(m, bones, kPitIndexProximal + 5 * f)[2];
+            CHECK(z < last - 0.08f);
+            last = z;
+        }
+        // The hand stays where the file has it.
+        const std::size_t knuckle = JointOf(m, kPitRingProximal);
+        CHECK(Distance(Apply(bones[knuckle], m.joints[knuckle].position.data()), m.joints[knuckle].position) < 1e-5f);
+    }
+    // The way it was before takes the wrist's turn for the fingers': 24 degrees to one side.
+    Tracked t;
+    const PitHandPose old = PitHandPoseFromJoints(t.Joints(), false, 0.0f);
+    const auto bones = PitModelEvaluate(m, &old, nullptr, false);
+    CHECK(Points(m, bones, kPitMiddleProximal)[2] < -0.45f);
+}
+
+TEST_CASE("Tracked fingers: each moves by itself, as far as its own joints", "[kiuhand][kiuhands]") {
+    const PitModel m = Hand(0.025f, 0.010f);
+    const auto open = Shown(m, {});
+    for (int f = 0; f < 4; f++) {
+        Tracked t;
+        t.bend[static_cast<std::size_t>(f) + 1] = 60.0f;
+        const auto bones = Shown(m, t);
+        for (int g = 0; g < 4; g++) {
+            const int first = kPitIndexProximal + 5 * g;
+            for (int k = 0; k < 3; k++) {
+                const float moved = AngleOf(Points(m, open, first + k), Points(m, bones, first + k));
+                if (g != f) {
+                    CHECK(moved < 0.1f);
+                }
+            }
+            if (g == f) {
+                CHECK(AngleOf(Points(m, open, first), Points(m, bones, first)) > 50.0f);
+                CHECK(AngleOf(Points(m, bones, first), Points(m, bones, first + 1)) == Approx(60.0f).margin(0.2f));
+                CHECK(AngleOf(Points(m, bones, first + 1), Points(m, bones, first + 2)) == Approx(60.0f).margin(0.2f));
+                // Toward the palm.
+                CHECK(Points(m, bones, first)[1] < -0.7f);
+            }
+        }
+    }
+    Tracked t;
+    t.bend[0] = 35.0f;
+    const auto bones = Shown(m, t);
+    CHECK(AngleOf(Points(m, bones, kPitThumbMetacarpal), Points(m, bones, kPitThumbProximal)) == Approx(35.0f).margin(0.2f));
+    CHECK(AngleOf(Points(m, open, kPitIndexProximal), Points(m, bones, kPitIndexProximal)) < 0.1f);
+}
+
+TEST_CASE("Tracked fingers: a right hand is the left's mirror, the bones keep their lengths", "[kiuhand][kiuhands]") {
+    const PitModel m = Hand(0.025f, 0.010f);
+    Tracked t;
+    t.bend = {20, 10, 80, 45, 30};
+    t.turned = Turn(0, 40.0f) * Turn(2, 60.0f);
+    t.moved = {0.3f, 1.0f, -0.5f};
+    const auto left = Shown(m, t, true), right = Shown(m, t, true, true);
+    REQUIRE(left.size() == right.size());
+    for (std::size_t i = 0; i < left.size(); i++) {
+        for (std::size_t k = 0; k < 12; k++) {
+            CHECK(left[i][k] == Approx(right[i][k]).margin(1e-4f));
+        }
+    }
+    for (std::size_t i = 0; i < m.joints.size(); i++) {
+        const int parent = m.joints[i].parent;
+        if (parent < 1) {
+            continue;
+        }
+        const auto p = static_cast<std::size_t>(parent);
+        CHECK(Distance(Apply(left[i], m.joints[i].position.data()), Apply(left[p], m.joints[p].position.data())) ==
+              Approx(Distance(m.joints[i].position, m.joints[p].position)).margin(1e-5f));
+    }
+}
+
+TEST_CASE("Tracked fingers: neighbours are held apart, no more than a little", "[kiuhand][kiuhands]") {
+    Tracked t;
+    t.side = {-2, -4, -6, -8}; // all along each other
+    const PitModel thick = Hand(0.025f, 0.0135f), thin = Hand(0.025f, 0.009f);
+    const auto before = PitModelFingerOverlap(thick, Shown(thick, t, false));
+    const auto after = PitModelFingerOverlap(thick, Shown(thick, t, true));
+    for (std::size_t pair = 0; pair < 3; pair++) {
+        CHECK(before[pair] > 0.0f);
+        CHECK(after[pair] < before[pair]);
+        CHECK(after[pair] < 0.0005f);
+    }
+    for (int f = 0; f < 4; f++) {
+        CHECK(AngleOf(Points(thick, Shown(thick, t, false), kPitIndexProximal + 5 * f),
+                      Points(thick, Shown(thick, t, true), kPitIndexProximal + 5 * f)) < kPitFingerAside + 0.1f);
+    }
+    // Fingers with room are not turned.
+    const auto with = Shown(thin, t, true), without = Shown(thin, t, false);
+    for (std::size_t i = 0; i < with.size(); i++) {
+        for (std::size_t k = 0; k < 12; k++) {
+            CHECK(with[i][k] == Approx(without[i][k]).margin(1e-6f));
+        }
+    }
+}
+
+TEST_CASE("Tracked fingers: joints that make no hand are left alone; easing ends at the target", "[kiuhand][kiuhands]") {
+    PitTracked out;
+    std::array<PitJointPose, kPitXrJoints> nowhere{};
+    CHECK_FALSE(PitTrackedFromJoints(nowhere, false, out)); // all in one place
+    auto bad = Tracked{}.Joints();
+    bad[kPitRingDistal].orientation = {0, 0, 0, 0};
+    CHECK_FALSE(PitTrackedFromJoints(bad, false, out));
+    bad = Tracked{}.Joints();
+    bad[kPitMiddleProximal].position[1] = std::nanf("");
+    CHECK_FALSE(PitTrackedFromJoints(bad, false, out));
+    Tracked closed;
+    closed.bend = {30, 70, 70, 70, 70};
+    PitTracked a, b;
+    REQUIRE(PitTrackedFromJoints(Tracked{}.Joints(), false, a));
+    REQUIRE(PitTrackedFromJoints(closed.Joints(), false, b));
+    CHECK(PitTrackedDiffers(a, b));
+    CHECK_FALSE(PitTrackedDiffers(b, b));
+    CHECK_FALSE(PitTrackedDiffers(PitTrackedEase(a, b, 1.0f, 0.015f), b));
+    CHECK(PitTrackedDiffers(PitTrackedEase(a, b, 0.002f, 0.015f), b));
+    CHECK_FALSE(PitTrackedDiffers(PitTrackedEase(a, b, 0.01f, 0.0f), b));
+}
+
+TEST_CASE("Tracked fingers: a moment without joints keeps the last ones, longer does not", "[kiuhand][kiuhands]") {
+    float lost = 0.0f;
+    CHECK(PitFingersKeep(false, false, 0.011f, lost) == PitFingersFrom::None); // never had any
+    CHECK(PitFingersKeep(true, false, 0.011f, lost) == PitFingersFrom::Joints);
+    for (int frame = 0; frame < 20; frame++) { // 0.22 s at 90 a second
+        CHECK(PitFingersKeep(false, true, 0.011f, lost) == PitFingersFrom::Held);
+    }
+    CHECK(PitFingersKeep(true, true, 0.011f, lost) == PitFingersFrom::Joints);
+    CHECK(lost == 0.0f);
+    for (int frame = 0; frame < 22; frame++) {
+        PitFingersKeep(false, true, 0.011f, lost);
+    }
+    CHECK(PitFingersKeep(false, true, 0.011f, lost) == PitFingersFrom::None);
+    // The kept bones are the same as a new list's.
+    const PitModel m = Hand(0.025f, 0.010f);
+    Tracked t;
+    t.bend = {20, 10, 80, 45, 30};
+    PitTracked fingers;
+    REQUIRE(PitTrackedFromJoints(t.Joints(), false, fingers));
+    std::vector<PitMat34> kept(3);
+    PitModelEvaluateTracked(m, fingers, nullptr, true, kept);
+    CHECK(kept == PitModelEvaluateTracked(m, fingers, nullptr, true));
+}
+
+TEST_CASE("Tracked fingers: the forearm goes with the controller as without them", "[kiuhand][kiuhands]") {
+    // Where 6b4f770d7 has it: as the file does, whatever the fingers do (no bone of the forearm is
+    // turned), and the hand's fit to the controller is the fingers' business in no way.
+    PitModel m = Hand(0.025f, 0.010f);
+    const PitModel thin = PitModelThinned(m, 0.92f);
+    std::vector<float> file(m.vertices), drawn(file.size());
+    const auto forearm_same = [&](const PitModel& model, const std::vector<PitMat34>& bones) {
+        PitModelSkin(model, bones, drawn);
+        std::size_t seen = 0;
+        for (std::size_t v = 0; v < m.vertex_count; v++) {
+            if (m.joints[m.bones[v * 4]].role != kPitForearm) {
+                continue;
+            }
+            seen++;
+            for (std::size_t c = 0; c < 6; c++) { // its place and its normal
+                REQUIRE(std::abs(drawn[v * kPitVertexFloats + c] - file[v * kPitVertexFloats + c]) < 0.0001f);
+            }
+        }
+        CHECK(seen == 3);
+        const std::size_t wrist = JointOf(m, kPitWrist);
+        CHECK(Distance(Apply(bones[wrist], m.joints[wrist].position.data()), m.joints[wrist].position) < 0.0001f);
+    };
+    const PitVec3 elbow = m.elbow;
+    for (const float bend : {0.0f, 30.0f, 85.0f}) {
+        Tracked t;
+        t.bend = {bend * 0.4f, bend, bend * 0.3f, bend, bend * 0.6f};
+        t.turned = Turn(1, bend) * Turn(0, -bend);
+        for (const bool right : {false, true}) {
+            PitTracked fingers;
+            REQUIRE(PitTrackedFromJoints(t.Joints(right), right, fingers));
+            for (const bool gap : {false, true}) {
+                forearm_same(m, PitModelEvaluateTracked(m, fingers, &elbow, gap));
+                forearm_same(thin, PitModelEvaluateTracked(thin, fingers, &elbow, gap));
+            }
+            const PitHandPose old = PitHandPoseFromJoints(t.Joints(right), right, 0.0f);
+            forearm_same(m, PitModelEvaluate(m, &old, &elbow, false)); // FINGERS_OLD, without joints' places
+            forearm_same(thin, PitModelEvaluate(thin, &old, &elbow, false));
+        }
+    }
+    const PitHandPose held = PitHandNamedPose(PitHandNamed::Relaxed); // no tracked fingers
+    forearm_same(m, PitModelEvaluate(m, &held, &elbow, true));
+    for (const bool left : {true, false}) {
+        CHECK(PitModelControllerFit(thin, left) == PitModelControllerFit(m, left));
+    }
+}
+
+TEST_CASE("Tracked fingers: they come and go, the vertices stay sound", "[kiuhand][kiuhands]") {
+    // As SkinPit has them one after another, into the same vertices: tracked, held, the controller's,
+    // the way before, another width, and joints no runtime should give.
+    const PitModel m = Hand(0.025f, 0.010f);
+    const PitModel thin = PitModelThinned(m, 0.85f);
+    CHECK(thin.vertex_count == m.vertex_count);
+    CHECK(thin.joints.size() == m.joints.size());
+    std::vector<float> out(std::size_t{m.vertex_count} * kPitVertexFloats);
+    const auto sound = [&](const PitModel& model, const std::vector<PitMat34>& bones) {
+        REQUIRE(bones.size() == model.joints.size());
+        std::fill(out.begin(), out.end(), std::nanf(""));
+        PitModelSkin(model, bones, out);
+        for (std::size_t i = 0; i < out.size(); i++) {
+            REQUIRE(std::isfinite(out[i]));
+            REQUIRE((i % kPitVertexFloats >= 3 || std::abs(out[i]) < 0.5f)); // on the hand
+        }
+    };
+    const PitVec3 elbow = m.elbow;
+    Tracked t;
+    t.bend = {20, 70, 80, 45, 30};
+    std::vector<PitMat34> kept;
+    PitTracked fingers;
+    REQUIRE(PitTrackedFromJoints(t.Joints(), false, fingers));
+    PitModelEvaluateTracked(m, fingers, &elbow, true, kept);
+    sound(m, kept);
+    PitHandPose pose = PitHandPoseFromJoints(t.Joints(), false, 0.0f);
+    sound(m, PitModelEvaluate(m, &pose, &elbow, false));
+    PitModelEvaluateTracked(thin, fingers, &elbow, false, kept);
+    sound(thin, kept);
+    for (const float bad : {0.0f, std::nanf(""), 1e30f}) {
+        auto joints = t.Joints();
+        joints[kPitMiddleProximal].orientation = {bad, bad, bad, bad};
+        PitTracked broken;
+        if (PitTrackedFromJoints(joints, false, broken)) {
+            PitModelEvaluateTracked(m, PitTrackedEase(fingers, broken, 0.011f, kFingersEase), &elbow, true, kept);
+            sound(m, kept);
+        }
+        // Not taken as tracked fingers, they reach the pose from before; it does not stay broken.
+        pose = PitHandEase(pose, PitHandPoseFromJoints(joints, false, 0.0f), 0.011f);
+        pose = PitHandEase(pose, PitHandPoseFromJoints(t.Joints(), false, 0.0f), 0.011f);
+        sound(m, PitModelEvaluate(m, &pose, &elbow, false));
+    }
+}
+
+TEST_CASE("Tracked fingers: joints gone 0.15 s each second, the hand does not flicker", "[kiuhand][kiuhands]") {
+    const PitModel m = Hand(0.025f, 0.010f);
+    const PitVec3 elbow = m.elbow;
+    Tracked t;
+    t.bend = {20, 70, 80, 45, 30};
+    PitTracked joints;
+    REQUIRE(PitTrackedFromJoints(t.Joints(), false, joints));
+    const auto expected = PitModelEvaluateTracked(m, joints, &elbow, true);
+    for (const float rate : {72.0f, 90.0f, 120.0f}) { // as SkinPit, frame by frame
+        const float dt = 1.0f / rate;
+        float lost = 0.0f;
+        bool had = false;
+        PitTracked shown;
+        for (int frame = 0; frame < static_cast<int>(3.0f * rate); frame++) {
+            const bool tracked = std::fmod(static_cast<float>(frame) * dt, 1.0f) < 0.85f;
+            const PitFingersFrom from = PitFingersKeep(tracked, had, dt, lost);
+            REQUIRE(from != PitFingersFrom::None);
+            if (from == PitFingersFrom::Joints) {
+                shown = had ? PitTrackedEase(shown, joints, dt, kFingersEase) : joints;
+            }
+            had = true;
+            const auto bones = PitModelEvaluateTracked(m, shown, &elbow, true);
+            for (std::size_t b = 0; b < bones.size(); b++) {
+                for (std::size_t k = 0; k < bones[b].size(); k++) {
+                    REQUIRE(std::abs(bones[b][k] - expected[b][k]) < 0.0001f);
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("Hand file: normals meet over a seam, not over an edge", "[kiuhand][kiuhands]") {
+    PitModel m = Good();
+    const auto put = [&m](std::size_t v, float x, float nx, float ny) {
+        float* p = &m.vertices[v * kPitVertexFloats];
+        p[0] = x;
+        p[1] = p[2] = 0.0f;
+        p[3] = nx;
+        p[4] = ny;
+        p[5] = 0.0f;
+    };
+    put(0, 0.5f, 0.2079f, 0.9781f); // 12 degrees either side of +y
+    put(1, 0.5f, -0.2079f, 0.9781f);
+    put(2, 0.6f, 1.0f, 0.0f); // square to each other
+    put(3, 0.6f, 0.0f, 1.0f);
+    CHECK(PitModelSmoothSeams(m) == 2);
+    CHECK(m.vertices[3] == Approx(0.0f).margin(1e-4f));
+    CHECK(m.vertices[4] == Approx(1.0f).margin(1e-4f));
+    CHECK(m.vertices[kPitVertexFloats + 4] == Approx(1.0f).margin(1e-4f));
+    CHECK(m.vertices[2 * kPitVertexFloats + 3] == 1.0f);
+    CHECK(m.vertices[3 * kPitVertexFloats + 4] == 1.0f);
+    CHECK(PitModelSmoothSeams(m) == 0);
+}
+
+TEST_CASE("Hand file: fingers drawn narrower keep their length and their middle", "[kiuhand][kiuhands]") {
+    CHECK(PitFingerWidth(std::nullopt) == kPitFingerWidth);
+    CHECK(PitFingerWidth(std::string{"85"}) == 85);
+    CHECK(PitFingerWidth(std::string{"100"}) == 100);
+    CHECK(PitFingerWidth(std::string{"20"}) == 60);
+    CHECK(PitFingerWidth(std::string{"x"}) == kPitFingerWidth);
+    CHECK(PitFingerWidth(std::string{""}) == kPitFingerWidth);
+    CHECK(PitFingerWidth(std::string{"99999999999"}) == kPitFingerWidth);
+    const PitModel m = Hand(0.025f, 0.012f);
+    const PitModel n = PitModelThinned(m, 0.75f);
+    CHECK(n.vertices.size() == m.vertices.size());
+    CHECK(n.colour.empty());
+    // On the second bone the whole of it, on the first the more the further from the knuckle.
+    const float z = 1.2f * 0.025f;
+    CHECK(n.vertices[4 * kPitVertexFloats + 2] == Approx(z - 0.009f).margin(1e-5f));
+    CHECK(n.vertices[4 * kPitVertexFloats] == Approx(m.vertices[4 * kPitVertexFloats]).margin(1e-6f));
+    CHECK(n.vertices[3 * kPitVertexFloats + 2] < z + 0.0119f);
+    CHECK(n.vertices[3 * kPitVertexFloats + 2] > z + 0.0089f);
+    CHECK(n.vertices[0] == m.vertices[0]); // the forearm as it was
+    CHECK(n.joints[JointOf(m, kPitIndexDistal)].radius == Approx(0.009f));
+    CHECK(n.joints[JointOf(m, kPitThumbDistal)].radius == Approx(0.012f));
 }

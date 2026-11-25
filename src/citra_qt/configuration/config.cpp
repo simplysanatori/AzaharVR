@@ -676,9 +676,28 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.vr_kiu_bottom_screen); // AzaharFrame kiu131
     ReadGlobalSetting(Settings::values.vr_kiu_bottom_size);
     ReadGlobalSetting(Settings::values.vr_kiu_bottom_opacity);
+    ReadGlobalSetting(Settings::values.vr_kiu_talk_portraits); // AzaharFrame kiu1s
+    ReadGlobalSetting(Settings::values.vr_kiu_talk_portraits_opacity);
+    ReadGlobalSetting(Settings::values.vr_kiu_power_menu); // AzaharFrame kiupowers
+    ReadGlobalSetting(Settings::values.vr_kiu_power_menu_opacity);
+    ReadGlobalSetting(Settings::values.vr_kiu_power_menu_across);
+    ReadGlobalSetting(Settings::values.vr_kiu_power_menu_height);
     ReadGlobalSetting(Settings::values.vr_kiu_bottom_x);
     ReadGlobalSetting(Settings::values.vr_kiu_bottom_y);
     ReadGlobalSetting(Settings::values.vr_kiu_wrist_angle); // AzaharFrame kiu140
+    {
+        // AzaharFrame kiuaim: the angle counts from the back of the wrist; a file's own angle is
+        // carried over once (frame_per_game_ini.h). From the file alone, so a second read before
+        // the save gives the same.
+        const FrameConfig::WristAngleCarry carry = FrameConfig::CarriedWristAngle(
+            *qt_config, global, Settings::values.vr_kiu_wrist_angle_from.GetValue());
+        if (carry.angle) {
+            Settings::values.vr_kiu_wrist_angle.SetValue(*carry.angle);
+        }
+        if (global) {
+            Settings::values.vr_kiu_wrist_angle_from.SetValue(carry.mark);
+        }
+    }
     ReadGlobalSetting(Settings::values.vr_kiu_wrist_along); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_cutscenes); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_hud); // AzaharFrame kiu140
@@ -693,9 +712,11 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.vr_kiu_score_height); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_subtitle_height); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_subtitle_size); // AzaharFrame kiu140
+    ReadGlobalSetting(Settings::values.vr_kiu_hide_off_hand); // AzaharFrame kiuhands
     ReadGlobalSetting(Settings::values.vr_kiu_reticle_size);
     ReadGlobalSetting(Settings::values.vr_kiu_game_camera); // AzaharFrame kiu133
     ReadGlobalSetting(Settings::values.vr_kiu_pit_opacity);
+    ReadGlobalSetting(Settings::values.vr_kiu_stick_click); // AzaharFrame kiucam
     if (!global) {
         // AzaharFrame kiu: what the Controls preset already decided (a game's file only).
         ReadGlobalSetting(Settings::values.vr_controls_preset_done);
@@ -1442,9 +1463,20 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.vr_kiu_bottom_screen); // AzaharFrame kiu131
     WriteGlobalSetting(Settings::values.vr_kiu_bottom_size);
     WriteGlobalSetting(Settings::values.vr_kiu_bottom_opacity);
+    WriteGlobalSetting(Settings::values.vr_kiu_talk_portraits); // AzaharFrame kiu1s
+    WriteGlobalSetting(Settings::values.vr_kiu_talk_portraits_opacity);
+    WriteGlobalSetting(Settings::values.vr_kiu_power_menu); // AzaharFrame kiupowers
+    WriteGlobalSetting(Settings::values.vr_kiu_power_menu_opacity);
+    WriteGlobalSetting(Settings::values.vr_kiu_power_menu_across);
+    WriteGlobalSetting(Settings::values.vr_kiu_power_menu_height);
     WriteGlobalSetting(Settings::values.vr_kiu_bottom_x);
     WriteGlobalSetting(Settings::values.vr_kiu_bottom_y);
     WriteGlobalSetting(Settings::values.vr_kiu_wrist_angle); // AzaharFrame kiu140
+    // AzaharFrame kiuaim: the mark that this file's angle counts from the back of the wrist (the
+    // read before this save carried it over).
+    WriteSetting(QString::fromLatin1(FrameConfig::kWristAngleFromKey),
+                 global ? std::max<u32>(Settings::values.vr_kiu_wrist_angle_from.GetValue(), 1u)
+                        : 1u);
     WriteGlobalSetting(Settings::values.vr_kiu_wrist_along); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_cutscenes); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_hud); // AzaharFrame kiu140
@@ -1459,9 +1491,11 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.vr_kiu_score_height); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_subtitle_height); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_subtitle_size); // AzaharFrame kiu140
+    WriteGlobalSetting(Settings::values.vr_kiu_hide_off_hand); // AzaharFrame kiuhands
     WriteGlobalSetting(Settings::values.vr_kiu_reticle_size);
     WriteGlobalSetting(Settings::values.vr_kiu_game_camera); // AzaharFrame kiu133
     WriteGlobalSetting(Settings::values.vr_kiu_pit_opacity);
+    WriteGlobalSetting(Settings::values.vr_kiu_stick_click); // AzaharFrame kiucam
     if (!global) {
 #ifdef ENABLE_FRAME_XR
         FrameXr::MirrorGyroAim(); // AzaharFrame kiugyro: kept by builds that drop vr_gyro_aim

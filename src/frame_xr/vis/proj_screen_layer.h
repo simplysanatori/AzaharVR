@@ -30,6 +30,7 @@ struct ProjScreenEye {
     /// AzaharFrame kiuview: the edge's fade to black, a share of the half size (0: a hard edge;
     /// Kid Icarus first person's top screen, AZAHARFRAME_KIU_FP_EDGE).
     float soft_edge = 0.0f;
+    float darker = 0.0f; ///< AzaharFrame kiucam: 0 as it is, 1 black (kiu_camera_tap.h)
 };
 
 struct ProjScreens {

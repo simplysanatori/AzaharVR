@@ -392,6 +392,12 @@ namespace {
 std::atomic<bool> g_cutscene{false};
 std::atomic<float> g_cutscene_tan{0.0f};
 std::atomic<bool> g_battle{false};
+std::atomic<bool> g_battle_page{false}, g_pause_panel{false}; // AzaharFrame kiu1s
+std::atomic<bool> g_menu_page{false}; // AzaharFrame kiuhud
+std::atomic<bool> g_menu_panel{false};
+std::atomic<PortraitState> g_portraits{PortraitState::Off};
+std::atomic<int> g_menu{-1};
+std::atomic<bool> g_weapon_hidden{false};
 } // namespace
 
 void SetCutscene(bool on, float tan_half_y) {
@@ -410,6 +416,55 @@ void SetBattle(bool on) {
 }
 bool Battle() {
     return g_battle.load(std::memory_order_relaxed);
+}
+void SetBattleUi(bool page, bool pause_panel, bool menu) {
+    g_battle_page.store(page, std::memory_order_relaxed);
+    g_pause_panel.store(pause_panel, std::memory_order_relaxed);
+    g_menu_page.store(page && menu, std::memory_order_relaxed);
+}
+bool MenuPage() {
+    return g_menu_page.load(std::memory_order_relaxed);
+}
+bool BattlePage() {
+    return g_battle_page.load(std::memory_order_relaxed);
+}
+bool PausePanel() {
+    return g_pause_panel.load(std::memory_order_relaxed);
+}
+void SetPortraits(PortraitState state) {
+    g_portraits.store(state, std::memory_order_relaxed);
+}
+PortraitState Portraits() {
+    return g_portraits.load(std::memory_order_relaxed);
+}
+void SetMenu(int menu, bool panel) {
+    g_menu_panel.store(panel, std::memory_order_relaxed);
+    g_menu.store(menu, std::memory_order_relaxed);
+}
+bool PortraitsWanted() {
+    const auto text = Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_PORTRAITS");
+    return PortraitsWantedFor(text ? text->c_str() : nullptr,
+                              Settings::values.vr_kiu_talk_portraits.GetValue());
+}
+bool TalkTopWanted() {
+    const auto text = Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_TALK_TOP");
+    return TalkTopFor(text ? text->c_str() : nullptr, PortraitsWanted(),
+                      BottomScreenNow().mode == BottomScreen::Persistent);
+}
+float PortraitAlpha() {
+    return BottomAlphaFor(Settings::values.vr_kiu_talk_portraits_opacity.GetValue());
+}
+void SetWeaponHidden(bool hidden) {
+    g_weapon_hidden.store(hidden, std::memory_order_relaxed);
+}
+bool WeaponHidden() {
+    return g_weapon_hidden.load(std::memory_order_relaxed);
+}
+int MenuUp() {
+    return g_menu.load(std::memory_order_relaxed);
+}
+bool MenuPanel() {
+    return g_menu_panel.load(std::memory_order_relaxed) && MenuUp() >= 0;
 }
 bool Cutscene() {
     return g_cutscene.load(std::memory_order_relaxed);

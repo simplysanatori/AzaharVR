@@ -86,6 +86,16 @@
 //                                     and the shots keep the ray from before (no jump to the
 //                                     frame's edge). 0: the beam aims as anywhere else.
 //                                     vis/wrist_screen.h WristAimHold, controls.cpp.
+//   AZAHARFRAME_KIU_AIM_PAGE=0|1      AzaharFrame kiuaim: the menu's Angel's Aim page with fewer
+//                                     rows on view (default 1; menu/angels_aim_tab.h). 0: the
+//                                     page as it was, one long list.
+//   AZAHARFRAME_KIU_WRIST_ABS=0|1     AzaharFrame kiuaim: Wrist Angle counts from the back of the
+//                                     wrist (default 1). 0: from Wrist Side's place, as before.
+//   AZAHARFRAME_KIU_PLACE_PREVIEW=0|1 AzaharFrame kiuaim: the real Bottom Screen stays on view
+//                                     (frozen: the game is paused) while the menu's Bottom
+//                                     Screen page is open (default 1; immersive_layout.h
+//                                     PlacePreviewFor). 0: hidden with the menu, as before.
+//                                     2: with any page of the menu (mock runs).
 //   AZAHARFRAME_KIU_FP_TRACE=1|2      a line a second (2: a VBlank) with the transform's inputs
 //                                     and what it gives (kiu_hooks.cpp).
 //   AZAHARFRAME_KIU_FP_PROBE=<hex>    with the trace: the actor at that address, where it is in
@@ -122,7 +132,7 @@
 //                                     (AzaharFrame kiufp3: why kiuview never saw it on the mock).
 //                                     At FP_FIELD 100 most of the edge is outside the view.
 //   AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]
-//                                     AzaharFrame kiuview: an over-the-shoulder view in first
+//                                     AzaharFrame kiuview: a third-person view in first
 //                                     person: the eye moved this many metres behind, above and
 //                                     to the right of the first-person eye (negative: in front,
 //                                     below, to the left), along the game camera's level view
@@ -144,6 +154,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <string_view>
@@ -151,6 +162,7 @@
 #include "frame_xr/input/kiu_room.h"
 #include "frame_xr/input/kiu_turn.h"
 #include "frame_xr/kiu_scan.h"
+#include "frame_xr/kiu_ui.h" // AzaharFrame kiu1s
 #include "frame_xr/menu/angels_aim_tab.h" // AzaharFrame 1.3.0: kGameCameraOffered
 
 namespace FrameXr::Kiu::FirstPerson {
@@ -212,8 +224,8 @@ constexpr bool ShotsFrom6DofFor(bool switch_on, bool first_person_on, bool angel
 bool On();
 /// AzaharFrame kiumode: Angel's Aim in effect (live): everything first person needs. Any thread.
 bool AngelsAim();
-/// AzaharFrame kiu130: the over-the-shoulder view is in effect (live): first person on, and Over
-/// the Shoulder's setting (vr_kiu_over_shoulder) or AZAHARFRAME_KIU_SHOULDER (ShoulderFor: the
+/// AzaharFrame kiu130: the third-person view is in effect (live): first person on, and Third
+/// Person's setting (vr_kiu_over_shoulder) or AZAHARFRAME_KIU_SHOULDER (ShoulderFor: the
 /// switch, when set, wins), with no AZAHARFRAME_KIU_EYE_OFFSET (which wins over both). The game
 /// draws Pit with his own weapon there, so the weapon in hand is left out of the image
 /// (Vis::WeaponModelDrawnFor). Any thread.
@@ -221,10 +233,10 @@ bool ShoulderOn();
 /// AzaharFrame kiu133: the Game's Camera view is in effect (live): first person on, and the
 /// setting (vr_kiu_game_camera) or AZAHARFRAME_KIU_GAME_CAMERA (GameCameraFor: the switch, when
 /// set, wins), with no AZAHARFRAME_KIU_EYE_OFFSET. The game's own camera places the eye (the eye
-/// hook stays out); everything else of first person stays. It wins over Over the Shoulder. Any
+/// hook stays out); everything else of first person stays. It wins over Third Person. Any
 /// thread.
 bool GameCameraOn();
-/// AzaharFrame kiu133: a view from outside Pit (Over the Shoulder or the Game's Camera): he is
+/// AzaharFrame kiu133: a view from outside Pit (Third Person or the Game's Camera): he is
 /// drawn with his own weapon, so the weapon in hand is left out, and Pit Opacity applies. Any
 /// thread.
 bool OutsideViewOn();
@@ -411,6 +423,154 @@ float CutsceneAngleDeg();
 /// results, menus) the 2D is a page, which stays the game's.
 void SetBattle(bool on);
 bool Battle();
+/// AzaharFrame kiu1s: what the game's battle UI shows (kiu_ui.h), each behind its test switch and
+/// false while that is off or the UI cannot be read: a page instead of the HUD
+/// (AZAHARFRAME_KIU_PAGE, on unless 0), the pause screen (AZAHARFRAME_KIU_PAUSE_PANEL=1: the Secondary Screen
+/// comes up in front as a panel to point at). Set each VBlank by the hooks; any thread.
+void SetBattleUi(bool page, bool pause_panel, bool menu = false);
+bool BattlePage();
+/// AzaharFrame kiuhud: that page is the hub's, with AZAHARFRAME_KIU_PAGE: its 2D goes in
+/// the view as the HUD does (kiu_hud.h PageInView).
+bool MenuPage();
+bool PausePanel();
+/// The 2D on view is a page, whole, rather than the HUD's pieces.
+constexpr bool WholePage(bool battle, bool battle_page) {
+    return !battle || battle_page;
+}
+/// The pause panel: degrees below straight ahead, across, and how far away (metres).
+inline constexpr float kPauseDownDeg = 4.0f, kPauseWidthDeg = 36.0f;
+/// The way the head looks without its roll (x, y, z, w; x right, y up, -z ahead), at most
+/// kPanelPitchDeg up or down: a panel left where the head was stays upright and in reach.
+inline constexpr float kPanelPitchDeg = 50.0f;
+inline std::array<float, 4> NoRoll(float qx, float qy, float qz, float qw) {
+    constexpr float kDeg = 3.14159265358979f / 180.0f;
+    // -z turned by q.
+    const float fx = -2.0f * (qx * qz + qw * qy), fy = -2.0f * (qy * qz - qw * qx),
+                fz = -(1.0f - 2.0f * (qx * qx + qy * qy));
+    const float flat = std::sqrt(fx * fx + fz * fz);
+    const float yaw = flat > 1e-4f ? std::atan2(-fx, -fz) : 0.0f;
+    const float pitch =
+        std::clamp(std::atan2(fy, flat), -kPanelPitchDeg * kDeg, kPanelPitchDeg * kDeg);
+    const float cy = std::cos(0.5f * yaw), sy = std::sin(0.5f * yaw);
+    const float cp = std::cos(0.5f * pitch), sp = std::sin(0.5f * pitch);
+    return {cy * sp, sy * cp, -sy * sp, cy * cp}; // yaw * pitch
+}
+/// Shown: paused, unless the Secondary Screen is up on the wrist (that one takes the touches).
+constexpr bool PausePanelShown(bool paused, bool wrist_up) {
+    return paused && !wrist_up;
+}
+/// AzaharFrame kiu1s: the talk's pictures (the portraits, an illustration) are on the Secondary
+/// Screen (AZAHARFRAME_KIU_PORTRAITS=1): a part of it is shown in the view, on the off hand's
+/// side. Ready all through a battle: its layer is there, shrunk to nothing, so that a line starting
+/// or ending changes neither the number of layers (LayerSlots) nor how the game's bottom screen is
+/// drawn.
+enum class PortraitState : int { Off, Ready, Up };
+constexpr PortraitState PortraitsFor(bool wanted, bool battle, bool pictures, bool paused) {
+    return !wanted || !battle     ? PortraitState::Off
+           : pictures && !paused ? PortraitState::Up
+                                 : PortraitState::Ready;
+}
+/// The same layer is the pause panel's and the menu panel's (AZAHARFRAME_KIU_PAUSE_PANEL=1,
+/// _MENU_PANEL=1): `keep` it there, shrunk, whenever the view is on, so that pausing, a menu coming
+/// up and a battle starting after it add or take no layer (a screen's layer that comes moves every
+/// quad after it to another overlay for a refresh, layer_slots.h).
+constexpr PortraitState LayerFor(PortraitState portraits, bool keep) {
+    return portraits == PortraitState::Off && keep ? PortraitState::Ready : portraits;
+}
+void SetPortraits(PortraitState state);
+PortraitState Portraits();
+inline constexpr float kPortraitShrunk = 1e-5f; ///< as LayerSlots::kCollapse
+/// A part of the Secondary Screen's picture, in its 320 x 240 pixels.
+struct Cut {
+    int x = 0, y = 0, width = 320, height = 240;
+    constexpr bool Whole() const {
+        return x == 0 && y == 0 && width == 320 && height == 240;
+    }
+    bool operator==(const Cut&) const = default;
+};
+/// The portraits: below the words, which are up to row 40 (the band behind them goes to 56); the
+/// tallest of them reach over that.
+inline constexpr Cut kPortraitCut{0, 42, 320, 198};
+/// Its middle, degrees to the off hand's side and below straight ahead, and its width. Above the
+/// words on the Primary Screen at their usual place and size (Subtitle Height and Size), which
+/// reach 28 degrees to each side, 15 and more below.
+inline constexpr float kPortraitSideDeg = 25.0f, kPortraitDownDeg = 7.5f,
+                       kPortraitWidthDeg = 16.0f;
+/// Where the cut is in an image of the whole Secondary Screen of this size.
+struct CutRect {
+    int x = 0, y = 0, width = 0, height = 0;
+};
+constexpr CutRect CutIn(const Cut& cut, int image_width, int image_height) {
+    const auto at = [](int v, int of, int size) { return (v * size + of / 2) / of; };
+    CutRect r{at(cut.x, 320, image_width), at(cut.y, 240, image_height), 0, 0};
+    r.width = at(cut.x + cut.width, 320, image_width) - r.x;
+    r.height = at(cut.y + cut.height, 240, image_height) - r.y;
+    return r;
+}
+/// The layer is theirs: the Secondary Screen is nowhere on view (it has them).
+constexpr bool PortraitsHere(PortraitState s, bool persistent, bool pause_panel, bool wrist_up) {
+    return s != PortraitState::Off && !persistent && !pause_panel && !wrist_up;
+}
+/// AzaharFrame kiu1s: the game's menu that is up outside a battle (kiu_ui.h; below 0: none) while
+/// AZAHARFRAME_KIU_MENU_SCREENS=1 or AZAHARFRAME_KIU_MENU_PANEL=1 asks for it: the normal two
+/// screens instead of the view, or (`panel`) the Secondary Screen as a large panel in front with
+/// the Primary Screen above it.
+void SetMenu(int menu, bool panel);
+int MenuUp();
+bool MenuPanel();
+/// The menu's two screens, where the head was as the first menu came up: the Secondary Screen's
+/// middle (degrees below straight ahead) and width, the Primary Screen's (above) and width. The
+/// Secondary Screen is the one pointed at: large, its middle a little below the eyes, where a
+/// hand at rest points; the Primary Screen is read only, above it and clear of it.
+struct MenuPlace {
+    float down_deg, width_deg;
+    float up_deg, top_width_deg;
+};
+inline constexpr MenuPlace kMenuPlace{12.0f, 40.0f, 14.5f, 32.0f};
+/// The Fiend's Cauldron, where both screens say something: the Primary Screen the larger one.
+inline constexpr MenuPlace kMenuPlaceCauldron{14.0f, 34.0f, 11.75f, 38.0f};
+constexpr MenuPlace MenuPlaceFor(int menu) {
+    return menu == Ui::kMenuCauldron ? kMenuPlaceCauldron : kMenuPlace;
+}
+/// How high a panel `width_deg` wide is, in degrees (it faces the eye).
+inline float PanelHighDeg(float width_deg, float aspect) {
+    constexpr float kDeg = 3.14159265358979f / 180.0f;
+    return 2.0f / kDeg * std::atan(std::tan(0.5f * width_deg * kDeg) / aspect);
+}
+/// The clear band between the two screens, in degrees (below 0: they overlap).
+inline float MenuGapDeg(const MenuPlace& p, float top_aspect = 400.0f / 240.0f) {
+    return (p.up_deg - 0.5f * PanelHighDeg(p.top_width_deg, top_aspect)) -
+           (-p.down_deg + 0.5f * PanelHighDeg(p.width_deg, 320.0f / 240.0f));
+}
+/// The game's letters (9 pixels high) on a screen `pixels` wide shown `width_deg` wide, in degrees.
+constexpr float LetterDeg(float width_deg, float pixels) {
+    return 9.0f * width_deg / pixels;
+}
+/// AzaharFrame kiu1s: no weapon in the hand (nor the arm and effects that go with it) while one of
+/// the game's menus is up outside a battle: the goddess's room, the Cauldron, the page after a
+/// fall. `menu` is the steady one (Ui::SteadyMenu: the game's one-frame gaps between menus do not
+/// count, and it is gone 0.2 s after the last); a battle's camera in brings the weapon back at
+/// once. The Practice Range's shooting is a battle with no menu (seen), so it keeps the weapon;
+/// so does the pause screen. First person, no switch. Set each VBlank by the hooks; any thread.
+constexpr bool WeaponHiddenFor(int menu, bool battle) {
+    return menu >= 0 && !battle;
+}
+void SetWeaponHidden(bool hidden);
+bool WeaponHidden();
+/// AzaharFrame kiu140: which of the game's menus get the normal screens: the flat ones (drawn for
+/// the game's frame, so in the view what is beside it shows) unless the switch says 0 (none) or 1
+/// (the goddess's room, which is a room to look round in, too).
+enum class MenuScreens { None, Flat, All };
+constexpr MenuScreens MenuScreensFor(const char* text) {
+    return text && *text == '0' ? MenuScreens::None
+           : text && *text == '1' ? MenuScreens::All
+                                  : MenuScreens::Flat;
+}
+constexpr int MenuOnScreens(MenuScreens which, int menu) {
+    return which == MenuScreens::None || (which == MenuScreens::Flat && menu == Ui::kMenuHub)
+               ? Ui::kNoMenu
+               : menu;
+}
 bool CutscenesOnScreen();
 /// AzaharFrame kiu140: the HUD moved into the view (HUD, vr_kiu_hud, or AZAHARFRAME_KIU_HUD=0|1).
 bool HudInView();
@@ -443,6 +603,32 @@ inline PanelInView PersistentInView(float right_deg, float down_deg, float width
     p.width = 2.0f * distance * std::tan(0.5f * width_deg * kDeg);
     p.height = aspect > 0.1f ? p.width / aspect : p.width * 0.75f;
     return p;
+}
+
+/// AzaharFrame kiu1s: the card is asked for: its setting (vr_kiu_talk_portraits), or the test
+/// switch AZAHARFRAME_KIU_PORTRAITS when set ("1" on, anything else off).
+constexpr bool PortraitsWantedFor(const char* switch_text, bool setting) {
+    return switch_text ? std::string_view{switch_text} == "1" : setting;
+}
+/// The words on the Primary Screen too (the "talk on top" group): AZAHARFRAME_KIU_TALK_TOP when set
+/// ("1" on, anything else off), else with the card unless the Secondary Screen is in the view
+/// (Persistent): the card leaves the words out (rows 0 to 41), and on land the game has them on
+/// the Secondary Screen only, so without this there would be faces and no words.
+constexpr bool TalkTopFor(const char* switch_text, bool portraits, bool persistent) {
+    return switch_text ? std::string_view{switch_text} == "1" : portraits && !persistent;
+}
+/// The two above from the switches and settings now, and the card's opacity
+/// (vr_kiu_talk_portraits_opacity, 20 to 100 percent; live). Any thread.
+bool PortraitsWanted();
+bool TalkTopWanted();
+float PortraitAlpha();
+/// AzaharFrame kiu1s: where the portraits' card is, in the head's frame: the one place to change
+/// (the owner would later have it by the off hand itself). `right`: the off hand is the right one.
+inline PanelInView PortraitPlace(bool right) {
+    return PersistentInView(kPortraitSideDeg * (right ? 1.0f : -1.0f), kPortraitDownDeg,
+                            kPortraitWidthDeg,
+                            static_cast<float>(kPortraitCut.width) /
+                                static_cast<float>(kPortraitCut.height));
 }
 
 /// AzaharFrame kiuview: AZAHARFRAME_KIU_FP_FIELD, a share of the view's angle (0.5 to 1).
@@ -488,12 +674,12 @@ inline bool ParseShoulder(const char* text, float& back_m, float& up_m, float& s
     side_m = n == 3 ? std::clamp(v[2], -kMaxShoulderM, kMaxShoulderM) : 0.0f;
     return back_m != 0.0f || up_m != 0.0f || side_m != 0.0f;
 }
-/// AzaharFrame kiutoggles: Over the Shoulder (Settings::values.vr_kiu_over_shoulder) puts the eye
+/// AzaharFrame kiutoggles: Third Person (Settings::values.vr_kiu_over_shoulder) puts the eye
 /// this far behind and above first person's: Pit drawn solid (the game fades him at 2 m back or
 /// less with 0.5 m up; KIU_HOOKS.md, kiufp3).
 inline constexpr float kShoulderSettingBackM = 2.5f;
 inline constexpr float kShoulderSettingUpM = 0.5f;
-/// The over-the-shoulder offset in use: the switch's text when it is set (ParseShoulder: "0" or
+/// The third-person offset in use: the switch's text when it is set (ParseShoulder: "0" or
 /// anything unreadable is off), else the setting's fixed place; false when off.
 inline bool ShoulderFor(const char* switch_text, bool setting, float& back_m, float& up_m,
                         float& side_m) {
@@ -520,7 +706,7 @@ inline bool GameCameraFor(const char* switch_text, bool setting) {
 }
 /// AzaharFrame kiu133: the View row (Angel's Aim) from its two keys: 0 First Person, 1 Over the
 /// Shoulder (vr_kiu_over_shoulder, as before), 2 the Game's Camera (vr_kiu_game_camera, which
-/// wins). Choosing writes both: Over the Shoulder only for 1, the Game's Camera only for 2.
+/// wins). Choosing writes both: Third Person only for 1, the Game's Camera only for 2.
 constexpr int ViewFor(bool over_shoulder, bool game_camera) {
     return game_camera && kGameCameraOffered ? 2 : over_shoulder ? 1 : 0;
 }

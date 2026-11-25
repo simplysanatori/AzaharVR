@@ -1505,7 +1505,7 @@ int main(int argc, char** argv) {
         ka.kiu_bottom_screen = 2;
         ka.kiu_bottom_size = 150;
         ka.kiu_bottom_opacity = 80;
-        ka.kiu_view = 1; // AzaharFrame kiu133: Over the Shoulder (Camera)
+        ka.kiu_view = 1; // AzaharFrame kiu133: Third Person (Camera)
         ka.kiu_snap_turn = SnapTurnIndexOf(45);
         ok &= shot("kiutoggles-2-angels-aim-rows-on", ka, kv);
         kv.hover = {Id::KiuBottomScreen, kLabelIndex};
@@ -1533,7 +1533,7 @@ int main(int argc, char** argv) {
             ok &= shot(names[i], ka, kv);
         }
         // AzaharFrame kiu133: Camera's Game's Camera with Pit Opacity under it at 50 %, their
-        // tooltips, and Over the Shoulder with it.
+        // tooltips, and Third Person with it.
         ka.kiu_bottom_screen = 0;
         ka.kiu_view = 1; // AzaharFrame 1.3.0: the Game's Camera not offered yet
         ka.kiu_pit_opacity = 50;
@@ -2959,6 +2959,72 @@ int main(int argc, char** argv) {
         kn.mods.angels_aim.report_url.clear();
         ok &= shot("aa-8-report-unavailable", kn, kv);
     }
+    // AzaharFrame kiuaim: the Angel's Aim page with fewer rows on view: the front view (in the
+    // mode, and out of it) and each page once (--only kiuaim).
+    {
+        SetAimPage(true);
+        MenuModel ka = m;
+        ka.game_title = "Kid Icarus: Uprising";
+        ka.scope = 1;
+        ka.mods.angels_aim.shown = true;
+        ka.mods.angels_aim.mapped = true;
+        ka.mods.angels_aim.recommended = true;
+        ka.mods.angels_aim.textures_pack = true;
+        ka.mods.angels_aim.report_url = std::string(kAngelsAimIssuesUrl) + "&body=App%3A%201.3.0";
+        ka.immersive_mode = 4;
+        ka.gyro_aim = 2;
+        ka.recoil = ka.weapon_in_hand = ka.muzzle_flash = ka.projectiles = true;
+        ka.kiu_bottom_screen = 2;
+        ka.kiu_bottom_opacity = 80;
+        ka.kiu_wrist_angle = 90;
+        ka.kiu_wrist_along = 4;
+        ka.kiu_hud = 1;
+        ka.kiu_power_menu = 2;
+        ka.trigger_layout = 1;
+        MenuView av;
+        av.tab = Tab::Mods;
+        av.mods_segment = ModsSegment::AngelsAim;
+        ok &= shot("kiuaim-01-front", ka, av);
+        MenuModel off = ka;
+        off.immersive_mode = 2;
+        ok &= shot("kiuaim-02-front-another-mode", off, av);
+        const std::pair<AimGroup, const char*> pages[] = {
+            {AimGroup::Aiming, "aiming"},        {AimGroup::View, "view"},
+            {AimGroup::Hud, "hud"},              {AimGroup::BottomScreen, "bottom-screen"},
+            {AimGroup::Weapon, "weapon"},        {AimGroup::ModsAndPack, "mods-and-pack"},
+            {AimGroup::About, "about"}};
+        int n = 3;
+        for (const auto& [group, name] : pages) {
+            av.aim_group = static_cast<int>(group);
+            av.aim_more = false;
+            char num[8];
+            std::snprintf(num, sizeof(num), "%02d", n++);
+            ok &= shot(std::string("kiuaim-") + num + "-" + name, ka, av);
+            if (!AimPageRows(ka, group).more.empty()) {
+                av.aim_more = true;
+                std::snprintf(num, sizeof(num), "%02d", n++);
+                ok &= shot(std::string("kiuaim-") + num + "-" + name + "-more", ka, av);
+            }
+        }
+        // The rows that wait: Gyro Aim, Persistent moved, the weapon's switches off; a More page
+        // scrolled to its end.
+        MenuModel kw = ka;
+        kw.gyro_aim = 1;
+        kw.kiu_bottom_screen = 1;
+        kw.kiu_bottom_moved = true;
+        kw.weapon_in_hand = kw.muzzle_flash = false;
+        av.aim_more = false;
+        av.aim_group = static_cast<int>(AimGroup::Aiming);
+        ok &= shot("kiuaim-20-aiming-gyro", kw, av);
+        av.aim_group = static_cast<int>(AimGroup::BottomScreen);
+        ok &= shot("kiuaim-21-bottom-screen-moved", kw, av);
+        av.aim_group = static_cast<int>(AimGroup::Weapon);
+        av.aim_more = true;
+        ok &= shot("kiuaim-22-weapon-more-off", kw, av);
+        av.scroll[static_cast<std::size_t>(Tab::Mods)] = 9999.0f;
+        ok &= shot("kiuaim-23-weapon-more-end", ka, av);
+        SetAimPage(false);
+    }
     // AzaharFrame kiu132: the Angel's Aim segment's settings (Kid Icarus: Uprising, European, in
     // Angel's Aim, Direct Aim and everything on), down the page; and the Kid Icarus-only rows
     // in Kid Icarus against another game, another region and no game.
@@ -3031,6 +3097,15 @@ int main(int argc, char** argv) {
         kv133.kiu_pit_opacity = 60;
         hv.scroll[static_cast<int>(Tab::Mods)] = 1320.0f;
         ok &= shot("kiu133-hub-view", kv133, hv);
+        // AzaharFrame kiuhands: Free Hand, the View group's last row, Hidden, with its tooltip.
+        MenuModel khide = kh;
+        khide.kiu_hide_off_hand = 1;
+        hv.scroll[static_cast<int>(Tab::Mods)] = 2000.0f;
+        hv.hover = {Id::KiuHideOffHand, kLabelIndex};
+        hv.tooltip = Id::KiuHideOffHand;
+        ok &= shot("kiuhands-hide-off-hand", khide, hv);
+        hv.hover = {};
+        hv.tooltip = Id::None;
         // The C-Stick mods' two toasts (a mod left out of the run; Angel's Aim chosen with one
         // loaded).
         ok &= toast_shot("kiu132-cstick-toasts.png",

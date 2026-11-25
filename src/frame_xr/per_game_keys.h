@@ -109,6 +109,12 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_kiu_bottom_screen); // AzaharFrame kiu131
     f(v.vr_kiu_bottom_size);
     f(v.vr_kiu_bottom_opacity);
+    f(v.vr_kiu_talk_portraits); // AzaharFrame kiu1s
+    f(v.vr_kiu_talk_portraits_opacity);
+    f(v.vr_kiu_power_menu); // AzaharFrame kiupowers
+    f(v.vr_kiu_power_menu_opacity);
+    f(v.vr_kiu_power_menu_across);
+    f(v.vr_kiu_power_menu_height);
     f(v.vr_kiu_bottom_x);
     f(v.vr_kiu_bottom_y);
     f(v.vr_kiu_wrist_angle); // AzaharFrame kiu140
@@ -126,9 +132,11 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_kiu_score_height); // AzaharFrame kiu140
     f(v.vr_kiu_subtitle_height); // AzaharFrame kiu140
     f(v.vr_kiu_subtitle_size); // AzaharFrame kiu140
+    f(v.vr_kiu_hide_off_hand); // AzaharFrame kiuhands
     f(v.vr_kiu_reticle_size);
     f(v.vr_kiu_game_camera); // AzaharFrame kiu133
     f(v.vr_kiu_pit_opacity);
+    f(v.vr_kiu_stick_click); // AzaharFrame kiucam
     f(v.vr_controls_preset_done);
     // Mode 3's two registers, which a game's preset sets at boot (presets.cpp) and no row
     // writes: the read put them back to Auto, so the first change made in the menu took Mario

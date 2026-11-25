@@ -7,12 +7,14 @@
 // touches it at the right 3DS pixel without pressing a trigger.
 
 #include <cmath>
+#include <utility>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include "frame_xr/input/gyro_aim.h"
 #include "frame_xr/input/mapper.h"
+#include "frame_xr/kiu_first_person.h"
 #include "frame_xr/vis/stats_place.h"
 #include "frame_xr/vis/wrist_screen.h"
 
@@ -235,6 +237,90 @@ TEST_CASE("FrameXr kiuwrist: the aiming hand's beam touches the wrist screen, fi
     panels.bottom_fixed = false; // a normal bottom screen still can be grabbed
     mapper.Update(frame(where, 0.0f, 1.0f), panels);
     REQUIRE(mapper.DragActive());
+    // AzaharFrame kiu1s: the menu panel comes up meanwhile: let go, and it grabs nothing.
+    panels.no_drag = true;
+    mapper.Update(frame(where, 0.0f, 1.0f), panels);
+    REQUIRE_FALSE(mapper.DragActive());
+    mapper.Update(frame(where, 0.0f, 0.0f), panels);
+    mapper.Update(frame(where, 0.0f, 1.0f), panels);
+    REQUIRE_FALSE(mapper.DragActive());
+    mapper.Update(frame(where, 0.0f, 0.0f), panels);
+    REQUIRE(mapper.Update(frame(where, 1.0f), panels).touch_event_count == 1); // still touched
+}
+
+// AzaharFrame kiu1s: the menu panel (Angel's Aim, the game's menus): the Secondary Screen large
+// in front, the Primary Screen above it. A pull on the large one is a touch at that pixel, held
+// and moved a drag (the game's lists), and no shot; a grip grabs neither.
+TEST_CASE("FrameXr kiu1s: the menu panel is touched and dragged by the beam, fires nothing",
+          "[frame_xr][kiu1s]") {
+    namespace FP = Kiu::FirstPerson;
+    for (const FP::MenuPlace& place : {FP::kMenuPlace, FP::kMenuPlaceCauldron}) {
+        const auto quad = [](float down_deg, float width_deg, float aspect) {
+            const FP::PanelInView p = FP::PersistentInView(0.0f, down_deg, width_deg, aspect);
+            return Input::PanelQuad{{{p.qx, p.qy, p.qz, p.qw}, {p.x, p.y, p.z}}, p.width, p.height,
+                                    true};
+        };
+        Input::PanelGeometry panels;
+        panels.top = quad(-place.up_deg, place.top_width_deg, 400.0f / 240.0f);
+        panels.bottom = quad(place.down_deg, place.width_deg, 320.0f / 240.0f);
+        panels.no_drag = true;
+        panels.bottom_toggle_enabled = true;
+        Input::Mapper mapper;
+        int64_t now = 0;
+        const Vec3f hand_at{0.2f, -0.35f, -0.2f}; // the right hand at rest
+        const auto frame = [&](Vec3f target, float trigger, float grip = 0.0f) {
+            Input::InputFrame f;
+            f.time_ns = now;
+            now += 11'111'111;
+            f.hand[1].active = true;
+            f.hand[1].aim = {Input::FaceViewer(target, hand_at, {0.0f, 1.0f, 0.0f}), hand_at};
+            f.hand[1].trigger = trigger;
+            f.hand[1].grip = grip;
+            return f;
+        };
+        const auto at = [&](float u, float v) { return Input::PointOnQuad(panels.bottom, u, v); };
+        // Every corner of it is in reach of the beam from the hand at rest: a tap is that pixel.
+        for (const auto& [u, v] : {std::pair{0.03f, 0.03f}, {0.97f, 0.03f}, {0.5f, 0.5f},
+                                   {0.03f, 0.97f}, {0.97f, 0.97f}}) {
+            mapper.Update(frame(at(u, v), 0.0f), panels);
+            const Input::MapperOutput& pressed = mapper.Update(frame(at(u, v), 1.0f), panels);
+            REQUIRE(pressed.touch_event_count == 1);
+            REQUIRE(pressed.touch_events[0].type == Input::TouchEventType::Pressed);
+            REQUIRE(pressed.touch_events[0].x == Approx(u * 320.0f).margin(0.5));
+            REQUIRE(pressed.touch_events[0].y == Approx(v * 240.0f).margin(0.5));
+            REQUIRE_FALSE(pressed.controls.Get(Input::Control::TriggerR));
+            const Input::MapperOutput& released = mapper.Update(frame(at(u, v), 0.0f), panels);
+            REQUIRE(released.touch_event_count == 1);
+            REQUIRE(released.touch_events[0].type == Input::TouchEventType::Released);
+        }
+        // A drag down a list: pressed, moved with the beam, let go where it ends; never a shot.
+        mapper.Update(frame(at(0.5f, 0.3f), 0.0f), panels);
+        REQUIRE(mapper.Update(frame(at(0.5f, 0.3f), 1.0f), panels).touch_event_count == 1);
+        float last_y = 0.3f * 240.0f;
+        int moves = 0;
+        for (int i = 1; i <= 10; ++i) {
+            const float v = 0.3f + 0.05f * static_cast<float>(i);
+            const Input::MapperOutput& out = mapper.Update(frame(at(0.5f, v), 1.0f), panels);
+            REQUIRE_FALSE(out.controls.Get(Input::Control::TriggerR));
+            for (int e = 0; e < out.touch_event_count; ++e) {
+                REQUIRE(out.touch_events[e].type == Input::TouchEventType::Moved);
+                REQUIRE(out.touch_events[e].y > last_y);
+                last_y = out.touch_events[e].y;
+                moves++;
+            }
+        }
+        CHECK(moves >= 8);
+        CHECK(last_y == Approx(0.8f * 240.0f).margin(1.0));
+        const Input::MapperOutput& let_go = mapper.Update(frame(at(0.5f, 0.8f), 0.0f), panels);
+        REQUIRE(let_go.touch_event_count == 1);
+        REQUIRE(let_go.touch_events[0].type == Input::TouchEventType::Released);
+        // A grip on either screen grabs nothing.
+        mapper.Update(frame(at(0.5f, 0.5f), 0.0f, 1.0f), panels);
+        REQUIRE_FALSE(mapper.DragActive());
+        mapper.Update(frame(at(0.5f, 0.5f), 0.0f, 0.0f), panels);
+        mapper.Update(frame(Input::PointOnQuad(panels.top, 0.5f, 0.5f), 0.0f, 1.0f), panels);
+        REQUIRE_FALSE(mapper.DragActive());
+    }
 }
 
 // AzaharFrame kiu131: Wrist Side. Back (the default setting): on the back of the wrist like a
@@ -439,4 +525,71 @@ TEST_CASE("FrameXr kiu140: the wrist screen's place round the wrist and up the a
     REQUIRE(Vis::UprightTurns(flat, up_at(65), 0, Vis::kUprightShownDeg) == 0);
     REQUIRE(Vis::UprightTurns(flat, up_at(110), 0, Vis::kUprightShownDeg) == 0);
     REQUIRE(Vis::UprightTurns(flat, up_at(170), 0, Vis::kUprightShownDeg) == 2);
+}
+
+// AzaharFrame kiuaim: Wrist Angle counts from the back of the wrist, whatever Wrist Side is.
+TEST_CASE("FrameXr kiuaim: Wrist Angle from the back of the wrist", "[frame_xr][kiuwrist][kiuaim]") {
+    using Vis::WristSide;
+    REQUIRE(Vis::WristAbsSwitchOn(std::nullopt));
+    REQUIRE(Vis::WristAbsSwitchOn(std::string("1")));
+    REQUIRE_FALSE(Vis::WristAbsSwitchOn(std::string("0")));
+    REQUIRE_FALSE(Vis::WristAbsSwitchOn(std::string("off")));
+    // The carry: Back keeps the angle, Inside is half a turn on; 360 is 0.
+    REQUIRE(Vis::WristAngleCarried(0, false) == 0);
+    REQUIRE(Vis::WristAngleCarried(90, false) == 90);
+    REQUIRE(Vis::WristAngleCarried(0, true) == 180);
+    REQUIRE(Vis::WristAngleCarried(90, true) == 270);
+    REQUIRE(Vis::WristAngleCarried(270, true) == 90);
+    REQUIRE(Vis::WristAngleCarried(360, true) == 180);
+    REQUIRE(Vis::WristAngleCarried(-5, true) == 180);
+    REQUIRE(Vis::WristAngleCarried(Vis::WristAngleCarried(77, true), true) == 77); // and back
+    const auto pose = [](Hand hand, const Vis::WristStart& s) {
+        return Vis::WristScreenLocalPose(hand, false, s.side, Vis::kWristScreenWidth,
+                                         Vis::WristAtFor(s.angle_deg, 0));
+    };
+    const auto degrees = [](const Posef& a, const Posef& b) {
+        float worst = 0.0f;
+        for (const Vec3f v : {Vec3f{1, 0, 0}, Vec3f{0, 1, 0}, Vec3f{0, 0, 1}}) {
+            const float dot = std::clamp(Input::Dot(Axis(a, v), Axis(b, v)), -1.0f, 1.0f);
+            worst = std::max(worst, std::acos(dot) * 57.29578f);
+        }
+        return worst;
+    };
+    for (const Hand hand : {Hand::Left, Hand::Right}) {
+        for (const WristSide stats : {WristSide::Back, WristSide::Inside}) {
+            // 0 is the back of the wrist, whatever Wrist Side is.
+            const Vis::WristStart zero = Vis::WristStartFor(0, stats, true);
+            REQUIRE(zero.side == WristSide::Back);
+            const Posef back = Vis::WristScreenLocalPose(hand, false, WristSide::Back);
+            REQUIRE(Input::Length(pose(hand, zero).position - back.position) < 1e-6f);
+            REQUIRE(degrees(pose(hand, zero), back) < 0.01f);
+        }
+        // 180 is the inside: Wrist Side's Inside place to 1 mm, its facing within 25 degrees (both
+        // lean 10 degrees to the controller's top).
+        const Posef inside = Vis::WristScreenLocalPose(hand, false, WristSide::Inside);
+        const Posef half = pose(hand, Vis::WristStartFor(180, WristSide::Back, true));
+        REQUIRE(Input::Length(half.position - inside.position) < 0.001f);
+        REQUIRE(degrees(half, inside) < 25.0f);
+        // A player on Inside, carried: the same place as before for any angle.
+        for (const int before : {0, 40, 180, 300}) {
+            const Posef was = Vis::WristScreenLocalPose(hand, false, WristSide::Inside,
+                                                        Vis::kWristScreenWidth,
+                                                        Vis::WristAtFor(before, 0));
+            const Posef now = pose(hand, Vis::WristStartFor(Vis::WristAngleCarried(before, true),
+                                                            WristSide::Inside, true));
+            INFO("before " << before);
+            REQUIRE(Input::Length(now.position - was.position) < 0.001f);
+            REQUIRE(degrees(now, was) < 25.0f);
+            // The switch off: the stored angle turned back, exactly the old pose.
+            const Posef old = pose(hand, Vis::WristStartFor(Vis::WristAngleCarried(before, true),
+                                                            WristSide::Inside, false));
+            REQUIRE(Input::Length(old.position - was.position) < 1e-5f);
+            REQUIRE(degrees(old, was) < 0.05f);
+        }
+        // On Back nothing moves, with the switch on or off.
+        const Vis::WristStart on = Vis::WristStartFor(40, WristSide::Back, true);
+        const Vis::WristStart off = Vis::WristStartFor(40, WristSide::Back, false);
+        REQUIRE(on.side == off.side);
+        REQUIRE(on.angle_deg == off.angle_deg);
+    }
 }

@@ -121,7 +121,8 @@ FakeMemory Game() {
 constexpr uint32_t kAll = Bit(Group::NoCull) | Bit(Group::BulletKeep) | Bit(Group::Eye) |
                           Bit(Group::Shot) | Bit(Group::EnemyKeepTimed) | Bit(Group::GroupKeep) |
                           Bit(Group::NoFollow) | Bit(Group::AimHold) | Bit(Group::AimBox) |
-                          Bit(Group::PlayerShadow) | Bit(Group::WideCamera);
+                          Bit(Group::PlayerShadow) | Bit(Group::WideCamera) |
+                          Bit(Group::TalkTop);
 constexpr std::size_t kAllWords = kPatches.size() - 1;
 
 bool SiteIs(const FakeMemory& m, Group g, bool patched) {
@@ -1324,7 +1325,7 @@ TEST_CASE("Kid Icarus hooks: first person hides the player on land", "[frame_xr]
     CHECK_FALSE(HideInFirstPerson(false, true, true, false)); // not first person
     CHECK_FALSE(HideInFirstPerson(true, false, true, false)); // the air: the haze, less damage
     CHECK_FALSE(HideInFirstPerson(true, true, false, false)); // the game's own shots
-    CHECK_FALSE(HideInFirstPerson(true, true, true, true));   // over the shoulder: to see him
+    CHECK_FALSE(HideInFirstPerson(true, true, true, true));   // in third person: to see him
 
     const uint32_t one = std::bit_cast<uint32_t>(1.0f);
     const uint32_t tiny = std::bit_cast<uint32_t>(0.001f);
@@ -1349,7 +1350,7 @@ TEST_CASE("Kid Icarus hooks: first person hides the player on land", "[frame_xr]
 TEST_CASE("Kid Icarus hooks: the player's model hidden by its draw", "[frame_xr][kiuhook][kiu131]") {
     CHECK(HideByDrawInFirstPerson(true, false));
     CHECK_FALSE(HideByDrawInFirstPerson(false, false)); // not first person
-    CHECK_FALSE(HideByDrawInFirstPerson(true, true));   // over the shoulder: to see him
+    CHECK_FALSE(HideByDrawInFirstPerson(true, true));   // in third person: to see him
     CHECK(HideByFrom(nullptr) == HideBy::Draw);
     CHECK(HideByFrom("draw") == HideBy::Draw);
     CHECK(HideByFrom("scale") == HideBy::Scale);
@@ -1550,7 +1551,7 @@ TEST_CASE("Kid Icarus hooks: USA Rev 1's tables are the European ones relocated"
             ++branches_moved;
         }
     }
-    CHECK(branches_moved == 3);
+    CHECK(branches_moved == 4);
     for (std::size_t i = 0; i < KT::kCodeCheck.size(); ++i) {
         CHECK(KT::kCodeCheckUsaRev1[i].word == KT::kCodeCheck[i].word);
     }

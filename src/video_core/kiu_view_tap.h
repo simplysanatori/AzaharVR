@@ -60,6 +60,8 @@ inline std::atomic<bool> g_soft_draw_turn{false};
 /// (no periphery factor, no head), so it looks the same in and out of battles. Set by the XR
 /// thread each frame (frame_xr/immersive.cpp).
 inline std::atomic<bool> g_bottom_as_drawn{false};
+/// AzaharFrame kiu140: text drawn into a texture keeps its own size (Kid Icarus first person).
+inline std::atomic<bool> g_text_as_drawn{false};
 
 /// AzaharFrame kiu140: the angle the game draws its world with, counted over the uploads of its
 /// camera into the top screen's viewport, in any view (patched or not): those within kNear of the
@@ -108,6 +110,16 @@ inline bool ReticleScaled(u32 texture0) {
 /// state, the colour buffer); the hooks set it for one VBlank to the next each time the switch's
 /// value changes (for 40 ms).
 inline std::atomic<bool> g_draw_log{false};
+
+/// AzaharFrame kiuhud: a test aid (AZAHARFRAME_KIU_HUD_CENSUS=<n>): every draw into the top
+/// screen's viewport without a depth test is shaded on the CPU and logged once a kind (its
+/// texture, blend, quads, place and what was done with it); a new n, or a new `state` (what the
+/// hooks know of the game's UI), lists them again. 0: off.
+inline std::atomic<u32> g_hud_census{0}, g_hud_census_state{0};
+/// AzaharFrame kiuhud: AZAHARFRAME_KIU_HUD_COST=1: the time spent telling and moving the HUD's
+/// draws (nanoseconds, draws asked, draws moved), taken by the hooks every few seconds.
+inline std::atomic<bool> g_hud_cost{false};
+inline std::atomic<u64> g_hud_cost_ns{0}, g_hud_cost_asked{0}, g_hud_cost_moved{0};
 
 /// AzaharFrame kiu133: Pit Opacity (frame_xr/kiu_pit_opacity.cpp). Pit's draws are known by their
 /// first vertex array's address: the hooks have the world's draws collected while he is drawn

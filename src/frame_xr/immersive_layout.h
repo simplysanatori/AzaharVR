@@ -873,6 +873,12 @@ HeadLocked SolveKiuFirstPerson(float game_fov_y_deg, float aspect, const ViewFov
                                float eye_shift = 0.0f, float factor_max = kKiuFpFactorMax,
                                float distance = kDefaultHeadDistance, float field = 1.0f);
 
+/// AzaharFrame kiu140: the narrowest angle (degrees, up and down) SolveKiuFirstPerson still fills
+/// the view with, both axes: a cutscene's closer shot is shown as this one (nearer than it is,
+/// for no edge of the picture in view).
+float KiuNarrowestDeg(float aspect, const ViewFov& view, float eye_shift = 0.0f,
+                      float factor_max = kKiuFpFactorMax, float field = 1.0f);
+
 /// AzaharFrame kiuwide: Kid Icarus: Uprising's first person with the game's own camera widened
 /// (AZAHARFRAME_KIU_FP_WIDE): the game camera's angle up and down and its shape that make the
 /// game's own frame exactly what SolveKiuFirstPerson fills the view with (the same cover: what
@@ -1486,6 +1492,7 @@ struct ScreenState {
     bool bottom_focused = false; ///< the bottom screen is the screen in focus
     bool menu_open = false;     ///< the in-game menu shows
     bool cutscene = false;      ///< AzaharFrame kiu140: Angel's Aim's game plays a cutscene
+    bool game_menu = false;     ///< AzaharFrame kiu1s: Angel's Aim's game is in one of its menus
     bool view_valid = false;    ///< the head pose is known
 };
 
@@ -1497,8 +1504,33 @@ struct ScreenDecision {
 /// The bottom screen starts hidden with "Hide Bottom Screen" or any immersive mode; the bumper
 /// chord flips it; it always shows while in focus. Immersive mode pauses (modes 2 and 3) while
 /// the bottom screen shows or the in-game menu is open, and (all modes) while the bottom screen
-/// is in focus. A hidden bottom screen is never drawn.
+/// is in focus. A hidden bottom screen is never drawn. AzaharFrame kiu1s: in one of Kid Icarus's
+/// menus (modes 2 and 3) both screens are shown, whatever was chosen for the bottom one.
 ScreenDecision Decide(const ScreenState& s);
+
+/// AzaharFrame kiuaim: the real Bottom Screen kept on view (its real place, size and last
+/// picture, the game paused) while the menu's Bottom Screen page is open, so its sliders show
+/// what they do; gone with the page or the menu. Persistent: with the view. Wrist: where the
+/// controls placed it for this frame (it moves with the hand, and shows as in play: while it
+/// faces the eyes). Live switch AZAHARFRAME_KIU_PLACE_PREVIEW, on unless "0", "off" or "false".
+inline constexpr const char* kKiuPlacePreviewSwitch = "AZAHARFRAME_KIU_PLACE_PREVIEW";
+struct PlacePreviewState {
+    bool wanted = false;       ///< the switch is on and the Bottom Screen's page is open
+    bool menu_open = false;    ///< the in-game menu shows (the tab menu, not Azahar's window)
+    bool first_person = false; ///< Angel's Aim's game on view in its mode
+    bool view_valid = false;   ///< the head pose is known
+    int bottom_mode = 0;       ///< Bottom Screen: 0 Off, 1 Persistent, 2 Wrist
+    bool wrist_placed = false; ///< Wrist: placed for this display frame, and facing the eyes
+};
+enum class PlacePreview : uint8_t { None, Persistent, Wrist };
+constexpr PlacePreview PlacePreviewFor(const PlacePreviewState& s) {
+    if (!s.wanted || !s.menu_open || !s.first_person || !s.view_valid) {
+        return PlacePreview::None;
+    }
+    return s.bottom_mode == 1                     ? PlacePreview::Persistent
+           : s.bottom_mode == 2 && s.wrist_placed ? PlacePreview::Wrist
+                                                  : PlacePreview::None;
+}
 
 // ---- The grip gesture ----
 

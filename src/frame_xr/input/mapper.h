@@ -37,6 +37,9 @@ struct PanelGeometry {
     /// AzaharFrame kiuwrist: the bottom screen is Angel's Aim's wrist screen: it goes with the
     /// off hand, so a grip on it grabs nothing (a touch is as on any bottom screen).
     bool bottom_fixed = false;
+    /// AzaharFrame kiu1s: the screens' place is the game's (Angel's Aim's menu panel): a grip on
+    /// either grabs nothing.
+    bool no_drag = false;
 };
 
 struct MapperConfig {

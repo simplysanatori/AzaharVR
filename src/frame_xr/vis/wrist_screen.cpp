@@ -148,6 +148,11 @@ WristScreen::Out WristScreen::Update(bool wanted, bool tracked, const Posef& aim
     return out;
 }
 
+// AzaharFrame kiuaim
+bool WristAbsSwitchOn(const std::optional<std::string>& value) {
+    return WristHoldSwitchOn(value); // on unless it says off
+}
+
 // AzaharFrame kiupanel
 bool WristHoldSwitchOn(const std::optional<std::string>& value) {
     if (!value) {

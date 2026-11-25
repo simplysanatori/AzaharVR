@@ -22,6 +22,8 @@ add_library(video_core STATIC EXCLUDE_FROM_ALL
     vr_hud_spacing.h # AzaharFrame hudmove
     vr_view_matrix.h # AzaharFrame
     kiu_hud.h # AzaharFrame kiu140
+    kiu_powers.h # AzaharFrame kiupowers
+    kiu_talk.h # AzaharFrame kiutalk
     kiu_sheets.h # AzaharFrame kiu140
     kiu_view_tap.h # AzaharFrame kiuvr
     vr_dynamic_resolution.h # AzaharFrame menuux
@@ -212,6 +214,9 @@ if (ENABLE_VULKAN)
         renderer_vulkan/vk_texture_runtime.h
         # AzaharFrame: XR output (no OpenXR here; frame_xr implements the sink)
         $<$<NOT:$<BOOL:${ENABLE_LIBRETRO}>>:renderer_vulkan/renderer_vulkan_xr.cpp>
+        $<$<NOT:$<BOOL:${ENABLE_LIBRETRO}>>:renderer_vulkan/renderer_vulkan_kiu_talk.cpp> # AzaharFrame kiutalk
+        renderer_vulkan/vk_kiu_talk.cpp
+        renderer_vulkan/vk_kiu_talk.h
         $<$<NOT:$<BOOL:${ENABLE_LIBRETRO}>>:renderer_vulkan/vk_xr_target.cpp>
         $<$<NOT:$<BOOL:${ENABLE_LIBRETRO}>>:renderer_vulkan/vk_xr_target.h>
         $<$<NOT:$<BOOL:${ENABLE_LIBRETRO}>>:renderer_vulkan/vk_xr_handoff.h> # AzaharFrame handoff

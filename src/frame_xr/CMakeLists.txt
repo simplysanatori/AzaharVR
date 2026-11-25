@@ -21,6 +21,8 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     controls_presets.h # AzaharFrame reticle
     presets.h # AzaharFrame vrqol
     flat_fit.h # AzaharFrame flatdialog
+    power_layers.cpp # AzaharFrame kiupowers
+    power_layers.h
     overlays.cpp
     pacing.cpp # AzaharFrame pacing
     pacing.h
@@ -104,6 +106,13 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     kiu_first_person.cpp
     kiu_first_person.h
     kiu_cutscene.h # AzaharFrame kiu140
+    kiu_powers.h # AzaharFrame kiupowers
+    kiu_powers_live.cpp # AzaharFrame kiupowers
+    kiu_powers_live.h
+    kiu_talk.cpp # AzaharFrame kiutalk
+    kiu_talk.h
+    kiu_ui.h # AzaharFrame kiu1s
+    kiu_camera_tap.h # AzaharFrame kiucam
     kiu_pit_opacity.cpp # AzaharFrame kiu133
     kiu_pit_opacity.h
     input/screen_rig.cpp
@@ -181,6 +190,8 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     vis/panel_hold.h # AzaharFrame kiu140
     vis/stats_place.cpp # AzaharFrame statspos
     vis/stats_place.h
+    vis/power_menu.cpp # AzaharFrame kiupowers
+    vis/power_menu.h
     vis/wrist_screen.cpp # AzaharFrame kiuwrist
     vis/wrist_screen.h
     vis/menu_diagram.cpp # AzaharFrame tabmenu

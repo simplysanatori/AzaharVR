@@ -106,6 +106,8 @@ std::string SliderText(Id id, float value) {
         id == Id::WeaponOpacity || id == Id::ProjectileOpacity ||
         id == Id::MuzzleFlashSize || id == Id::HudSpacingX || id == Id::HudSpacingY ||
         id == Id::KiuBottomSize || id == Id::KiuBottomOpacity || id == Id::KiuReticleSize ||
+        id == Id::KiuTalkPortraitsOpacity || // AzaharFrame kiuaim
+        id == Id::KiuPowerMenuOpacity || // AzaharFrame kiuaim
         id == Id::KiuPitOpacity) { // AzaharFrame kiugyro: "10%" (kiufix: the strengths, the scale; kiuopacity: the opacities; kiuweap2: the flash's size)
         return Format("%.0f%%", value);
     }
@@ -131,6 +133,9 @@ std::string SliderText(Id id, float value) {
         return Format("%.0f\u00B0", value);
     }
     if (id == Id::KiuScoreAcross) { // AzaharFrame kiu140
+        return Format("%.0f\u00B0", value);
+    }
+    if (id == Id::KiuPowerMenuAcross || id == Id::KiuPowerMenuHeight) { // AzaharFrame kiuaim
         return Format("%.0f\u00B0", value);
     }
     if (id == Id::KiuScoreHeight) { // AzaharFrame kiu140
@@ -313,6 +318,30 @@ Row RowFor(Id id, const MenuModel& m) {
         break;
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
         slider(m.kiu_subtitle_size);
+        break;
+    case Id::KiuPowerMenu: // AzaharFrame kiuaim
+        segmented(std::clamp(m.kiu_power_menu, 0, 4));
+        break;
+    case Id::KiuPowerMenuAcross:
+        slider(m.kiu_power_menu_across);
+        break;
+    case Id::KiuPowerMenuHeight:
+        slider(m.kiu_power_menu_height);
+        break;
+    case Id::KiuPowerMenuOpacity:
+        slider(m.kiu_power_menu_opacity);
+        break;
+    case Id::KiuStickClick: // AzaharFrame kiucam
+        segmented(std::clamp(m.kiu_stick_click, 0, 1));
+        break;
+    case Id::KiuHideOffHand: // AzaharFrame kiuhands
+        segmented(std::clamp(m.kiu_hide_off_hand, 0, 1));
+        break;
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+        segmented(std::clamp(m.kiu_talk_portraits, 0, 1));
+        break;
+    case Id::KiuTalkPortraitsOpacity:
+        slider(m.kiu_talk_portraits_opacity);
         break;
     case Id::KiuReticleSize:
         slider(m.kiu_reticle_size);
@@ -593,7 +622,15 @@ SettingsSection SectionOf(Id id) {
     case Id::KiuScoreAcross: // AzaharFrame kiu140
     case Id::KiuScoreHeight: // AzaharFrame kiu140
     case Id::KiuSubtitleHeight: // AzaharFrame kiu140
+    case Id::KiuPowerMenu: // AzaharFrame kiuaim
+    case Id::KiuPowerMenuAcross:
+    case Id::KiuPowerMenuHeight:
+    case Id::KiuPowerMenuOpacity:
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
+    case Id::KiuStickClick: // AzaharFrame kiucam
+    case Id::KiuHideOffHand: // AzaharFrame kiuhands
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+    case Id::KiuTalkPortraitsOpacity:
     case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
@@ -684,7 +721,15 @@ bool PerGameSetting(Id id) {
     case Id::KiuScoreAcross: // AzaharFrame kiu140
     case Id::KiuScoreHeight: // AzaharFrame kiu140
     case Id::KiuSubtitleHeight: // AzaharFrame kiu140
+    case Id::KiuPowerMenu: // AzaharFrame kiuaim
+    case Id::KiuPowerMenuAcross:
+    case Id::KiuPowerMenuHeight:
+    case Id::KiuPowerMenuOpacity:
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
+    case Id::KiuStickClick: // AzaharFrame kiucam
+    case Id::KiuHideOffHand: // AzaharFrame kiuhands
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+    case Id::KiuTalkPortraitsOpacity:
     case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
@@ -874,6 +919,20 @@ std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& m) {
     if (m.kiu_hud != 0) { // AzaharFrame kiu140
         rows.push_back(Id::KiuSubtitleSize);
     }
+    rows.push_back(Id::KiuPowerMenu); // AzaharFrame kiuaim
+    if (m.kiu_power_menu >= 2) { // on the HUD, not the hand
+        rows.push_back(Id::KiuPowerMenuAcross);
+        rows.push_back(Id::KiuPowerMenuHeight);
+    }
+    if (m.kiu_power_menu != 0) {
+        rows.push_back(Id::KiuPowerMenuOpacity);
+    }
+    rows.push_back(Id::KiuStickClick); // AzaharFrame kiucam
+    rows.push_back(Id::KiuHideOffHand);
+    rows.push_back(Id::KiuTalkPortraits); // AzaharFrame kiuaim
+    if (m.kiu_talk_portraits != 0) {
+        rows.push_back(Id::KiuTalkPortraitsOpacity);
+    }
     rows.push_back(Id::KiuReticleSize);
     return rows;
 }
@@ -906,14 +965,18 @@ std::vector<AngelsAimRowGroup> AngelsAimGroups(const MenuModel& model) {
     }
     aiming.rows.push_back(Id::AngelsAimSettings); // the Controls tab at Aiming, as before
     AngelsAimRowGroup view{AngelsAimGroupKind::View, {Id::ImmersiveMode}};
-    for (const Id id : {Id::KiuOverShoulder, Id::KiuPitOpacity, Id::KiuSnapTurn, Id::KiuCutscenes, Id::KiuHud, Id::KiuHudSize, Id::KiuHudLinked, Id::KiuHudAcross, Id::KiuHudHeight, Id::KiuBarAcross, Id::KiuBarHeight, Id::KiuScoreAcross, Id::KiuScoreHeight, Id::KiuSubtitleHeight, Id::KiuSubtitleSize}) {
+    for (const Id id : {Id::KiuOverShoulder, Id::KiuPitOpacity, Id::KiuSnapTurn, Id::KiuCutscenes, Id::KiuStickClick, Id::KiuHud, Id::KiuHudSize, Id::KiuHudLinked, Id::KiuHudAcross, Id::KiuHudHeight, Id::KiuBarAcross, Id::KiuBarHeight, Id::KiuScoreAcross, Id::KiuScoreHeight, Id::KiuSubtitleHeight, Id::KiuSubtitleSize, Id::KiuPowerMenu, Id::KiuPowerMenuAcross, Id::KiuPowerMenuHeight, Id::KiuPowerMenuOpacity}) {
         if (has(fp, id)) {
             view.rows.push_back(id);
         }
     }
+    if (has(fp, Id::KiuHideOffHand)) { // AzaharFrame kiuhands
+        view.rows.push_back(Id::KiuHideOffHand);
+    }
     AngelsAimRowGroup bottom{AngelsAimGroupKind::BottomScreen, {}};
     for (const Id id : {Id::KiuBottomScreen, Id::KiuBottomSize, Id::KiuBottomOpacity,
-                        Id::KiuWristAngle, Id::KiuWristAlong, Id::KiuBottomReset}) {
+                        Id::KiuWristAngle, Id::KiuWristAlong, Id::KiuBottomReset,
+                        Id::KiuTalkPortraits, Id::KiuTalkPortraitsOpacity}) { // kiuaim
         if (has(fp, id)) {
             bottom.rows.push_back(id);
         }
@@ -923,6 +986,7 @@ std::vector<AngelsAimRowGroup> AngelsAimGroups(const MenuModel& model) {
     }
     bottom.rows.push_back(Id::WristSide); // global: every wrist display (the Stats tab's too)
     for (AngelsAimRowGroup* g : {&aiming, &view, &bottom, &weapons}) {
+        AimPageFilter(model, g->rows); // AzaharFrame kiuaim
         if (!g->rows.empty()) {
             groups.push_back(std::move(*g));
         }
@@ -1130,6 +1194,25 @@ const std::vector<std::string>& OptionsFor(Id id) {
         static const std::vector<std::string> kChoices{"Separate", "Linked"};
         return kChoices;
     }
+    case Id::KiuPowerMenu: { // AzaharFrame kiuaim: the stored order
+        static const std::vector<std::string> kChoices{kKiuPowerMenuOff, kKiuPowerMenuOffHand,
+                                                       kKiuPowerMenuHealthBar,
+                                                       kKiuPowerMenuMiddle,
+                                                       kKiuPowerMenuScore};
+        return kChoices;
+    }
+    case Id::KiuStickClick: { // AzaharFrame kiucam: the stored order
+        static const std::vector<std::string> kChoices{kKiuStickClickCamera, kKiuStickClickSwap};
+        return kChoices;
+    }
+    case Id::KiuHideOffHand: { // AzaharFrame kiuhands: the stored order (hidden or not)
+        static const std::vector<std::string> kChoices{"Shown", "Hidden"};
+        return kChoices;
+    }
+    case Id::KiuTalkPortraits: { // AzaharFrame kiuaim: the stored order
+        static const std::vector<std::string> kChoices{"Hidden", "Shown"};
+        return kChoices;
+    }
     case Id::WristSide: { // AzaharFrame kiu131: the stored order
         static const std::vector<std::string> kSide{kWristSideBack, kWristSideInside};
         return kSide;
@@ -1322,6 +1405,22 @@ std::string LabelFor(Id id) {
         return kKiuSubtitleHeightRow;
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
         return kKiuSubtitleSizeRow;
+    case Id::KiuPowerMenu: // AzaharFrame kiuaim
+        return kKiuPowerMenuRow;
+    case Id::KiuPowerMenuAcross:
+        return kKiuPowerMenuAcrossRow;
+    case Id::KiuPowerMenuHeight:
+        return kKiuPowerMenuHeightRow;
+    case Id::KiuPowerMenuOpacity:
+        return kKiuPowerMenuOpacityRow;
+    case Id::KiuStickClick: // AzaharFrame kiucam
+        return kKiuStickClickRow;
+    case Id::KiuHideOffHand: // AzaharFrame kiuhands
+        return kKiuHideOffHandRow;
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+        return kKiuTalkPortraitsRow;
+    case Id::KiuTalkPortraitsOpacity:
+        return kKiuTalkPortraitsOpacityRow;
     case Id::KiuReticleSize:
         return kReticleSizeRow;
     case Id::KiuOverShoulder: // AzaharFrame kiu133
@@ -1603,7 +1702,7 @@ std::string ExplainFor(Id id) {
     case Id::TurnSpeedVertical:
         return "How fast the camera turns up and down in the Turn Zone.";
     case Id::Recoil:
-        return "A short buzz in the aiming controller on each shot.";
+        return "Haptic feedback in the aiming controller on each shot.";
     case Id::WeaponInHand: // AzaharFrame kiuguns
         return "Shows the weapon Pit holds in place of the aiming controller.";
     case Id::LaserSight:
@@ -1617,9 +1716,9 @@ std::string ExplainFor(Id id) {
     case Id::ProjectileSpeed:
         return "How fast your shots look as they fly.";
     case Id::RecoilCharged: // AzaharFrame kiufix
-        return "How strong the buzz is for a charged shot.";
+        return "How strong the haptic feedback is for a charged shot.";
     case Id::RecoilRapid:
-        return "How strong the buzz is for each rapid-fire shot.";
+        return "How strong the haptic feedback is for each rapid-fire shot.";
     case Id::WeaponSize:
         return "Game Size matches Pit's weapon. Hand Size shrinks big weapons to fit your hand.";
     case Id::WeaponScale:
@@ -1735,6 +1834,22 @@ std::string ExplainFor(Id id) {
         return kKiuSubtitleHeightTip;
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
         return kKiuSubtitleSizeTip;
+    case Id::KiuPowerMenu: // AzaharFrame kiuaim
+        return kKiuPowerMenuTip;
+    case Id::KiuPowerMenuAcross:
+        return kKiuPowerMenuAcrossTip;
+    case Id::KiuPowerMenuHeight:
+        return kKiuPowerMenuHeightTip;
+    case Id::KiuPowerMenuOpacity:
+        return kKiuPowerMenuOpacityTip;
+    case Id::KiuStickClick: // AzaharFrame kiucam
+        return kKiuStickClickTip;
+    case Id::KiuHideOffHand: // AzaharFrame kiuhands
+        return kKiuHideOffHandTip;
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+        return kKiuTalkPortraitsTip;
+    case Id::KiuTalkPortraitsOpacity:
+        return kKiuTalkPortraitsOpacityTip;
     case Id::KiuReticleSize:
         return kReticleSizeTip;
     case Id::KiuOverShoulder: // AzaharFrame kiu133
@@ -1852,7 +1967,8 @@ SliderRange SliderFor(Id id) {
     if (id == Id::KiuBottomSize) { // AzaharFrame kiu131: 50 to 200 %
         return {50.0f, 200.0f, 10.0f};
     }
-    if (id == Id::KiuBottomOpacity) { // 20 to 100 %, as Weapon Opacity
+    if (id == Id::KiuBottomOpacity || id == Id::KiuTalkPortraitsOpacity ||
+        id == Id::KiuPowerMenuOpacity) { // 20 to 100 %, as Weapon Opacity
         return {20.0f, 100.0f, 10.0f};
     }
     if (id == Id::KiuPitOpacity) { // AzaharFrame kiu133: 20 to 100 %, as the other opacities
@@ -1880,6 +1996,9 @@ SliderRange SliderFor(Id id) {
         return {-40.0f, 40.0f, 1.0f};
     }
     if (id == Id::KiuScoreAcross) { // AzaharFrame kiu140
+        return {-40.0f, 40.0f, 1.0f};
+    }
+    if (id == Id::KiuPowerMenuAcross || id == Id::KiuPowerMenuHeight) { // AzaharFrame kiuaim
         return {-40.0f, 40.0f, 1.0f};
     }
     if (id == Id::KiuScoreHeight) { // AzaharFrame kiu140
@@ -3511,6 +3630,23 @@ float TabMenu::DrawAngelsAimSettings(Kit& kit, const MenuModel& model, const Men
     for (const Row& r : rows) {
         if (r.kind == RowKind::Slider || r.kind == RowKind::MenuButton) {
             label_w = std::max(label_w, LabelRoom(kit, model, r.id));
+        }
+    }
+    return DrawRowItems(kit, model, view, rows, c, list, y, c.x0 + label_w + kLabelGap,
+                        open_anchor, open_selected);
+}
+
+// AzaharFrame kiuaim: `ids` as rows from `y`, for the Angel's Aim page (angels_aim_tab.cpp; Row
+// and RowFor are this file's own).
+float TabMenu::DrawAimRows(Kit& kit, const MenuModel& model, const MenuView& view,
+                           const std::vector<Id>& ids, const Rect& c, const Rect& list, float y,
+                           Rect& open_anchor, int& open_selected) {
+    std::vector<Row> rows;
+    float label_w = 0.0f;
+    for (const Id id : ids) {
+        rows.push_back(RowFor(id, model));
+        if (rows.back().kind == RowKind::Slider || rows.back().kind == RowKind::MenuButton) {
+            label_w = std::max(label_w, LabelRoom(kit, model, id));
         }
     }
     return DrawRowItems(kit, model, view, rows, c, list, y, c.x0 + label_w + kLabelGap,

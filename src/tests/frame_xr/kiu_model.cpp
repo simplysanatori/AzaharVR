@@ -100,7 +100,7 @@ TEST_CASE("Kid Icarus: Pit Opacity's draws", "[frame_xr][kiu133]") {
 
 TEST_CASE("Kid Icarus: Camera's two keys", "[frame_xr][kiu133]") {
     using namespace FrameXr::Kiu::FirstPerson;
-    // A file from before keeps its meaning: Over the Shoulder alone is 1, nothing is 0.
+    // A file from before keeps its meaning: Third Person alone is 1, nothing is 0.
     CHECK(ViewFor(false, false) == 0);
     CHECK(ViewFor(true, false) == 1);
     CHECK_FALSE(GameCameraFor(nullptr, false));

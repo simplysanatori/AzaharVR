@@ -17,6 +17,7 @@
 #pragma once
 
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <numeric>
@@ -38,6 +39,32 @@ public:
 private:
     int run_ = 0;
     bool on_ = false;
+};
+
+/// Whether the angles drawn are to be counted: while the wide camera is in, and after it went for
+/// as long as the scene camera still says the angle it was given (seen for up to 7 s as a battle
+/// ends, the game drawing 28 to 45 degrees high then: the screen would be sized for 112).
+class WideAngle {
+public:
+    bool Update(bool wide_in, float wide_fov, bool scene_ok, float scene_fov) {
+        if (wide_in) {
+            fov_ = wide_fov;
+            return true;
+        }
+        if (!(fov_ > 0.0f) || !scene_ok || !(std::abs(scene_fov - fov_) < kSame)) {
+            fov_ = 0.0f;
+            return false;
+        }
+        return true;
+    }
+    /// The angle the wide camera was given (radians), 0 once it is gone from the scene camera.
+    float Fov() const {
+        return fov_;
+    }
+
+private:
+    static constexpr float kSame = 0.002f; ///< radians
+    float fov_ = 0.0f;
 };
 
 class CutsceneWatch {

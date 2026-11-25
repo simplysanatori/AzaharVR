@@ -736,6 +736,17 @@ HeadLocked SolveKiuFirstPerson(float game_fov_y_deg, float aspect, const ViewFov
     return s;
 }
 
+float KiuNarrowestDeg(float aspect, const ViewFov& view, float eye_shift, float factor_max,
+                      float field) {
+    const Cover cover = ShareCover(DefaultCover(view, ViewMiddlePitch(view), eye_shift), field);
+    const float a = std::isfinite(aspect) && aspect > 0.1f ? aspect : 5.0f / 3.0f;
+    const float hi = std::isfinite(factor_max)
+                         ? std::clamp(factor_max, kFactorMin, kKiuFpFactorCeiling)
+                         : kKiuFpFactorMax;
+    const float t = std::max(cover.tan_x / (a * hi), cover.tan_y / hi);
+    return std::isfinite(t) && t > 0.0f ? 2.0f * std::atan(t) / kDegToRad : 0.0f;
+}
+
 KiuWide KiuWideCamera(const ViewFov& view, float eye_shift, float keep_aspect, float field) {
     KiuWide w;
     const Cover cover = ShareCover(DefaultCover(view, ViewMiddlePitch(view), eye_shift), field);
@@ -1608,6 +1619,7 @@ ScreenDecision Decide(const ScreenState& s) {
     const bool hidden_at_start = s.hide_bottom || s.mode != 0;
     d.show_bottom = s.bottom_focused || hidden_at_start == s.bottom_toggled;
     const bool head_locked = s.mode >= 2;
+    d.show_bottom |= head_locked && s.game_menu; // AzaharFrame kiu1s
     d.immersive = s.mode != 0 && s.live && !s.bottom_focused &&
                   (!head_locked || (!d.show_bottom && !s.menu_open && !s.cutscene && s.view_valid));
     return d;

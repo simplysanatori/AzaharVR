@@ -316,9 +316,12 @@ them.
 | `AZAHARFRAME_KIU_FP_TALK=0\|1`, `AZAHARFRAME_KIU_FP_TALK_AT=<down>,<width>` | first person's talk panel (default 0; 1 shows it; unset: the setting Bottom Screen's Persistent, `vr_kiu_bottom_screen`, AzaharFrame kiu131; before it Talk Panel): the Secondary Screen, where this game shows its talk, as a small panel with the head, its middle 24° below straight ahead, 34° wide, 0.8 m away (degrees; "The talk and the HUD in first person" below) |
 | `AZAHARFRAME_KIU_FP_FIELD=<percent>` | the share of the view's angle the picture fills (50 to 100, default 100): the wide camera that much narrower, the screen still at true size, a dark border around it (live; desktop, AzaharFrame kiufp3: the screen 126 × 112° at 100, 101 × 89° at 80, 76 × 67° at 60, the scene camera 111.5°, 89.2° and 66.9° high, the game drawing 1.00× its frame each time, a black border around it; kiuview's "no change" was its rig writing the switch before the app started) |
 | `AZAHARFRAME_KIU_FP_EDGE=<percent>` | the picture's edge fades to black over that share of its half size (0 to 50, default 0); the projection path only, which needs the controller models' files (without them the models' pass is never made and the screen goes as quads: why kiuview's mock never drew it); at `FP_FIELD` 100 most of the edge is outside the view. Desktop, AzaharFrame kiufp3, `FP_FIELD=80`: the picture's brightness against no edge, across the left edge, reaches full at 15 % of the half width with 15 and at about 30 % with 30 (pictures reports/91/kiufp3/pics/edge-*); the HUD pieces at the edge fade with it |
-| `AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]` | over the shoulder (unset: the setting Over the Shoulder, `vr_kiu_over_shoulder`, 2.5 m back and 0.5 m up when on; `0` off whatever the setting; AzaharFrame kiutoggles): the eye this many metres behind, above and to the right of the first-person eye along the camera's level view (game units = metres × the leaning scale, 7.7 per metre at life size); `AZAHARFRAME_KIU_EYE_OFFSET` wins |
+| `AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]` | in third person (unset: the setting Third Person, `vr_kiu_over_shoulder`, 2.5 m back and 0.5 m up when on; `0` off whatever the setting; AzaharFrame kiutoggles): the eye this many metres behind, above and to the right of the first-person eye along the camera's level view (game units = metres × the leaning scale, 7.7 per metre at life size); `AZAHARFRAME_KIU_EYE_OFFSET` wins |
 | `AZAHARFRAME_KIU_WRIST_SCREEN=0\|1` | Angel's Aim's Secondary Screen on the off hand's wrist (default 0, off; unset: the setting Bottom Screen's Wrist, `vr_kiu_bottom_screen`, AzaharFrame kiu131; before it Secondary Screen on Wrist; `1` wins over Persistent): shown while the wrist is turned up, touched by the aiming hand's beam without a shot ("The Secondary Screen on the wrist" below) |
 | `AZAHARFRAME_KIU_FP_FACTOR=<f>` | the most the game draws past its own frame on either axis in first person (1 to 8, default 6); past it the screen is smaller on that axis ("The screen in first person" below) |
+| `AZAHARFRAME_KIU_PAGE=0`, `AZAHARFRAME_KIU_HUD_EXACT=0` | off: the 2D as before ("Single screen" below; AzaharFrame kiuhud); on without them, first person only, live |
+| `AZAHARFRAME_KIU_HUD_CENSUS=<n>`, `AZAHARFRAME_KIU_HUD_COST=1` | log only, off by default: each kind of 2D draw of the top screen once (and again for another `<n>`) with what was made of it; the HUD's cost every 300 VBlanks |
+| `AZAHARFRAME_KIU_TALK_TOP=1`, `AZAHARFRAME_KIU_PAUSE_PANEL=1`, `AZAHARFRAME_KIU_PORTRAITS=1`, `AZAHARFRAME_KIU_MENU_SCREENS=1`, `AZAHARFRAME_KIU_MENU_PANEL=1`, `AZAHARFRAME_KIU_UI_TRACE=1` | the single screen's, each off without it, first person only, live ("Single screen" below; AzaharFrame kiu1s) |
 | `AZAHARFRAME_KIU_FP_TRACE=1\|2`, `AZAHARFRAME_KIU_FP_PROBE=<hex>` | a line of `key=value` words a second (2: a VBlank): the scene camera, the view register, the rest pose, the head, the hand's ray in the world, the reticle, the mailbox; and an actor's place in the world and in the head's view. AzaharFrame kiupit: `cam_node_44=` the scene camera node's ten words from +0x44, as floats (to find its near plane) |
 
 ### The transform (`kiu_room.h`)
@@ -468,7 +471,7 @@ screen. A ray that leaves the game's view holds the reticle at the screen's edge
   shape (the 21:9 mod draws 7:3 with Screen Shape 21:9).
 - **Behind Pit.** `AZAHARFRAME_KIU_EYE_OFFSET=x,y,z` in first person is laid out along the
   camera's level view (its yaw), not the player's body, which turns with shots.
-- **Over the shoulder (AzaharFrame kiuview).** `AZAHARFRAME_KIU_SHOULDER=back,up[,side]` in
+- **Third person (AzaharFrame kiuview).** `AZAHARFRAME_KIU_SHOULDER=back,up[,side]` in
   metres adds to the first-person eye (land 12.3 units up in his axes, air 3), along the
   camera's level view, so both keep their own height. Desktop: 2,0.6 in Chapter 1's air battle
   moved the eye offset from (0.2, 3.0, 0.0) to (-2.3, 7.6, 15.1) units (4.6 up, 15.3 back: 0.6
@@ -486,13 +489,13 @@ screen. A ray that leaves the game's view holds the reticle at the screen's edge
   0x1000 and 0x800 bytes), so the fade lives in the model's drawing; left as the game does it.
   At `SHOULDER=1.5,0.5` he stays faded; `2.5,0.5` shows him solid on land and in the air.
   Pictures: reports/91/kiufp3/pics/s1-*, s2-*, t1-*.
-- **Shots over the shoulder (AzaharFrame kiufp3, V on the desktop, Practice Range,
+- **Shots in third person (AzaharFrame kiufp3, V on the desktop, Practice Range,
   `SHOULDER=2.5,0.5`, charged shots, aa6dof2's method).** 0.00° off the hand's ray at head yaw
   0, 20 and 40 right and 20 left with 15 down; each passes the aim point 0.00 units away (526
   units on). The path each flew (its first to its last point, about 255 units, 29 to 31 points)
   is 0.000° off the ray too, so no homing turned it. They start at the hand's place behind the moved eye (2.1 m behind Pit, 1.7 m up),
   not at Pit: they fly from behind him, along the laser.
-- **Lock-on marks over the shoulder (AzaharFrame kiufp3, desktop, Chapter 1's air battle,
+- **Lock-on marks in third person (AzaharFrame kiufp3, desktop, Chapter 1's air battle,
   `SHOULDER=2.5,0.5`, projection path).** By eye the triangles stay above their enemies at rest,
   with the head 20° left and 15° down, Pit solid in front (pictures
   reports/91/kiufp3/pics/t1-*); not measured to the pixel.
@@ -641,10 +644,10 @@ looks like his head.
   - `round shadows`: 3 standing and running (the level's other shadows), 4 with
     `NO_PLAYER_SHADOW=0` standing and running; running far off, 1 with it and 0 without. So his
     round shadow stays out while he runs too; with it in, the soft disc shows under the eye.
-  - Over the Shoulder (the setting): `scale 1.0000`, no hide line, Pit solid. `SHOULDER=0` live
+  - Third Person (the setting): `scale 1.0000`, no hide line, Pit solid. `SHOULDER=0` live
     gives first person and the hide; the switch taken out, the shoulder view and scale 1 again.
   - Still seen with him hidden: the game's green guidance arrow, which lies on the floor beside
-    him (seen solid from over the shoulder; in first person its tip is at the left edge of the
+    him (seen solid from third person; in first person its tip is at the left edge of the
     view) and is not his; and, while firing or just after, the palm weapon's ghostly hand at
     full size below the view's middle. The palm's hand is the game's weapon effect: the scale
     write does not shrink it, and neither does shrinking the two kinds of effect actors
@@ -688,12 +691,12 @@ the game's picture, not this app's layer.
 - **Pit's own weapon.** On land he is hidden with it. The palm's ghostly hand still shows while
   firing ("Pit's own model in first person" above); not fixed. In the air his weapon was not
   seen in the game's picture (the palm).
-- **Over the Shoulder** (`Kiu::FirstPerson::ShoulderOn`, `Vis::WeaponModelDrawnFor`): the game
+- **Third Person** (`Kiu::FirstPerson::ShoulderOn`, `Vis::WeaponModelDrawnFor`): the game
   draws Pit with his own weapon there, so the weapon in hand (and a controller in its place)
-  is left out of the image while the view is over the shoulder, at run time only. No setting
+  is left out of the image while the view is in third person, at run time only. No setting
   is written; first person draws it again. The fit, muzzle, Laser Sight and the shots from the
-  hand go on. `WEAPON_DRAW`, when set, wins (`1` draws it over the shoulder too). The log's
-  `xr: weapon drawn:` line ends `; the model left out (Over the Shoulder: Pit holds his own)`.
+  hand go on. `WEAPON_DRAW`, when set, wins (`1` draws it in third person too). The log's
+  `xr: weapon drawn:` line ends `; the model left out (Third Person: Pit holds his own)`.
   V on the mock: no weapon in the hand with Pit solid and his palm on; `SHOULDER=0` live, the
   weapon in the hand again.
 
@@ -931,7 +934,7 @@ the game's picture, not this app's layer.
 - **The fix.** The model's word `+0xB4`, byte `+0xB5` (e.g. 0x14010101): 1 drawn, 0 not.
   Clearing it hides his body, wings and weapon. On land the game sets it again about every game
   frame (median 33 ms), so the VBlank pass clears it each time. In the air the game rarely sets
-  it again. Done in first person, land and air, unless Over the Shoulder or the eye offset
+  it again. Done in first person, land and air, unless Third Person or the eye offset
   moves the eye (`KH::HideByDrawInFirstPerson`, `KH::ModelDrawWrite`). It puts the byte back only
   on a node it cleared (or, once a run, one a save state brought cleared). The log says it once
   per change: `the player's model hidden by its draw (first person, land)` / `drawn again`.
@@ -1037,7 +1040,7 @@ other build is off.
   - every group goes in;
   - shots follow the hand's ray (0.00° on land; 0.00–0.21° for three shots in the air);
   - the 2D sprites turn with the head;
-  - Reticle Size works (the same texture, 0x1810AF00), and so does Over the Shoulder;
+  - Reticle Size works (the same texture, 0x1810AF00), and so does Third Person;
   - the Bottom Screen's talk and wrist test switches work, and the touch reaches the game;
   - a 345 s session ran without a crash.
 - **Not mapped for USA Rev 1:** the C-Stick & Gyro mod leave-out and the Recommended preset are
@@ -1073,7 +1076,7 @@ other build is off.
   - The score keeps rising while he is hidden (23710 → 25340).
   - The Chapter 2 state 9 is saved on the pause screen, so it was not usable.
 
-#### Camera (`vr_kiu_over_shoulder`, `vr_kiu_game_camera`: First Person, Over the Shoulder, Game's Camera)
+#### Camera (`vr_kiu_over_shoulder`, `vr_kiu_game_camera`: First Person, Third Person, Game's Camera)
 
 One choice row stored in two keys, so old files keep their meaning. If `game_camera` is on, the
 view is the Game's Camera; otherwise `over_shoulder` decides
@@ -1118,10 +1121,136 @@ view is the Game's Camera; otherwise `over_shoulder` decides
   Shoulder at 20 %: his body, wings and legs are see-through, and the floor and the target
   show through him. 6 draws were found, with 64 draws while drawn and 18 while hidden.
   The owner's air state, firing, 50 % from the start: 5 found (108 with him, 42 without); in
-  the Game's Camera and then Over the Shoulder he is see-through, and the enemies, the lock-on
+  the Game's Camera and then Third Person he is see-through, and the enemies, the lock-on
   marks and the shots stay solid. No weapon in hand in either view.
 - **Risks.** The addresses are learnt once per model node. If the game moves his vertex data
   later (another weapon, a power), he stays solid until the next model node. A depth-writing see-through draw hides his own parts behind it (a back arm), as in any
   one-pass blend.
 
-**1.3.0: the Game's Camera is held back.** Its view was broken on the headset (Pit far off in the air; the camp's view wrong). `Menu::kGameCameraOffered` (`menu/angels_aim_tab.h`) is false: Camera lists First Person and Over the Shoulder, and a saved `vr_kiu_game_camera` is not used. `AZAHARFRAME_KIU_GAME_CAMERA=1` still turns it on for work on it.
+**The right stick's click (AzaharFrame kiucam, `vr_kiu_stick_click`: 0 Switch Camera, 1 Swap Screens; per game, live).** In a battle a tap switches First Person and Third Person (First Person from the Game's Camera), in both keys as the Camera row does; the Qt side writes the game's file, as for the row. Not in a cutscene, the game's pause screen or one of its menus (`kiu_ui.h`, read each VBlank), nor with the screens swapped: there it is Swap Screens (`CameraTap::Switches`). Drawn by the projection layer, the picture fades to black in 0.05 s, the camera switches, and it comes back over 0.05 s after 0.15 s of black (0.25 s in all; a factor in the screen's shader, nothing waits: the game, the controls and the shots go on). The black has a fixed end: a picture carries its head pose's time, not the camera it was drawn from. Primary Screen as Panel has no fade: it switches at once.
+
+**1.3.0: the Game's Camera is held back.** Its view was broken on the headset (Pit far off in the air; the camp's view wrong). `Menu::kGameCameraOffered` (`menu/angels_aim_tab.h`) is false: Camera lists First Person and Third Person, and a saved `vr_kiu_game_camera` is not used. `AZAHARFRAME_KIU_GAME_CAMERA=1` still turns it on for work on it.
+
+### Powers (AzaharFrame kiupowers; `vr_kiu_power_menu`, off)
+
+- **Power Menu** (`vr_kiu_power_menu`: 0 Off, 1 Off Hand, 2 Health Bar, 3 Middle, 4 Score; `vr_kiu_power_menu_opacity`, 20 to 100; per game, live,
+  Angel's Aim only; no menu rows yet): the powers on land and the dots in the air, there. Over the hand the powers only while another is picked,
+  facing the eyes and upright (`Billboard`: it follows once they are 2 degrees off); with the HUD all battle, the name under the row (`BelowRow`),
+  moved by `vr_kiu_power_menu_across` and `_height` (degrees, -40 to 40, from the place). In the middle the linked HUD's two pieces make room
+  (`KiuHud::Wanted::link_gap`); not linked and too close, it is under both. `AZAHARFRAME_KIU_POWERS*` and `_POWER_DOTS*`, when set, win (`SettingsFor`).
+
+The game's power panel is at +0xB64 of the battle UI's 2D context (`[0xEE3098 + 0x140]`, `kiu_ui.h`), on the bottom screen
+(`kiu_powers.h`; its code words are checked first, EUR and USA Rev 1; USA never run).
+
+| Field | What |
+|---|---|
+| +0 & 0x4000 | in the air (the dots), else the bar |
+| +4 & 0x20000, & 0x10000000 | the name bubble is up; a power was just used |
+| +0x104 f32 | the name's timer, refilled by each step |
+| +0x118, +0x184, +0x11C + 8n | the selected place, how many, a power (uses in its first byte) |
+| +0x1B4 f32 | the charge in the air, 0 to 3 dots (about 0.0194 a second) |
+
+- **The bar's draws** (`video_core/kiu_powers.h`). Draws of the bottom pass (viewport 240 x 320) of that context. Read from guest memory, told
+  apart by place, texture and TEV; the wanted ones are drawn again from the same textures (a pack's too) into a transparent strip under the
+  bottom screen's picture, in the same XR image (`RendererVulkan::DrawKiuPowers`). In the game's order: paper (the selected place's piece tinted
+  FFD200, alpha 0xBF: "the gold"), the name bubble (u 183 to 206, v 72 to 96 of the sheet's 256), the cards, the icons, the counts, the arrows,
+  the name. Left out: the paper but the gold piece, the cards.
+- **Their TEV** (any other is not drawn again): paper, bubble, arrows: texture x vertex colour; icons and counts: the texture mixed toward the
+  vertex colour by its alpha, alpha = the texture's x a stage constant; the name: the vertex colour, alpha = the texture's red x the vertex alpha.
+- The cards, icons and counts are cut to x 8 to 124, as the game's scissor does. The bar's idle fade (its alphas, 0.5 seen) is divided out; the
+  opacity multiplies the finished strip, so nothing shows through the icons.
+- **In the air** any of D-pad Left, Right and Down spends a dot. With Fire and Power in Angel's Aim the bumpers send nothing there
+  (`AZAHARFRAME_KIU_SKY_BUMPERS=1`: as before); the off hand's trigger (D-pad Down) does it.
+  V (desktop): both bumpers: nothing held, the charge goes on; the trigger: 1.736 to 0.737, once. The player's own charge is
+  `[0xD635E0] + 0x1238`; the panel's is set from it, so writing the panel's does not stick.
+- Switches: `vis/power_menu.h`.
+
+### Single screen (AzaharFrame kiu1s; test switches, all off)
+
+Where to look was learnt from **UprisingHack** (https://github.com/patricksmill/UprisingHack,
+GPL-3.0-or-later), a PC port of the game, from its notes on USA Rev 1. Each address was found again
+in both builds by its code; no code or layout of it is used.
+
+- **The battle UI (`kiu_ui.h`).** One 2D context, `[0xEE3098 + 0x140]`, for both screens: the top pass
+  (EUR 0x60D538, USA 0x60D3EC), the bottom pass (0x60DA88, 0x60D93C). 30 code words that name the
+  fields are checked first; another word and nothing is read.
+
+| Field | What |
+|---|---|
+| +0x1C, +0x28 | the vertices' base (physical), the quads' index offset (after two buffers of 0x60 a quad: 400 quads). V: the HUD's draws, to the byte (land and air; the first HUD draw is quad 0, they add up to +0x128) |
+| +0x31B8 bit 0 | the UI draws; `& 0x10100`: a page instead of the HUD |
+| +0x218C bit 0 | a page (a dim band and two columns) instead of the bar; the score is still drawn. I: the battle's results; never seen set |
+| +0x243C & 0x801 | the pause screen is drawn |
+| +0x3124 (+0, +1, +3, +4) | the talk's message: shown, shown, its screen (0 top, 1 bottom), its line |
+| +0xB64 | the bottom screen's own UI, flags first: & 0x800 another picture instead of all below (its pass, +0x31B8 & 0x400, too) |
+| +0xB64 +0xD8 | the portraits' object (EUR 0x9E2D4C draws it): +0 & 0x3000000 hidden, +8 & 0xF its four places in use. V: set as they start to fade in, clear 0.4 s after the words, as they are gone |
+| +0xB64 +0x1FC, +0x200 | an illustration's share of the picture (the portraits have the rest); with flag 0x1000000 only while one of the pieces at +0x200 is up. V: Chapter 1's flight, Medusa's line: 0 to 1 in 0.3 s, 1 for 10 s |
+
+- **`AZAHARFRAME_KIU_PAGE` (on; `0` off).** The 2D is a page (`PagePlace`) outside a battle as before, and also (45 degrees high, `PagePlaceInBattle`)
+  while the game itself draws a page instead of the HUD, two VBlanks in a row, or a menu is up: its number is the byte `[[[0xE6F98C] + 0xC] + 0x72C]`
+  (classes 0xCFC660 and 0xCFC3B4; USA 0xA0 lower), the holder null in a battle. V: the title 0, the page after Pit falls 51 (CONTINUE). That page comes 2 s after
+  the battle's camera is out. The battle's results (state: flag 0x100 of the context): whole, its rules too; its dim's corners are put exactly at the frame's
+  and not turned, so it covers the whole view. The hub (menu 3): the game's words and number are flat 2D, but the veil behind the words, the heart bag and its shadow are
+  depth tested cards in front of the room's camera (one 64 x 64 RGBA4 texture, 40 units away, 6 or 12 vertices; nothing else of the room is: census). They all go to the
+  HUD's frame (`PageInView`, `MoveCard`), in front of the room's depth; the veil, which hangs off three sides of the game's screen, is drawn again with all sides fading (`SoftVeil`).
+  V: bag and number together, following the head, turned 15 degrees and 35 down. The room's own sheets and floor reflection still end where the game's frame did.
+- **`AZAHARFRAME_KIU_HUD_EXACT` (on; `0` off).** The HUD's draws are the top screen's draws of that context
+  (vertex base and index offset, `KiuHud::InBatch`) and no others but the console's battery (the dialogs' context; `IsBattery`), each moved as one by its own middle.
+  The flush (EUR 0x92F5A0) only adds to a list that is replayed later for both eyes, so a draw's caller
+  is not known. Batch not known: the guess (`MayBeHud`), as without the switch. V (air, land): every HUD draw logged as exact; on land the bar and score are on the same pixels as by the guess (best match at no shift).
+  Clip y is across to the LEFT: until kiuhud the guess had the bar's and the score's groups swapped, so the bar's right end (0.3 to 0.45) went with the middle.
+- **`AZAHARFRAME_KIU_TALK_TOP=1`.** One word (EUR 0x60D804, USA 0x60D6B8: `bne`, the message is the bottom
+  screen's, to `mov r0, r0`), group "talk on top": the top pass draws the line with the game's own function for
+  the top screen (EUR 0x9E9D2C), as Subtitles: Upper does. The bottom keeps its line, the setting is not touched.
+  V: Practice Range, the words of the bottom screen on top from the switch on (two quads more in the top pass).
+- **`AZAHARFRAME_KIU_PAUSE_PANEL=1`.** While the pause screen is drawn in a battle, the Secondary Screen is a
+  panel in front (36 degrees wide, 4 below where the head looked, 0.8 m), pointable, still where the head was as
+  the game paused, upright (`NoRoll`; at most 50 degrees up or down); a re-centre takes the head again. The Secondary
+  Screen up on the wrist wins. Its layer is the portraits' (`LayerFor`): there, shrunk, whenever the view is on, so pausing
+  adds none. Direct Aim holds no aim on it and the beam is the usual one.
+  V: START: up in the same frame, 6 layers before and after; head turned 25 left and 12 down: the panel 24.6 left, 16 down;
+  Resume, Retreat and Yes by the beam and the trigger (246,83 and 225,171 asked and touched, ZL, ZR and L 0), the hub after.
+  Not run: the Options pages, a re-centre while paused. The mock does not composite, so the panel over the picture was not seen.
+- **Talk Portraits** (`vr_kiu_talk_portraits`, off; `vr_kiu_talk_portraits_opacity`, 20 to 100, per game, live; no menu rows yet).
+  The setting asks for the card below; `AZAHARFRAME_KIU_PORTRAITS`, when set, wins (1 on, else off). The card is at its own opacity,
+  blended as the Bottom Screen's. With the card and no `AZAHARFRAME_KIU_TALK_TOP` set, the words go on the Primary Screen too
+  (`TalkTopFor`) unless Bottom Screen is Persistent: the card leaves the words out, and on land the game has them below only.
+- **`AZAHARFRAME_KIU_PORTRAITS=1`.** While the game draws the talk's portraits (or an illustration), that part of the Secondary
+  Screen's own picture (rows 42 to 240 of 320 x 240, `kPortraitCut`; a plain card) is a quad with the head, 25 degrees to the off
+  hand's side, 7.5 below, 16 wide, to look at only. No code patch. All through a battle the quad is there,
+  shrunk to nothing between the lines and while paused, so a line changes neither the number of layers nor how the bottom screen is
+  drawn. Not while the Secondary Screen is on view anyway (Persistent, the wrist, the pause panel). V: an air battle: up with the
+  portraits, the rect 1280 x 792 at 0,168 of 1280 x 960, away while paused and 0.35 s after the words, 6 layers all the time. The
+  card at 13 below (the plan) was over the words' left end at their usual size, so it is above them. On land the same (25.3 left,
+  7.2 below in the trace), away with Bottom Screen: Persistent. An illustration is in the same cut (rows 55 to 184) and shows in
+  the card. A boss's card is not shown.
+- **The characters alone** (`video_core/kiu_talk.h`; with Talk Portraits, `AZAHARFRAME_KIU_TALK_CUTOUT=0` for the card). The draws of the
+  bottom pass that are the portraits' and the illustration's are drawn again, coloured as the game does, into a transparent copy of the
+  bottom screen under its picture in the same XR image (below the powers' strip); the card's quad shows that, all rows (the tallest
+  portraits reach over row 42). No frame, backdrop, words or power bar.
+  - A portrait (EUR 0x9E2D4C): one draw, one quad of 256 x 256 (two while wiped in or out: the upper one's top see-through), x -5 or 69 +
+    the place's, mirrored by flag 0x400; its texture 256 x 256 ETC1. TEV, two stages: (1 - texture) x AAAAAA x 2, then 1 - that, times the
+    vertex colour (the place's +0x20: its tint and fade); alpha min(1, 2 x (red + green)) x the vertex alpha
+    (drawn again without its lowest 4 %: a pack's black is not quite 0).
+  - An illustration (0xA0F9B8): an untextured black quad (320 wide, 130 high), its pieces (one quad a draw, texture x vertex colour), four
+    untextured quads (bands and lines). Pieces are cut to rows 56 to 184; the black beside the picture is left out.
+  - How many the game says it draws (`frame_xr/kiu_talk.h`: the places' colour and wipe, the pieces' alpha). Fewer found, or an illustration
+    not as known, for 8 pictures: the strip has the card's part of the picture instead. The code another: that at once.
+  - The opacity is on the whole, so nothing shows through a portrait in front of another.
+- **The weapon in the hand** (no switch, first person): not drawn, nor Pit's arm and the muzzle's effects, while one of the game's
+  menus is up outside a battle (`WeaponHiddenFor`, by its own `SteadyMenu`: the one-frame gaps between menus do not count). The
+  Practice Range's shooting is a battle with no menu and the pause screen is none either: the weapon stays there.
+- **`AZAHARFRAME_KIU_MENU_SCREENS=1`.** While one of the game's menus is up (`SteadyMenu`, MENUID 0 to 58, two VBlanks; gone
+  after 12 with none), the normal two screens instead of the view (`ScreenState::game_menu`; the bottom one whatever was chosen
+  for it, and its hide button does nothing). V: the title (0), the Cauldron (5), off into the battle (none 0.8 s before its UI is
+  there), the pause and its Options pages (none), Retreat, the hub (3), the page after Pit falls (51: both screens, 2 s after
+  the battle's camera is out). The game goes from one menu to the next within a frame.
+- **`AZAHARFRAME_KIU_MENU_PANEL=1`.** The same menus, as a panel: the Secondary Screen 40 degrees wide, its middle 12 below, the
+  Primary Screen above it, 32 wide, 14.5 above (the Cauldron: 34 at 14 below, 38 at 11.75 above), a degree and more between them
+  (`MenuGapDeg`), 0.8 m, level, where the head was as the first menu came up; a re-centre moves it; the grips move neither
+  (`PanelGeometry::no_drag`); no swap on it; it stays while a wrist is turned up. The layer is kept, shrunk, in the view
+  between a menu and a battle (`LayerFor`). With either switch Direct Aim holds no aim in a menu: Keep Reticle on Screen made
+  the aiming hand's beam touch nothing while the Primary Screen is a screen. The stick and the buttons go to the game as ever.
+  V, all by the beam and the trigger, each pixel asked and touched, ZL, ZR and L 0: the title (0), the file (2), the main menu
+  (4), the hub (3) and back; the Cauldron (5): a drag along the intensity bar (155,22 to 93,22: 4.0 to 2.2) and Move Out, the
+  battle, Retreat, the hub again. A grip on the panel moved nothing. Not run: the rooms past the hub, a swap, a re-centre, a wrist turned up (the mock's wrist screen did not come up), the stick and buttons.

@@ -3292,7 +3292,7 @@ TEST_CASE("Tab menu: Trigger Layout, Kid Icarus only", "[frame_xr][tabmenu][kiuf
           "Your aiming hand's trigger only fires. The other trigger uses your power, and the "
           "bumpers pick it.");
     CHECK(ExplainOption(Id::TriggerLayout, 1) ==
-          "Both triggers fire and also press the game's own buttons, as before.");
+          "Both triggers fire and also press the game's own buttons.");
     CHECK(TriggerLayoutIndexOf(0) == 1);
     CHECK(TriggerLayoutIndexOf(1) == 0);
     CHECK(TriggerLayoutValueAt(0) == 1);
@@ -3368,13 +3368,13 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
     CHECK(LabelFor(Id::KiuBottomSize) == "Bottom Screen Size");
     CHECK(LabelFor(Id::KiuBottomOpacity) == "Bottom Screen Opacity");
     CHECK(LabelFor(Id::KiuBottomReset) == "Reset Bottom Screen Position");
-    // AzaharFrame kiu133: Over the Shoulder is one of Camera's choices.
+    // AzaharFrame kiu133: Third Person is one of Camera's choices.
     CHECK(LabelFor(Id::KiuOverShoulder) == "Camera");
     // AzaharFrame 1.3.0: the Game's Camera is not offered yet (kGameCameraOffered).
     CHECK(OptionsFor(Id::KiuOverShoulder) ==
           (FrameXr::Menu::kGameCameraOffered
-               ? std::vector<std::string>{"First Person", "Over the Shoulder", "Game's Camera"}
-               : std::vector<std::string>{"First Person", "Over the Shoulder"}));
+               ? std::vector<std::string>{"First Person", "Third Person", "Game's Camera"}
+               : std::vector<std::string>{"First Person", "Third Person"}));
     CHECK(LabelFor(Id::KiuSnapTurn) == "Turning");
     CHECK(LabelFor(Id::WristSide) == "Wrist Side");
     CHECK(LabelFor(Id::KiuReticleSize) == "Reticle Size");
@@ -5129,7 +5129,7 @@ TEST_CASE("Angel's Aim settings: drawn in the segment, each control a target",
     CHECK(opened);
 }
 
-// AzaharFrame kiu133: Camera (First Person, Over the Shoulder, Game's Camera) and, in the two
+// AzaharFrame kiu133: Camera (First Person, Third Person, Game's Camera) and, in the two
 // views from outside Pit, Pit Opacity: in the Settings tab's first-person rows and the hub's
 // View group, the same rows.
 TEST_CASE("Tab menu: Angel's Aim's Camera and Pit Opacity", "[frame_xr][tabmenu][kiu133]") {
@@ -5163,4 +5163,22 @@ TEST_CASE("Tab menu: Angel's Aim's Camera and Pit Opacity", "[frame_xr][tabmenu]
     usa.mods.angels_aim.mapped = false; // not the European game: none of first person's rows
     usa.kiu_view = 2;
     CHECK_FALSE(Has(AngelsAimFirstPersonRows(usa), Id::KiuPitOpacity));
+}
+
+// AzaharFrame kiuhands: Free Hand (Shown, Hidden), with the view's rows in Angel's Aim, Shown by default.
+TEST_CASE("Tab menu: Hide Off Hand", "[frame_xr][tabmenu][kiuhands]") {
+    CHECK(PerGameSetting(Id::KiuHideOffHand));
+    CHECK(SectionOf(Id::KiuHideOffHand) == SettingsSection::Immersive);
+    CHECK(LabelFor(Id::KiuHideOffHand) == "Free Hand");
+    CHECK(OptionsFor(Id::KiuHideOffHand) == std::vector<std::string>{"Shown", "Hidden"}); // 0: not hidden
+    CHECK_FALSE(ExplainFor(Id::KiuHideOffHand).empty());
+    CHECK(MenuModel{}.kiu_hide_off_hand == 0);
+    MenuModel m = KiuModel(true, 4);
+    CHECK(Has(AngelsAimFirstPersonRows(m), Id::KiuHideOffHand));
+    const auto groups = AngelsAimGroups(m);
+    REQUIRE(groups.size() == 4);
+    CHECK(groups[1].rows.back() == Id::KiuHideOffHand); // View's last
+    m.mods.angels_aim.mapped = false; // not the European game
+    CHECK_FALSE(Has(AngelsAimFirstPersonRows(m), Id::KiuHideOffHand));
+    CHECK_FALSE(Has(AngelsAimFirstPersonRows(KiuModel(true, 1)), Id::KiuHideOffHand));
 }
