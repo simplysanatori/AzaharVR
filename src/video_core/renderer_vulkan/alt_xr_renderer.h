@@ -4,8 +4,11 @@
 
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <memory>
+
+#include "common/layer_depth.h"
 
 namespace Frontend {
 class EmuWindow;
@@ -28,6 +31,32 @@ struct AltScreenImage {
 /// The right eye has a picture of its own, which can be drawn just as the left eye's.
 inline bool AltShowsStereo(const AltScreenImage& left, const AltScreenImage& right) {
     return right.HasPicture() && right.width == left.width && right.height == left.height;
+}
+
+/// The two eyes' pictures of a stereo frame as the headset shows them: without what Layer Depth
+/// leaves out at their edges.
+struct AltEyePictures {
+    AltScreenImage left{};
+    AltScreenImage right{};
+};
+inline AltEyePictures AltCutEyes(const AltScreenImage& left, const AltScreenImage& right,
+                                 float layer_shift) {
+    const auto cut = [layer_shift](AltScreenImage image, bool right_eye) {
+        const auto columns = static_cast<uint32_t>(std::lround(
+            Common::LayerDepth::Cut(layer_shift) * static_cast<float>(image.width)));
+        if (columns >= image.width) {
+            return image;
+        }
+        if (image.stride_pixels == 0) {
+            image.stride_pixels = image.width;
+        }
+        if (!Common::LayerDepth::CutsRightEdge(right_eye, layer_shift)) {
+            image.pixels += columns;
+        }
+        image.width -= columns;
+        return image;
+    };
+    return {cut(left, false), cut(right, true)};
 }
 
 /**
@@ -63,11 +92,12 @@ public:
     /// screen is active. `overlay` (premultiplied alpha, RGBA) covers the whole Primary Screen as
     /// it is shown, whatever its size; without a picture nothing is drawn for it. `primary_right`
     /// (the size of `primary`, the overlay over it too) is the headset's right eye's; without a
-    /// picture both eyes see `primary`. The window never shows it. With `skippable` (fast forward)
-    /// the window may miss frames its display could not show anyway.
+    /// picture both eyes see `primary`. `layer_shift` is what the headset's are cut for (AltCutEyes).
+    /// The window shows neither. With `skippable` (fast forward) the window may miss frames its
+    /// display could not show anyway.
     bool Present(const AltScreenImage& primary, const AltScreenImage& secondary,
                  const AltScreenImage& overlay = {}, const AltScreenImage& primary_right = {},
-                 bool skippable = false);
+                 float layer_shift = 0.0f, bool skippable = false);
 
     bool IsReady() const;
 

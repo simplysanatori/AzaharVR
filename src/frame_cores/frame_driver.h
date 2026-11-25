@@ -78,6 +78,8 @@ struct DriverServices {
     /// The game's picture as the core drew it: the core's own buffer, the same until the game is
     /// unloaded, its alpha not set. A Game Boy's is DriverBufferWidth pixels wide.
     std::function<DriverPicture()> picture;
+    /// FrameOutput::layer_shift for the game's picture: the overlay is on what is left of it.
+    std::function<float()> layer_shift;
     /// Copies the battery save aside, at most once a session, before the first edit. False: not
     /// copied, and nothing may be edited.
     std::function<bool()> backup_save;

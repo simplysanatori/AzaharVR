@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "common/alt_core_types.h"
+#include "common/layer_depth.h"
 #include "common/logging/log.h"
 #include "frame_cores/frame_driver.h"
 #include "frame_cores/rom_info.h"
@@ -1005,7 +1006,7 @@ private:
         int at = Selected(items);
         if (dx || dy) {
             quick_set_grid(live.quickGrid);
-            at = quick_step(static_cast<int>(items.size()), at, dx, dy, OverlayWidth(width, height),
+            at = quick_step(static_cast<int>(items.size()), at, dx, dy, ShownOverlayWidth(),
                             PD_TOP_H);
         }
         s.quickSel = items[static_cast<std::size_t>(at)];
@@ -1066,7 +1067,7 @@ private:
             overlay_drawn = false;
             return;
         }
-        const int w = OverlayWidth(width, height);
+        const int w = ShownOverlayWidth();
         pd_settings hud_settings{};
         hud_state state{};
         uint32_t key = static_cast<uint32_t>(w);
@@ -1094,6 +1095,13 @@ private:
             out.overlay = {overlay.data(), static_cast<uint32_t>(w), PD_TOP_H,
                            static_cast<uint32_t>(w)};
         }
+    }
+
+    /// For the part of the game's picture that is shown (Layer Depth).
+    int ShownOverlayWidth() const {
+        const float shift = services.layer_shift ? services.layer_shift() : 0.0f;
+        const float shown = static_cast<float>(width) * (1.0f - Common::LayerDepth::Cut(shift));
+        return OverlayWidth(static_cast<uint32_t>(std::lround(shown)), height);
     }
 
     bool DrawOverlay(int w, bool menu, const hud_state* hud, const pd_settings& hud_settings,

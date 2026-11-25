@@ -857,10 +857,10 @@ bool AltXrRenderer::NeedsPresent() const {
            (vr && impl->StereoTurnedOff());
 }
 
-bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage& secondary,
-                            const AltScreenImage& overlay, const AltScreenImage& primary_right,
-                            bool skippable) {
-    if (!impl || !impl->ready || !primary.pixels || primary.width == 0 || primary.height == 0) {
+bool AltXrRenderer::Present(const AltScreenImage& whole, const AltScreenImage& secondary,
+                            const AltScreenImage& overlay, const AltScreenImage& whole_right,
+                            float layer_shift, bool skippable) {
+    if (!impl || !impl->ready || !whole.pixels || whole.width == 0 || whole.height == 0) {
         return false;
     }
     impl->presented_vr = impl->XrShowsScreens();
@@ -872,8 +872,8 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
             std::chrono::steady_clock::now() - impl->window_presented < kSkippableInterval) {
             return true;
         }
-        impl->PickScales(primary, secondary, overlay.HasPicture() || impl->overlay_tex.view);
-        if (!impl->UploadImage(impl->primary_tex, primary) ||
+        impl->PickScales(whole, secondary, overlay.HasPicture() || impl->overlay_tex.view);
+        if (!impl->UploadImage(impl->primary_tex, whole) ||
             (secondary.pixels && !impl->UploadImage(impl->secondary_tex, secondary))) {
             return false;
         }
@@ -881,7 +881,11 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
         return true;
     }
     VideoCore::XrScreenSink* const sink = impl->sink;
-    const bool stereo = AltShowsStereo(primary, primary_right);
+    const bool stereo = AltShowsStereo(whole, whole_right);
+    if (!stereo) {
+        layer_shift = 0.0f;
+    }
+    const auto [primary, primary_right] = AltCutEyes(whole, whole_right, layer_shift);
     if (impl->StereoTurnedOff() && stereo) {
         sink->SetTopStereo(true);
     }
@@ -947,7 +951,9 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
     Common::XrPacer::Get().game_swaps.fetch_add(1, std::memory_order_relaxed);
 
     std::array<XrPresentTarget::Target, XrPresentTarget::kScreens> targets{};
-    if (!impl->xr_target->BeginFrame(targets, VideoCore::XrContentPose{})) {
+    VideoCore::XrContentPose content{};
+    content.layer_shift = layer_shift;
+    if (!impl->xr_target->BeginFrame(targets, content)) {
         impl->scheduler->Flush();
         return false;
     }

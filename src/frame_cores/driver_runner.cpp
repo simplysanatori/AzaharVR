@@ -304,12 +304,10 @@ void DriverRunner::SetRightEye(const DriverPicture& right, const DriverPicture& 
     if (!right.pixels || !out.primary.HasPicture()) {
         return;
     }
-    if (right.width == game.width && right.height == game.height && Shows(out.primary, game)) {
-        out.primary_right = ToImage(right);
-        out.layer_shift = shift;
-    } else {
-        out.primary_right = out.primary;
-    }
+    const bool same_size = out.primary.width == game.width && out.primary.height == game.height &&
+                           right.width == game.width && right.height == game.height;
+    out.primary_right = same_size && Shows(out.primary, game) ? ToImage(right) : out.primary;
+    out.layer_shift = same_size ? shift : 0.0f;
 }
 
 bool DriverRunner::UpdateSecondary(Common::AltCore::Capabilities& caps) {

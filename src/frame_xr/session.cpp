@@ -766,11 +766,6 @@ void Runtime::Release(VideoCore::XrScreen screen, bool gpu_finished) {
         LOG_ERROR(Frontend, "xr: xrReleaseSwapchainImage {}: {}", ScreenName(i), ResultName(r));
     }
     chain.waited = false;
-    {
-        std::scoped_lock lock{screens_mutex};
-        chain.has_image = true;
-        chain.shown_index = chain.index; // AzaharFrame projscreen
-    }
     stats.releases[i]++;
     if (!gpu_finished) {
         stats.unfinished[i]++;
@@ -810,11 +805,13 @@ void Runtime::ReleaseFrame(bool gpu_finished, const VideoCore::XrContentPose& co
             chain.has_image = true;
             chain.frame_serial = serial;
             chain.shown_index = chain.index; // AzaharFrame projscreen
+            chain.layer_shift = content.layer_shift;
         } else {
             std::scoped_lock lock{screens_mutex};
             chain.has_image = true;
             chain.frame_serial = serial;
             chain.shown_index = chain.index;
+            chain.layer_shift = content.layer_shift;
         }
         // A packed top screen counts for both eyes (the log line keeps its meaning).
         const bool both = packed_top && top_stereo.load(std::memory_order_relaxed) &&

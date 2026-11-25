@@ -620,7 +620,7 @@ struct AltCoreHost::Impl {
     void Present(bool skippable) {
         if (renderer && renderer->IsReady() && last_frame.primary.pixels) {
             renderer->Present(last_frame.primary, last_frame.secondary, last_frame.overlay,
-                              last_frame.primary_right, skippable);
+                              last_frame.primary_right, last_frame.layer_shift, skippable);
         }
     }
 
@@ -652,8 +652,6 @@ struct AltCoreHost::Impl {
         if (mic_blow_frames > 0 && --mic_blow_frames == 0) {
             core->SetMicBlow(false);
         }
-        Common::LayerDepth::Get().farthest_shift.store(last_frame.layer_shift,
-                                                       std::memory_order_relaxed);
         holding.store(last_frame.held, std::memory_order_relaxed);
 
         if (last_frame.metrics_changed) {
@@ -1001,7 +999,6 @@ void AltCoreHost::Stop() {
     }
 
     impl->caps = Common::AltCore::Capabilities::ForN3DS();
-    Common::LayerDepth::Get().farthest_shift.store(0.0f, std::memory_order_relaxed);
     SetPacerEmuFrameUs(Common::XrPacer::Get(), Common::XrPacer::kEmuFrameUs);
 }
 

@@ -78,8 +78,8 @@ public:
     /// Only the renderer's handoff thread calls it (and Release), never the emu thread.
     virtual int32_t Acquire(XrScreen screen) = 0;
 
-    /// Releases the image last acquired, once the GPU finished writing it
-    /// (gpu_finished: the caller checked that it had). Takes the queue lock itself.
+    /// Gives back the image last acquired without a game frame in it (gpu_finished: the GPU is not
+    /// using it). A screen without a picture stays without one. Takes the queue lock itself.
     virtual void Release(XrScreen screen, bool gpu_finished) = 0;
 
     /// AzaharFrame doubling: releases the waited image of every screen, one game frame, once
