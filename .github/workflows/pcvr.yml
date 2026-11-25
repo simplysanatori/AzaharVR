@@ -110,7 +110,7 @@ jobs:
             -DCITRA_WARNINGS_AS_ERRORS=OFF \
             -DENABLE_FFMPEG=OFF \
             -DENABLE_DISCORD_RPC=OFF \
-            -DENABLE_QT_UPDATE_CHECKER=OFF \
+            -DENABLE_QT_UPDATE_CHECKER=ON \
             -DENABLE_WEB_SERVICE=OFF
           ninja
           ninja bundle

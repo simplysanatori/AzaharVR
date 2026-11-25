@@ -229,7 +229,7 @@ file(GLOB_RECURSE THEMES ${PROJECT_SOURCE_DIR}/dist/qt_themes/*)
 
 if (ENABLE_QT_UPDATE_CHECKER)
     target_link_libraries(citra_qt PRIVATE httplib json-headers)
-    target_sources(citra_qt PRIVATE update_checker.cpp)
+    target_sources(citra_qt PRIVATE update_checker.cpp update_version.cpp)
     target_compile_definitions(citra_qt PUBLIC ENABLE_QT_UPDATE_CHECKER)
 endif()
 

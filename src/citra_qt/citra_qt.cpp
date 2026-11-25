@@ -115,6 +115,7 @@
 #include "common/stall_telemetry.h" // AzaharFrame stall
 #ifdef ENABLE_QT_UPDATE_CHECKER
 #include "citra_qt/update_checker.h"
+#include "citra_qt/update_version.h" // AzaharVR updatecheck
 #endif
 #include "citra_qt/util/clickable_label.h"
 #include "citra_qt/util/graphics_device_info.h"
@@ -871,31 +872,6 @@ void GMainWindow::ShowCommandOutput(std::string title, std::string message) {
 #endif
 }
 
-bool IsPrereleaseBuild() {
-    return ((strstr(Common::g_build_fullname, "alpha") != NULL) ||
-            (strstr(Common::g_build_fullname, "beta") != NULL) ||
-            (strstr(Common::g_build_fullname, "rc") != NULL) ||
-            (strstr(Common::g_build_fullname, "test") != NULL));
-}
-
-#ifdef ENABLE_QT_UPDATE_CHECKER
-static bool ShouldCheckForPrereleaseUpdates() {
-    const bool update_channel = UISettings::values.update_check_channel.GetValue();
-    const bool using_prerelease_channel =
-        (update_channel == UISettings::UpdateCheckChannels::PRERELEASE);
-    return (IsPrereleaseBuild() || using_prerelease_channel);
-}
-
-static int GetMajorVersion(const std::string& version) {
-    size_t dot = version.find('.');
-    try {
-        return std::stoi(version.substr(0, dot));
-    } catch (...) {
-        return 0;
-    }
-}
-#endif
-
 GMainWindow::GMainWindow(Core::System& system_)
     : ui{std::make_unique<Ui::MainWindow>()}, system{system_}, movie{system.Movie()},
       user_data_migrator{this}, config{std::make_unique<QtConfig>()}, emu_thread{nullptr} {
@@ -1169,17 +1145,16 @@ GMainWindow::GMainWindow(Core::System& system_)
 #endif
 
 #ifdef ENABLE_QT_UPDATE_CHECKER
-    if (UISettings::values.check_for_update_on_start) {
+    // AzaharVR updatecheck: once per start, off the UI thread, and only when the alert could be
+    // shown (no game on the command line); the answer is checked again when it comes.
+    if (UISettings::values.check_for_update_on_start && game_path.isEmpty()) {
         update_future = QtConcurrent::run([]() -> QString {
-            const std::optional<std::string> latest_release_tag =
-                UpdateChecker::GetLatestRelease(ShouldCheckForPrereleaseUpdates());
-
-            if (latest_release_tag && latest_release_tag.value() != Common::g_build_fullname) {
-                const int latest_major_version = GetMajorVersion(latest_release_tag.value());
-                const int current_major_version = GetMajorVersion(Common::g_build_fullname);
-                if (current_major_version <= latest_major_version) {
-                    return QString::fromStdString(latest_release_tag.value());
-                }
+            const auto latest_release_tag = UpdateChecker::GetLatestRelease();
+            const auto build =
+                UpdateChecker::PickBuildVersion(Common::g_build_fullname, Common::g_scm_desc);
+            if (latest_release_tag && build &&
+                UpdateChecker::IsUpdateAvailable(*build, *latest_release_tag)) {
+                return QString::fromStdString(*latest_release_tag);
             }
             return QString{};
         });
@@ -8681,22 +8656,29 @@ void GMainWindow::OnEmulatorUpdateAvailable() {
     if (version_string.isEmpty())
         return;
 
+    // AzaharVR updatecheck: not over a game, a game starting or a window that is not on screen;
+    // the alert is dropped (no retry this run).
+    const bool covered = !isVisible() || isMinimized() || emulation_running ||
+                         !game_path.isEmpty() || (game_list && !game_list->isVisible());
+    if (covered) {
+        return;
+    }
+    const auto current =
+        UpdateChecker::PickBuildVersion(Common::g_build_fullname, Common::g_scm_desc);
+
     QMessageBox update_prompt(this);
     update_prompt.setWindowTitle(tr("Update Available"));
     update_prompt.setIcon(QMessageBox::Information);
     update_prompt.addButton(QMessageBox::Yes);
     update_prompt.addButton(QMessageBox::Ignore);
-    update_prompt.setText(tr("Update %1 for Azahar is available.\nWould you like to download it?")
-                              .arg(version_string));
+    update_prompt.setText(
+        tr("Update %1 for %2 is available.\nYou have version %3.\nWould you like to download it?")
+            .arg(version_string, QString::fromUtf8(Common::FrameProduct::kName),
+                 QString::fromStdString(current.value_or(std::string{}))));
     update_prompt.exec();
     if (update_prompt.button(QMessageBox::Yes) == update_prompt.clickedButton()) {
-        std::string update_page_url;
-        if (ShouldCheckForPrereleaseUpdates()) {
-            update_page_url = "https://github.com/azahar-emu/azahar/releases";
-        } else {
-            update_page_url = "https://azahar-emu.org/pages/download/";
-        }
-        QDesktopServices::openUrl(QUrl(QString::fromStdString(update_page_url)));
+        QDesktopServices::openUrl(QUrl(
+            QString::fromStdString(UpdateChecker::ReleasePageUrl(version_string.toStdString()))));
     }
 }
 #endif

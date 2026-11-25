@@ -2,103 +2,83 @@
 // Licensed under GPLv2 or any later version
 // Refer to the misc/licenses/gplv2.txt file included.
 
+// AzaharVR updatecheck: one HTTPS GET to GitHub's API for this project's latest release. Nothing
+// else is sent (no game, user or system information; the headers are the HTTP client's own).
+
+#include <array>
 #include <optional>
 #include <string>
-#include <fmt/format.h>
 #include <httplib.h>
-#include <json.hpp>
+#include "citra_qt/update_checker.h"
+#include "citra_qt/update_version.h"
+#include "common/file_util.h"
 #include "common/logging/log.h"
-#include "update_checker.h"
+#ifdef _WIN32
+#include "common/windows_ca_bundle.h"
+#endif
 
-static std::optional<std::string> GetResponse(std::string url, std::string path) {
-    constexpr std::size_t timeout_seconds = 15;
+namespace {
 
-    std::unique_ptr<httplib::Client> client = std::make_unique<httplib::Client>(url);
-    client->set_connection_timeout(timeout_seconds);
-    client->set_read_timeout(timeout_seconds);
-    client->set_write_timeout(timeout_seconds);
-
-    if (client == nullptr) {
-        LOG_ERROR(Frontend, "Invalid URL {}{}", url, path);
-        return {};
+// The static LibreSSL has no CA store of its own; the same lookup as the other downloads.
+const char* CaBundle() {
+#ifdef _WIN32
+    return Common::WindowsCaBundle();
+#else
+    static constexpr std::array<const char*, 4> candidates{
+        "/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt",
+        "/etc/ssl/cert.pem", "/etc/ssl/ca-bundle.pem"};
+    for (const char* path : candidates) {
+        if (FileUtil::Exists(path)) {
+            return path;
+        }
     }
-
-    httplib::Request request{
-        .method = "GET",
-        .path = path,
-    };
-
-    client->set_follow_location(true);
-    const auto result = client->send(request);
-    if (!result) {
-        LOG_ERROR(Frontend, "GET to {}{} returned null", url, path);
-        return {};
-    }
-
-    const auto& response = result.value();
-    if (response.status >= 400) {
-        LOG_ERROR(Frontend, "GET to {}{} returned error status code: {}", url, path,
-                  response.status);
-        return {};
-    }
-    if (!response.headers.contains("content-type")) {
-        LOG_ERROR(Frontend, "GET to {}{} returned no content", url, path);
-        return {};
-    }
-
-    return response.body;
+    return nullptr;
+#endif
 }
 
-std::optional<std::string> UpdateChecker::GetLatestRelease(bool include_prereleases) {
-    constexpr auto update_check_url = "http://api.github.com";
-    std::string update_check_path = "/repos/azahar-emu/azahar";
+} // namespace
+
+std::optional<std::string> UpdateChecker::GetLatestRelease() {
+    constexpr const char* host = "https://api.github.com";
+    constexpr const char* path = "/repos/simplysanatori/AzaharVR/releases/latest";
+    constexpr std::size_t max_body = 1024 * 1024;
+
+    const char* ca = CaBundle();
+    if (ca == nullptr) {
+        LOG_INFO(Frontend, "Update check: no certificate store found");
+        return std::nullopt;
+    }
     try {
-        if (include_prereleases) { // This can return either a prerelease or a stable release,
-                                   // whichever is more recent.
-            const auto update_check_tags_path = update_check_path + "/tags";
-            const auto update_check_releases_path = update_check_path + "/releases";
+        httplib::Client client(host);
+        client.set_connection_timeout(5);
+        client.set_read_timeout(10);
+        client.set_write_timeout(10);
+        client.set_follow_location(false);
+        client.set_ca_cert_path(ca);
+        client.enable_server_certificate_verification(true);
 
-            const auto tags_response = GetResponse(update_check_url, update_check_tags_path);
-            const auto releases_response =
-                GetResponse(update_check_url, update_check_releases_path);
-
-            if (!tags_response || !releases_response)
-                return {};
-
-            const std::string latest_tag =
-                nlohmann::json::parse(tags_response.value()).at(0).at("name");
-            const bool latest_tag_has_release =
-                releases_response.value().find(fmt::format("\"{}\"", latest_tag)) !=
-                std::string::npos;
-
-            // If there is a newer tag, but that tag has no associated release, don't prompt the
-            // user to update.
-            if (!latest_tag_has_release)
-                return {};
-
-            return latest_tag;
-        } else { // Stable releases only
-            update_check_path += "/releases/latest";
-            const auto response = GetResponse(update_check_url, update_check_path);
-
-            if (!response)
-                return {};
-
-            const std::string latest_tag = nlohmann::json::parse(response.value()).at("tag_name");
-            return latest_tag;
+        bool too_large = false;
+        std::string body;
+        const auto res = client.Get(
+            path, httplib::Headers{}, [](const httplib::Response&) { return true; },
+            [&](const char* data, std::size_t len) {
+                if (body.size() + len > max_body) {
+                    too_large = true;
+                    return false;
+                }
+                body.append(data, len);
+                return true;
+            });
+        if (too_large || !res) {
+            LOG_INFO(Frontend, "Update check: no answer");
+            return std::nullopt;
         }
-
-    } catch (nlohmann::detail::out_of_range&) {
-        LOG_ERROR(Frontend,
-                  "Parsing JSON response from {}{} failed during update check: "
-                  "nlohmann::detail::out_of_range",
-                  update_check_url, update_check_path);
-        return {};
-    } catch (nlohmann::detail::type_error&) {
-        LOG_ERROR(Frontend,
-                  "Parsing JSON response from {}{} failed during update check: "
-                  "nlohmann::detail::type_error",
-                  update_check_url, update_check_path);
-        return {};
+        if (res->status != 200) {
+            LOG_INFO(Frontend, "Update check: status {}", res->status);
+            return std::nullopt;
+        }
+        return TagFromReleaseJson(body);
+    } catch (...) {
+        return std::nullopt;
     }
 }

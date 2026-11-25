@@ -51,6 +51,10 @@ ConfigureGeneral::ConfigureGeneral(QWidget* parent)
 #endif
 #ifndef ENABLE_QT_UPDATE_CHECKER
     ui->updates_group->setVisible(false);
+#else
+    // AzaharVR updatecheck: only the latest release is checked; there is no pre-release channel
+    ui->update_channel_label->setVisible(false);
+    ui->update_channel_combobox->setVisible(false);
 #endif
 
     SetupAutosave(); // AzaharFrame autosave
