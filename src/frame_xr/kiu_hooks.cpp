@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cmath>
 #include <memory>
+#include <mutex> // AzaharFrame kiuhs3a
 #include <numbers>
 #include <string>
 #include "common/frame_emu_poll.h"
@@ -669,6 +670,9 @@ void CutsceneOff(State& s) {
 /// rate is brought to it, and the setting changed while the game runs says that it counts from the
 /// next start.
 std::atomic<bool> g_sixty{false};
+std::atomic<bool> g_sixty_off{false}; ///< AzaharFrame kiuhs3a: State::sixty_off
+std::mutex g_sixty_mutex;
+FileSys::Kiu60::RestartToast g_sixty_toast; ///< under g_sixty_mutex
 
 bool SixtyWanted() {
     const auto asked = Switch(FileSys::Kiu60::kSwitch);
@@ -682,7 +686,6 @@ void SixtyFps(State& s, uint64_t title, GuestMemory& mem) {
     if (!build) {
         return;
     }
-    const bool sixty = g_sixty.load(std::memory_order_relaxed);
     const K60::Run run = K60::g_run.load(std::memory_order_relaxed);
     if (!s.sixty_off && run != K60::Run::Leave) {
         const K60::Turned turned = K60::TurnTo(
@@ -700,15 +703,8 @@ void SixtyFps(State& s, uint64_t title, GuestMemory& mem) {
             s.sixty_off = true; // the loader's line says where, or a mod did it
         }
     }
-    static bool said = false; // emulation thread
-    const bool other = SixtyWanted() != sixty;
-    if (other != said && !s.sixty_off && run != K60::Run::Leave) {
-        said = other;
-        if (other) {
-            ShowToastText(sixty ? Menu::kKiu60FpsOffToast : Menu::kKiu60FpsOnToast,
-                          ToastTime::Long);
-        }
-    }
+    g_sixty_off.store(s.sixty_off, std::memory_order_relaxed);
+    NoteSixtyFps();
 }
 
 void Hook(int64_t ticks) {
@@ -1264,10 +1260,38 @@ void OnGameBoot() {
 
 void OnGameSettings(uint64_t /*title_id*/) {
     // AzaharFrame kiu60: what this run plays at; the setting changed later counts from the next.
-    g_sixty.store(SixtyWanted(), std::memory_order_relaxed);
+    {
+        std::scoped_lock lock{g_sixty_mutex};
+        g_sixty.store(SixtyWanted(), std::memory_order_relaxed);
+        g_sixty_toast = {}; // AzaharFrame kiuhs3a
+    }
     // AzaharFrame kiumode: every game, before its presets: the last run's code check and
     // registers are forgotten (no setting is written).
     Kiu::FirstPerson::OnGameBoot();
+}
+
+void NoteSixtyFps() {
+    namespace K60 = FileSys::Kiu60;
+    if (!K60::BuildFor(GameTitleId()) ||
+        K60::g_run.load(std::memory_order_relaxed) == K60::Run::Leave ||
+        g_sixty_off.load(std::memory_order_relaxed)) {
+        return;
+    }
+    std::scoped_lock lock{g_sixty_mutex};
+    const bool started = g_sixty.load(std::memory_order_relaxed);
+    switch (g_sixty_toast.Next(started, SixtyWanted())) {
+    case K60::RestartToast::Say::For60:
+        ShowToastText(Menu::kKiu60FpsOnToast, ToastTime::Long);
+        break;
+    case K60::RestartToast::Say::For30:
+        ShowToastText(Menu::kKiu60FpsOffToast, ToastTime::Long);
+        break;
+    case K60::RestartToast::Say::TakeBack:
+        HideToastText(started ? Menu::kKiu60FpsOffToast : Menu::kKiu60FpsOnToast);
+        break;
+    case K60::RestartToast::Say::Nothing:
+        break;
+    }
 }
 
 } // namespace FrameXr::Kiu::Hooks

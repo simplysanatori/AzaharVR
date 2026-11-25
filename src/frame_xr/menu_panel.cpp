@@ -40,6 +40,7 @@
 #include "frame_xr/vis/menu_diagram.h"
 #include "frame_xr/vis/visuals.h"
 #include "frame_xr/kiu_first_person.h" // AzaharFrame kiu131: Bottom Screen
+#include "frame_xr/kiu_hooks.h" // AzaharFrame kiuhs3a
 #include "input_common/frame_xr.h" // AzaharFrame pads: the mouse for the Pointer Test
 
 namespace FrameXr {
@@ -1841,6 +1842,7 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = std::clamp(value, 0, 1);
         Apply(v.vr_kiu_60fps, r.value != 0, per_game);
         r.setting = MenuSetting::Kiu60Fps;
+        Kiu::Hooks::NoteSixtyFps(); // AzaharFrame kiuhs3a: the toast now, over the menu
         break;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         r.value = std::clamp(value, 0, 1);
@@ -2076,6 +2078,8 @@ void MenuPanel::UseGlobal(Id id, Host& host) {
         ShowToastText("Hide Secondary Screen: From the Next Start", ToastTime::Long);
     } else if (id == Id::AsyncShaders && async != v.async_shader_compilation.GetValue()) {
         ShowToastText("Async Shader Compilation: From the Next Start", ToastTime::Long);
+    } else if (id == Id::Kiu60Fps) { // AzaharFrame kiuhs3a
+        Kiu::Hooks::NoteSixtyFps();
     }
     LOG_INFO(Frontend, "xr: in-game menu: {}: Use Global Value", Menu::LabelFor(id));
     MenuRequest r;
