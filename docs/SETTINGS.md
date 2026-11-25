@@ -11,7 +11,7 @@ The VR settings are in the **VR** group at the bottom of the **Graphics** tab.
 
 While a game with its own value runs, **Configure** still changes that row's global value; the game keeps its own, and pointing at the box says so.
 
-The in-game menu's **Settings** tab has three sections, **General**, **Graphics** and **Immersive**. The **Settings**, **Controls** and **Position** tabs have a **Global | Per-Game** switch at the top right, which opens on **Per-Game** while a game runs. **Global** changes every game. Pointing at **Per-Game** while it is picked shows how many values on the tab are set for this game (on **Settings**, in this section), and **Use Global Values for All**, in the **⋮** menu next to it, puts them back on the global values.
+The in-game menu's **Settings** tab has three sections, **General**, **Graphics** and **Immersive**; with a DS, Game Boy Advance or Game Boy game, **Console** comes first. The **Settings**, **Controls** and **Position** tabs have a **Global | Per-Game** switch at the top right, which opens on **Per-Game** while a game runs. **Global** changes every game. Pointing at **Per-Game** while it is picked shows how many values on the tab are set for this game (on **Settings**, in this section), and **Use Global Values for All**, in the **⋮** menu next to it, puts them back on the global values.
 
 **Detach Screens**, **Touchpad**, **Bottom Screen Reticle**, **Reticle Speed**, **At Edge**, **Aim Only While Pressed**, **Right Stick Moves Touch** and [Angel's Aim](#angels-aim)'s rows are only in the in-game menu. **Mouse Mode** and **Recentre at Edge** belong to a device and are on its **Edit Controls** page; they are kept in `user/controller-mappings.txt`.
 
@@ -28,7 +28,7 @@ The in-game menu's **Settings** tab has three sections, **General**, **Graphics*
 | [Controllers in Front of Screen](#controllers-in-front-of-screen) | **Off**, **Primary**, **Secondary**, **Both** | Both | global | at once |
 | [Show Stats](#show-stats) | on or off | off | global | at once |
 | [Stats Position](#stats-position) | **In Front**, **On Wrist** | In Front | global | at once |
-| [Screen Layout](#screen-layout) | **Stacked**, **Side by Side** | Stacked | global | at once |
+| [Screen Layout](#screen-layout) | **Stacked**, **Side by Side** | Stacked | global and per game | at once |
 | [Detach Screens](#detach-screens) | **Off**, **Secondary**, **Both** | Off | global | at once |
 | [Touchpad](#touchpad) | **Tap for Input**, **Click for Input** | Tap for Input | global and per game | at once |
 | [Bottom Screen Reticle](#bottom-screen-reticle) | **Off**, **Left Controller**, **Right Controller**, **Headset** | Off (Kid Icarus: Uprising: Headset) | global and per game | at once |
@@ -111,7 +111,7 @@ Makes one controller, or your head, the 3DS's gyroscope and accelerometer, for g
 
 The same controller still points at the screens. If that gets in the way, choose the hand you don't point with. **Off** leaves the 3DS lying flat and still. Going from **Off** to another choice takes effect the next time VR starts.
 
-It can be set for one game on the in-game menu's **Settings** tab, in **General**, with **Per-Game** picked, or in the game's **Properties**. In the global settings it sets the value the other games use; a game with its own value keeps it. Kid Icarus: Uprising starts with **Off**, because its C-Stick & Gyro mod aims with the gyroscope and the reticle moved whenever you did. Turn it on for that game if you want gyro aiming.
+It can be set for one game on the in-game menu's **Controls** tab, in **Motion**, with **Per-Game** picked, or in the game's **Properties**. In the global settings it sets the value the other games use; a game with its own value keeps it. Kid Icarus: Uprising starts with **Off**, because its C-Stick & Gyro mod aims with the gyroscope and the reticle moved whenever you did. Turn it on for that game if you want gyro aiming.
 
 ## Show Controllers
 
@@ -119,7 +119,7 @@ Shows the Frame controllers in your hands, with their buttons and sticks moving.
 
 ## Controllers in Front of Screen
 
-Shows the controllers, and a weapon in your hand, in front of a screen when they are nearer to you than it, so a hand held up in front of a screen stays in front and one reaching behind it goes behind. **Primary** and **Secondary** name the screens as **Detach Screens** does (after a swap the Secondary Screen is the Primary Screen); the screen left out covers the controllers wherever they are. **Both** does it for both screens. **Off** keeps the controllers behind every screen and menu, as before. With any choice but **Off**, the menus, the keyboard and the stats go by distance too, so a controller pointing at a menu shows in front of it; messages never cover the controllers, and neither does the immersive screen (what it shows is far away) unless the choice leaves it out. It is on the in-game menu's **Settings** tab, under **Show Controllers**, while that is on.
+Shows the controllers, and a weapon in your hand, in front of a screen when they are nearer to you than it, so a hand held up in front of a screen stays in front and one reaching behind it goes behind. **Primary** and **Secondary** name the screens as **Detach Screens** does (after a swap the Secondary Screen is the Primary Screen); the screen left out covers the controllers wherever they are. **Both** does it for both screens. **Off** keeps the controllers behind every screen and menu, as before. With any choice but **Off**, the menus, the keyboard and the stats go by distance too, so a controller pointing at a menu shows in front of it; messages never cover the controllers, and neither does the immersive screen (what it shows is far away) unless the choice leaves it out. It is on the in-game menu's **Controls** tab, in **Buttons**, under **Show Controllers**, while that is on.
 
 ## Show Stats
 
