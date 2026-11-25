@@ -30,7 +30,9 @@
 #include "frame_xr/test_switches.h"
 #include "frame_xr/kiu_cutscene.h" // AzaharFrame kiu140
 #include "frame_xr/kiu_ui.h" // AzaharFrame kiu1s
+#include "frame_xr/kiu_powers_live.h" // AzaharFrame kiupowers
 #include "video_core/kiu_hud.h" // AzaharFrame kiu1s
+#include "video_core/kiu_powers.h" // AzaharFrame kiupowers
 #include "video_core/kiu_sheets.h" // AzaharFrame kiu140
 #include "video_core/kiu_view_tap.h" // AzaharFrame kiuvr: the view register's tap
 
@@ -186,6 +188,8 @@ struct State {
     Ui::SteadyMenu ui_menu;
     Ui::SteadyMenu ui_weapon_menu; ///< the same, read whatever the switches say (the weapon)
     int menu_up = Ui::kNoMenu; ///< as said to the view
+    int powers_code = -1; ///< AzaharFrame kiupowers: as ui_code
+    bool powers_told = false;
     Kiu::EventWatch event_watch;
     bool cutscene = false;
     uint32_t angle_match = 0, angle_other = 0;
@@ -556,9 +560,51 @@ void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
     s.ui = now;
 }
 
+/// AzaharFrame kiupowers: the powers and the dots (kiu_powers.h), for the switches that ask.
+void PowersOff(State& s) {
+    s.powers_code = -1;
+    if (std::exchange(s.powers_told, false)) {
+        Kiu::Powers::SetGame({}, false);
+        VideoCore::KiuPowers::g_live.Set({});
+    }
+}
+/// The strip in the bottom screen's image: by the switch alone while the game runs, so the image
+/// is not remade as battles, cutscenes and menus come and go.
+void PowersStrip(bool game) {
+    const bool on = game && Kiu::Powers::SettingsNow().powers;
+    if (VideoCore::KiuPowers::g_live.strip.exchange(on, std::memory_order_relaxed) != on) {
+        LOG_INFO(Frontend, "xr: Kid Icarus hooks: the powers' strip under the bottom screen {}",
+                 on ? "on" : "off");
+    }
+}
+void ReadPowers(State& s, const KH::GameMemory& mem, bool playing) {
+    const Vis::Powers::Settings want = Kiu::Powers::SettingsNow();
+    if (!want.powers && !want.dots && !Kiu::Powers::AirNoBumpersWanted()) {
+        PowersOff(s);
+        return;
+    }
+    if (s.powers_code < 0) {
+        s.powers_code =
+            Kiu::Powers::CodeMatches(mem, s.build == &Input::KiuTurn::kBuildUsaRev1) ? 1 : 0;
+        LOG_INFO(Frontend, "xr: Kid Icarus hooks: the powers: {}",
+                 s.powers_code != 0 ? "their code matches" : "off: the game's code differs");
+    }
+    const Kiu::Powers::State now =
+        s.powers_code != 0 ? Kiu::Powers::Read(mem) : Kiu::Powers::State{};
+    Kiu::Powers::SetGame(now, playing);
+    VideoCore::KiuHud::Batch batch;
+    if (want.powers && playing && now.known && !now.air && !now.paused) {
+        batch = {now.vertex_base, now.index_offset, now.quads};
+    }
+    VideoCore::KiuPowers::g_live.gold.store(want.gold, std::memory_order_relaxed);
+    VideoCore::KiuPowers::g_live.Set(batch);
+    s.powers_told = true;
+}
+
 /// AzaharFrame kiu140: no game of this kind, or nothing asked for: no cutscene and nothing counted.
 void CutsceneOff(State& s) {
     UiOff(s); // AzaharFrame kiu1s
+    PowersOff(s); // AzaharFrame kiupowers
     s.cutscene_watch = {};
     s.wide_angle = {};
     s.event_watch = {};
@@ -576,6 +622,7 @@ void Hook(int64_t ticks) {
     if (!system.IsPoweredOn()) {
         s.process = nullptr;
         CutsceneOff(s); // AzaharFrame kiu140
+        PowersStrip(false); // AzaharFrame kiupowers
         VideoCore::Immersive::g_soft_draw_turn.store(false, std::memory_order_relaxed); // kiu2d
         VideoCore::Immersive::g_reticle_texture.store(0, std::memory_order_relaxed); // kiu131
         VideoCore::KiuSheets::g_mode.store(VideoCore::KiuSheets::Mode::Off,
@@ -592,6 +639,7 @@ void Hook(int64_t ticks) {
     if (!process) {
         s.process = nullptr;
         CutsceneOff(s); // AzaharFrame kiu140
+        PowersStrip(false); // AzaharFrame kiupowers
         Kiu::FirstPerson::SetGameCode(0, false); // AzaharFrame kiumode
         Kiu::FirstPerson::SupplyRegisters(false);
         VideoCore::Immersive::g_soft_draw_turn.store(false, std::memory_order_relaxed); // kiu2d
@@ -744,6 +792,7 @@ void Hook(int64_t ticks) {
     const char* const as_other =
         fp_wanted && !first_person ? "; Angel's Aim plays as Full (6DoF): Other Games" : "";
 
+    PowersStrip(mapped && s.code_ok); // AzaharFrame kiupowers
     if (!first_person) {
         CutsceneOff(s); // AzaharFrame kiu140
     }
@@ -923,6 +972,7 @@ void Hook(int64_t ticks) {
         Kiu::FirstPerson::SetBattle(wide_in);
         if (first_person) { // AzaharFrame kiu1s
             ReadUi(s, mem, wide_in);
+            ReadPowers(s, mem, wide_in && !cutscene); // AzaharFrame kiupowers
         }
         if (cutscene != s.cutscene) {
             LOG_INFO(Frontend,

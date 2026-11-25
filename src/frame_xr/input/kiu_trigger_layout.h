@@ -37,6 +37,13 @@
 //     as the recentre (the player reports had a trigger recentre). NOT proven: no recentre was
 //     found on the desktop, so this is the slot for it; let go sooner, the bumper picks the power.
 // The Frame's D-pad keeps its own presses (they are added to).
+//
+// AzaharFrame kiupowers: in an air battle (Frame::air: Angel's Aim, the power panel's air flag,
+// frame_xr/kiu_powers.h) the game takes any of D-pad Left, Right and Down as "use the special
+// attack", so there the bumpers send nothing (a slip would spend a dot, 52 s of charge, and so
+// would a chord of both bumpers); the other trigger's D-pad Down is the special attack. A bumper
+// pressed in the air picks nothing when let go over land either.
+// AZAHARFRAME_KIU_SKY_BUMPERS=1: as before (the bumpers use it too).
 
 #pragma once
 
@@ -72,6 +79,7 @@ struct Frame {
     GyroAimMode mode = GyroAimMode::Off;
     Hand aiming = Hand::Right;
     uint64_t time_ns = 0;
+    bool air = false; ///< AzaharFrame kiupowers: an air battle: the bumpers send nothing
 
     /// Whether the layout is in use: Fire and Power, with Aiming on.
     bool Active() const {
@@ -109,7 +117,11 @@ public:
         for (std::size_t i = 0; i < 2; i++) {
             Bumper& b = bumpers_[i];
             uint64_t& press = i == 0 ? previous_until_ : next_until_;
-            if (bump[i] && !b.down) {
+            if (f.air) { // kiupowers: nothing sent, nothing left to send later
+                b.down = bump[i];
+                b.long_hold = true;
+                press = 0;
+            } else if (bump[i] && !b.down) {
                 b.down = true;
                 b.since = f.time_ns;
                 b.long_hold = false;

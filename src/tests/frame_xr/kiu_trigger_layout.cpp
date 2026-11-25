@@ -265,3 +265,66 @@ TEST_CASE("Trigger Layout: the Frame's D-pad keeps working", "[kiufire]") {
     l.Apply(c, off);
     CHECK(OnlyThese(Step(l, {}, On(GyroAimMode::Gyro, Hand::Right, 200 * kMs)), {}));
 }
+
+// AzaharFrame kiupowers: in an air battle any of D-pad Left, Right and Down uses the special attack.
+TEST_CASE("Trigger Layout: in the air the bumpers send nothing, the other trigger does",
+          "[kiufire][kiupowers]") {
+    for (const GyroAimMode mode : {GyroAimMode::LightGun, GyroAimMode::Gyro}) {
+        Layout layout;
+        const auto run = [&](std::initializer_list<Control> held, uint64_t ms, bool air) {
+            Frame f = On(mode, Hand::Right, ms * kMs);
+            f.air = air;
+            ControlState c = With(held);
+            layout.Apply(c, f);
+            return c;
+        };
+        const auto none = [](const ControlState& c) {
+            return !c.Get(Control::DpadLeft) && !c.Get(Control::DpadRight) &&
+                   !c.Get(Control::DpadDown) && !c.Get(Control::TriggerL) &&
+                   !c.Get(Control::BumperL) && !c.Get(Control::BumperR);
+        };
+        // A tap, a long hold, and both at once (a chord): nothing, pressed or let go.
+        uint64_t t = 0;
+        for (; t < 900; t += 10) {
+            CHECK(none(run({Control::BumperL}, t, true)));
+        }
+        for (; t < 1200; t += 10) {
+            CHECK(none(run({}, t, true)));
+        }
+        for (; t < 1500; t += 10) {
+            CHECK(none(run({Control::BumperL, Control::BumperR}, t, true)));
+        }
+        for (; t < 1800; t += 10) {
+            CHECK(none(run({}, t, true)));
+        }
+        // The other trigger: one D-pad Down a pull, and the aiming one still fires.
+        CHECK(run({Control::TriggerL}, t, true).Get(Control::DpadDown));
+        CHECK_FALSE(run({Control::TriggerL}, t + 150, true).Get(Control::DpadDown));
+        CHECK(run({Control::TriggerR}, t + 200, true).Get(Control::BumperL));
+        t += 400;
+        // Held from the air into land, then let go: no late press.
+        CHECK(none(run({Control::BumperR}, t, true)));
+        for (uint64_t k = 10; k < 700; k += 10) {
+            CHECK(none(run({Control::BumperR}, t + k, false)));
+        }
+        for (uint64_t k = 700; k < 1000; k += 10) {
+            CHECK(none(run({}, t + k, false)));
+        }
+        t += 1000;
+        // Pressed over land just before the air: what is left of the press is not sent there.
+        run({Control::BumperR}, t, false);
+        run({}, t + 20, false);
+        CHECK(none(run({}, t + 40, true)));
+        CHECK(none(run({}, t + 60, false)));
+        t += 400;
+        // Land again: the bumpers pick as before.
+        bool right = false;
+        for (uint64_t k = 0; k < 300; k += 10) {
+            right |= run(k < 50 ? std::initializer_list<Control>{Control::BumperR}
+                                : std::initializer_list<Control>{},
+                         t + k, false)
+                         .Get(Control::DpadRight);
+        }
+        CHECK(right);
+    }
+}
