@@ -281,3 +281,19 @@ TEST_CASE("Kid Icarus 60: the touch turns as far as at 30", "[kiu60]") {
         }
     }
 }
+
+// AzaharFrame kiuhs3a: said once a change, whoever sees it first (the menu, then the hook).
+TEST_CASE("Kid Icarus 60 FPS: the restart toast", "[core][kiuhs3a]") {
+    using Say = FileSys::Kiu60::RestartToast::Say;
+    for (const bool started : {false, true}) {
+        FileSys::Kiu60::RestartToast t;
+        CHECK(t.Next(started, started) == Say::Nothing); // a run at the setting
+        const Say other = started ? Say::For30 : Say::For60;
+        CHECK(t.Next(started, !started) == other);       // the menu
+        CHECK(t.Next(started, !started) == Say::Nothing); // the hook, after it closed
+        CHECK(t.Next(started, !started) == Say::Nothing);
+        CHECK(t.Next(started, started) == Say::TakeBack); // back at the running rate: no toast
+        CHECK(t.Next(started, started) == Say::Nothing);
+        CHECK(t.Next(started, !started) == other); // changed again: again
+    }
+}

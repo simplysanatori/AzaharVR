@@ -421,6 +421,122 @@ TEST_CASE("Kid Icarus UI: the portraits' part of the Secondary Screen's image", 
     CHECK(PortraitPlace(false, -40.0f).y < PortraitPlace(false).y);
 }
 
+// AzaharFrame kiuhs3a: the portraits in the words' plane: their angle and depth, each eye's.
+TEST_CASE("Kid Icarus UI: the portraits where the words are", "[frame_xr][kiuhs3a]") {
+    using namespace FirstPerson;
+    namespace L = FrameXr::Immersive::Layout;
+    using FrameXr::Input::Vec3f;
+    namespace In = FrameXr::Input;
+    constexpr float kDeg = 3.14159265f / 180.0f;
+    constexpr float kHalfIpd = 0.0339f;
+    L::HeadLocked s;
+    s.tan_half_y = std::tan(56.0f * kDeg);
+    s.aspect = std::tan(63.0f * kDeg) / s.tan_half_y;
+    s.pitch_rad = -5.1f * kDeg;
+    s.distance = 4.57f;
+    const float tan_x = s.tan_half_y * s.aspect, tan_y = s.tan_half_y;
+    const auto cross = [](const Vec3f& a, const Vec3f& b) {
+        return Vec3f{a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
+    };
+    const auto angle = [&](const Vec3f& a, const Vec3f& b) { // degrees; exact near 0
+        return std::atan2(In::Length(cross(a, b)), In::Dot(a, b)) / kDeg;
+    };
+    struct Seen {
+        Vec3f ray[2]; // from each eye
+        float vergence = 0.0f, plane = 0.0f; // along the screen's facing; 0 m: as far as can be
+        float elevation = 0.0f, azimuth = 0.0f, high = 0.0f;
+    };
+    // A point of the screen (its coordinates) and a half height there, as the eyes see it.
+    const auto seen = [&](float u, float v, float half_v, float quad_half) {
+        Seen out;
+        for (int eye = 0; eye < 2; eye++) {
+            const In::Posef screen = L::FullQuadInView(s, 3, eye, kHalfIpd, quad_half);
+            const Vec3f e{L::EyeX(eye, kHalfIpd), 0.0f, 0.0f};
+            const auto at = [&](float up) {
+                return In::Transform(screen, {u * 0.5f * s.width(), up * 0.5f * s.height(), 0.0f}) -
+                       e;
+            };
+            out.ray[eye] = In::Normalized(at(v));
+            out.high = angle(at(v - half_v), at(v + half_v));
+        }
+        out.vergence = angle(out.ray[0], out.ray[1]);
+        // Where the two meet: how far, along the screen's facing.
+        const float per = out.ray[0].x / -out.ray[0].z - out.ray[1].x / -out.ray[1].z;
+        if (per > 1e-5f) {
+            const float ahead = 2.0f * kHalfIpd / per;
+            const float k = ahead / -out.ray[0].z;
+            const Vec3f at{L::EyeX(0, kHalfIpd) + out.ray[0].x * k, out.ray[0].y * k, -ahead};
+            const In::Quatf facing = L::FullQuadInView(s, 3, 0, kHalfIpd, quad_half).orientation;
+            out.plane = In::Dot(at, In::Rotate(facing, {0.0f, 0.0f, -1.0f}));
+        }
+        const Vec3f mid = In::Normalized(out.ray[0] + out.ray[1]);
+        out.elevation = std::asin(mid.y) / kDeg;
+        out.azimuth = std::atan2(mid.x, -mid.z) / kDeg;
+        return out;
+    };
+    const auto words = [&](float height_deg, float quad_half) {
+        VideoCore::KiuHud::Wanted w;
+        w.subtitle_height = height_deg;
+        const VideoCore::KiuHud::Place hud =
+            VideoCore::KiuHud::PlaceFor(w, tan_x, tan_y, s.pitch_rad);
+        return seen(0.0f, hud.subtitle_up, hud.subtitle_half_up, quad_half);
+    };
+    const auto portraits = [&](const PanelInView& p, float quad_half) {
+        const InPlane at = ToPlane(p, s.pitch_rad, tan_x, tan_y);
+        return seen(at.u, at.v, at.half_v, quad_half);
+    };
+    for (const bool right : {false, true}) {
+        for (const float height : {-40.0f, -18.0f, 0.0f, 22.0f}) {
+            INFO("right " << right << ", Subtitle Height " << height);
+            const PanelInView linked = PortraitPlace(right, height);
+            // The direction they had, to a hundredth of a degree.
+            const Seen p = portraits(linked, kHalfIpd), w = words(height, kHalfIpd);
+            const float up = std::asin(linked.y / 0.8f) / kDeg;
+            CHECK(p.elevation == Catch::Approx(up).margin(0.01));
+            CHECK(p.azimuth == Catch::Approx(right ? 25.0f : -25.0f).margin(0.01));
+            const float facing = 2.0f * std::atan(0.5f * linked.height / 0.8f) / kDeg;
+            // (as foreshortened up and down as the words at that height)
+            CHECK(p.high == Catch::Approx(facing * std::cos(up * kDeg - s.pitch_rad)).margin(0.4));
+            // As far as the words: the eyes' lines parallel (before: 4.86 degrees).
+            CHECK(p.vergence < 0.005f);
+            CHECK(w.vergence < 0.005f);
+            CHECK(w.elevation == Catch::Approx(height).margin(0.01));
+        }
+        // Separate: the sliders' degrees.
+        for (const float across : {-20.0f, 0.0f, 20.0f}) {
+            for (const float up : {-20.0f, 0.0f, 20.0f}) {
+                const PanelInView own = PortraitPlace(right, kPortraitWordsDeg, across, up);
+                const Seen p = portraits(own, kHalfIpd);
+                CHECK(p.elevation == Catch::Approx(-kPortraitDownDeg + up).margin(0.01));
+                CHECK(p.azimuth == Catch::Approx((right ? 25.0f : -25.0f) + across).margin(0.01));
+                CHECK(p.vergence < 0.005f);
+            }
+        }
+        // Screens moved in (the game's 3D depth, Mode3Natural): the two go nearer as one.
+        for (const float quad_half : {0.030f, 0.020f, 0.010f}) {
+            const Seen p = portraits(PortraitPlace(right), quad_half);
+            const Seen w = words(kPortraitWordsDeg, quad_half);
+            INFO("the screens " << quad_half << " m from the middle");
+            const float plane = s.distance * kHalfIpd / (kHalfIpd - quad_half);
+            CHECK(w.plane == Catch::Approx(plane).epsilon(0.005));
+            CHECK(p.plane == Catch::Approx(plane).epsilon(0.005));
+            CHECK(p.vergence > 0.05f);
+        }
+    }
+    // As before: 0.8 m, 4.86 degrees between the eyes' lines.
+    const PanelInView old = PortraitPlace(false);
+    const Vec3f at{old.x, old.y, old.z};
+    const float was = angle(at - Vec3f{-kHalfIpd, 0, 0}, at - Vec3f{kHalfIpd, 0, 0});
+    CHECK(was > 4.2f);
+    CHECK(was < 4.9f);
+    // Far aside (Separate): held, finite.
+    const InPlane far_aside =
+        ToPlane(PortraitPlace(true, kPortraitWordsDeg, 60.0f, 40.0f), s.pitch_rad, tan_x, tan_y);
+    CHECK(std::isfinite(far_aside.u));
+    CHECK(std::hypot(far_aside.u * tan_x, far_aside.v * tan_y) ==
+          Catch::Approx(std::tan(kInPlaneMostDeg * kDeg)).margin(0.01));
+}
+
 TEST_CASE("Kid Icarus UI: the menu panel's two screens", "[frame_xr][kiu1s]") {
     using namespace FirstPerson;
     CHECK(MenuPlaceFor(0).width_deg == kMenuPlace.width_deg);

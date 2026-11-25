@@ -695,6 +695,15 @@ TEST_CASE("Dynamic Resolution: the remembered levels' file", "[frame_xr][fixd]")
     const std::string text = FormatStore(levels);
     CHECK(text == "0004000000030800 4\n0004000000030800 3 bfi\n0004000000125600 5\n");
     CHECK(ParseStore(text) == levels);
+    // AzaharFrame kiuhs3a: the 60 FPS levels' lines
+    const uint64_t kiu = 0x0004000000030200ULL;
+    const LevelList four{{{kiu, 0}, 5}, {{kiu, kLevelBfi}, 4}, {{kiu, kLevelSixty}, 3},
+                         {{kiu, kLevelBfi | kLevelSixty}, 2}};
+    const std::string words = FormatStore(four);
+    CHECK(words == "0004000000030200 5\n0004000000030200 4 bfi\n0004000000030200 3 60\n"
+                   "0004000000030200 2 bfi60\n");
+    CHECK(ParseStore(words) == four);
+    CHECK(ParseStore("0004000000030200 3 6\n0004000000030200 3 600\n").empty());
     // lines this build cannot read are left out; the last line for a game wins
     const auto parsed = ParseStore("# a comment\n0004000000030800 4\nzz 3\n0004000000030800 5\n"
                                    "0000000000000000 4\n0004000000054000 0\n0004000000054000 99\n"
@@ -1454,6 +1463,141 @@ TEST_CASE("Dynamic Resolution: a hold with Black Frame Insertion asked for but n
     }
     CHECK(RememberedFactor(title, false) == 6);
     Uninstall();
+    SetLevelStore({});
+    setting.SetValue(was);
+    factor.SetValue(was_factor);
+    V::g_base = 0;
+}
+
+// AzaharFrame kiuhs3a: Kid Icarus: Uprising at 60 FPS: down to kSixtyFloor under the setting,
+// with levels of its own; everything else at the setting.
+TEST_CASE("Dynamic Resolution: the floor at 60 FPS", "[frame_xr][kiuhs3a]") {
+    CHECK(kSixtyFloor == 2);
+    for (int setting = 2; setting <= 10; setting++) {
+        for (int base = setting; base <= setting + 2; base++) {
+            INFO("setting " << setting << "x, drawn at " << base << "x");
+            CHECK(FloorFactor(base, setting) == setting); // 30 FPS, every other game
+            CHECK(FloorFactor(base, setting, kFloorAtSetting, true) == 2);
+            CHECK(base - MaxDrop(base, setting, kFloorAtSetting, true) == 2);
+        }
+    }
+    // 1x: nothing to do, at either rate; Auto: as it is at 30.
+    CHECK(MaxDrop(3, 1, kFloorAtSetting, true) == 0);
+    CHECK(MaxDrop(6, 0, kFloorAtSetting, true) == MaxDrop(6, 0));
+    // A setting of 2x: the same floor at both rates.
+    CHECK(MaxDrop(4, 2, kFloorAtSetting, true) == MaxDrop(4, 2));
+    CHECK(MaxDrop(2, 2, kFloorAtSetting, true) == 0);
+    // Drawn under the floor (no setting does it): nothing comes off.
+    CHECK(MaxDrop(1, 4, kFloorAtSetting, true) == 0);
+}
+
+TEST_CASE("Dynamic Resolution: 60 FPS on and off", "[frame_xr][kiuhs3a]") {
+    namespace V = VideoCore::DynamicResolution;
+    auto& setting = Settings::values.vr_dynamic_resolution;
+    auto& factor = Settings::values.resolution_factor;
+    const bool was = setting.GetValue();
+    const auto was_factor = factor.GetValue();
+    setting.SetValue(true);
+    factor.SetValue(4);
+    std::map<LevelKey, int> disk;
+    const uint64_t title = 0x0004000000030200ULL;
+    LevelStore store;
+    store.load = [&] { return LevelList(disk.begin(), disk.end()); };
+    store.save = [&](LevelList levels) {
+        disk = std::map<LevelKey, int>(levels.begin(), levels.end());
+    };
+    store.title = [&] { return title; };
+    const auto run = [](Second s, int n, bool sixty) {
+        s.sixty_fps = sixty;
+        for (int i = 0; i < n; i++) {
+            NoteSecond(s);
+        }
+    };
+    Second off = Fine();
+    off.live = false;
+    SetLevelStore(store);
+    V::Apply(6); // a Full mode over 4x
+    Install();
+
+    // 30 FPS, the GPU far behind: the setting.
+    run(GpuBehind(), 200, false);
+    CHECK(V::Apply(6) == 4);
+    CHECK(RememberedFactor(title) == 4);
+    // The game started again at 60: from the level at 30, then down to 2x, its own level.
+    run(off, 2, true);
+    CHECK(V::Apply(6) == 4);
+    run(GpuBehind(), 300, true);
+    CHECK(V::Apply(6) == 2);
+    CHECK(RememberedFactor(title, false, true) == 2);
+    CHECK(RememberedFactor(title) == 4);
+    // A Load at 60: 2x again.
+    run(off, 2, true);
+    CHECK(V::Apply(6) == 2);
+    run(Neutral(), 1, true);
+    CHECK(V::Apply(6) == 2);
+    // Back at 30: its own level, never the one at 60.
+    run(off, 2, false);
+    CHECK(V::Apply(6) == 4);
+    run(Neutral(), 1, false);
+    CHECK(V::Apply(6) == 4);
+    Uninstall();
+
+    // Nothing remembered at 30: a run at 30 starts at the top whatever 60 remembers.
+    disk = {{{title, kLevelSixty}, 2}, {{title, kLevelBfi | kLevelSixty}, 2}};
+    SetLevelStore(store);
+    Install();
+    run(Neutral(), 1, false);
+    CHECK(V::Apply(6) == 6);
+    // Started while the screens were off with the rate not known yet: from the first second.
+    run(off, 1, false);
+    run(Neutral(), 1, true);
+    CHECK(V::Apply(6) == 2);
+    Uninstall();
+
+    // Black Frame Insertion's level: the four are apart.
+    disk = {{{title, 0}, 5}, {{title, kLevelSixty}, 3}};
+    SetLevelStore(store);
+    Install();
+    run(Bfi(3.0), 1, true); // none of its own: the one at 60 without it
+    CHECK(V::Apply(6) == 3);
+    run(Bfi(0.95 * kPeriod, 5, 2, 1.6 * kPeriod), 300, true);
+    CHECK(V::Apply(6) == 2);
+    CHECK(RememberedFactor(title, true, true) == 2);
+    CHECK(RememberedFactor(title, false, true) == 3);
+    CHECK(RememberedFactor(title, true, false) == 0);
+    CHECK(RememberedFactor(title, false, false) == 5);
+    run(Neutral(), 1, true); // Black Frame Insertion off
+    CHECK(V::Apply(6) == 3);
+    run(Bfi(3.0), 1, false); // at 30 with it: the one at 30 without it
+    CHECK(V::Apply(6) == 5);
+    Uninstall();
+
+    // Internal Resolution changed while it runs at 60: from the new one, down to 2x again.
+    disk.clear();
+    SetLevelStore(store);
+    Install();
+    run(GpuBehind(), 300, true);
+    CHECK(V::Apply(6) == 2);
+    factor.SetValue(3);
+    Reset();
+    V::Apply(5);
+    run(Neutral(), 1, true);
+    CHECK(V::Apply(5) == 5);
+    run(GpuBehind(), 300, true);
+    CHECK(V::Apply(5) == 2);
+    // To 2x: the floor is the setting; to 1x: nothing to do.
+    factor.SetValue(2);
+    Reset();
+    V::Apply(4);
+    run(GpuBehind(), 300, true);
+    CHECK(V::Apply(4) == 2);
+    factor.SetValue(1);
+    Reset();
+    V::Apply(3);
+    run(GpuBehind(), 300, true);
+    CHECK(V::Apply(3) == 3);
+    Uninstall();
+
     SetLevelStore({});
     setting.SetValue(was);
     factor.SetValue(was_factor);

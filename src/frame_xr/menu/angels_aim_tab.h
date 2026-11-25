@@ -159,6 +159,8 @@ inline constexpr const char* kKiuHudTip =
 inline constexpr const char* kKiuHudSizeRow = "HUD Size"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuHudSizeTip =
     "How big the HUD is.";
+inline constexpr const char* kKiuHudOpacityRow = "HUD Opacity"; // AzaharFrame kiuhs3a PROPOSED
+inline constexpr const char* kKiuHudOpacityTip = "How solid the health bar and score are.";
 inline constexpr const char* kKiuArmRow = "Pit's Arm"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuArmTip =
     "Your free hand is Pit's arm instead of the controller.";

@@ -137,6 +137,7 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_kiu_cutscenes); // AzaharFrame kiu140
     f(v.vr_kiu_hud); // AzaharFrame kiu140
     f(v.vr_kiu_hud_size); // AzaharFrame kiu140
+    f(v.vr_kiu_hud_opacity); // AzaharFrame kiuhs3a
     f(v.vr_kiu_arm); // AzaharFrame kiu140
     f(v.vr_kiu_hud_linked); // AzaharFrame kiu140
     f(v.vr_kiu_hud_across); // AzaharFrame kiu140

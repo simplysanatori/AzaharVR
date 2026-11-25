@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include "video_core/kiu_hud.h" // AzaharFrame kiuhud
+#include "video_core/kiu_hud_fade.h" // AzaharFrame kiuhs3a
 #include "video_core/rasterizer_interface.h"
 #include "video_core/shader/generator/pica_fs_config.h"
 #include "video_core/shader/generator/shader_uniforms.h"
@@ -133,8 +134,10 @@ protected:
     /// into each colour buffer (each eye's); the CPU-shaded draws into a buffer get its turn.
     struct SoftClip {
         float h[4][4]{};
+        float z_scale = 0.0f, z_constant = 0.0f; ///< AzaharFrame kiuhs3: the projection's third row
         u32 buffer = 0;
         u32 serial = 0;
+        u32 age = 0; ///< AzaharFrame kiuhs3: the pictures begun since (SetVRData)
         bool valid = false;
     };
     std::array<SoftClip, 4> vr_soft_clip{};
@@ -153,8 +156,14 @@ public:
     /// mode 3's world (vr_soft_clip), when g_soft_draw_turn is on and they go to the buffer the
     /// world went to. The backends call it before drawing them.
     void TurnSoftwareVertices();
+    /// AzaharFrame kiuhs3a: what TurnSoftwareVertices found of it for HUD Opacity.
+    KiuHudFade::Piece hud_piece;
     /// AzaharFrame kiuhud: the hub's veil or heart bag (hud_flat holds it) to the page's frame.
     void MoveCard(const VideoCore::KiuHud::Place& place);
+    /// AzaharFrame kiuhs3: the hub's 2D, placed (vertex_batch), fixed in the room (kiu_hud.h InRoom).
+    void PutInRoom();
+    /// AzaharFrame kiuhs3: the direction marks' draw at the edges of its frame; false: another draw.
+    bool MoveMarks(const VideoCore::KiuHud::Place& place);
     /// AzaharFrame kiu131: whether this draw is the reticle Reticle Size scales (kiu_view_tap.h):
     /// such a draw is not accelerated, so its vertices can be scaled on the CPU.
     bool ReticleDraw() const;

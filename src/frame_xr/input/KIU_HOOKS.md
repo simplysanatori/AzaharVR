@@ -319,6 +319,7 @@ them.
 | `AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]` | in third person (unset: the setting Third Person, `vr_kiu_over_shoulder`, 2.5 m back and 0.5 m up when on; `0` off whatever the setting; AzaharFrame kiutoggles): the eye this many metres behind, above and to the right of the first-person eye along the camera's level view (game units = metres × the leaning scale, 7.7 per metre at life size); `AZAHARFRAME_KIU_EYE_OFFSET` wins |
 | `AZAHARFRAME_KIU_WRIST_SCREEN=0\|1` | Angel's Aim's Secondary Screen on the off hand's wrist (default 0, off; unset: the setting Bottom Screen's Wrist, `vr_kiu_bottom_screen`, AzaharFrame kiu131; before it Secondary Screen on Wrist; `1` wins over Persistent): shown while the wrist is turned up, touched by the aiming hand's beam without a shot ("The Secondary Screen on the wrist" below) |
 | `AZAHARFRAME_KIU_FP_FACTOR=<f>` | the most the game draws past its own frame on either axis in first person (1 to 8, default 6); past it the screen is smaller on that axis ("The screen in first person" below) |
+| `AZAHARFRAME_KIU_CLEAR=0\|1` | what nothing draws in the picture is black (default 1 in first person): the game fills each eye's depth, never its colour, and past its frame a colour buffer kept the bottom screen's pieces (EUR 18000000) or the last pictures'; a picture that starts with a world draw (after the fills) is cleared first (`video_core/kiu_clear.h`; AzaharFrame kiuhs3). V (Chapter 2, the eye 60 units under the floor, 30 and 60): the pieces and smears gone in both eyes, the hub's picture the same on and off; the game's own exposure (from the whole picture) goes up over the black |
 | `AZAHARFRAME_KIU_PAGE=0`, `AZAHARFRAME_KIU_HUD_EXACT=0` | off: the 2D as before ("Single screen" below; AzaharFrame kiuhud); on without them, first person only, live |
 | `AZAHARFRAME_KIU_HUD_CENSUS=<n>`, `AZAHARFRAME_KIU_HUD_COST=1` | log only, off by default: each kind of 2D draw of the top screen once (and again for another `<n>`) with what was made of it; the HUD's cost every 300 VBlanks |
 | `AZAHARFRAME_KIU_TALK_TOP=1`, `AZAHARFRAME_KIU_PAUSE_PANEL=1`, `AZAHARFRAME_KIU_PORTRAITS=1`, `AZAHARFRAME_KIU_MENU_SCREENS=1`, `AZAHARFRAME_KIU_MENU_PANEL=1`, `AZAHARFRAME_KIU_UI_TRACE=1` | the single screen's, each off without it, first person only, live ("Single screen" below; AzaharFrame kiu1s) |
@@ -1193,12 +1194,22 @@ in both builds by its code; no code or layout of it is used.
   and not turned, so it covers the whole view. The hub (menu 3): the game's words and number are flat 2D, but the veil behind the words, the heart bag and its shadow are
   depth tested cards in front of the room's camera (one 64 x 64 RGBA4 texture, 40 units away, 6 or 12 vertices; nothing else of the room is: census). They all go to the
   HUD's frame (`PageInView`, `MoveCard`), in front of the room's depth; the veil, which hangs off three sides of the game's screen, is drawn again with all sides fading (`SoftVeil`).
-  V: bag and number together, following the head, turned 15 degrees and 35 down. The room's own sheets and floor reflection still end where the game's frame did.
+  The room's own sheets and floor reflection still end where the game's frame did.
+  AzaharFrame kiuhs3: all of it is fixed in the room (`InRoom`): the HUD's frame in front of the game's camera, 40 units away as the game's own cards, through the
+  world's turn for that eye ("The game's sprites" above; the picture before's while this one's world is not drawn yet, none with `AZAHARFRAME_KIU_FP_2D=0`: with the head).
+  V (30 and 60 FPS): at rest where it was (words on the same pixels, bag within 3 of 1600); the head turned 15 and 30, 15 down, moved 0.4 m, re-centred turned 30: with the room; rolled 20 (30 FPS) too; the words change with the choice, the battle that follows has none of it.
+  Other pages and a battle's results as before.
 - **`AZAHARFRAME_KIU_HUD_EXACT` (on; `0` off).** The HUD's draws are the top screen's draws of that context
   (vertex base and index offset, `KiuHud::InBatch`) and no others but the console's battery (the dialogs' context; `IsBattery`), each moved as one by its own middle.
   The flush (EUR 0x92F5A0) only adds to a list that is replayed later for both eyes, so a draw's caller
   is not known. Batch not known: the guess (`MayBeHud`), as without the switch. V (air, land): every HUD draw logged as exact; on land the bar and score are on the same pixels as by the guess (best match at no shift).
   Clip y is across to the LEFT: until kiuhud the guess had the bar's and the score's groups swapped, so the bar's right end (0.3 to 0.45) went with the middle.
+  AzaharFrame kiuhs3: the direction marks (the orange strips and corners): EUR 0x92F05C (context, mask), called by the score's draw (0x9F31F8) with
+  `[context + 0x8EC]`: one bit for each of eight directions round the game's camera, top, then clockwise; a table of their corners at 0xD49A48, some 8 pixels
+  past the frame; one draw of 1 to 8 quads, 0xFF2384F2, the 256 x 256 IA4 atlas, whose shapes there are in its colour where its alpha is 0 (an HD texture that does not
+  keep that colour draws triangles and solid blocks, Immersive Mode on or off). Moved as one piece the strip sat on the bar, a corner behind the score, a side in
+  mid view. Now (`MoveMarks`) each is cut at the frame and put at the same edge of a frame as large as the game camera's (45 degrees high, straight ahead), its top
+  above the bar and score where they are across it. The mask has no more than eight steps: no ray to the enemy.
 - **`AZAHARFRAME_KIU_TALK_TOP=1`.** One word (EUR 0x60D804, USA 0x60D6B8: `bne`, the message is the bottom
   screen's, to `mov r0, r0`), group "talk on top": the top pass draws the line with the game's own function for
   the top screen (EUR 0x9E9D2C), as Subtitles: Upper does. The bottom keeps its line, the setting is not touched.

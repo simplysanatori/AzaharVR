@@ -85,6 +85,11 @@
 //   - two remembered levels a game (the owner, 2026-11-17): one with Black Frame Insertion asked
 //     for (Second::bfi_asked), one without. A step taken for it is its own level only, so
 //     turning it off goes back to the other level (or the setting) at once.
+//
+// AzaharFrame kiuhs3a (the owner, 2026-11-25): while Kid Icarus: Uprising runs at 60 FPS
+// (Second::sixty_fps) the floor is kSixtyFloor instead of the setting, where the setting is above
+// it; every other game, and this one at 30, keep the floor above. The line is the GPU's as before.
+// Its levels are its own (two more, LevelKey), so a run at 30 never starts from one.
 
 #pragma once
 
@@ -129,6 +134,8 @@ struct Second {
     /// which of the game's two remembered levels is in use (the owner, 2026-11-17: a step taken
     /// for it never lowers the level without it).
     bool bfi_asked = false;
+    /// AzaharFrame kiuhs3a: the game on view is Kid Icarus: Uprising at 60 FPS.
+    bool sixty_fps = false;
 };
 
 /// AzaharFrame bfidr: while Black Frame Insertion flashes in a Full mode, a picture late is lit
@@ -254,19 +261,25 @@ private:
 /// has nothing to do) or may go down to 1x (false, as in 1.1.1: in the immersive modes it could
 /// go under the setting, e.g. 3x under a 4x setting).
 inline constexpr bool kFloorAtSetting = true;
+/// AzaharFrame kiuhs3a: the floor under a higher Internal Resolution setting at 60 FPS.
+inline constexpr int kSixtyFloor = 2;
 
 /// AzaharFrame flash3: the lowest factor it draws at for the renderer's factor `base` (with the
 /// immersive modes' steps) and the Internal Resolution setting `setting` (0: Auto), and how many
 /// steps that leaves (MaxDrop). Internal Resolution 1x leaves none either way.
-constexpr int FloorFactor(int base, int setting, bool floor_at_setting = kFloorAtSetting) {
+/// `sixty`: Second::sixty_fps (Auto's 1x is as it is).
+constexpr int FloorFactor(int base, int setting, bool floor_at_setting = kFloorAtSetting,
+                          bool sixty = false) {
     if (setting == 1) {
         return base; // at 1x it has nothing to do (the menu's row is locked)
     }
-    const int floor = floor_at_setting && setting > 1 ? setting : 1;
+    const int at_setting = sixty && setting > kSixtyFloor ? kSixtyFloor : setting;
+    const int floor = floor_at_setting && setting > 1 ? at_setting : 1;
     return floor < base ? floor : base;
 }
-constexpr int MaxDrop(int base, int setting, bool floor_at_setting = kFloorAtSetting) {
-    return base > 1 ? base - FloorFactor(base, setting, floor_at_setting) : 0;
+constexpr int MaxDrop(int base, int setting, bool floor_at_setting = kFloorAtSetting,
+                      bool sixty = false) {
+    return base > 1 ? base - FloorFactor(base, setting, floor_at_setting, sixty) : 0;
 }
 
 /// The decisions, without threads or settings (unit-tested).
@@ -445,13 +458,18 @@ constexpr int StartDrop(int base, int remembered, int max_drop) {
 /// Lines this build cannot read are left out; a title ID of 0 is never kept. AzaharFrame bfidr:
 /// a game's level with Black Frame Insertion asked for is a line of its own, "<title ID>
 /// <factor> bfi" (builds before it skip such a line: a third word was never read).
+/// AzaharFrame kiuhs3a: the 60 FPS levels are "60" and "bfi60" lines, skipped the same way.
 inline constexpr const char* kStoreFile = "dynamic-resolution.txt";
 /// AzaharFrame fixd: judged seconds at one level before it is remembered for the game (a level
 /// it steps down to is remembered at once).
 inline constexpr int kRememberAfter = 60;
 /// AzaharFrame bfidr: a remembered level's key: the game's title ID, and whether it is the level
-/// with Black Frame Insertion asked for.
-using LevelKey = std::pair<uint64_t, bool>;
+/// with Black Frame Insertion asked for (kLevelBfi), at 60 FPS (kLevelSixty), both or neither.
+inline constexpr int kLevelBfi = 1, kLevelSixty = 2;
+constexpr int LevelMode(bool bfi, bool sixty) {
+    return (bfi ? kLevelBfi : 0) | (sixty ? kLevelSixty : 0);
+}
+using LevelKey = std::pair<uint64_t, int>;
 using LevelList = std::vector<std::pair<LevelKey, int>>;
 std::string FormatStore(const LevelList& levels);
 LevelList ParseStore(const std::string& text);
@@ -465,8 +483,9 @@ struct LevelStore {
     std::function<uint64_t()> title; ///< the running game's title ID (0: none)
 };
 void SetLevelStore(LevelStore store);
-/// The factor remembered for `title` (0: none), without or (`bfi`) with Black Frame Insertion.
-int RememberedFactor(uint64_t title, bool bfi = false);
+/// The factor remembered for `title` (0: none), without or (`bfi`) with Black Frame Insertion, at
+/// 60 FPS (`sixty`) or not.
+int RememberedFactor(uint64_t title, bool bfi = false, bool sixty = false);
 
 /// Frame loop side: the controller for the running session, fed by Runtime::LogSummary.
 void Install();

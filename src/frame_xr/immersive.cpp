@@ -42,6 +42,7 @@
 #include "frame_xr/test_switches.h" // AzaharFrame integ9
 #include "frame_xr/vis/wrist_screen.h" // AzaharFrame kiu1s: the off hand
 #include "video_core/kiu_hud.h" // AzaharFrame kiu140
+#include "video_core/kiu_hud_fade.h" // AzaharFrame kiuhs3a
 #include "video_core/kiu_view_tap.h" // AzaharFrame kiu140
 #include "video_core/vr_immersive.h"
 
@@ -1718,8 +1719,8 @@ void OnFrame(const FrameInfo& info) {
         const bool battle = Kiu::FirstPerson::Battle(), page = Kiu::FirstPerson::BattlePage();
         if (battle && page) { // AzaharFrame kiu1s: the results as they start
             hud_place = VideoCore::KiuHud::PagePlaceInBattle(tan_x, tan_y);
-        } else if (Kiu::FirstPerson::MenuPage()) { // AzaharFrame kiuhud: the hub: in the view
-            hud_place = VideoCore::KiuHud::PageInView(wanted, tan_x, tan_y, g.solved.pitch_rad);
+        } else if (Kiu::FirstPerson::MenuPage()) { // AzaharFrame kiuhud: the hub: in its room
+            hud_place = VideoCore::KiuHud::PageInView(wanted, tan_x, tan_y);
         } else if (!battle) { // a page, over the game's own frame
             hud_place = VideoCore::KiuHud::PagePlace(g.solved.factor, g.solved.factor_y);
         } else {
@@ -1736,6 +1737,15 @@ void OnFrame(const FrameInfo& info) {
         }
     }
     VideoCore::KiuHud::g_live.Set(hud_place);
+    { // AzaharFrame kiuhs3a: HUD Opacity (test switch AZAHARFRAME_KIU_HUD_OPACITY: percent, from 0)
+        const bool hud = hud_place.on && !hud_place.page;
+        float opacity = VideoCore::KiuHudFade::OpacityFor(
+            static_cast<int>(Settings::values.vr_kiu_hud_opacity.GetValue()), hud);
+        if (const auto text = Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_HUD_OPACITY")) {
+            opacity = hud ? std::clamp(std::atoi(text->c_str()), 0, 100) / 100.0f : 1.0f;
+        }
+        VideoCore::KiuHudFade::g_opacity.store(opacity, std::memory_order_relaxed);
+    }
     VideoCore::Immersive::g_text_as_drawn.store(KiuFirstPerson(), std::memory_order_relaxed);
 
     VideoCore::Immersive::VRData data; // CitraVR's "off" values
@@ -2276,6 +2286,7 @@ float AnchorFollowNow(bool follow_eye) {
 ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacement& placement) {
     ScreenLayers out;
     bool bottom_as_drawn = false; // AzaharFrame kiu140
+    bool in_plane = false; // AzaharFrame kiuhs3a: the portraits, each eye's own
     const bool wrist_up = g.wrist_shown && g.wrist_time == g.display_time; // AzaharFrame kiu1s
     out.top_space = local_space;
     out.top_pose[0] = out.top_pose[1] = placement.top_pose;
@@ -2466,10 +2477,28 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
                              right, Kiu::FirstPerson::kPortraitWordsDeg,
                              static_cast<float>(v.vr_kiu_portraits_across.GetValue()),
                              static_cast<float>(v.vr_kiu_portraits_height.GetValue()));
-            out.bottom_pose =
-                Compose(g.view.head, XrPosef{{p.qx, p.qy, p.qz, p.qw}, {p.x, p.y, p.z}});
             const float size = portraits_up ? 1.0f : Kiu::FirstPerson::kPortraitShrunk;
-            out.bottom_size = {p.width * size, p.height * size};
+            if (Kiu::FirstPerson::WordsPlane()) { // AzaharFrame kiuhs3a: where the words are
+                const Kiu::FirstPerson::InPlane at = Kiu::FirstPerson::ToPlane(
+                    p, g.solved.pitch_rad, g.solved.tan_half_y * g.solved.aspect,
+                    g.solved.tan_half_y);
+                for (int eye = 0; eye < 2; eye++) {
+                    const XrPosef screen = out.top_space == view_space
+                                               ? Compose(g.view.head, out.top_pose[eye])
+                                               : out.top_pose[eye];
+                    const float half_x = 0.5f * out.top_size[eye].width;
+                    const float half_y = 0.5f * out.top_size[eye].height;
+                    (eye ? out.bottom_pose_right : out.bottom_pose) = Compose(
+                        screen, XrPosef{{0, 0, 0, 1}, {at.u * half_x, at.v * half_y, 0.0f}});
+                    (eye ? out.bottom_size_right : out.bottom_size) = {
+                        2.0f * at.half_u * half_x * size, 2.0f * at.half_v * half_y * size};
+                }
+                in_plane = true;
+            } else {
+                out.bottom_pose =
+                    Compose(g.view.head, XrPosef{{p.qx, p.qy, p.qz, p.qw}, {p.x, p.y, p.z}});
+                out.bottom_size = {p.width * size, p.height * size};
+            }
             out.bottom_cut = cut;
             out.bottom_talk = Kiu::Talk::CutoutWanted(); // AzaharFrame kiutalk
             out.show_bottom = true;
@@ -2557,10 +2586,19 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
     const float top_distance = out.top_space == view_space || (g.engaged && IsViewMode(g.mode))
                                    ? g.solved.distance
                                    : DistanceTo(out.top_pose[0]);
-    out.bottom_first = DistanceTo(out.bottom_pose) > top_distance;
+    // (the portraits in the screen's plane are over it, aside or not)
+    out.bottom_first = !in_plane && DistanceTo(out.bottom_pose) > top_distance;
     if (g.engaged || out.bottom_preview || out.screens_fixed) {
         out.bottom_curve = 0.0f; // not at the second slot's own place
     }
+    if (!in_plane) { // AzaharFrame kiuhs3a: the same for both eyes
+        out.bottom_pose_right = out.bottom_pose;
+        out.bottom_size_right = out.bottom_size;
+    }
+    out.bottom_per_eye = in_plane || (KiuFirstPerson() && g.live && IsViewMode(g.mode) &&
+                                      g.view.valid && Kiu::FirstPerson::WordsPlane() &&
+                                      Kiu::FirstPerson::Portraits() !=
+                                          Kiu::FirstPerson::PortraitState::Off);
     VideoCore::Immersive::g_bottom_as_drawn.store(bottom_as_drawn, std::memory_order_relaxed);
     return out;
 }

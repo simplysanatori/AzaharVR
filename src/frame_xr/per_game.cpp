@@ -266,6 +266,9 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::KiuHudSize: // AzaharFrame kiu140
         f(v.vr_kiu_hud_size);
         return true;
+    case Id::KiuHudOpacity: // AzaharFrame kiuhs3a
+        f(v.vr_kiu_hud_opacity);
+        return true;
     case Id::KiuArm: // AzaharFrame kiu140
         f(v.vr_kiu_arm);
         return true;

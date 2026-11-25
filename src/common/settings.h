@@ -1196,6 +1196,8 @@ struct Values {
     // to the right and up from straight ahead), or each with a place of its own.
     SwitchableSetting<u32, true> vr_kiu_hud{1, 0, 1, "vr_kiu_hud"};
     SwitchableSetting<u32, true> vr_kiu_hud_size{100, 40, 200, "vr_kiu_hud_size"};
+    /// AzaharFrame kiuhs3a: HUD Opacity, percent: the health bar and the score (In View).
+    SwitchableSetting<u32, true> vr_kiu_hud_opacity{100, 20, 100, "vr_kiu_hud_opacity"};
     SwitchableSetting<u32, true> vr_kiu_hud_linked{1, 0, 1, "vr_kiu_hud_linked"};
     SwitchableSetting<s32, true> vr_kiu_hud_across{0, -40, 40, "vr_kiu_hud_across"};
     SwitchableSetting<s32, true> vr_kiu_hud_height{22, -40, 40, "vr_kiu_hud_height"};

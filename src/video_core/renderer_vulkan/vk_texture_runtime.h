@@ -226,7 +226,8 @@ public:
     }
 
     /// Returns a copy of the upscaled image handle, used for feedback loops.
-    vk::ImageView CopyImageView() noexcept;
+    /// AzaharFrame kiuhs3a: with `parts`, only those of the first level (the rest is undefined).
+    vk::ImageView CopyImageView(std::span<const vk::Rect2D> parts = {}) noexcept;
 
     /// Returns the framebuffer view of the surface image
     vk::ImageView FramebufferView() noexcept {
