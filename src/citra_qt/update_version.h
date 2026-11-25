@@ -45,4 +45,9 @@ std::optional<std::string> TagFromReleaseJson(std::string_view body);
 /// The release's page in this project's repository, for a tag that parses.
 std::string ReleasePageUrl(std::string_view tag);
 
+/// True only for a page ReleasePageUrl makes: https://github.com/simplysanatori/AzaharVR/releases/
+/// latest or .../releases/tag/<a tag that parses>, with nothing else in it (no query, fragment,
+/// space, quote or other character). Checked before a URL goes to the opener.
+bool IsReleasePageUrl(std::string_view url);
+
 } // namespace UpdateChecker

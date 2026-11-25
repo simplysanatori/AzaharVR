@@ -150,3 +150,32 @@ TEST_CASE("Update check: a stopped check uses no network", "[update]") {
     CHECK(UpdateChecker::GetLatestRelease(stopper) == std::nullopt);
     CHECK(std::chrono::steady_clock::now() - start < std::chrono::seconds(1));
 }
+
+TEST_CASE("Update check: only this project's release page may be opened", "[update]") {
+    const std::string base = "https://github.com/simplysanatori/AzaharVR/releases/";
+    CHECK(IsReleasePageUrl(base + "latest"));
+    CHECK(IsReleasePageUrl(base + "tag/v1.4.0"));
+    CHECK(IsReleasePageUrl(base + "tag/1.4.0"));
+    CHECK(IsReleasePageUrl(ReleasePageUrl("v1.4.0")));
+    CHECK(IsReleasePageUrl(ReleasePageUrl("../x?y#z"))); // falls back to /latest
+    CHECK_FALSE(IsReleasePageUrl(""));
+    CHECK_FALSE(IsReleasePageUrl("http://github.com/simplysanatori/AzaharVR/releases/latest"));
+    CHECK_FALSE(IsReleasePageUrl("https://github.com/simplysanatori/Other/releases/latest"));
+    CHECK_FALSE(IsReleasePageUrl("https://github.com/other/AzaharVR/releases/latest"));
+    CHECK_FALSE(IsReleasePageUrl(
+        "https://github.com.evil.example/simplysanatori/AzaharVR/releases/latest"));
+    CHECK_FALSE(
+        IsReleasePageUrl("https://evil@github.com/simplysanatori/AzaharVR/releases/latest"));
+    CHECK_FALSE(IsReleasePageUrl(base + "latest?x=1"));
+    CHECK_FALSE(IsReleasePageUrl(base + "latest#a"));
+    CHECK_FALSE(IsReleasePageUrl(base + "latest/"));
+    CHECK_FALSE(IsReleasePageUrl(base + "tag/"));
+    CHECK_FALSE(IsReleasePageUrl(base + "tag/v1.4.0 --open"));
+    CHECK_FALSE(IsReleasePageUrl(base + "tag/v1.4.0?x"));
+    CHECK_FALSE(IsReleasePageUrl(base + "tag/v1.4.0\""));
+    CHECK_FALSE(IsReleasePageUrl(base + "tag/v1.4.0-rc1"));
+    CHECK_FALSE(IsReleasePageUrl(base + "tag/../../../x"));
+    CHECK_FALSE(IsReleasePageUrl(base + "download/v1.4.0/azahar"));
+    CHECK_FALSE(IsReleasePageUrl("steam://openurl/https://example.com"));
+    CHECK_FALSE(IsReleasePageUrl("file:///etc/passwd"));
+}

@@ -117,6 +117,7 @@
 #include "common/stall_telemetry.h" // AzaharFrame stall
 #ifdef ENABLE_QT_UPDATE_CHECKER
 #include "citra_qt/update_checker.h"
+#include "citra_qt/frame_open_link.h" // AzaharVR updatecheck
 #include "citra_qt/update_prompt.h" // AzaharVR updatecheck
 #include "citra_qt/update_version.h" // AzaharVR updatecheck
 #endif
@@ -9005,8 +9006,15 @@ void GMainWindow::OnEmulatorUpdateAvailable() {
     QMessageBox& update_prompt = *prompt_box;
     update_prompt.exec();
     if (update_prompt.button(QMessageBox::Yes) == update_prompt.clickedButton()) {
-        QDesktopServices::openUrl(QUrl(
-            QString::fromStdString(UpdateChecker::ReleasePageUrl(version_string.toStdString()))));
+        // Only this project's release page (it was built from a tag that parsed); opened as the
+        // Mods tab's links are, in Steam's browser on the Frame (frame_open_link.h).
+        const std::string page = UpdateChecker::ReleasePageUrl(version_string.toStdString());
+        if (UpdateChecker::IsReleasePageUrl(page) &&
+            OpenLink::Open(QString::fromStdString(page)) == OpenLink::Result::LowMemory) {
+#ifdef ENABLE_FRAME_XR
+            FrameXr::ShowToastText("Link Not Opened: Low Memory", FrameXr::ToastTime::Long);
+#endif
+        }
     }
 }
 #endif

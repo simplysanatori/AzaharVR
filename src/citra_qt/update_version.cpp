@@ -145,4 +145,18 @@ std::string ReleasePageUrl(std::string_view tag) {
     return "https://github.com/simplysanatori/AzaharVR/releases/tag/" + std::string(tag);
 }
 
+bool IsReleasePageUrl(std::string_view url) {
+    constexpr std::string_view base = "https://github.com/simplysanatori/AzaharVR/releases/";
+    if (url.substr(0, base.size()) != base) {
+        return false;
+    }
+    url.remove_prefix(base.size());
+    if (url == "latest") {
+        return true;
+    }
+    constexpr std::string_view tag_part = "tag/";
+    return url.substr(0, tag_part.size()) == tag_part &&
+           ParseTag(url.substr(tag_part.size())).has_value();
+}
+
 } // namespace UpdateChecker
