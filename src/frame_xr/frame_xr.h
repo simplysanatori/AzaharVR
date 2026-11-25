@@ -418,6 +418,7 @@ enum class MenuSetting {
     /// `value`: 0 Off, 1 On (gba_allow_editing), per game too. The menu leaves it off on a 1: the
     /// Qt side asks once (game_editing_warning) and then sets it.
     AllowGameEditing,
+    LayerDepth, ///< `value`: 0 to 3 (layer_depth), per game too
 };
 struct MenuRequest {
     MenuCommand command = MenuCommand::Continue;

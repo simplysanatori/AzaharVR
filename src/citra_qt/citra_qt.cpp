@@ -123,6 +123,7 @@
 #include "common/common_paths.h"
 #include "common/dynamic_library.h"
 #include "common/file_util.h"
+#include "common/layer_depth.h"
 #include "common/literals.h"
 #include "common/logging/backend.h"
 #include "common/logging/log.h"
@@ -3735,6 +3736,7 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     options.force_nds = console == Common::AltCore::DsConsoleDS;
     options.force_dsi = console == Common::AltCore::DsConsoleDSi;
     options.second_screen = Settings::values.gba_second_screen.GetValue();
+    options.layer_depth = Settings::values.layer_depth.GetValue();
     if (!AltWindowOpen(info) ||
         !alt_core_host->Boot(path, data_dir, /*headless_for_test=*/false, options)) {
         LOG_CRITICAL(Frontend, "Failed to load application!");
@@ -3852,6 +3854,9 @@ void GMainWindow::ApplyAltSettings() {
     }
     if (caps.can_edit_game) {
         alt_core_host->SetEditing(v.gba_allow_editing.GetValue());
+    }
+    if (caps.layer_depth) {
+        alt_core_host->SetLayerDepth(v.layer_depth.GetValue());
     }
 }
 #endif
@@ -6239,6 +6244,9 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
             return;
         }
         set(v.gba_allow_editing, r.value != 0);
+        break;
+    case S::LayerDepth:
+        set(v.layer_depth, std::min<u32>(u, Common::LayerDepth::kMaxLevel));
         break;
     }
 #ifdef ENABLE_ALT_CORES

@@ -1196,6 +1196,8 @@ struct Values {
     // 2 Off (FrameCores::SecondScreen). Allow Game Editing off: the game is never written to.
     SwitchableSetting<u32, true> gba_second_screen{0, 0, 2, "gba_second_screen"};
     SwitchableSetting<bool> gba_allow_editing{false, "gba_allow_editing"};
+    // Layer Depth: 0 off, 1 to 3: how far back the background layers go in the headset.
+    SwitchableSetting<u32, true> layer_depth{0, 0, 3, "layer_depth"};
 };
 
 extern Values values;

@@ -12,6 +12,7 @@
 #include <utility>
 
 #include <fmt/format.h>
+#include "common/layer_depth.h"
 #include "common/logging/log.h"
 #include "common/param_package.h"
 #include "common/settings.h"
@@ -389,6 +390,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::SecondScreen;
     case Id::AllowGameEditing:
         return MenuSetting::AllowGameEditing;
+    case Id::LayerDepth:
+        return MenuSetting::LayerDepth;
     case Id::AutosaveKeep:
     default: // UseGlobal checks PerGameSetting first
         return MenuSetting::AutosaveKeep;
@@ -1331,6 +1334,7 @@ void MenuPanel::BuildModel(const Host& host) {
         m.gba_solar_level = static_cast<int>(v.gba_solar_level.GetValue());
         m.gba_second_screen = static_cast<int>(v.gba_second_screen.GetValue());
         m.gba_allow_editing = v.gba_allow_editing.GetValue();
+        m.layer_depth = static_cast<int>(v.layer_depth.GetValue());
         const DsHeld held = GetDsHeld();
         m.ds_lid_closed = held.lid_closed;
         m.ds_mic_active = held.mic_blow;
@@ -1895,6 +1899,11 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
             Apply(v.gba_allow_editing, false, per_game);
         } // on: the Qt side asks once, then sets it (the switch follows the setting)
         r.setting = MenuSetting::AllowGameEditing;
+        break;
+    case Id::LayerDepth:
+        r.value = std::clamp(value, 0, static_cast<int>(Common::LayerDepth::kMaxLevel));
+        Apply(v.layer_depth, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::LayerDepth;
         break;
     default:
         return;
