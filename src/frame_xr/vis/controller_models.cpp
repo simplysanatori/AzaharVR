@@ -3657,7 +3657,7 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
                        se->rect.extent.height / ih};
             sp.tex = {iw, ih, marks ? 1.0f : 0.0f, 0.0f};
             // projb; projdef: filter; kiuview: the soft edge (first person's top screen)
-            sp.extra = {ProjDepthCode(se->depth), filter, se->soft_edge, 0.0f};
+            sp.extra = {ProjDepthCode(se->depth), filter, se->soft_edge, se->darker};
             c.bindPipeline(vk::PipelineBindPoint::eGraphics, g.screen_pipeline);
             c.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g.screen_layout, 0,
                                  g.screen_sets[static_cast<std::size_t>(e)], {});

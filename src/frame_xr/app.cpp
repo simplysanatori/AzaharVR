@@ -1502,6 +1502,8 @@ void Runtime::FrameLoop() {
                     pe.serial = chain.frame_serial;
                     // AzaharFrame kiuview: first person's soft edge (the top screen only).
                     pe.soft_edge = top_immersive ? Kiu::FirstPerson::EdgeShare() : 0.0f;
+                    pe.darker = // AzaharFrame kiucam
+                        top_immersive ? 1.0f - ui->CameraBrightness(fs.predictedDisplayTime) : 0.0f;
                     // projb: "Controllers in Front of Screen" as on the quad path (ctrlfront's
                     // occluders above): by depth when the choice takes this screen's slot (the
                     // immersive screen then never hides them: what it shows is far away), else

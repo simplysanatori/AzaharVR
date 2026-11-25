@@ -175,6 +175,7 @@ layout(push_constant) uniform PC {
     vec4 tex;     // x, y: the image's size in texels, z: flags (1: test marks)
     vec4 extra;   // x: the depth (0 its own, 1 nearest, 2 farthest), y: the filter (projdef),
                   // z: the soft edge's width, a share of the half size (0: none; kiuview)
+                  // w: how much darker, 0 (as it is) to 1 (black; kiucam)
 } pc;
 
 layout(location = 0) out vec2 v_uv;
@@ -282,6 +283,7 @@ void main() {
         vec2 inside = 1.0 - abs(v_screen);
         colour *= smoothstep(0.0, pc.extra.z, inside.x) * smoothstep(0.0, pc.extra.z, inside.y);
     }
+    colour *= 1.0 - pc.extra.w; // AzaharFrame kiucam
     if (mod(pc.tex.z, 2.0) > 0.5) {
         // Test marks: on each mark's picture point a magenta Gaussian dot (sigma 1.2 pixels) on
         // a black disc 5.5 pixels round, so a reader can take its weighted centre to a hundredth
