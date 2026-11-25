@@ -95,6 +95,8 @@ public:
     /// AzaharFrame ui3: whether a game runs now (GUI thread): a pack switch Optimize for Frame
     /// or Use Original asks for then waits for ApplyPendingPack.
     void SetGameRunningSource(std::function<bool()> source);
+    /// The in-game menu is open (the game waits behind it).
+    void SetMenuOpenSource(std::function<bool()> source);
     /// AzaharFrame ui3: the switches that waited (the game stopped, or the next one boots, before
     /// its loader reads the folders): each pair's chosen pack takes its place in the game's list
     /// (the Customize choices went with it when it was chosen). GUI thread; quick (a listing and
@@ -232,9 +234,13 @@ private:
     void CheckNudge();        ///< "Optimize <Pack> for Frame?" for a candidate, once a pack
     const CustomTex::Pack* PackByPath(const std::string& path) const;
     std::function<bool()> game_running_source;
+    std::function<bool()> menu_open_source;
+    /// Textures converted at a time now, by what the game does
+    int OptimizeJobs() const;
     /// The conversion running now, on `optimize_thread` (core/custom_tex/convert.h)
     std::shared_ptr<CustomTex::Convert::Converter> optimize_converter;
     std::thread optimize_thread;
+    QTimer* optimize_jobs_timer = nullptr; ///< gives optimize_converter OptimizeJobs()
     std::string optimize_png;   ///< the pack converting now (canonical path)
     u64 optimize_title = 0;
     FrameXr::Menu::PackOptimize optimize_progress; ///< its Converting state

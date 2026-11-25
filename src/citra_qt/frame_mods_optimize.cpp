@@ -100,6 +100,15 @@ void FrameMods::SetGameRunningSource(std::function<bool()> source) {
     game_running_source = std::move(source);
 }
 
+void FrameMods::SetMenuOpenSource(std::function<bool()> source) {
+    menu_open_source = std::move(source);
+}
+
+int FrameMods::OptimizeJobs() const {
+    return Conv::JobsFor(Conv::UsableCpus(), game_running_source && game_running_source(),
+                         menu_open_source && menu_open_source());
+}
+
 const CustomTex::Pack* FrameMods::PackByPath(const std::string& path) const {
     const std::string c = Canon(path);
     for (const CustomTex::Pack& p : packs) {
@@ -172,10 +181,7 @@ void FrameMods::OptimizeStart(const std::string& png) {
     UpdateOptimizeRow();
     PublishTextures();
 
-    // While a game runs, two textures at a time (the default is one less than the cores): at
-    // nice 19 and idle I/O the game keeps its frame rate.
-    const bool running = game_running_source && game_running_source();
-    const int jobs = running ? 2 : std::max(1, static_cast<int>(std::thread::hardware_concurrency()) - 1);
+    const int jobs = OptimizeJobs();
     LOG_INFO(Frontend, "xr: optimize: converting {} ({} jobs)", png, jobs);
 
     // The worker's progress, handed to the GUI thread at most once per its turn
@@ -189,6 +195,7 @@ void FrameMods::OptimizeStart(const std::string& png) {
     Conv::Request request;
     request.pack = png;
     request.jobs = jobs;
+    request.max_jobs = Conv::JobsFor(Conv::UsableCpus(), false, false);
     auto converter = std::make_shared<Conv::Converter>(
         request, [guard, latest](const Conv::Progress& progress) {
             std::lock_guard lock(latest->mutex);
@@ -224,6 +231,17 @@ void FrameMods::OptimizeStart(const std::string& png) {
                 Qt::QueuedConnection);
         });
     optimize_converter = converter;
+    if (!optimize_jobs_timer) {
+        optimize_jobs_timer = new QTimer(this);
+        connect(optimize_jobs_timer, &QTimer::timeout, this, [this] {
+            if (optimize_converter) {
+                optimize_converter->SetJobs(OptimizeJobs());
+            } else {
+                optimize_jobs_timer->stop();
+            }
+        });
+    }
+    optimize_jobs_timer->start(500);
     if (optimize_thread.joinable()) {
         optimize_thread.join(); // the last run's, already finished
     }

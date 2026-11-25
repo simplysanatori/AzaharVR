@@ -371,11 +371,47 @@ Converter::Converter(Request request, ProgressFn progress)
     : request_(std::move(request)), progress_(std::move(progress)) {}
 
 void Converter::Stop() {
-    stop_ = true;
+    {
+        std::lock_guard lock(turn_mutex_);
+        stop_ = true;
+    }
+    turn_.notify_all();
     std::lock_guard lock(encoders_mutex_);
     for (AstcEncoder* encoder : encoders_) {
         encoder->Cancel();
     }
+}
+
+void Converter::SetJobs(int jobs) {
+    {
+        std::lock_guard lock(turn_mutex_);
+        jobs_ = std::max(1, jobs);
+    }
+    turn_.notify_all();
+}
+
+bool Converter::AwaitTurn(int index) {
+    std::unique_lock lock(turn_mutex_);
+    turn_.wait(lock, [&] { return Stopped() || none_left_ || index < jobs_; });
+    return !Stopped() && !none_left_;
+}
+
+int UsableCpus() {
+    unsigned cpus = std::thread::hardware_concurrency();
+#ifdef __linux__
+    cpu_set_t set;
+    if (::sched_getaffinity(0, sizeof(set), &set) == 0) {
+        cpus = static_cast<unsigned>(CPU_COUNT(&set));
+    }
+#endif
+    return std::max(1, static_cast<int>(cpus));
+}
+
+int JobsFor(int cpus, bool game_running, bool menu_open) {
+    if (!game_running) {
+        return std::max(1, cpus - 1);
+    }
+    return menu_open ? std::max(2, cpus - 2) : 2;
 }
 
 namespace {
@@ -577,18 +613,14 @@ Result Converter::RunInner() {
         total_bytes += b;
     }
 
-    int jobs = request_.jobs;
-    if (jobs <= 0) {
-        unsigned cpus = std::thread::hardware_concurrency();
-#ifdef __linux__
-        cpu_set_t set;
-        if (::sched_getaffinity(0, sizeof(set), &set) == 0) {
-            cpus = static_cast<unsigned>(CPU_COUNT(&set));
-        }
-#endif
-        jobs = std::max(1, static_cast<int>(cpus) - 1);
+    const int jobs = request_.jobs > 0 ? request_.jobs : std::max(1, UsableCpus() - 1);
+    const int workers = std::max(1, std::min<int>(std::max(jobs, request_.max_jobs),
+                                                  static_cast<int>(todo.size())));
+    {
+        std::lock_guard lock(turn_mutex_);
+        jobs_ = jobs;
+        none_left_ = todo.empty();
     }
-    jobs = std::max(1, std::min<int>(jobs, static_cast<int>(std::max<size_t>(todo.size(), 1))));
 
     std::mutex mutex; // the counters, the failures, the callback
     const int total_files = static_cast<int>(pngs.size());
@@ -606,9 +638,12 @@ Result Converter::RunInner() {
     }
 
     std::atomic<size_t> next{0};
-    const auto worker = [&] {
+    const auto worker = [&](int index) {
         if (request_.low_priority) {
             LowerThreadPriority();
+        }
+        if (!AwaitTurn(index)) {
+            return; // no encoder for a worker that never works
         }
         AstcEncoder encoder(plan.block, plan.quality);
         {
@@ -618,12 +653,17 @@ Result Converter::RunInner() {
                 encoder.Cancel();
             }
         }
-        while (!Stopped()) {
-            const size_t index = next.fetch_add(1);
-            if (index >= todo.size()) {
+        while (AwaitTurn(index)) {
+            const size_t texture = next.fetch_add(1);
+            if (texture >= todo.size()) {
+                {
+                    std::lock_guard lock(turn_mutex_);
+                    none_left_ = true;
+                }
+                turn_.notify_all();
                 break;
             }
-            const std::string& rel = todo[index];
+            const std::string& rel = todo[texture];
             std::string error;
             bool cancelled = false;
             bool too_big = false;
@@ -666,8 +706,8 @@ Result Converter::RunInner() {
     };
     {
         std::vector<std::thread> pool;
-        for (int i = 0; i < jobs; i++) {
-            pool.emplace_back(worker);
+        for (int i = 0; i < workers; i++) {
+            pool.emplace_back(worker, i);
         }
         for (std::thread& t : pool) {
             t.join();
