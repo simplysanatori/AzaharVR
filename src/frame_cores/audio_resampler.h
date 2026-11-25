@@ -39,7 +39,8 @@ public:
     /// Stops and destroys the audio sink and clears buffered samples.
     void Shutdown();
 
-    /// Updates the core's nominal input sample rate.
+    /// Updates the core's nominal input sample rate, for what is pushed from here on. (What is
+    /// queued, 90 ms at most, then plays at the new rate too.)
     void SetCoreSampleRate(uint32_t rate);
 
     /// Toggles fast-forward mode: Muted plays nothing, Sped Up reads `speed` times faster,

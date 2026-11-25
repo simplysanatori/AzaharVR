@@ -84,7 +84,6 @@ struct GbaCore::Impl {
     CorePaths paths{};
     CoreBootOptions opts{};
 
-    uint32_t audio_rate = 32768;
     Common::AltCore::InputState input{};
     DriverRunner driver;
 
@@ -186,8 +185,6 @@ bool GbaCore::Load(const std::string& rom_path, const CorePaths& paths,
     impl->loaded = true;
     impl->input = {};
 
-    const unsigned rate = emu_audio_rate(&impl->emu);
-    impl->audio_rate = rate > 0 ? rate : 32768u;
     impl->caps.has_solar_sensor = emu_has_solar(&impl->emu);
 
     impl->StartDriver();
@@ -214,7 +211,7 @@ bool GbaCore::Load(const std::string& rom_path, const CorePaths& paths,
     impl->ApplyAllCheats();
 
     LOG_INFO(Core, "GbaCore: loaded {} (code={}, rate={} Hz)", rom_path, impl->emu.gameCode,
-             impl->audio_rate);
+             AudioSampleRate());
     return true;
 }
 
@@ -251,7 +248,9 @@ void GbaCore::RunFrame(FrameOutput& out) {
 }
 
 uint32_t GbaCore::AudioSampleRate() const {
-    return impl->audio_rate;
+    // Games change it (SOUNDBIAS), most soon after the start
+    const unsigned rate = impl->loaded ? emu_audio_rate(&impl->emu) : 0;
+    return rate > 0 ? rate : 32768u;
 }
 
 Common::AltCore::Capabilities GbaCore::GetCapabilities() const {
