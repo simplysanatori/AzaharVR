@@ -190,3 +190,25 @@ TEST_CASE("Kid Icarus HUD: a page outside a battle keeps its layout", "[kiu140]"
     REQUIRE(live.Get().page);
     REQUIRE_FALSE(PagePlace(0.5f, 1.0f).on);
 }
+
+TEST_CASE("Kid Icarus HUD: the text texture's other draws are pieces; text targets are wide",
+          "[frame_xr][kiu140]") {
+    using namespace VideoCore::KiuHud;
+    Draw d;
+    d.top_viewport = d.blended = d.textured = true;
+    d.texture = 0x181A8000;
+    d.vertices = 24;
+    d.width = 512;
+    d.height = 128;
+    REQUIRE(IsText(d));
+    REQUIRE_FALSE(IsSubtitle(d));
+    d.vertices = 12;
+    REQUIRE(IsText(d));
+    REQUIRE(IsSubtitle(d));
+    d.width = 256; // a picture of the world
+    REQUIRE_FALSE(IsText(d));
+    REQUIRE(IsTextTarget(512.0f, 128.0f));
+    REQUIRE_FALSE(IsTextTarget(240.0f, 400.0f));
+    REQUIRE_FALSE(IsTextTarget(240.0f, 320.0f));
+    REQUIRE_FALSE(IsTextTarget(128.0f, 256.0f));
+}

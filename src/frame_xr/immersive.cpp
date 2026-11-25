@@ -1713,6 +1713,7 @@ void OnFrame(const FrameInfo& info) {
         }
     }
     VideoCore::KiuHud::g_live.Set(hud_place);
+    VideoCore::Immersive::g_text_as_drawn.store(KiuFirstPerson(), std::memory_order_relaxed);
 
     VideoCore::Immersive::VRData data; // CitraVR's "off" values
     data.ipd = g.ipd.Value(); // AzaharFrame ipd
@@ -2159,6 +2160,7 @@ void Uninstall() {
     // The XR thread has stopped: this thread is the only writer now.
     VideoCore::Immersive::Publish({});
     VideoCore::KiuHud::g_live.Set({}); // AzaharFrame kiu140: flat, the HUD is the game's again
+    VideoCore::Immersive::g_text_as_drawn.store(false, std::memory_order_relaxed);
     VideoCore::Immersive::g_xr_active = false;
     VideoCore::Immersive::g_measure_camera = false; // AzaharFrame depth
 }
