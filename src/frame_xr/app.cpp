@@ -1292,7 +1292,11 @@ void Runtime::FrameLoop() {
                 const bool top_shown = draw.swapped ? draw.top_visible : shown.show_top;
                 const bool bottom_shown =
                     draw.swapped || (shown.show_bottom && draw.bottom_visible);
-                const std::size_t screens_now = (top_shown ? 2 : 0) + (bottom_shown ? 1 : 0);
+                // AzaharFrame kiuhs3a: the portraits are a layer an eye.
+                const bool bottom_two =
+                    shown.bottom_per_eye && !shown.bottom_preview && !draw.swapped;
+                const std::size_t screens_now =
+                    (top_shown ? 2 : 0) + (bottom_shown ? (bottom_two ? 2 : 1) : 0);
                 const bool room =
                     !wanted || !ui ||
                     backing_room.Next(MotionClarity::BackingRoom::Fits(
