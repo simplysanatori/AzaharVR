@@ -3,7 +3,7 @@
 // Refer to the license.txt file included.
 
 // AzaharFrame tabmenu: the in-game menu as one panel in the structure of CitraVR's VR menu (a
-// column of tabs on the left: Main, Position, Stats, Controls, Mods, Homebrew, Settings), drawn in Material 3
+// column of tabs on the left: Main, Position, Controls, Mods, Homebrew, Stats, Settings), drawn in Material 3
 // (md3.h). This file is the menu's content, layout, drawing and hit testing; it knows nothing of
 // OpenXR, Qt or the settings. The host fills a MenuModel with the current values, keeps a
 // MenuView (the tab, what the beam points at, scrolling, an open menu), draws with Draw and maps
@@ -557,6 +557,9 @@ struct MenuModel {
 /// the states of Weapon in Hand, Muzzle Flash, Projectiles, Recoil and Laser Sight, and its
 /// buttons Controls (DialogExtra) and OK (DialogConfirm).
 ModsDialog AngelsIntroDialog(const MenuModel& model);
+
+/// The tabs in the rail's order, those that show now.
+std::vector<Tab> RailTabs(const MenuModel& model);
 
 enum class Page { Tabs, SaveSlots, LoadSlots };
 

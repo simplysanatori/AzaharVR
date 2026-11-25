@@ -115,6 +115,49 @@ TEST_CASE("Core rows: a 3DS game has every row but the other consoles'", "[frame
     CHECK(MenuModel{}.core == CoreCaps::ForN3DS());
 }
 
+TEST_CASE("The rail: its order, whatever the tabs' values", "[frame_xr][tabmenu]") {
+    MenuModel m = Game(CoreCaps::ForN3DS());
+    CHECK(RailTabs(m) == std::vector<Tab>{Tab::Main, Tab::Position, Tab::Controls, Tab::Mods,
+                                          Tab::Homebrew, Tab::Stats, Tab::Settings});
+    // As drawn: each tab's target keeps its own value
+    Kit kit{1.0f};
+    frame_xr::ui::Canvas canvas;
+    TabMenu menu;
+    canvas.Init(static_cast<int>(kPanelW), static_cast<int>(kPanelH));
+    kit.Begin(canvas);
+    menu.Draw(kit, m, MenuView{});
+    std::vector<Tab> drawn;
+    float y = -1.0f;
+    for (const auto& h : menu.Hits()) {
+        if (h.t.id == Id::TabButton) {
+            CHECK(h.r.y0 > y);
+            y = h.r.y0;
+            drawn.push_back(static_cast<Tab>(h.t.index));
+        }
+    }
+    CHECK(drawn == RailTabs(m));
+    CHECK(static_cast<int>(Tab::Main) == 0);
+    CHECK(static_cast<int>(Tab::Stats) == 2);
+    CHECK(static_cast<int>(Tab::Settings) == 6);
+    m.core = CoreCaps::ForNDS();
+    std::vector<Tab> ds{Tab::Main, Tab::Position, Tab::Controls};
+    if (m.core.has_alt_cheats) {
+        ds.push_back(Tab::Mods);
+    }
+    ds.insert(ds.end(), {Tab::Stats, Tab::Settings});
+    CHECK(RailTabs(m) == ds);
+}
+
+TEST_CASE("The Position tab's rows", "[frame_xr][tabmenu]") {
+    CHECK(RowIds(Tab::Position, Game(CoreCaps::ForN3DS())) ==
+          std::vector<Id>{Id::ScreenLayout, Id::HideBottomScreen, Id::MoveScreens, Id::ScreenShape,
+                          Id::ScreenCurve, Id::ImmersiveOffset});
+    CHECK(RowIds(Tab::Position, Game(CoreCaps::ForNDS())) ==
+          std::vector<Id>{Id::ScreenLayout, Id::DsScreenRotation, Id::HideBottomScreen,
+                          Id::MoveScreens, Id::ScreenCurve});
+    CHECK(RowIds(Tab::Position, Game(CoreCaps::ForGB())) == std::vector<Id>{Id::ScreenCurve});
+}
+
 TEST_CASE("Core rows: the table for each other console", "[frame_xr][tabmenu]") {
     CHECK(Table(CoreCaps::ForGB()) == Expected({}));
     CHECK(Table(CoreCaps::ForGBA()) == Expected({Id::GbaSolarLevel}));

@@ -44,6 +44,9 @@ constexpr std::array<TabInfo, static_cast<int>(Tab::Count)> kTabs{{
     {"Homebrew", Sym::kDeployedCode}, // AzaharFrame ui3
     {"Settings", Sym::kSettings},
 }};
+/// The rail's order.
+constexpr std::array<Tab, static_cast<int>(Tab::Count)> kRailOrder{
+    Tab::Main, Tab::Position, Tab::Controls, Tab::Mods, Tab::Homebrew, Tab::Stats, Tab::Settings};
 
 } // namespace
 
@@ -263,10 +266,10 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
     };
     std::vector<Row> rows;
     if (tab == Tab::Position) {
-        rows.push_back(row(Id::HideBottomScreen, RowKind::Switch, 0, m.hide_bottom_screen));
         rows.push_back(row(Id::ScreenLayout, RowKind::Segmented, m.screen_layout));
         rows.push_back(row(Id::DsScreenRotation, RowKind::Segmented,
                            std::clamp(m.ds_screen_rotation, 0, 2)));
+        rows.push_back(row(Id::HideBottomScreen, RowKind::Switch, 0, m.hide_bottom_screen));
         rows.push_back(row(Id::MoveScreens, RowKind::Segmented, m.move_screens)); // AzaharFrame menu
         rows.push_back(row(Id::ScreenShape, RowKind::MenuButton, m.screen_shape));
         rows.push_back(row(Id::ScreenCurve, RowKind::MenuButton, m.screen_curve));
@@ -1897,17 +1900,23 @@ void TabMenu::Draw(Kit& kit, const MenuModel& model, const MenuView& view) {
     DrawTooltip(kit, model, view, pane);
 }
 
-void TabMenu::DrawRail(Kit& kit, const MenuModel& model, const MenuView& view) {
-    std::vector<int> shown_tabs; // AzaharVR: the console's own
-    for (int i = 0; i < static_cast<int>(kTabs.size()); i++) {
-        if (TabApplies(static_cast<Tab>(i), model.core)) {
-            shown_tabs.push_back(i);
+std::vector<Tab> RailTabs(const MenuModel& model) {
+    std::vector<Tab> tabs;
+    for (const Tab tab : kRailOrder) {
+        if (TabApplies(tab, model.core)) { // AzaharVR: the console's own
+            tabs.push_back(tab);
         }
     }
+    return tabs;
+}
+
+void TabMenu::DrawRail(Kit& kit, const MenuModel& model, const MenuView& view) {
+    const std::vector<Tab> shown_tabs = RailTabs(model);
     const float total = kRailItemH * static_cast<float>(shown_tabs.size());
     float y = (kPanelH - total) * 0.5f;
     const Rect all{0, 0, kPanelW, kPanelH};
-    for (const int i : shown_tabs) {
+    for (const Tab tab : shown_tabs) {
+        const int i = static_cast<int>(tab);
         const Rect r{0.0f, y, kRailW, y + kRailItemH};
         const Target t{Id::TabButton, i};
         const bool active = static_cast<int>(view.tab) == i;
