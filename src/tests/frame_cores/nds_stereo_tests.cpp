@@ -7,6 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "frame_cores/nds_stereo_3d.h"
 #include "frame_cores/nds_stereo_renderer.h"
 
 using namespace FrameCores::NdsDepth;
@@ -113,4 +114,105 @@ TEST_CASE("NDS Layer Depth: sprites", "[frame_cores]") {
             CHECK((moved == x + 9 || moved <= -128)); // 128: the widest, at double size
         }
     }
+}
+
+TEST_CASE("NDS Layer Depth: 3D by level", "[frame_cores]") {
+    CHECK(Depth3DForLevel(0).strength == 0);
+    for (int level = 1; level <= kMaxLevel; ++level) {
+        const Depth3D depth = Depth3DForLevel(level);
+        CHECK(depth.strength == LayerShift(level, 3)); // as deep as the backmost 2D layer
+        CHECK(depth.limit == depth.strength);
+        CHECK(depth.convergence == 4 * kOneW);
+    }
+    CHECK(Depth3DForLevel(9) == Depth3DForLevel(kMaxLevel));
+}
+
+TEST_CASE("NDS Layer Depth: 3D vertices", "[frame_cores]") {
+    constexpr Depth3D kDepth{8, 4 * kOneW, 6};
+    constexpr int32_t kMaxW = 0xFFFFFF;
+
+    SECTION("on the screen at the convergence, behind it further away, before it nearer") {
+        CHECK(VertexShift(kDepth, 4 * kOneW) == 0);
+        CHECK(VertexShift(kDepth, 8 * kOneW) == 4);
+        CHECK(VertexShift(kDepth, 2 * kOneW + kOneW / 2) == -5); // 8 * (1 - 1.6) = -4.8
+        CHECK(VertexShift({8, 4 * kOneW, 20}, 2 * kOneW) == -8);
+    }
+
+    SECTION("limits") {
+        CHECK(VertexShift(kDepth, kMaxW) == 6);
+        CHECK(VertexShift(kDepth, 1) == -6);
+        CHECK(VertexShift({8, 4 * kOneW, 8}, kMaxW) == 8); // far away is the strength
+        CHECK(VertexShift(kDepth, 0) == 0);
+    }
+
+    SECTION("strength 0 moves nothing") {
+        for (const int32_t w : {1, kOneW, 64 * kOneW, kMaxW}) {
+            CHECK(VertexShift({0, 4 * kOneW, 6}, w) == 0);
+        }
+    }
+
+    SECTION("rounded to the nearest, the same on both sides") {
+        constexpr Depth3D one{1, 4 * kOneW, 9};
+        CHECK(VertexShift(one, 8 * kOneW - 8) == 0); // just under a half
+        CHECK(VertexShift(one, 8 * kOneW) == 1);     // a half
+        CHECK(VertexShift(one, 2 * kOneW) == -1);
+        CHECK(VertexShift(one, 3 * kOneW) == 0); // -1/3
+    }
+
+    SECTION("never less for a larger w") {
+        int last = -kDepth.limit;
+        for (int32_t w = 1; w <= 1024 * kOneW; w += 37) {
+            const int shift = VertexShift(kDepth, w);
+            if (shift < last) {
+                FAIL("w " << w << ": " << shift << " after " << last);
+            }
+            last = shift;
+        }
+        CHECK(last == kDepth.limit);
+    }
+
+    SECTION("x stays in the rasteriser's range") {
+        CHECK(ShiftVertexX(100, 6) == 106);
+        CHECK(ShiftVertexX(100, -6) == 94);
+        CHECK(ShiftVertexX(3, -6) == 0);      // below 0 it would write into the row above
+        CHECK(ShiftVertexX(256, 6) == 262);   // the rasteriser cuts at 256 by itself
+        CHECK(ShiftVertexX(kMaxX, 6) == kMaxX);
+        CHECK(ShiftVertexX(100, 0) == 100);
+    }
+
+    SECTION("vertices at one depth keep their order, also at the edges of the screen") {
+        for (const int32_t w : {1, 3 * kOneW, 4 * kOneW, 600 * kOneW}) {
+            const int shift = VertexShift(kDepth, w);
+            int last = 0;
+            for (int32_t x = 0; x <= kMaxX; ++x) {
+                const int moved = ShiftVertexX(x, shift);
+                if (moved < last) {
+                    FAIL("x " << x << " at w " << w);
+                }
+                last = moved;
+            }
+        }
+    }
+
+    SECTION("edges of different depths can cross") {
+        // A thin polygon, its left edge far away: the rasteriser draws swapped spans, as the DS
+        // does for crossed edges. Both stay in range.
+        const int left = ShiftVertexX(100, VertexShift(kDepth, kMaxW));
+        const int right = ShiftVertexX(101, VertexShift(kDepth, kOneW));
+        CHECK(left == 106);
+        CHECK(right == 95);
+        // Wider than both limits, no two can
+        CHECK(ShiftVertexX(100, kDepth.limit) <= ShiftVertexX(100 + 2 * kDepth.limit,
+                                                              -kDepth.limit));
+    }
+}
+
+TEST_CASE("NDS Layer Depth: orthographic polygons stay", "[frame_cores]") {
+    constexpr int32_t ortho[] = {kOneW, kOneW, kOneW, kOneW};
+    constexpr int32_t facing[] = {60 * kOneW, 60 * kOneW, 60 * kOneW}; // a billboard: in the scene
+    constexpr int32_t last_differs[] = {kOneW, kOneW, kOneW + 1};
+    CHECK(IsOnScreen(ortho, 4));
+    CHECK_FALSE(IsOnScreen(facing, 3));
+    CHECK_FALSE(IsOnScreen(last_differs, 3));
+    CHECK(IsOnScreen(last_differs, 2));
 }

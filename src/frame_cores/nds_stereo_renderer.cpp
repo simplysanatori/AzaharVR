@@ -14,6 +14,8 @@
 #include "GPU.h"
 #include "NDS.h"
 
+#include "frame_cores/nds_stereo_3d.h"
+
 namespace FrameCores {
 namespace {
 
@@ -25,21 +27,6 @@ using melonDS::u8;
 constexpr u32 kWidth = 256;
 constexpr int kLines = 192;
 constexpr int kCaptureHoldFrames = 60; // games that capture every few frames do not flicker
-
-/// No 3D for the right eye, and no semaphores: SoftRenderer3D::GetLine takes one of the render
-/// thread's lines per call, and the left eye has taken them all. The place for polygons per eye.
-class No3D final : public melonDS::Renderer3D {
-public:
-    explicit No3D(melonDS::GPU3D& gpu3d) : melonDS::Renderer3D(gpu3d) {}
-    void Reset() override {}
-    void RenderFrame() override {}
-    u32* GetLine(int) override {
-        return empty.data();
-    }
-
-private:
-    std::array<u32, kWidth> empty{};
-};
 
 struct Windows {
     u8 win0;
@@ -101,11 +88,12 @@ void MoveBackgrounds(melonDS::GPU2D& engine, int level) {
     }
 }
 
-/// Engine A's line is the same in both eyes: 3D in BG0, or a display mode without layers.
-bool IsFlatLineA(const melonDS::GPU2D& engine) {
-    const bool has_3d = (engine.DispCnt & (1u << 3)) != 0 && (engine.LayerEnable & 1) != 0;
+/// Engine A's line is the same in both eyes: a display mode without layers, or 3D in BG0 that the
+/// right eye does not have (its line is the left eye's as a whole, since that 3D is private there).
+bool IsFlatLineA(const melonDS::GPU2D& engine, bool right_has_3d) {
     const bool layers = ((engine.DispCnt >> 16) & 3) == 1;
-    return has_3d || !layers;
+    const bool has_3d = (engine.DispCnt & (1u << 3)) != 0 && (engine.LayerEnable & 1) != 0;
+    return !layers || (has_3d && !right_has_3d);
 }
 
 } // namespace
@@ -113,7 +101,8 @@ bool IsFlatLineA(const melonDS::GPU2D& engine) {
 class StereoSoft::RightEye final : public melonDS::SoftRenderer {
 public:
     RightEye(melonDS::NDS& nds, int back_buffer) : melonDS::SoftRenderer(nds) {
-        Rend3D = std::make_unique<No3D>(GPU.GPU3D);
+        // Never SoftRenderer's own: its GetLine would wait for lines of the left eye's thread
+        Rend3D = std::make_unique<NdsRight3D>(GPU.GPU3D, *this);
         BackBuffer = back_buffer;
         Reset(); // its buffers start undefined
     }
@@ -122,6 +111,10 @@ public:
     void SetRenderSettings(melonDS::RendererSettings&) override {}
     void PreSavestate() override {}
     void PostSavestate() override {}
+
+    NdsRight3D& Scene() {
+        return static_cast<NdsRight3D&>(*Rend3D);
+    }
 
 private:
     friend class StereoSoft;
@@ -133,6 +126,61 @@ StereoSoft::~StereoSoft() = default;
 
 void StereoSoft::SetDepth(int level_) {
     wanted_level = std::clamp(level_, 0, NdsDepth::kMaxLevel);
+}
+
+void StereoSoft::SetDepth3D(bool on) {
+    wanted_3d = on;
+}
+
+void StereoSoft::SetRenderSettings(melonDS::RendererSettings& settings) {
+    SoftRenderer::SetRenderSettings(settings);
+    threaded_3d = settings.Threaded;
+}
+
+void StereoSoft::PreSavestate() {
+    SoftRenderer::PreSavestate();
+    if (right) {
+        right->Scene().Wait(); // a load clears the texture memory its thread reads
+    }
+}
+
+void StereoSoft::PostSavestate() {
+    SoftRenderer::PostSavestate();
+    // After a load the left eye draws the loaded polygons; ours are the old ones. A save keeps
+    // them. A load, and only that, has reset the texture tracking.
+    const bool loaded = GPU.VRAMDirty_Texture.Mapping[0] == 0x8000;
+    if (right && loaded) {
+        right->Scene().Drop();
+    }
+}
+
+void StereoSoft::Start3DRendering() {
+    if (right) {
+        right->Scene().Wait(); // the base class writes the texture memory its thread reads
+    }
+    SoftRenderer::Start3DRendering();
+    if (!right) {
+        return;
+    }
+    // Line 215, for the frame that begins at 262: by then the level is the wanted one, and the
+    // hold one frame shorter (BeginFrame)
+    const NdsDepth::Depth3D depth = NdsDepth::Depth3DForLevel(wanted_3d ? wanted_level : 0);
+    const u32 dispcnt = GPU.GPU2D_A.DispCnt;
+    const bool shown = (dispcnt & (1u << 3)) != 0 && (dispcnt & (1u << 8)) != 0; // 3D in BG0, on
+    if (depth.strength == 0) {
+        right->Scene().Stop();
+    } else if (shown && capture_hold <= 1) {
+        right->Scene().Start(depth, threaded_3d);
+    } else {
+        right->Scene().Drop();
+    }
+}
+
+void StereoSoft::Restart3DRendering() {
+    SoftRenderer::Restart3DRendering();
+    if (right) {
+        right->Scene().Drop();
+    }
 }
 
 bool StereoSoft::GetRightFramebuffers(void** top, void** bottom) {
@@ -232,7 +280,7 @@ void StereoSoft::DrawScanline(u32 line) {
     // Drawing a line moves the windows' state on: both eyes start from the same
     const Windows windows_a = ReadWindows(GPU.GPU2D_A);
     const Windows windows_b = ReadWindows(GPU.GPU2D_B);
-    const bool flat_a = IsFlatLineA(GPU.GPU2D_A);
+    const bool flat_a = IsFlatLineA(GPU.GPU2D_A, right->Scene().HasLine());
 
     SoftRenderer::DrawScanline(line);
 

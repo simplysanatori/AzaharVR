@@ -63,15 +63,16 @@ namespace FrameCores {
  * again with the backgrounds and sprites moved by their priority, for the right eye. The game and
  * the left picture never see it. At level 0 there is no second renderer.
  *
- * 2D only. Engine A's lines with 3D are the left eye's; frames with display capture (3D on both
- * screens), and the second after them, have no right picture: captures would alternate between
- * moved and not.
+ * 3D is drawn again for the right eye from the game's polygons (nds_stereo_3d.h). Lines without
+ * it (3D off, the frame after a change of level or a state load) are the left eye's. Frames with
+ * display capture (3D on both screens), and the second after them, have no right picture: captures
+ * would alternate between moved and not.
  *
  * Not wired in. That needs:
  * - NdsCore::Load: nds->SetRenderer(std::make_unique<StereoSoft>(*nds)) after making the NDS or
  *   DSi and before SetRenderSettings. The GPU owns it; NdsCore keeps a plain pointer for as long
  *   as `nds` lives.
- * - Threaded 3D stays as it is: settings, save states and 3D calls only reach the base class.
+ * - Threaded 3D stays as it is: the right eye's 3D is threaded when the left eye's is.
  * - CoreBootOptions::layer_depth and the live setting to SetDepth, under the core's mutex.
  * - RunFrame: GetRightFramebuffers after GetFramebuffers; the right top picture to
  *   FrameOutput::primary_right when it returns true.
@@ -84,6 +85,8 @@ public:
 
     /// 0 off, 1 to 3. From the next frame. Not while a frame runs.
     void SetDepth(int level);
+    /// Off: 3D is flat, and no second 3D frame is drawn. As SetDepth.
+    void SetDepth3D(bool on);
 
     /// The right eye's last frame, as GetFramebuffers gives the left one's: top and bottom
     /// (either engine, by the screen swap), 256x192, 32-bit BGRA with alpha set, until the next
@@ -92,6 +95,11 @@ public:
 
     void Reset() override;
     void Stop() override;
+    void SetRenderSettings(melonDS::RendererSettings& settings) override;
+    void PreSavestate() override;
+    void PostSavestate() override;
+    void Start3DRendering() override;
+    void Restart3DRendering() override;
     void DrawScanline(melonDS::u32 line) override;
     void DrawSprites(melonDS::u32 line) override;
     void SwapBuffers() override;
@@ -107,6 +115,8 @@ private:
 
     std::unique_ptr<RightEye> right; ///< none at level 0
     int wanted_level = 0;
+    bool wanted_3d = true;
+    bool threaded_3d = false; ///< the left eye's 3D
     int level = 0;
     int capture_hold = 0;     ///< frames left without a right picture
     int drawn_lines = 0;      ///< the right eye's, this frame

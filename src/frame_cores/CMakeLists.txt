@@ -16,6 +16,8 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     melonds_platform.cpp
     nds_core.cpp
     nds_core.h
+    nds_stereo_3d.cpp
+    nds_stereo_3d.h
     nds_stereo_renderer.cpp
     nds_stereo_renderer.h
     microphone.cpp
