@@ -17,7 +17,8 @@
 // world) stays as it is.
 //
 // Clip space as the vertex shader has it: x is up and down, y across (the top screen is drawn
-// turned); +x up and +y to the right.
+// turned); +x up and +y to the LEFT (a census, Chapter 2: the wing of the health bar at y 0.8 to 1,
+// the score and the battery at -1). Here across is counted to the right: -y.
 //
 // Pure, unit tested (src/tests/frame_xr/kiu_hud.cpp); the XR thread publishes the place
 // (frame_xr/immersive.cpp) and the rasterizer moves the vertices (TurnSoftwareVertices).
@@ -59,7 +60,7 @@ struct Place {
 /// Degrees across at HUD Size 100 %, and the height of the frame's middle.
 inline constexpr float kWidthDeg = 60.0f, kMiddleDeg = 6.0f;
 inline constexpr float kFrameAspect = 400.0f / 240.0f;
-/// The two top groups in the frame (a desktop picture: the bar from -1 to -0.33, the score from
+/// The two top groups in the frame, across to the right (a desktop picture: the bar from -1 to -0.33, the score from
 /// 0.58 to 1, both about 0.86 up), and what a draw is told from them by.
 inline constexpr float kTopUp = 0.6f, kBarAside = -0.2f, kScoreAside = 0.4f;
 inline constexpr float kBarLeft = -1.0f, kBarRight = -0.33f;
@@ -245,7 +246,7 @@ constexpr As Decide(const Draw& d, bool in_batch, bool batch_known, bool page, b
 }
 
 struct Vertex {
-    float x, y, z, w; ///< clip: x up, y across
+    float x, y, z, w; ///< clip: x up, y across to the left
 };
 /// Whether these vertices (a triangle list) are a piece to move: all flat, not the whole frame.
 inline bool Movable(const Vertex* v, std::size_t n) {
@@ -289,8 +290,8 @@ inline void MoveAs(Vertex* t, std::size_t n, const Place& p, float factor_across
     for (std::size_t i = 0; i < n; ++i) {
         Vertex& v = t[i];
         const float u = at_up + p.half_up * (v.x + rise);
-        const float a = at_across + p.half_across * v.y;
-        v = {2.0f * u * factor_up, 2.0f * a * factor_across, 2.0f * v.z, 2.0f};
+        const float a = at_across - p.half_across * v.y; // to the right
+        v = {2.0f * u * factor_up, -2.0f * a * factor_across, 2.0f * v.z, 2.0f};
     }
 }
 /// `up`, `across`: the middle that decides its group.
@@ -305,7 +306,7 @@ inline void Move(Vertex* t, std::size_t n, const Place& p, float factor_across, 
     float up = 0.0f, across = 0.0f;
     for (std::size_t i = 0; i < n; ++i) {
         up += t[i].x / static_cast<float>(n);
-        across += t[i].y / static_cast<float>(n);
+        across -= t[i].y / static_cast<float>(n);
     }
     MoveBy(t, n, p, factor_across, factor_up, up, across);
 }
@@ -321,7 +322,7 @@ inline void MovePiece(Vertex* v, std::size_t n, const Place& p, float factor_acr
         a0 = std::min(a0, v[i].y);
         a1 = std::max(a1, v[i].y);
     }
-    MoveBy(v, n, p, factor_across, factor_up, 0.5f * (u0 + u1), 0.5f * (a0 + a1));
+    MoveBy(v, n, p, factor_across, factor_up, 0.5f * (u0 + u1), -0.5f * (a0 + a1));
 }
 
 /// AzaharFrame kiuhud: a page's draw: each quad (or triangle) that is flat and not the whole frame

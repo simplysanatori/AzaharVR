@@ -24,13 +24,14 @@ struct Seen {
 };
 Seen See(float across, float up, const Place& p, float f = 1.0f, float fy = 1.0f) {
     // A small triangle about the point, so the point's own group decides.
-    Vertex t[3] = {{up, across, 0.2f, 1.0f},
-                   {up + 1e-4f, across, 0.2f, 1.0f},
-                   {up, across + 1e-4f, 0.2f, 1.0f}};
+    // `across` to the right: clip's y is to the left.
+    Vertex t[3] = {{up, -across, 0.2f, 1.0f},
+                   {up + 1e-4f, -across, 0.2f, 1.0f},
+                   {up, -across + 1e-4f, 0.2f, 1.0f}};
     Move(t, 3, p, f, fy);
     REQUIRE(t[0].w == 2.0f);
     REQUIRE(t[0].z / t[0].w == Approx(0.2f));
-    return {std::atan(t[0].y / t[0].w / f * kTanX) / kRad,
+    return {std::atan(-t[0].y / t[0].w / f * kTanX) / kRad,
             std::atan(t[0].x / t[0].w / fy * kTanY) / kRad - 5.0f};
 }
 } // namespace
@@ -254,25 +255,41 @@ TEST_CASE("Kid Icarus HUD: what a draw is, by what is known of the game's 2D",
     }
 }
 
-TEST_CASE("Kid Icarus HUD: the battery goes with the score wherever the game has it",
+TEST_CASE("Kid Icarus HUD: the battery and the health bar's ornament, as the census has them",
           "[frame_xr][kiuhud]") {
+    // Clip's y is to the left: the health bar 0.3 to 1, the score and the battery -1 to -0.6.
+    const auto quad = [](Vertex* v, float u0, float u1, float y0, float y1) {
+        const float up[6] = {u0, u1, u0, u1, u1, u0};
+        const float at[6] = {y0, y0, y1, y0, y1, y1};
+        for (int i = 0; i < 6; ++i) {
+            v[i] = {up[i], at[i], 0.1f, 1.0f};
+        }
+    };
     const Place p = At();
-    // The dialogs' context draws it in a corner of its own; by its place it would go with the bar.
-    Vertex corner[6], score[6];
-    const float up[6] = {0.9f, 1.0f, 0.9f, 1.0f, 1.0f, 0.9f};
-    const float at[6] = {-1.0f, -1.0f, -0.9f, -1.0f, -0.9f, -0.9f};
+    Vertex end[6], wing[6], score[6], battery[6], whole[6];
+    quad(end, 0.8f, 0.95f, 0.3f, 0.45f); // the ornament's right end: it was left behind
+    quad(wing, 0.7f, 0.9f, 0.8f, 1.0f);
+    quad(score, 0.6f, 1.0f, -1.0f, -0.6f);
+    quad(battery, 0.9f, 1.0f, -1.0f, -0.9f);
+    quad(whole, 0.9f, 1.0f, -1.0f, -0.9f);
+    CHECK(GroupAt(0.875f, -0.375f) == Group::Bar);
+    CHECK(GroupAt(0.8f, 0.8f) == Group::Score);
+    Move(end, 6, p, 1.0f, 1.0f);
+    Move(wing, 6, p, 1.0f, 1.0f);
+    MovePiece(score, 6, p, 1.0f, 1.0f);
+    Move(battery, 6, p, 1.0f, 1.0f);
+    MoveAs(whole, 6, p, 1.0f, 1.0f, Group::Score);
+    // Their places on view are theirs in the game's frame, to one another.
+    CHECK(wing[2].y / 2.0f - end[0].y / 2.0f == Approx(p.half_across * 0.7f).margin(1e-4));
+    CHECK(wing[0].x / 2.0f - end[0].x / 2.0f == Approx(p.half_up * -0.1f).margin(1e-4));
+    CHECK(battery[0].y / 2.0f == Approx(score[0].y / 2.0f).margin(1e-4));
+    CHECK(battery[1].x / 2.0f == Approx(score[1].x / 2.0f).margin(1e-4));
     for (int i = 0; i < 6; ++i) {
-        corner[i] = {up[i], at[i], 0.1f, 1.0f};
-        score[i] = {up[i], at[i], 0.1f, 1.0f};
+        CHECK(whole[i].x == battery[i].x);
+        CHECK(whole[i].y == battery[i].y);
     }
-    CHECK(GroupAt(0.95f, -0.95f) == Group::Bar);
-    MoveAs(corner, 6, p, 1.0f, 1.0f, Group::Score);
-    MoveAs(score, 6, p, 1.0f, 1.0f, GroupAt(0.95f, 0.8f));
-    for (int i = 0; i < 6; ++i) {
-        CHECK(corner[i].x == score[i].x);
-        CHECK(corner[i].y == score[i].y);
-        CHECK(corner[i].w == 2.0f);
-    }
+    // The bar left of the score.
+    CHECK(end[0].y > score[2].y);
 }
 
 TEST_CASE("Kid Icarus HUD: a page's draw, quad by quad the same way; the dim stays whole",
