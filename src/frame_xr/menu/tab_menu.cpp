@@ -47,13 +47,13 @@ constexpr std::array<TabInfo, static_cast<int>(Tab::Count)> kTabs{{
 }};
 /// AzaharVR: the rail's order, Games after Main.
 constexpr std::array<Tab, static_cast<int>(Tab::Count)> kRailOrder{
-    Tab::Main, Tab::Games, Tab::Position, Tab::Stats, Tab::Controls, Tab::Mods, Tab::Homebrew,
-    Tab::Settings};
+    Tab::Main, Tab::Games,    Tab::Position, Tab::Controls,
+    Tab::Mods, Tab::Homebrew, Tab::Stats,    Tab::Settings};
 constexpr float kRailItemSmallH = 64.0f; ///< AzaharVR: with more tabs than fit at kRailItemH
 
 } // namespace
 
-// AzaharFrame menuux: Button, a full-width tonal button (Switch to Flat at the end of Settings).
+// AzaharFrame menuux: Button, a full-width tonal button (Fill View).
 // AzaharFrame autosave: Header, a group's subheader ("Saves") as tall as a row (the list scrolls
 // in whole rows). AzaharFrame kiu132: outside the unnamed namespace, so TabMenu's row drawing
 // (DrawRowItems, tab_menu.h) can take them.
@@ -95,6 +95,11 @@ std::string SliderText(Id id, float value) {
     }
     if (id == Id::ScaleX || id == Id::ScaleY) { // AzaharFrame kiu: "+10%", "0%", "-10%"
         return Format(value > 0.5f ? "+%.0f%%" : "%.0f%%", value);
+    }
+    if (id == Id::ScreenCurve || id == Id::MarginX || id == Id::MarginY) { // the stop's own text
+        const auto& stops = OptionsFor(id);
+        return stops[static_cast<std::size_t>(
+            std::clamp(std::lround(value), 0L, static_cast<long>(stops.size()) - 1))];
     }
     if (id == Id::WorldScale) { // AzaharFrame natural: the stop's percent, "100%" too
         const int i = std::clamp(static_cast<int>(std::lround(value)), 0,
@@ -336,7 +341,6 @@ Row RowFor(Id id, const MenuModel& m) {
     return r;
 }
 
-/// Every console's rows; RowsFor keeps the running game's.
 /// AzaharVR: the options of what draws the Secondary Screen (RowsFor leaves out the others').
 template <typename MakeRow>
 void OptionRows(const MenuModel& m, std::vector<Row>& rows, const MakeRow& row) {
@@ -362,6 +366,7 @@ void OptionRows(const MenuModel& m, std::vector<Row>& rows, const MakeRow& row) 
     }
 }
 
+/// Every console's rows; RowsFor keeps the running game's.
 std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section) {
     const auto lock = [&m](Id id) { return m.locked[static_cast<std::size_t>(id)]; };
     const auto row = [&](Id id, RowKind kind, int selected = 0, bool on = false) {
@@ -372,8 +377,9 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
     };
     std::vector<Row> rows;
     if (tab == Tab::Position) {
-        rows.push_back(row(Id::HideBottomScreen, RowKind::Switch, 0, m.hide_bottom_screen));
         rows.push_back(row(Id::ScreenLayout, RowKind::Segmented, m.screen_layout));
+        rows.push_back(row(Id::DsScreenRotation, RowKind::Segmented,
+                           std::clamp(m.ds_screen_rotation, 0, 2)));
         if (!m.second_free) { // it follows the main one
             Row gap = row(Id::ScreenGap, RowKind::Slider);
             const SliderRange gr = SliderFor(Id::ScreenGap);
@@ -382,15 +388,20 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             gap.value = SliderText(Id::ScreenGap, at);
             rows.push_back(gap);
         }
+        rows.push_back(row(Id::HideBottomScreen, RowKind::Switch, 0, m.hide_bottom_screen));
         rows.push_back(row(Id::MoveScreens, RowKind::Segmented, m.move_screens)); // AzaharFrame menu
         rows.push_back(row(Id::ScreenShape, RowKind::MenuButton, m.screen_shape));
-        rows.push_back(row(Id::ScreenCurve, RowKind::MenuButton, m.screen_curve));
+        Row curve = row(Id::ScreenCurve, RowKind::Slider);
+        const SliderRange cr = SliderFor(Id::ScreenCurve);
+        const float curve_at = std::clamp(static_cast<float>(m.screen_curve), cr.min, cr.max);
+        curve.t = (curve_at - cr.min) / (cr.max - cr.min);
+        curve.stops = static_cast<int>(cr.max - cr.min);
+        curve.value = SliderText(Id::ScreenCurve, curve_at);
+        rows.push_back(curve);
         Row offset = row(Id::ImmersiveOffset, RowKind::Offset);
         offset.value = m.immersive_offset;
         offset.on = m.immersive_offset_set;
         rows.push_back(offset);
-        rows.push_back(row(Id::DsScreenRotation, RowKind::Segmented,
-                           std::clamp(m.ds_screen_rotation, 0, 2)));
     } else if (tab == Tab::Settings) {
         // Render Margin and on: the Full (6DoF) modes only.
         const auto full = [&](Row r) {
@@ -399,11 +410,8 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             }
             return r;
         };
-        // AzaharFrame autosave: in three sections (owner decision, round 2). General: the
-        // settings that are the same in every game, and the list's end.
-        if (section == SettingsSection::General) {
-            // AzaharVR: the Console group (DS, GBA and Game Boy games)
-            rows.push_back(row(Id::CoreHeader, RowKind::Header));
+        // AzaharVR: Console (DS, GBA and Game Boy games): what is used while playing first.
+        if (section == SettingsSection::Console) {
             Row solar = row(Id::GbaSolarLevel, RowKind::Slider);
             const SliderRange sr = SliderFor(Id::GbaSolarLevel);
             const float sv = std::clamp(static_cast<float>(m.gba_solar_level), sr.min, sr.max);
@@ -411,26 +419,23 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             solar.stops = 10;
             solar.value = SliderText(Id::GbaSolarLevel, sv);
             rows.push_back(solar);
-            rows.push_back(row(Id::DsConsoleMode, RowKind::Segmented,
-                               std::clamp(m.ds_console_mode, 0, 2)));
+            rows.push_back(row(Id::DsMicBlow, RowKind::Button));
+            rows.push_back(row(Id::DsLidToggle, RowKind::Switch, 0, m.ds_lid_closed));
             rows.push_back(row(Id::SecondScreen, RowKind::Segmented,
                                SecondScreenIndex(m.core, m.gba_second_screen)));
             rows.push_back(row(Id::AllowGameEditing, RowKind::Switch, 0, m.gba_allow_editing));
-            OptionRows(m, rows, row);
             rows.push_back(row(Id::DsTouchEnabled, RowKind::Switch, 0, m.ds_touch_enabled));
-            rows.push_back(row(Id::DsMicBlow, RowKind::Switch, 0, m.ds_mic_active));
-            rows.push_back(row(Id::DsLidToggle, RowKind::Switch, 0, m.ds_lid_closed));
+            rows.push_back(row(Id::DsConsoleMode, RowKind::Segmented,
+                               std::clamp(m.ds_console_mode, 0, 2)));
             rows.push_back(row(Id::ImportSave, RowKind::Button));
+            OptionRows(m, rows, row); // under headers of their own
+            return rows;
+        }
+        // AzaharFrame autosave: in three sections (owner decision, round 2). General: the
+        // settings that are the same in every game, and the list's end.
+        if (section == SettingsSection::General) {
             rows.push_back(row(Id::Background, RowKind::Segmented, m.background));
             rows.push_back(row(Id::WindowScale, RowKind::Segmented, m.window_scale));
-            rows.push_back(row(Id::FaceButtons, RowKind::Segmented, m.face_buttons));
-            rows.push_back(row(Id::MotionControls, RowKind::Segmented, m.motion_controls));
-            // AzaharFrame kiufix: Aiming and its rows are on the Controls tab now (DrawControls).
-            rows.push_back(row(Id::ShowControllers, RowKind::Switch, 0, m.show_controllers));
-            if (m.show_controllers) { // AzaharFrame ctrlfront
-                rows.push_back(
-                    row(Id::ControllersInFront, RowKind::Segmented, m.controllers_in_front));
-            }
             rows.push_back(row(Id::FastForwardSpeed, RowKind::Segmented, m.fast_forward_speed));
             // AzaharFrame kiu2: a menu button, as Normal Speed (Experimental) does not fit a
             // segment (four choices beside the label).
@@ -454,7 +459,6 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             saves(Id::AutosaveEvery, static_cast<float>(every) / 4.0f, 4, every);
             saves(Id::AutosaveKeep, static_cast<float>(keep - 1) / 9.0f, 9, keep);
             rows.push_back(row(Id::MoreSettings, RowKind::Link));
-            rows.push_back(row(Id::SwitchToFlat, RowKind::Button)); // AzaharFrame menuux
             rows.push_back(row(Id::HelpHeader, RowKind::Header)); // AzaharFrame crashreport
             rows.push_back(row(Id::ReportProblem, RowKind::Link));
             rows.push_back(row(Id::AboutApp, RowKind::Link));
@@ -485,6 +489,8 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             rows.push_back(row(Id::AsyncShaders, RowKind::Switch, 0, m.async_shaders));
             rows.push_back(row(Id::AccurateImageCopies, RowKind::Segmented, // accxfer, xfergpu
                                m.accurate_image_copies));
+            rows.push_back(row(Id::ExperimentalHeader, RowKind::Header));
+            // AzaharVR: Layer Depth's place (DS, GBA and Game Boy games), first under the header.
             // AzaharFrame fixa: Motion Clarity in the Off and Wide modes (vr_motion_clarity_normal),
             // never locked: in the Full modes it does nothing (Immersive has their own row).
             {
@@ -510,13 +516,19 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
         for (const Id id : AngelsAimFirstPersonRows(m)) {
             rows.push_back(RowFor(id, m));
         }
-        Row fov = full(row(Id::GameFov, RowKind::Slider));
-        const SliderRange fr = SliderFor(Id::GameFov);
-        fov.t = (static_cast<float>(m.game_fov) - fr.min) / (fr.max - fr.min);
-        fov.value = SliderText(Id::GameFov, static_cast<float>(m.game_fov));
-        rows.push_back(fov);
-        // AzaharFrame depth, fovonce: Off | Set Once | Always
-        rows.push_back(full(row(Id::MatchCamera, RowKind::Segmented, m.match_camera)));
+        // AzaharFrame fovaxis: Fill View, once (a button; the values stay ordinary)
+        rows.push_back(full(row(Id::FillView, RowKind::Button)));
+        // AzaharFrame natural: World Scale, a slider over its stops (10% to 400%, the default
+        // 100%), and Follow Screen Size.
+        Row world = full(row(Id::WorldScale, RowKind::Slider));
+        const SliderRange wr = SliderFor(Id::WorldScale);
+        world.t = (static_cast<float>(m.world_scale_stop) - wr.min) / (wr.max - wr.min);
+        // No tick marks: 33 stops would be a row of dots; it still snaps to them.
+        world.value = SliderText(Id::WorldScale, static_cast<float>(m.world_scale_stop));
+        rows.push_back(world);
+        rows.push_back(full(row(Id::FollowScreen, RowKind::Switch, 0, m.follow_screen)));
+        // AzaharFrame fovscale: Stretch | Field of View, over the scales it acts on
+        rows.push_back(full(row(Id::ScaleMode, RowKind::Segmented, m.scale_mode)));
         // AzaharFrame kiu: Horizontal and Vertical Scale, -100 to +100 % around 0 (AzaharFrame
         // fov100; -30 to +30 % before). No tick marks: 40 stops would be a row of dots, as World
         // Scale's; it still snaps to them.
@@ -535,21 +547,41 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
         };
         scale(Id::ScaleX, m.scale_x, m.scale_x_warp);
         scale(Id::ScaleY, m.scale_y, m.scale_y_warp);
-        // AzaharFrame fovscale: Stretch | Field of View, under the scales it acts on
-        rows.push_back(full(row(Id::ScaleMode, RowKind::Segmented, m.scale_mode)));
         // AzaharFrame fovaxis: Render Margin per axis (one row before), with Stretch only: the
-        // two rows show under Scale Mode while it is Stretch and are gone in Field of View (the
+        // two rows show under the scales while it is Stretch and are gone in Field of View (the
         // owner's rule), their values kept. Under the row that shows them, so a change of mode
         // moves nothing above the beam.
         if (m.scale_mode == 0) {
             for (const auto& [id, level] : {std::pair{Id::MarginX, m.margin_x},
                                             std::pair{Id::MarginY, m.margin_y}}) {
-                rows.push_back(full(row(id, RowKind::Segmented, level)));
+                Row r = full(row(id, RowKind::Slider));
+                const SliderRange sr = SliderFor(id);
+                const float v = std::clamp(static_cast<float>(level), sr.min, sr.max);
+                r.t = (v - sr.min) / (sr.max - sr.min);
+                r.stops = static_cast<int>(sr.max - sr.min);
+                r.value = SliderText(id, v);
+                rows.push_back(r);
             }
         }
-        // AzaharFrame fovaxis: Fill View, once (a button; the values stay ordinary)
-        rows.push_back(full(row(Id::FillView, RowKind::Button)));
-        // AzaharFrame hudmove: HUD Spacing, 0 to 150 %, 100 the game's own (Experimental chip, never
+        Row fov = full(row(Id::GameFov, RowKind::Slider));
+        const SliderRange fr = SliderFor(Id::GameFov);
+        fov.t = (static_cast<float>(m.game_fov) - fr.min) / (fr.max - fr.min);
+        fov.value = SliderText(Id::GameFov, static_cast<float>(m.game_fov));
+        rows.push_back(fov);
+        // AzaharFrame depth, fovonce: Off | Set Once | Always
+        rows.push_back(full(row(Id::MatchCamera, RowKind::Segmented, m.match_camera)));
+        rows.push_back(row(Id::ExperimentalHeader, RowKind::Header));
+        // AzaharFrame projdef: how the Primary screen is drawn in the Full modes, never locked;
+        // while Motion Clarity is on here it takes the panel in the Full modes, and the row says
+        // so there (elsewhere the screen is a panel anyway, Motion Clarity or not).
+        {
+            Row panel = row(Id::ScreenAsPanel, RowKind::Switch, 0, m.screen_as_panel);
+            if (m.motion_clarity_immersive && m.immersive_mode >= 2) {
+                panel.value = Immersive::Names::kScreenAsPanelNote;
+            }
+            rows.push_back(panel);
+        }
+        // AzaharFrame hudmove: HUD Spacing, 0 to 150 %, 100 the game's own (Experimental, never
         // locked: outside the Full modes it does nothing, and its tooltip says so).
         const bool spacing = HudSpacingRowsShown(
             AngelsAimRowsShown(m.mods.angels_aim.shown && m.mods.angels_aim.mapped,
@@ -567,25 +599,6 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             r.t = (v - hr.min) / (hr.max - hr.min);
             r.value = SliderText(id, v);
             rows.push_back(r);
-        }
-        // AzaharFrame natural: World Scale, a slider over its stops (10% to 400%, the default
-        // 100%), and Follow Screen Size.
-        Row world = full(row(Id::WorldScale, RowKind::Slider));
-        const SliderRange wr = SliderFor(Id::WorldScale);
-        world.t = (static_cast<float>(m.world_scale_stop) - wr.min) / (wr.max - wr.min);
-        // No tick marks: 33 stops would be a row of dots; it still snaps to them.
-        world.value = SliderText(Id::WorldScale, static_cast<float>(m.world_scale_stop));
-        rows.push_back(world);
-        rows.push_back(full(row(Id::FollowScreen, RowKind::Switch, 0, m.follow_screen)));
-        // AzaharFrame projdef: how the Primary screen is drawn in the Full modes, never locked;
-        // while Motion Clarity is on here it takes the panel in the Full modes, and the row says
-        // so there (elsewhere the screen is a panel anyway, Motion Clarity or not).
-        {
-            Row panel = row(Id::ScreenAsPanel, RowKind::Switch, 0, m.screen_as_panel);
-            if (m.motion_clarity_immersive && m.immersive_mode >= 2) {
-                panel.value = Immersive::Names::kScreenAsPanelNote;
-            }
-            rows.push_back(panel);
         }
         // AzaharFrame flash; fixa: Motion Clarity in the Full modes (vr_motion_clarity_immersive,
         // read alone), never locked: elsewhere it does nothing, and its tooltip says where it
@@ -609,13 +622,47 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
                          SettingsSection section = SettingsSection::General) {
     std::vector<Row> rows = AllRowsFor(tab, m, section);
     std::erase_if(rows, [&m](const Row& r) { return !RowApplies(r.id, m.core); });
+    // AzaharVR: a subheader with nothing under it goes (Experimental)
+    for (std::size_t i = rows.size(); i-- > 0;) {
+        if (rows[i].kind == RowKind::Header &&
+            (i + 1 == rows.size() || rows[i + 1].kind == RowKind::Header)) {
+            rows.erase(rows.begin() + static_cast<std::ptrdiff_t>(i));
+        }
+    }
     return rows;
 }
 
 } // namespace
 
+bool ControlsSectionShown(ControlsSection section, const CoreCaps& core) {
+    switch (section) {
+    case ControlsSection::Pointing:
+        return RowApplies(Id::TouchpadTouch, core);
+    case ControlsSection::Motion:
+        return RowApplies(Id::MotionControls, core) || RowApplies(Id::GyroAim, core);
+    default:
+        return section == ControlsSection::Buttons;
+    }
+}
+
 bool SectionShown(SettingsSection section, const MenuModel& model) {
-    return Is3ds(model.core) || !RowsFor(Tab::Settings, model, section).empty();
+    return (Is3ds(model.core) && section != SettingsSection::Console) ||
+           !RowsFor(Tab::Settings, model, section).empty();
+}
+
+SettingsSection OpeningSection(SettingsSection section, const MenuModel& model, bool new_console) {
+    if (new_console && SectionShown(SettingsSection::Console, model)) {
+        return SettingsSection::Console;
+    }
+    return SectionShown(section, model) ? section : SettingsSection::General;
+}
+
+std::vector<Id> RowIds(Tab tab, const MenuModel& model, SettingsSection section) {
+    std::vector<Id> ids;
+    for (const Row& r : RowsFor(tab, model, section)) {
+        ids.push_back(r.id);
+    }
+    return ids;
 }
 
 int RowsBefore(Id id, SettingsSection section, const MenuModel& model) {
@@ -627,6 +674,9 @@ int RowsBefore(Id id, SettingsSection section, const MenuModel& model) {
 
 // AzaharFrame autosave
 SettingsSection SectionOf(Id id) {
+    if (OptionOf(id)) { // what draws the Secondary Screen
+        return SettingsSection::Console;
+    }
     switch (id) {
     case Id::Depth3d:
     case Id::InternalResolution:
@@ -677,6 +727,18 @@ SettingsSection SectionOf(Id id) {
     case Id::KiuPitOpacity: // AzaharFrame kiu133
     case Id::KiuSnapTurn:
         return SettingsSection::Immersive;
+    case Id::CoreHeader: // AzaharVR
+    case Id::GbaSolarLevel:
+    case Id::DsMicBlow:
+    case Id::DsLidToggle:
+    case Id::SecondScreen:
+    case Id::AllowGameEditing:
+    case Id::GbaDsHeader:
+    case Id::PokeDaisyHeader:
+    case Id::DsTouchEnabled:
+    case Id::DsConsoleMode:
+    case Id::ImportSave:
+        return SettingsSection::Console;
     default:
         return SettingsSection::General;
     }
@@ -685,6 +747,7 @@ SettingsSection SectionOf(Id id) {
 bool PerGameSetting(Id id) {
     switch (id) {
     case Id::HideBottomScreen:
+    case Id::ScreenLayout:
     case Id::ScreenShape:
     case Id::ImmersiveMode:
     case Id::MarginX: // AzaharFrame fovaxis
@@ -802,7 +865,9 @@ ModsDialog AngelsIntroDialog(const MenuModel& m) {
 // AzaharFrame reticle
 const std::vector<Id>& ControlsScopeRows() {
     // AzaharFrame kiufix: and Aiming's rows, moved here from Settings, General.
+    // AzaharVR: and the Buttons section's and Motion's first (Face Buttons is global).
     static const std::vector<Id> kRows{
+        Id::ShowControllers, Id::ControllersInFront, Id::MotionControls,
         Id::TouchpadTouch, Id::BottomScreenReticle, Id::ReticleSpeed,  Id::ReticleAtEdge,
         Id::ReticleCenter, Id::ReticleStick,        Id::GyroAim,       Id::GyroSensitivity,
         Id::Recoil,        Id::RecoilCharged,       Id::RecoilRapid,   Id::WeaponInHand,
@@ -1091,9 +1156,11 @@ const std::vector<std::string>& OptionsFor(Id id) {
     static const std::vector<std::string> kMouseMode{"Secondary Screen", "Pointer"}; // padsui
     static const std::vector<std::string> kStatsAt{"In Front", "On Wrist"}; // statspos
     static const std::vector<std::string> kPage{"In Game", "Azahar's Window"};
+    static const std::vector<std::string> kControlsSections{"Buttons", "Pointing", "Motion"};
     static const std::vector<std::string> kModsSegments{"Cheats", "Mods", "Textures"}; // cheatstab
     static const std::vector<std::string> kScope{"Global", "Per-Game"};
-    static const std::vector<std::string> kSections{"General", "Graphics", "Immersive"}; // autosave
+    static const std::vector<std::string> kSections{"General", "Graphics", "Immersive", // autosave
+                                                    LabelFor(Id::CoreHeader)};
     static const std::vector<std::string> kBackground{"Black", "Passthrough"};
     // AzaharFrame ctrlfront: vr_controllers_in_front's values in order, worded as Detach
     // Screens (kMove) with Primary added
@@ -1157,6 +1224,8 @@ const std::vector<std::string>& OptionsFor(Id id) {
         return kStatsAt;
     case Id::ControlsPage:
         return kPage;
+    case Id::ControlsSection:
+        return kControlsSections;
     case Id::ModsSegment:
         return kModsSegments;
     case Id::Scope:
@@ -1667,6 +1736,8 @@ std::string LabelFor(Id id) {
         return "Uninstall";
     case Id::CoreHeader:
         return "Console";
+    case Id::ExperimentalHeader:
+        return Immersive::Names::kExperimental;
     case Id::GbaSolarLevel:
         return "Solar Sensor Level";
     case Id::DsConsoleMode:
@@ -2111,6 +2182,9 @@ SliderRange SliderFor(Id id) {
     }
     if (id == Id::WorldScale) { // AzaharFrame natural: Layout::kWorldScaleStops' indexes
         return {0.0f, static_cast<float>(Immersive::Layout::kWorldScaleStops.size() - 1), 1.0f};
+    }
+    if (id == Id::ScreenCurve || id == Id::MarginX || id == Id::MarginY) { // OptionsFor's stops
+        return {0.0f, static_cast<float>(OptionsFor(id).size() - 1), 1.0f};
     }
     if (id == Id::CursorSpeed) { // AzaharFrame padsui: five steps, Normal in the middle
         return {0.0f, 4.0f, 1.0f};
@@ -3145,23 +3219,9 @@ constexpr float kScopeRowsGap = 16.0f;  ///< under the toggle's line, before the
 constexpr float kScopeEditGap = 40.0f;
 
 /// The room a row's label takes.
-// AzaharFrame projdef: an "Experimental" chip right after a row's label (Motion Clarity), in the
-// style of Angel's Aim's Alpha chip and the Mods list's version chips.
-constexpr float kRowChipH = 32.0f, kRowChipPad = 12.0f, kRowChipGap = 12.0f;
-const char* RowChip(Id id) {
-    return id == Id::MotionClarity || id == Id::MotionClarityNormal || id == Id::ScreenAsPanel ||
-                   id == Id::HudSpacingX || id == Id::HudSpacingY // AzaharFrame hudmove
-               ? Immersive::Names::kExperimental
-               : nullptr;
-}
-float RowChipWidth(const Kit& kit, Id id) {
-    const char* chip = RowChip(id);
-    return chip ? kRowChipGap + kit.TextWidth(Type::Label, chip) + kRowChipPad * 2.0f : 0.0f;
-}
-
 float LabelRoom(const Kit& kit, const MenuModel& model, Id id) {
     (void)model;
-    return kit.TextWidth(Type::Body, LabelFor(id)) + RowChipWidth(kit, id); // projdef: its chip
+    return kit.TextWidth(Type::Body, LabelFor(id));
 }
 } // namespace
 
@@ -3174,35 +3234,59 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
     const Rect c{pane.x0 + kPad, pane.y0 + kPad, pane.x1 - kPad, pane.y1 - kPad};
     // AzaharFrame reticle: the scope control at the top right, as on Settings and Position.
     const float scope_x0 = DrawScope(kit, model, view, c, pane);
-    const auto& pages = OptionsFor(Id::ControlsPage);
-    const float w = kit.SegmentedWidth(pages, scope_x0 - kScopeGapX - c.x0);
-    // AzaharFrame menu: the pages on the left. AzaharFrame reticle: Edit Controls at the top of
-    // a column on the right, under the scope control, beside the controller picture.
-    const Rect seg{c.x0, c.y0, c.x0 + w, c.y0 + kControlH};
-    const int hover = view.hover.id == Id::ControlsPage ? view.hover.index : -1;
-    const int pressed = view.pressed.id == Id::ControlsPage ? view.pressed.index : -1;
-    kit.Segmented(seg, pages, model.controls_page, hover, pressed);
-    const auto pe = kit.SegmentEdges(seg, pages);
-    for (int i = 0; i < static_cast<int>(pages.size()); i++) {
-        AddHit({pe[static_cast<std::size_t>(i)], seg.y0, pe[static_cast<std::size_t>(i + 1)], seg.y1},
-               {Id::ControlsPage, i}, pane);
+    // AzaharVR: three sections (Buttons, Pointing, Motion) on the left, those the running game's
+    // console has; with Buttons alone, its pages (In Game, Azahar's Window) are there instead.
+    std::vector<std::string> sections;
+    std::vector<int> section_values;
+    for (int i = 0; i < static_cast<int>(ControlsSection::Count); i++) {
+        if (ControlsSectionShown(static_cast<ControlsSection>(i), model.core)) {
+            sections.push_back(OptionsFor(Id::ControlsSection)[static_cast<std::size_t>(i)]);
+            section_values.push_back(i);
+        }
     }
-    // AzaharFrame kiufix: under the pages, the page scrolls (as the Settings tab's list): the
-    // picture and the rows under it as before, then Aiming and its rows (moved here from
-    // Settings, General), reached by scrolling.
-    const Rect list{pane.x0, seg.y1 + 8.0f, pane.x1, pane.y1 - 8.0f};
+    const bool one_section = sections.size() < 2;
+    const ControlsSection section = ControlsSectionShown(view.controls_section, model.core)
+                                        ? view.controls_section
+                                        : ControlsSection::Buttons;
+    const bool buttons = section == ControlsSection::Buttons;
+    if (!one_section) {
+        const auto place = [&section_values](int value) {
+            const auto it = std::find(section_values.begin(), section_values.end(), value);
+            return it == section_values.end() ? -1
+                                              : static_cast<int>(it - section_values.begin());
+        };
+        const Rect ss{c.x0, c.y0, c.x0 + kit.SegmentedWidth(sections, scope_x0 - kScopeGapX - c.x0),
+                      c.y0 + kControlH};
+        const int sh = view.hover.id == Id::ControlsSection ? view.hover.index : -1;
+        const int sp = view.pressed.id == Id::ControlsSection ? view.pressed.index : -1;
+        kit.Segmented(ss, sections, place(static_cast<int>(section)), place(sh), place(sp));
+        const auto se = kit.SegmentEdges(ss, sections);
+        for (std::size_t i = 0; i < sections.size(); i++) {
+            AddHit({se[i], ss.y0, se[i + 1], ss.y1}, {Id::ControlsSection, section_values[i]},
+                   pane);
+        }
+    }
+    // AzaharFrame kiufix: under the sections, the page scrolls (as the Settings tab's list).
+    const Rect list{pane.x0, c.y0 + kControlH + kScopeRowsGap, pane.x1, pane.y1 - 8.0f};
     constexpr float kChoiceH = kControlH + 8.0f;
     constexpr float kSupportH = 16.0f; ///< the Touchpad's supporting line and its gaps
-    const bool show_touch_rows = RowApplies(Id::TouchpadTouch, model.core);
-    const bool show_aim_rows = RowApplies(Id::GyroAim, model.core);
+    const bool show_touch_rows = section == ControlsSection::Pointing;
+    const bool show_motion_rows =
+        section == ControlsSection::Motion && RowApplies(Id::MotionControls, model.core);
+    const bool show_aim_rows =
+        section == ControlsSection::Motion && RowApplies(Id::GyroAim, model.core);
     const bool reticle_on = show_touch_rows && model.bottom_screen_reticle != 0;
     const float rows_h =
         show_touch_rows
             ? (kChoiceH + kSupportH + kChoiceH + (reticle_on ? 3.0f * kChoiceH : 0.0f))
             : 0.0f;
-    // The picture keeps the height it has with the reticle off and nothing below (the page as it
-    // was); the rest goes under it.
-    const float picture_h = (c.y1 - (kChoiceH + kSupportH + kChoiceH)) - 4.0f - list.y0;
+    // Buttons: the pages and Edit Controls in a row of their own (the pages over the list while
+    // it is the only section), the picture under it as wide as the pane, then the rows; one shows
+    // under the picture without scrolling.
+    const float pages_h = buttons && !one_section ? kChoiceH : 0.0f;
+    const float picture_h = buttons ? 320.0f : 0.0f;
+    const float button_rows_h =
+        buttons ? kChoiceH * (model.show_controllers ? 3.0f : 2.0f) : 0.0f;
     // Aiming's rows: Aiming and Gyro Sensitivity always; Recoil and Weapon in Hand (with their
     // own rows; Weapon in Hand's: Weapon Opacity, Weapon Size, Weapon Scale, Muzzle Flash (Muzzle
     // Flash Size while it is on), Projectiles (Projectile Opacity, Size and Speed while it is on))
@@ -3212,33 +3296,55 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
     // AzaharFrame kiurows: the rows only Kid Icarus: Uprising has (KiuOnlyControlsRow) are added
     // only while it is the game (model.mods.angels_aim.shown).
     const std::vector<Id> aim_rows = show_aim_rows ? AimingRows(model) : std::vector<Id>{}; // AzaharFrame kiu132: shared
-    constexpr float kDividerH = 24.0f;
-    const float aim_block_h =
-        show_aim_rows ? (kDividerH + kChoiceH * static_cast<float>(aim_rows.size())) : 0.0f;
-    const float content_h = picture_h + 4.0f + rows_h + aim_block_h + 8.0f;
+    const float motion_h = show_motion_rows ? kChoiceH : 0.0f;
+    const float aim_block_h = kChoiceH * static_cast<float>(aim_rows.size());
+    const float content_h =
+        pages_h + picture_h + 4.0f + button_rows_h + rows_h + motion_h + aim_block_h + 8.0f;
     const float max_scroll = std::max(0.0f, std::ceil(content_h - list.H()));
     layout.max_scroll = max_scroll;
     layout.scroll_step = kChoiceH;
     const float scroll =
         std::clamp(view.scroll[static_cast<std::size_t>(view.tab)], 0.0f, max_scroll);
     // Where Aiming is: the scroll that brings it to the top (Angel's Aim's Aiming Settings).
-    layout.aiming_scroll = std::min(max_scroll, picture_h + 4.0f + rows_h);
-    layout.controls = true;
+    layout.aiming_scroll = std::min(max_scroll, 4.0f + motion_h);
+    layout.controls = show_aim_rows;
     const float top = list.y0 - scroll;
     kit.Clip(list);
+    // AzaharFrame menu: the pages on the left. AzaharFrame reticle: Edit Controls clear of
+    // Per-Game's count tooltip (34 dp under the toggle): beside the pages, or, while they are over
+    // the list, at the right under it, beside the picture.
     const float edit_w =
         std::min(200.0f, kit.TextWidth(Type::Label, LabelFor(Id::EditControls)) + 82.0f);
-    const Rect edit{c.x1 - edit_w, seg.y1 + kScopeEditGap - scroll, c.x1,
-                    seg.y1 + kScopeEditGap + kControlH - scroll};
-    kit.Button(edit, ButtonStyle::Tonal, Sym::kEdit, LabelFor(Id::EditControls),
-               StateOf(view, {Id::EditControls}));
-    AddHit(edit, {Id::EditControls}, list);
+    Rect edit{c.x1 - edit_w, top + kScopeEditGap - kScopeRowsGap, c.x1, 0.0f};
+    if (buttons) {
+        const auto& pages = OptionsFor(Id::ControlsPage);
+        // Beside each other, the pages as wide as their labels.
+        const float room = one_section ? scope_x0 - kScopeGapX - c.x0 : 300.0f;
+        const float seg_y = one_section ? c.y0 : top;
+        const Rect seg{c.x0, seg_y, c.x0 + kit.SegmentedWidth(pages, room), seg_y + kControlH};
+        if (!one_section) {
+            edit = {seg.x1 + 12.0f, top, seg.x1 + 12.0f + edit_w, 0.0f};
+        }
+        edit.y1 = edit.y0 + kControlH;
+        const int hover = view.hover.id == Id::ControlsPage ? view.hover.index : -1;
+        const int pressed = view.pressed.id == Id::ControlsPage ? view.pressed.index : -1;
+        kit.Clip(one_section ? pane : list);
+        kit.Segmented(seg, pages, model.controls_page, hover, pressed);
+        kit.Clip(list);
+        const auto pe = kit.SegmentEdges(seg, pages);
+        for (int i = 0; i < static_cast<int>(pages.size()); i++) {
+            AddHit({pe[static_cast<std::size_t>(i)], seg.y0, pe[static_cast<std::size_t>(i + 1)],
+                    seg.y1},
+                   {Id::ControlsPage, i}, one_section ? pane : list);
+        }
+        kit.Button(edit, ButtonStyle::Tonal, Sym::kEdit, LabelFor(Id::EditControls),
+                   StateOf(view, {Id::EditControls}));
+        AddHit(edit, {Id::EditControls}, list);
+    }
     const auto visible = [&list](const Rect& r) { return r.y1 > list.y0 && r.y0 < list.y1; };
     // Touchpad: a label and its two choices; AzaharFrame menuux: under them one line saying what
     // the chosen one does (the only row with a supporting line: the owner asked for it).
     // AzaharFrame mouse: Bottom Screen Reticle under that line, the same way.
-    // AzaharFrame ui2: the controller picture at the top, under the pages; these rows at the
-    // bottom of the pane, under the picture (owner's report 14).
     // AzaharFrame reticle: in Global, a row the game has its own value for is greyed (its
     // tooltip says why), as on the Settings tab.
     // AzaharFrame kiu: `right`, the row's right end when it shares its row (At Edge).
@@ -3260,7 +3366,10 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
                     enabled ? 1.0f : kDisabledContent);
         const auto& opts = OptionsFor(id);
         // AzaharFrame input2: up to 0.64 of the width (the reticle's four choices need it).
-        const float room = shared ? right - c.x0 - kit.TextWidth(Type::Body, LabelFor(id)) - 16.0f
+        // AzaharVR: the rows moved here have what their labels leave, as in Settings.
+        const bool wide = id == Id::FaceButtons || id == Id::ControllersInFront ||
+                          id == Id::MotionControls;
+        const float room = shared || wide ? right - c.x0 - kit.TextWidth(Type::Body, LabelFor(id)) - 16.0f
                                   : c.W() * 0.64f;
         const float tw = kit.SegmentedWidth(opts, room);
         const Rect ts{right - tw, row.Cy() - kControlH * 0.5f, right, row.Cy() + kControlH * 0.5f};
@@ -3332,10 +3441,22 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
             anchors.push_back({id, label_x, half.y0 + 6.0f, lock});
         }
     };
-    const float rows_y0 = top + picture_h + 4.0f;
-    const Rect area{pane.x0 + 8.0f, top, edit.x0 - 12.0f, rows_y0 - 4.0f};
-    if (diagram) {
+    const float rows_y0 = top + pages_h + picture_h + 4.0f;
+    const Rect area{pane.x0 + 8.0f, top + pages_h, one_section ? edit.x0 - 12.0f : pane.x1 - 8.0f,
+                    rows_y0 - 4.0f};
+    if (diagram && buttons) {
         diagram(kit, area, model.controls_page);
+    }
+    if (buttons) { // AzaharVR: moved from Settings, General
+        const Rect face = choice_row(Id::FaceButtons, rows_y0, model.face_buttons);
+        const Rect show{face.x0, face.y1, face.x1, face.y1 + kChoiceH};
+        switch_half(Id::ShowControllers, show, model.show_controllers);
+        if (model.show_controllers) { // AzaharFrame ctrlfront
+            choice_row(Id::ControllersInFront, show.y1, model.controllers_in_front);
+        }
+    }
+    if (show_motion_rows) {
+        choice_row(Id::MotionControls, rows_y0, model.motion_controls);
     }
     if (show_touch_rows) {
         const Rect tp_row = choice_row(Id::TouchpadTouch, rows_y0, model.touchpad_touch);
@@ -3361,9 +3482,7 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
 
     // ---- AzaharFrame kiufix: Aiming (moved from Settings, General) ----
     if (show_aim_rows) {
-        float y = rows_y0 + rows_h + 8.0f;
-        kit.Line(c.x0, y, c.x1, y, 1.0f, Tok::kOutlineVariant);
-        y += kDividerH - 8.0f;
+        float y = rows_y0 + motion_h;
     const auto switch_row = [&](Id id, bool on) {
         switch_half(id, {c.x0 - 12.0f, y, c.x1 + 12.0f, y + kChoiceH}, on);
     };
@@ -3584,13 +3703,14 @@ void TabMenu::DrawRows(Kit& kit, const MenuModel& model, const MenuView& view, c
                 AddHit(b, {Id::SwapScreens}, pane);
             }
         } else {
-            // AzaharFrame autosave: the section (General, Graphics, Immersive). AzaharVR: those
-            // with rows for the console, and none to pick from when that is General alone; a
-            // target's index is the section's own value.
+            // AzaharFrame autosave: the section (General, Graphics, Immersive). AzaharVR: Console
+            // before them; those with rows for the console, and none to pick from when that is
+            // General alone; a target's index is the section's own value.
             std::vector<std::string> sections;
             std::vector<int> values;
-            for (int i = 0; i < static_cast<int>(SettingsSection::Count); i++) {
-                if (SectionShown(static_cast<SettingsSection>(i), model)) {
+            for (const SettingsSection section : kSectionOrder) {
+                if (SectionShown(section, model)) {
+                    const int i = static_cast<int>(section);
                     sections.push_back(
                         OptionsFor(Id::SettingsSection)[static_cast<std::size_t>(i)]);
                     values.push_back(i);
@@ -3698,10 +3818,14 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
             continue;
         }
         if (r.kind == RowKind::Button) {
-            // AzaharFrame menuux: a full-width tonal button (Switch to Flat), no label.
+            // AzaharFrame menuux: a full-width tonal button (Fill View), no label.
             const Rect b{c.x0, cy - 28.0f, c.x1, cy + 28.0f};
+            if (r.id == Id::DsMicBlow && row.y1 > list.y0 && row.y0 < list.y1) {
+                anchors.push_back({r.id, c.x0, std::max(row.y0, list.y0) + 6.0f, r.lock, -1, b.Cx()});
+            }
             kit.Button(b, ButtonStyle::Tonal,
-                       r.id == Id::FillView            ? Sym::kFitScreen
+                       r.id == Id::DsMicBlow           ? char32_t{0}
+                       : r.id == Id::FillView          ? Sym::kFitScreen
                        : r.id == Id::KiuBottomReset    ? Sym::kRecenter // AzaharFrame kiu131
                        : r.id == Id::AngelsAimSettings ? Sym::kTune     // AzaharFrame kiu132
                                                        : Sym::kTv,
@@ -3734,14 +3858,6 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
         const float label_y = r.note.empty() ? cy : cy - 11.0f;
         kit.TextMid(c.x0, label_y, Type::Body, Tok::kOnSurface, LabelFor(r.id), 0,
                     enabled ? 1.0f : kDisabledContent);
-        if (const char* chip = RowChip(r.id)) { // AzaharFrame projdef: "Experimental"
-            const float x = c.x0 + kit.TextWidth(Type::Body, LabelFor(r.id)) + kRowChipGap;
-            const float cw = kit.TextWidth(Type::Label, chip) + kRowChipPad * 2.0f;
-            const Rect chip_r{x, label_y - kRowChipH * 0.5f, x + cw, label_y + kRowChipH * 0.5f};
-            kit.Fill(chip_r, 8.0f, Tok::kSecondaryContainer, enabled ? 1.0f : kDisabledContent);
-            kit.TextMid(chip_r.Cx(), chip_r.Cy(), Type::Label, Tok::kOnSecondaryContainer, chip, 1,
-                        enabled ? 1.0f : kDisabledContent);
-        }
         if (!r.note.empty()) {
             kit.TextSized(c.x0, cy + 20.0f, 14.0f, false,
                           r.note_warn ? Tok::kError : Tok::kOnSurfaceVariant, r.note, 0,

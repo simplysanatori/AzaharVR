@@ -72,7 +72,7 @@ Posef BottomFromTop(const Posef& top, float scale, float main_height = 2.0f * kT
 
 // ---- AzaharFrame layout: Screen Layout --------------------------------------------------------
 //
-// Where the second slot goes for the main one (Settings::values.vr_screen_layout, global):
+// Where the second slot goes for the main one (Settings::values.vr_screen_layout):
 // Stacked is BottomFromTop; Side by Side is the main slot turned about the viewer (the LOCAL
 // origin's vertical axis) far enough that the second screen sits kSideGap to the right of it,
 // at the same distance and height (vertically centred on the main screen), facing you as the

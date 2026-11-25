@@ -29,6 +29,8 @@ bool WithSetting(Menu::Id id, F&& f) {
         return true;
     case Id::ScreenGap:
         f(v.vr_screen_gap);
+    case Id::ScreenLayout:
+        f(v.vr_screen_layout);
         return true;
     case Id::ImmersiveMode:
         f(v.vr_immersive_mode);

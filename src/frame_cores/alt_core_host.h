@@ -224,6 +224,10 @@ public:
     /// An option of the driver's: RotatePages and MapRefresh hold for a driver made later too.
     bool SetDriverOption(Common::AltCore::DriverOption option, uint32_t value);
     void SetMicBlow(bool on);
+    /// One blow of kMicBlowFrames of the game's frames, so a paused game gets it when it goes on.
+    void BlowMic();
+    int MicBlowFramesLeft() const;
+    static constexpr int kMicBlowFrames = 120;
     void SetLidClosed(bool closed);
     void SetTouchEnabled(bool on);
     void SetScreenRotation(int deg);

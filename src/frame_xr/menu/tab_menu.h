@@ -3,7 +3,7 @@
 // Refer to the license.txt file included.
 
 // AzaharFrame tabmenu: the in-game menu as one panel in the structure of CitraVR's VR menu (a
-// column of tabs on the left: Main, Position, Stats, Controls, Mods, Homebrew, Settings), drawn in Material 3
+// column of tabs on the left: Main, Position, Controls, Mods, Homebrew, Stats, Settings), drawn in Material 3
 // (md3.h). This file is the menu's content, layout, drawing and hit testing; it knows nothing of
 // OpenXR, Qt or the settings. The host fills a MenuModel with the current values, keeps a
 // MenuView (the tab, what the beam points at, scrolling, an open menu), draws with Draw and maps
@@ -169,8 +169,8 @@ enum class Id : int {
     /// section's, MatchBottomNormal under the Graphics section's; one key, per game, never locked
     MatchBottom,
     MatchBottomNormal,
-    /// AzaharFrame projdef: Primary Screen as Panel, a switch with the Experimental chip right
-    /// before Motion Clarity (the opposite of vr_screens_in_projection), per game, never locked
+    /// AzaharFrame projdef: Primary Screen as Panel, a switch, first under Experimental
+    /// (the opposite of vr_screens_in_projection), per game, never locked
     ScreenAsPanel,
     MoreSettings,
     HelpHeader,    ///< AzaharFrame crashreport: General's "Help" subheader (no action)
@@ -287,7 +287,7 @@ enum class Id : int {
     // AzaharFrame kiuweap2
     MuzzleFlashSize, ///< a slider, 50 to 300 (percent), with Muzzle Flash on
     // AzaharFrame hudmove: HUD Spacing, sliders of 0 to 150 % (vr_immersive_hud_spacing_x,
-    // _up_down), per game, with the Experimental chip, never locked
+    // _up_down), per game, under Experimental, never locked
     HudSpacingX,
     HudSpacingY,
     // AzaharFrame kiufire
@@ -365,6 +365,8 @@ enum class Id : int {
     GamesSearchClear, ///< the chip's close glyph, and No Matches' button
     GamesSort,        ///< its menu; index: GamesSort
     GamesAddFolder,
+    ControlsSection, ///< the Controls tab's section buttons: Buttons, Pointing, Motion
+    ExperimentalHeader, ///< the Graphics and Immersive sections' "Experimental" subheader (no action)
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -624,7 +626,6 @@ struct MenuModel {
     bool ds_touch_enabled = true; ///< DS touch input switch
     int ds_screen_rotation = 0;   ///< 0 = 0°, 1 = 90°, 2 = 270°
     bool ds_lid_closed = false;   ///< DS lid closed toggle
-    bool ds_mic_active = false;   ///< DS microphone blow toggle
     bool operator==(const MenuModel&) const = default;
 };
 
@@ -641,15 +642,30 @@ bool TabShown(Tab tab, const MenuModel& model);
 enum class Page { Tabs, SaveSlots, LoadSlots };
 
 /// AzaharFrame autosave: the Settings tab's sections (owner decision, round 2).
-enum class SettingsSection : int { General, Graphics, Immersive, Count };
+/// AzaharVR: Console (DS, GBA and Game Boy games) drawn first.
+enum class SettingsSection : int { General, Graphics, Immersive, Console, Count };
+/// The sections as they are drawn.
+constexpr std::array<SettingsSection, static_cast<int>(SettingsSection::Count)> kSectionOrder{
+    SettingsSection::Console, SettingsSection::General, SettingsSection::Graphics,
+    SettingsSection::Immersive};
 /// The scope the menu opens on: Per-Game (1) whenever the game can have settings of its own.
 constexpr int OpeningScope(bool per_game_ok) {
     return per_game_ok ? 1 : 0;
 }
 /// The section a Settings row is in (General for the rest).
 SettingsSection SectionOf(Id id);
+/// AzaharVR: the Controls tab's sections: Buttons always, Pointing with a touch screen, Motion with
+/// a gyro.
+enum class ControlsSection { Buttons, Pointing, Motion, Count };
+bool ControlsSectionShown(ControlsSection section, const CoreCaps& core);
 /// Whether the section has any row for the running game's console.
 bool SectionShown(SettingsSection section, const MenuModel& model);
+/// The section Settings shows: `section`, or Console when the console changed (`new_console`) to
+/// one that has it, or General when the console does not have `section`.
+SettingsSection OpeningSection(SettingsSection section, const MenuModel& model, bool new_console);
+/// The rows of the Position tab, or of a section of the Settings tab, in order as they show now.
+std::vector<Id> RowIds(Tab tab, const MenuModel& model,
+                       SettingsSection section = SettingsSection::General);
 /// How many of the section's rows come before this one, for the running game's console.
 int RowsBefore(Id id, SettingsSection section, const MenuModel& model);
 /// Per-game settings (Azahar's Properties have most of them too): a change in Per-Game is the
@@ -714,6 +730,7 @@ struct MenuView {
     Tab tab = Tab::Main;
     Page page = Page::Tabs; ///< the Main tab's slot lists
     SettingsSection section = SettingsSection::General; ///< AzaharFrame autosave
+    ControlsSection controls_section = ControlsSection::Buttons;
     Target hover;
     Target pressed;
     std::array<float, static_cast<int>(Tab::Count)> scroll{}; ///< dp scrolled down
@@ -813,7 +830,7 @@ struct MenuLayout {
     Scrolling::Bar bar;
     bool scroll_locked = false;
     /// AzaharFrame kiufix: the Controls tab's scroll that brings Aiming to the top (`controls`:
-    /// this layout is the Controls tab's page).
+    /// this layout is the Controls tab's Motion section).
     float aiming_scroll = 0.0f;
     bool controls = false;
     GamesList games; ///< the Games tab's list as drawn: GameTile's index is in it

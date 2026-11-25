@@ -829,10 +829,11 @@ int main(int argc, char** argv) {
     v.hover = {Id::ScreenCurve, kLabelIndex};
     ok &= shot("2-position", m, v);
 
-    v.hover = {Id::ScreenCurve, 5};
-    v.open_menu = Id::ScreenCurve;
-    ok &= shot("2c-position-curve-menu", m, v);
-    v.open_menu = Id::None;
+    v.hover = {Id::ScreenCurve, -1};
+    v.dragging = Id::ScreenCurve;
+    v.drag_t = 5.0f / 6.0f;
+    ok &= shot("2c-position-curve-held", m, v);
+    v.dragging = Id::None;
 
     v.hover = {Id::ScreenShape, 3};
     v.open_menu = Id::ScreenShape;
@@ -879,6 +880,7 @@ int main(int argc, char** argv) {
         mr.reticle_at_edge = 1;
         v = {};
         v.tab = Tab::Controls;
+        v.controls_section = ControlsSection::Pointing;
         v.hover = {Id::ReticleAtEdge, 1};
         ok &= shot("4c-controls-reticle", mr, v);
         // AzaharFrame reticle: Reticle Speed held at 3.0x, and its tooltip
@@ -895,6 +897,7 @@ int main(int argc, char** argv) {
         mr.reticle_center = true;
         v = {};
         v.tab = Tab::Controls;
+        v.controls_section = ControlsSection::Pointing;
         ok &= shot("4f-controls-reticle-switches", mr, v);
         v.hover = {Id::ReticleCenter, -1};
         v.tooltip = Id::ReticleCenter;
@@ -908,6 +911,7 @@ int main(int argc, char** argv) {
         mk.reticle_stick = true;
         v = {};
         v.tab = Tab::Controls;
+        v.controls_section = ControlsSection::Pointing;
         ok &= shot("4i-controls-reticle-right-stick-on", mk, v);
     }
 
@@ -1086,12 +1090,14 @@ int main(int argc, char** argv) {
     pg.autosave_every = 2;
     pg.autosave_keep = 3;
     v = settings(SettingsSection::General);
-    v.hover = {Id::ShowControllers};
+    v.hover = {Id::WindowScale, 1};
     ok &= shot("5-settings", pg, v);
     {
         // AzaharFrame ctrlfront: Controllers in Front of Screen under Show Controllers, its
         // Primary choice's tooltip; then Show Controllers off, the row gone.
-        MenuView cv = settings(SettingsSection::General);
+        MenuView cv;
+        cv.tab = Tab::Controls;
+        cv.scroll[static_cast<int>(Tab::Controls)] = -1.0f;
         cv.hover = {Id::ControllersInFront, 1};
         ok &= shot("5c-settings-controllers-in-front", pg, cv);
         MenuModel off = pg;
@@ -1108,7 +1114,9 @@ int main(int argc, char** argv) {
         MenuModel mo = pg;
         mo.motion_controls = 0;
         mo.game_value[static_cast<std::size_t>(Id::MotionControls)] = true;
-        MenuView mv = settings(SettingsSection::General);
+        MenuView mv;
+        mv.tab = Tab::Controls;
+        mv.controls_section = ControlsSection::Motion;
         ok &= shot("5m-settings-motion-controls-per-game", mo, mv);
         mo.scope = 0;
         mo.locked[static_cast<std::size_t>(Id::MotionControls)] = Lock::GameValue;
@@ -1136,6 +1144,7 @@ int main(int argc, char** argv) {
                            bool tip = false) {
             MenuView cv;
             cv.tab = Tab::Controls;
+            cv.controls_section = ControlsSection::Motion;
             cv.scroll[static_cast<int>(Tab::Controls)] = scroll;
             cv.hover = {hover, index};
             if (tip) {
@@ -1145,7 +1154,7 @@ int main(int argc, char** argv) {
         };
         ok &= shot("kiu-controls-1-top", go, at(0.0f));
         ok &= shot("kiu-controls-2-scrolled-one-step", go, at(80.0f));
-        ok &= shot("kiu-controls-3-aiming", go, at(1.0e4f * 0 + 330.0f));
+        ok &= shot("kiu-controls-3-aiming", go, at(330.0f));
         ok &= shot("kiu-controls-4-aiming-mid", go, at(480.0f));
         ok &= shot("kiu-controls-5-end", go, at(1.0e5f));
         MenuModel cal = go;
@@ -1182,7 +1191,7 @@ int main(int argc, char** argv) {
         gy.gyro_aim = 1;
         gy.gyro_sensitivity = 15;
         ok &= shot("kiu-controls-9-gyro-aim-end", gy, at(1.0e5f));
-        ok &= shot("kiu-controls-9b-gyro-aim-tooltip", gy, at(330.0f, Id::GyroAim, kLabelIndex, true));
+        ok &= shot("kiu-controls-9b-gyro-aim-tooltip", gy, at(0.0f, Id::GyroAim, kLabelIndex, true));
         MenuModel off = go;
         off.gyro_aim = 0;
         ok &= shot("kiu-controls-10-aiming-off-end", off, at(1.0e5f));
@@ -1192,15 +1201,18 @@ int main(int argc, char** argv) {
         ok &= shot("kiu-controls-11-recoil-and-weapon-off-end", nr, at(1.0e5f));
         MenuModel rr = go;
         rr.bottom_screen_reticle = 3;
-        ok &= shot("kiu-controls-12-reticle-on-top", rr, at(0.0f));
-        ok &= shot("kiu-controls-12b-reticle-on-end", rr, at(1.0e5f));
+        MenuView rv = at(0.0f);
+        rv.controls_section = ControlsSection::Pointing;
+        ok &= shot("kiu-controls-12-reticle-on", rr, rv);
         MenuModel gl = go;
         gl.scope = 0;
         gl.locked[static_cast<std::size_t>(Id::GyroAim)] = Lock::GameValue;
         ok &= shot("kiu-controls-13-global-locked-end", gl, at(1.0e5f, Id::GyroAim, kLabelIndex, true));
         MenuModel win = go;
         win.controls_page = 1;
-        ok &= shot("kiu-controls-14-window-page", win, at(0.0f));
+        MenuView wv = at(0.0f);
+        wv.controls_section = ControlsSection::Buttons;
+        ok &= shot("kiu-controls-14-window-page", win, wv);
         // AzaharFrame kiuflash: Muzzle Flash and Projectiles (with its Size and Speed) under
         // Weapon in Hand's rows: the end of the page, their tooltips, Projectiles off, one held.
         MenuModel fx = go;
@@ -1352,7 +1364,7 @@ int main(int argc, char** argv) {
             MenuModel fa = pg;
             fa.fast_forward_audio = pick;
             v = settings(SettingsSection::General);
-            v.scroll[static_cast<int>(Tab::Settings)] = 300.0f;
+            v.scroll[static_cast<int>(Tab::Settings)] = 0.0f;
             if (pick == 2) {
                 v.hover = {Id::FastForwardAudio, kLabelIndex};
                 v.tooltip = Id::FastForwardAudio;
@@ -1483,14 +1495,15 @@ int main(int argc, char** argv) {
         ax.scale_x = 70; // Field of View: the scales alone, 1.7x wanted, 1.6x drawn
         ax.scale_x_warp = true;
         ok &= shot("fa-fov-wider-may-warp", ax, v);
-        // Field of View: no Render Margin rows; Fill View right under Scale Mode (scrolled to it,
-        // and with the beam on it).
+        // Field of View: no Render Margin rows; Fill View right under Immersive Mode (with the
+        // beam on it, and its tooltip).
         MenuModel fv = ax;
         fv.scale_x = 40;
         fv.scale_y = 40;
         fv.scale_x_warp = false;
         v = immersive_at(fv, Id::ScaleX);
         ok &= shot("fa-fov-margins-hidden", fv, v);
+        v = immersive_at(fv, Id::ImmersiveMode);
         v.hover = {Id::FillView};
         ok &= shot("fa-fill-view", fv, v);
         v.hover = {Id::FillView, kLabelIndex};
@@ -1517,7 +1530,7 @@ int main(int argc, char** argv) {
     }
     {
         // AzaharFrame projdef; fixa: the Immersive section's Motion Clarity (the Full modes) with
-        // its Experimental chip and tooltip, on, and outside the Full modes (never locked); the
+        // its tooltip, on, and outside the Full modes (never locked); the
         // Graphics section's Motion Clarity (the Off and Wide modes) with its tooltip, on; the
         // toast.
         MenuModel mc = pg;
@@ -1802,6 +1815,7 @@ int main(int argc, char** argv) {
         const std::initializer_list<Id> cids{Id::BottomScreenReticle, Id::ReticleSpeed};
         v = {};
         v.tab = Tab::Controls;
+        v.controls_section = ControlsSection::Pointing;
         ok &= shot("sc9-controls-per-game", own(ctl, cids, 1), v);
         v.hover = {Id::Scope, 1};
         v.tooltip = Id::Scope;
@@ -1809,12 +1823,14 @@ int main(int argc, char** argv) {
         ok &= shot("sc9a-controls-per-game-tooltip", own(ctl, cids, 1), v);
         v = {};
         v.tab = Tab::Controls;
+        v.controls_section = ControlsSection::Pointing;
         ok &= shot("sc10-controls-global", own(ctl, cids, 0), v);
         v.hover = {Id::BottomScreenReticle, kLabelIndex};
         v.tooltip = Id::BottomScreenReticle;
         ok &= shot("sc10a-controls-global-locked-tooltip", own(ctl, cids, 0), v);
         v = {};
         v.tab = Tab::Controls;
+        v.controls_section = ControlsSection::Pointing;
         v.open_menu = Id::ScopeMore;
         v.hover = {Id::ScopeMore, 0};
         ok &= shot("sc11-controls-scope-more-menu", own(ctl, cids, 1), v);
@@ -1839,6 +1855,37 @@ int main(int argc, char** argv) {
                            (t == Tab::Settings ? "settings" : t == Tab::Controls ? "controls" : "position"),
                        ng, v);
         }
+    }
+
+    { // AzaharVR: the pages a DS and a Game Boy Advance game change
+        const std::pair<const char*, CoreCaps> consoles[] = {{"ds", CoreCaps::ForNDS()},
+                                                             {"gba", CoreCaps::ForGBA()}};
+        for (const auto& [name, caps] : consoles) {
+            const std::string n = name;
+            MenuModel cm = pg;
+            cm.core = caps;
+            cm.game_title = n == "ds" ? "Mario Kart DS" : "Boktai: The Sun Is in Your Hand";
+            cm.immersive_mode = 0;
+            ok &= shot("core-" + n + "-1-console", cm, settings(SettingsSection::Console));
+            ok &= shot("core-" + n + "-2-general", cm, settings(SettingsSection::General));
+            MenuView cv;
+            cv.tab = Tab::Position;
+            ok &= shot("core-" + n + "-3-position", cm, cv);
+            for (int sec = 0; sec < static_cast<int>(ControlsSection::Count); sec++) {
+                cv.tab = Tab::Controls;
+                cv.controls_section = static_cast<ControlsSection>(sec);
+                if (ControlsSectionShown(cv.controls_section, caps)) {
+                    ok &= shot("core-" + n + "-4-controls-" + std::to_string(sec), cm, cv);
+                }
+            }
+        }
+        MenuView cv;
+        cv.tab = Tab::Controls;
+        cv.controls_section = ControlsSection::Motion;
+        ok &= shot("4j-controls-motion", pg, cv);
+        MenuView ev = settings(SettingsSection::Graphics);
+        ev.scroll[static_cast<int>(Tab::Settings)] = -1.0f;
+        ok &= shot("5p-settings-graphics-end", pg, ev);
     }
 
     MenuModel om = m;
@@ -3238,6 +3285,7 @@ int main(int argc, char** argv) {
             ok &= shot("kiu132-vis-" + n + "-1-settings-immersive", *gm, sv);
             MenuView cv;
             cv.tab = Tab::Controls;
+            cv.controls_section = ControlsSection::Motion;
             cv.scroll[static_cast<int>(Tab::Controls)] = 480.0f;
             ok &= shot("kiu132-vis-" + n + "-2-controls-aiming", *gm, cv);
             cv.scroll[static_cast<int>(Tab::Controls)] = 1.0e5f;

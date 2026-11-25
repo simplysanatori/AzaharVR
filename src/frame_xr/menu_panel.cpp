@@ -253,6 +253,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::ScreenShape;
     case Id::ScreenGap:
         return MenuSetting::ScreenGap;
+    case Id::ScreenLayout:
+        return MenuSetting::ScreenLayout;
     case Id::ImmersiveMode:
         return MenuSetting::ImmersiveMode;
     case Id::MarginX: // AzaharFrame fovaxis
@@ -1429,12 +1431,18 @@ void MenuPanel::BuildModel(const Host& host) {
         m.gba_map_refresh = static_cast<int>(v.gba_map_refresh.GetValue());
         const DsHeld held = GetDsHeld();
         m.ds_lid_closed = held.lid_closed;
-        m.ds_mic_active = held.mic_blow;
         if (!Menu::TabShown(view.tab, m)) {
             view.tab = Menu::Tab::Main;
         }
-        if (!Menu::SectionShown(view.section, m)) {
-            view.section = Menu::SettingsSection::General;
+        if (!Menu::ControlsSectionShown(view.controls_section, m.core)) {
+            view.controls_section = Menu::ControlsSection::Buttons;
+            view.scroll[static_cast<std::size_t>(Menu::Tab::Controls)] = 0.0f;
+        }
+        const auto section =
+            Menu::OpeningSection(view.section, m, m.core.kind != model.core.kind);
+        if (section != view.section) {
+            view.section = section;
+            view.scroll[static_cast<std::size_t>(Menu::Tab::Settings)] = 0.0f;
         }
     }
     model = std::move(m);
@@ -1492,8 +1500,8 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         Apply(v.vr_screen_curve, static_cast<u32>(r.value), false);
         r.setting = MenuSetting::ScreenCurve;
         break;
-    case Id::ScreenLayout: // AzaharFrame layout, global
-        Apply(v.vr_screen_layout, std::min<u32>(u, 1), false);
+    case Id::ScreenLayout: // AzaharFrame layout
+        Apply(v.vr_screen_layout, std::min<u32>(u, 1), per_game);
         r.setting = MenuSetting::ScreenLayout;
         break;
     case Id::ScreenGap:
@@ -2243,10 +2251,8 @@ void MenuPanel::Click(Target t, Host& host) {
         view.page = Menu::Page::Tabs;
         view.section = Menu::SettingsSection::General;
         view.scroll[static_cast<std::size_t>(Menu::Tab::Settings)] =
-            (Menu::Is3ds(model.core)
-                 ? 7.0f
-                 : static_cast<float>(Menu::RowsBefore(
-                       Id::SavesHeader, Menu::SettingsSection::General, model))) *
+            static_cast<float>(Menu::RowsBefore(Id::SavesHeader, Menu::SettingsSection::General,
+                                                model)) *
             Menu::kRowH;
         break;
     case Id::UndoLoad:
@@ -2591,7 +2597,7 @@ void MenuPanel::Click(Target t, Host& host) {
             view.angels_intro = false;
             view.tab = Menu::Tab::Controls;
             view.page = Menu::Page::Tabs;
-            controls_page = 0;
+            view.controls_section = Menu::ControlsSection::Motion;
             scroll_to_aiming = true;
         } else if (view.mods_segment == Menu::ModsSegment::Ctgp7 && // AzaharFrame ctgp7
                    model.mods.ctgp7.dialog.kind != Menu::ModsDialogKind::None) {
@@ -2827,7 +2833,7 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::AngelsAimSettings: // AzaharFrame kiufix: the Controls tab at Aiming
         view.tab = Menu::Tab::Controls;
         view.page = Menu::Page::Tabs;
-        controls_page = 0;
+        view.controls_section = Menu::ControlsSection::Motion;
         scroll_to_aiming = true;
         break;
     case Id::AngelsAimSend: // AzaharFrame kiumenus: Azahar's window, Send Report's dialog
@@ -2870,7 +2876,6 @@ void MenuPanel::Click(Target t, Host& host) {
         SetSetting(t.id, 0, host);
         break;
     case Id::ScreenShape:
-    case Id::ScreenCurve:
     case Id::ImmersiveMode:
     case Id::InternalResolution: // AzaharFrame menuux
     case Id::FastForwardAudio:   // AzaharFrame kiu2
@@ -2878,6 +2883,13 @@ void MenuPanel::Click(Target t, Host& host) {
         break;
     case Id::ControlsPage:
         controls_page = t.index;
+        break;
+    case Id::ControlsSection:
+        if (t.index >= 0 && t.index < static_cast<int>(Menu::ControlsSection::Count) &&
+            static_cast<Menu::ControlsSection>(t.index) != view.controls_section) {
+            view.controls_section = static_cast<Menu::ControlsSection>(t.index);
+            view.scroll[static_cast<std::size_t>(Menu::Tab::Controls)] = 0.0f;
+        }
         break;
     case Id::Scope: // AzaharFrame reticle: the scope toggle (Global, Per-Game), every tab's
         if (t.index >= 0) {
@@ -2918,8 +2930,6 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::KiuHudLinked: // AzaharFrame kiu140
     case Id::WristSide:       // Back, Inside
     case Id::WindowScale:
-    case Id::MarginX: // AzaharFrame fovaxis
-    case Id::MarginY:
     case Id::MatchCamera: // AzaharFrame fovonce: Off | Set Once | Always
     case Id::ScaleMode:   // AzaharFrame fovscale: Stretch | Field of View
     case Id::ControllersInFront: // AzaharFrame ctrlfront: Off | Primary | Secondary | Both
@@ -2959,13 +2969,9 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::RotatePages:
         SetSetting(Id::RotatePages, model.gba_rotate_pages ? 0 : 1, host);
         break;
-    case Id::DsMicBlow: {
-        DsHeld held = GetDsHeld();
-        held.mic_blow = !held.mic_blow;
-        SetDsHeld(held);
-        ask(MenuCommand::DsMicBlow, held.mic_blow ? 1 : 0);
+    case Id::DsMicBlow:
+        ask(MenuCommand::DsMicBlow);
         break;
-    }
     case Id::DsLidToggle: {
         DsHeld held = GetDsHeld();
         held.lid_closed = !held.lid_closed;

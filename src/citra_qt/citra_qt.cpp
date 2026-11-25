@@ -5824,9 +5824,8 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case C::DsMicBlow:
 #ifdef ENABLE_ALT_CORES
         if (alt_core_host && alt_core_host->IsRunning()) {
-            const bool on = r.value != 0; // the menu has flipped it
-            alt_core_host->SetMicBlow(on);
-            FrameXr::ShowToastText(on ? "Microphone Blow: On" : "Microphone Blow: Off");
+            alt_core_host->BlowMic();
+            FrameXr::ShowToastText("Microphone Blow");
         }
 #endif
         return;

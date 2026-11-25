@@ -1437,8 +1437,12 @@ void VrUi::CycleScreenLayout() {
     ShowToastText(Rig::LayoutToast(after));
     LOG_INFO(Frontend, "xr: screen layout {}", Rig::LayoutName(after));
     std::scoped_lock lock{hooks_mutex};
-    if (hooks.vr_setting_changed) {
-        hooks.vr_setting_changed();
+    // AzaharVR: the game's own layout goes to its file
+    const auto& changed = Settings::values.vr_screen_layout.UsingGlobal()
+                              ? hooks.vr_setting_changed
+                              : hooks.game_setting_changed;
+    if (changed) {
+        changed();
     }
 }
 

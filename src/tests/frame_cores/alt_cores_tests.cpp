@@ -849,6 +849,20 @@ TEST_CASE("Microphone Blow and Close Lid take the value they get", "[frame_cores
     CHECK(pixel() == open);
     host.SetLidClosed(false);
     CHECK(pixel() == open);
+    // The menu's Microphone Blow: one press, over after its frames; SetMicBlow ends it
+    constexpr int kFrames = FrameCores::AltCoreHost::kMicBlowFrames;
+    CHECK(host.MicBlowFramesLeft() == 0);
+    host.BlowMic();
+    CHECK(host.MicBlowFramesLeft() == kFrames);
+    REQUIRE(host.StepFrames(kFrames - 1));
+    CHECK(host.MicBlowFramesLeft() == 1);
+    host.BlowMic(); // pressed again: from the start
+    CHECK(host.MicBlowFramesLeft() == kFrames);
+    REQUIRE(host.StepFrames(kFrames));
+    CHECK(host.MicBlowFramesLeft() == 0);
+    host.BlowMic();
+    host.SetMicBlow(false);
+    CHECK(host.MicBlowFramesLeft() == 0);
     host.Stop();
 }
 

@@ -28,7 +28,7 @@ enum class Need {
     TextureFilter,
     Autosave,
     // Rows a 3DS game never has
-    ConsoleGroup, ///< any of the Console group's rows
+    ConsoleGroup, ///< any of the Console section's rows
     SolarSensor,
     ConsoleMode,
     DsTouch,
@@ -56,7 +56,7 @@ constexpr Rule kRules[] = {
     {Id::SwapScreens, Need::Bottom},
     {Id::ScreenCurve, Need::Any},
     {Id::DsScreenRotation, Need::Rotation},
-    // Settings, General
+    // Settings, Console
     {Id::CoreHeader, Need::ConsoleGroup},
     {Id::GbaSolarLevel, Need::SolarSensor},
     {Id::DsConsoleMode, Need::ConsoleMode},
@@ -68,12 +68,9 @@ constexpr Rule kRules[] = {
     {Id::DsMicBlow, Need::MicBlow},
     {Id::DsLidToggle, Need::Lid},
     {Id::ImportSave, Need::SaveImport},
+    // Settings, General
     {Id::Background, Need::Any},
     {Id::WindowScale, Need::Any},
-    {Id::FaceButtons, Need::Any},
-    {Id::MotionControls, Need::Gyro},
-    {Id::ShowControllers, Need::Any},
-    {Id::ControllersInFront, Need::Any},
     {Id::FastForwardSpeed, Need::Any},
     {Id::FastForwardAudio, Need::Any},
     {Id::SavesHeader, Need::Autosave},
@@ -82,7 +79,7 @@ constexpr Rule kRules[] = {
     {Id::AutosaveKeep, Need::Autosave},
     {Id::AutosaveCard, Need::Autosave}, // Load State's
     {Id::MoreSettings, Need::Any},
-    {Id::SwitchToFlat, Need::Flat},
+    {Id::SwitchToFlat, Need::Flat}, // Main's
     {Id::HelpHeader, Need::Any},
     {Id::ReportProblem, Need::Any},
     {Id::AboutApp, Need::Any},
@@ -91,9 +88,14 @@ constexpr Rule kRules[] = {
     {Id::InternalResolution, Need::InternalResolution},
     {Id::DynamicResolution, Need::DynamicResolution},
     {Id::TextureFilter, Need::TextureFilter},
+    {Id::ExperimentalHeader, Need::Any}, // gone while it has no row under it
     {Id::MotionClarityNormal, Need::Bfi},
     {Id::MatchBottomNormal, Need::Bfi},
     // Controls
+    {Id::FaceButtons, Need::Any},
+    {Id::ShowControllers, Need::Any},
+    {Id::ControllersInFront, Need::Any},
+    {Id::MotionControls, Need::Gyro},
     {Id::TouchpadTouch, Need::Touch},
     {Id::BottomScreenReticle, Need::Touch},
     {Id::ReticleSpeed, Need::Touch},
@@ -138,7 +140,8 @@ bool Has(Need need, const CoreCaps& core) {
     case Need::ConsoleGroup:
         return core.has_solar_sensor || core.has_dsi_mode || Has(Need::DsTouch, core) ||
                core.has_mic_blow || core.has_lid_close || core.has_save_import ||
-               Has(Need::SecondScreen, core) || core.can_edit_game;
+               Has(Need::SecondScreen, core) || core.can_edit_game ||
+               core.driver_options != 0;
     case Need::SolarSensor:
         return core.has_solar_sensor;
     case Need::ConsoleMode:

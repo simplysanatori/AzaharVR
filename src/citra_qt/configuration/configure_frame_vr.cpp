@@ -245,7 +245,7 @@ ConfigureFrameVr::ConfigureFrameVr(QWidget* parent, u64 title_id) : QGroupBox(pa
                         {curve_combo});
     layout->addWidget(curve_row);
 
-    // AzaharFrame layout: global only.
+    // AzaharFrame layout
     screen_layout_combo = new QComboBox(this);
     screen_layout_combo->addItem(tr("Stacked"), 0);
     screen_layout_combo->addItem(tr("Side by Side"), 1);
@@ -538,7 +538,6 @@ void ConfigureFrameVr::SetupPerGameUI() {
     window_scale_row->setVisible(Settings::IsConfiguringGlobal());
     background_row->setVisible(Settings::IsConfiguringGlobal());
     curve_row->setVisible(Settings::IsConfiguringGlobal()); // AzaharFrame curve
-    screen_layout_row->setVisible(Settings::IsConfiguringGlobal()); // AzaharFrame layout
     offset_row->setVisible(Settings::IsConfiguringGlobal()); // AzaharFrame vrsize
     show_controllers_check->setVisible(Settings::IsConfiguringGlobal()); // AzaharFrame vrvis
     controllers_in_front_row->setVisible(Settings::IsConfiguringGlobal()); // AzaharFrame ctrlfront
@@ -562,6 +561,7 @@ void ConfigureFrameVr::SetupPerGameUI() {
         };
         hint(hide_bottom_check, Settings::values.vr_hide_bottom_screen.UsingGlobal());
         hint(shape_combo, Settings::values.vr_top_aspect.UsingGlobal());
+        hint(screen_layout_combo, Settings::values.vr_screen_layout.UsingGlobal());
         hint(fov_spin, Settings::values.vr_immersive_game_fov.UsingGlobal());
         hint(match_camera_combo, Settings::values.vr_immersive_match_camera_mode.UsingGlobal());
         // AzaharFrame fovaxis: Render Margin per axis (two keys each: render_margin.h)
@@ -598,6 +598,9 @@ void ConfigureFrameVr::SetupPerGameUI() {
             Settings::values.vr_immersive_match_camera_mode.GetValue(true), 2))); // fovonce
     ConfigurationShared::SetColoredComboBox(
         shape_combo, shape_row, static_cast<int>(Settings::values.vr_top_aspect.GetValue(true)));
+    ConfigurationShared::SetColoredComboBox(
+        screen_layout_combo, screen_layout_row,
+        static_cast<int>(std::min<u32>(Settings::values.vr_screen_layout.GetValue(true), 1)));
     ConfigurationShared::SetColoredComboBox( // AzaharFrame fovaxis
         margin_x_combo, margin_x_row,
         static_cast<int>(
@@ -742,7 +745,7 @@ void ConfigureFrameVr::SetConfiguration() {
             (static_cast<int>(Settings::values.vr_window_scale.GetValue()) - 100 + 25) / 50, 0, 2));
         curve_combo->setCurrentIndex(CurveIndex(Settings::values.vr_screen_curve.GetValue()));
         screen_layout_combo->setCurrentIndex(
-            std::min<int>(static_cast<int>(Settings::values.vr_screen_layout.GetValue()), 1));
+            std::min<int>(static_cast<int>(Settings::values.vr_screen_layout.GetValue(true)), 1));
         offset_reset_pending = false;
         ShowOffset(Settings::values.vr_immersive_offset_x.GetValue(),
                    Settings::values.vr_immersive_offset_y.GetValue());
@@ -752,6 +755,9 @@ void ConfigureFrameVr::SetConfiguration() {
 
     ConfigurationShared::SetPerGameSetting(shape_combo, &Settings::values.vr_top_aspect);
     ConfigurationShared::SetHighlight(shape_row, !Settings::values.vr_top_aspect.UsingGlobal());
+    ConfigurationShared::SetPerGameSetting(screen_layout_combo, &Settings::values.vr_screen_layout);
+    ConfigurationShared::SetHighlight(screen_layout_row,
+                                      !Settings::values.vr_screen_layout.UsingGlobal());
     for (auto [combo, setting] :
          {std::pair{scale_x_combo, &Settings::values.vr_immersive_scale_x},
           std::pair{scale_y_combo, &Settings::values.vr_immersive_scale_y}}) {
@@ -936,8 +942,6 @@ void ConfigureFrameVr::ApplyConfiguration() {
             Settings::values.vr_screen_curve.SetValue(
                 static_cast<u32>(curve_combo->currentData().toInt()));
         }
-        Settings::values.vr_screen_layout.SetValue(
-            static_cast<u32>(screen_layout_combo->currentIndex())); // AzaharFrame layout
         // Kept as it is when the item shown is still the nearest one (a value typed into the file).
         const int percent = window_scale_combo->currentData().toInt();
         if (std::clamp((static_cast<int>(Settings::values.vr_window_scale.GetValue()) - 75) / 50,
@@ -959,6 +963,7 @@ void ConfigureFrameVr::ApplyConfiguration() {
     as_global(Settings::values.vr_hide_bottom_screen);
     as_global(Settings::values.vr_immersive_match_camera_mode);
     as_global(Settings::values.vr_top_aspect);
+    as_global(Settings::values.vr_screen_layout); // AzaharFrame layout
     as_global(Settings::values.vr_motion_controls);
     as_global(Settings::values.vr_immersive_game_fov);
     as_global(Settings::values.vr_immersive_scale_x);
@@ -990,6 +995,7 @@ void ConfigureFrameVr::ApplyConfiguration() {
         }
     }
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.vr_top_aspect, shape_combo);
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.vr_screen_layout, screen_layout_combo);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.vr_motion_controls,
                                              motion_combo); // AzaharFrame kiu
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.vr_immersive_game_fov, fov_scope,
