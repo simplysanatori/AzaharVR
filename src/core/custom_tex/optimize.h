@@ -39,6 +39,11 @@ bool IsOptimized(const std::string& pack);
 /// `optimized` is not one or names none.
 std::optional<std::string> SourceOf(const std::string& optimized);
 
+/// The copy was made from a previous version of its source (update.h): not used in its place, and
+/// made again from nothing by Optimize for Frame.
+bool IsStale(const std::string& optimized);
+bool MarkStale(const std::string& optimized, bool stale);
+
 struct Pair {
     std::string png;       ///< the original ("" none)
     std::string optimized; ///< its complete copy ("" none yet)

@@ -18,6 +18,8 @@
 #include "core/custom_tex/convert.h"
 #include "core/custom_tex/download.h"
 #include "core/custom_tex/layers.h"
+#include "core/custom_tex/optimize.h"
+#include "core/custom_tex/update.h"
 
 namespace fs = std::filesystem;
 
@@ -321,13 +323,23 @@ Result Delete(const Paths& paths, u64 title_id, const std::vector<std::string>& 
         }
     }
 
+    std::error_code ec;
     for (const Target& t : targets) {
+        const bool library = t.place == Place::Library && !t.link;
+        const auto source = library ? Optimize::SourceOf(t.path) : std::nullopt;
         const std::string error = Remove(t.path, t.link);
         ForgetSize(t.path);
         ForgetSize(t.id);
         result.changed = true;
         if (!error.empty()) {
             return fail(error);
+        }
+        if (library) {
+            Update::RemoveLeftovers(t.path); // an update of it that waits goes too
+            if (source && Canon(*source).parent_path() == fs::path(t.path).parent_path() &&
+                !fs::exists(fs::symlink_status(*source, ec))) {
+                Update::RemoveLeftovers(Canon(*source).generic_string());
+            }
         }
         LOG_INFO(Render, "texture packs: deleted {}{}", t.link ? "the link " : "", t.path);
     }

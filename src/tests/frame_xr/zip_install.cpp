@@ -653,8 +653,15 @@ TEST_CASE("texdl: the catalog's updated and verified fields", "[frame_xr][texdl]
     CHECK(list[0].verified);
     const fs::path folder = fs::path(t.load()) / "texture-packs" / kOotText / "B";
     fs::create_directories(folder);
+    REQUIRE(WriteMarker(folder.string(), "b", "https", "2025-04-02"));
+    list = dl.ListForTitle(kOot);
+    CHECK(list[0].installed);
+    CHECK_FALSE(list[0].update);
+    CHECK(list[0].updated == "2025-04-02");
+    // ... and with an update there, the new one's
     REQUIRE(WriteMarker(folder.string(), "b", "https", "2024-01-02"));
     list = dl.ListForTitle(kOot);
     CHECK(list[0].installed);
-    CHECK(list[0].updated == "2024-01-02");
+    CHECK(list[0].update);
+    CHECK(list[0].updated == "2025-03-10");
 }

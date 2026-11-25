@@ -80,6 +80,8 @@ add_library(citra_core STATIC EXCLUDE_FROM_ALL
     custom_tex/convert.h # AzaharFrame cppconv
     custom_tex/delete.cpp
     custom_tex/delete.h
+    custom_tex/update.cpp
+    custom_tex/update.h
     custom_tex/ktx_encode.cpp # AzaharFrame cppconv
     custom_tex/ktx_encode.h # AzaharFrame cppconv
     custom_tex/download.cpp # AzaharFrame texdl

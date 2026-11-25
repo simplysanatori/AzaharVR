@@ -553,6 +553,22 @@ Result Converter::RunInner() {
     const std::string& out = plan.out;
     result.output = out;
     const RunningEntry entry(src, out);
+    if (Optimize::IsStale(out)) {
+        // Made from a previous version of the pack, whose files may have other names: made again
+        // from nothing (the player asked for it: this run)
+        std::error_code stale_ec;
+        if (Common::FS::IsLink(out, stale_ec) || !fs::is_directory(out, stale_ec)) {
+            result.code = kFailed;
+            result.message = out + ": cannot be replaced";
+            return result;
+        }
+        fs::remove_all(out, stale_ec);
+        if (stale_ec) {
+            result.code = kFailed;
+            result.message = out + ": cannot be replaced: " + stale_ec.message();
+            return result;
+        }
+    }
 
     const std::string config_path = src + "/pack.json";
     std::error_code ec;
