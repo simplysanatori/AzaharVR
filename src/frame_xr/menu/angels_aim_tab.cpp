@@ -140,7 +140,7 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
         content += OfferListHeight(kit, model.mods.mods, c, rows, opt);
     }
     content += kDividerH + kTitleH + kItemH + 16.0f;             // Suggested, the pack
-    if (m.mapped) { // AzaharFrame kiu140: the hand model's row
+    if (m.mapped && kPitArmOffered) { // AzaharFrame kiu140: the hand model's row
         content += kItemH;
     }
     const float max_scroll = std::max(0.0f, content - (shown.y1 - c.y0));
@@ -243,7 +243,7 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
     // ---- Suggested: the catalog's weapons and effects texture pack, one row ----
     title(kAngelsAimSuggested);
     status_item(kAngelsAimTexturesPack, m.textures_pack);
-    if (m.mapped) { // AzaharFrame kiu140: a hand model from the player's own zip
+    if (m.mapped && kPitArmOffered) { // AzaharFrame kiu140: a hand model from the player's own zip
         const bool found = !m.hand_installed && !m.hand_zip.empty();
         const std::string zip = found ? std::string(kAngelsAimHandInstall) : LabelFor(Id::InstallFromZip);
         const Target zt{Id::InstallFromZip,

@@ -798,6 +798,15 @@ void ControllerModels::DestroyXr() {
             XrSwapchainImageReleaseInfo ri{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
             const XrSwapchain sc = g.SwapchainOf(g.drawn_side); // AzaharFrame ctrl2
             g.queue_lock->With([&] { return Xr().xrReleaseSwapchainImage(sc, &ri); });
+            // AzaharFrame kiu140: the release may have sent work of the runtime's own.
+            try {
+                g.queue_lock->With([&] {
+                    g.queue.waitIdle();
+                    return 0;
+                });
+            } catch (const std::exception& e) {
+                LOG_ERROR(Frontend, "xr: waiting for the GPU before the models go: {}", e.what());
+            }
         }
         if (g.state == 1) {
             static_cast<void>(g.device.waitForFences(g.upload_fence, true, 1'000'000'000));

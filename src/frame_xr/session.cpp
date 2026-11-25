@@ -65,6 +65,25 @@ void IdleForProjPass(bool used, VulkanBridge* vulkan) {
     }
 }
 
+// AzaharFrame kiu140: the GPU done with everything sent so far, the runtime's own work for the
+// swapchains included (their release and the last xrEndFrame), before any of it is destroyed. A
+// GPU fault came 2 ms after the session ended on most quits (the Frame's journal, 2026-11-14 to
+// 24; no other VR program's), and one hung the GPU and took SteamVR down with it.
+void IdleBeforeDestroy(VulkanBridge* vulkan, QueueLock& queue_lock) {
+    if (!vulkan || !vulkan->Device()) {
+        return;
+    }
+    try {
+        const vk::Device device{vulkan->Device()};
+        queue_lock.With([&] {
+            device.getQueue(vulkan->QueueFamily(), 0).waitIdle();
+            return 0;
+        });
+    } catch (const std::exception& e) {
+        LOG_ERROR(Frontend, "xr: waiting for the GPU before the session goes: {}", e.what());
+    }
+}
+
 void WaitHeldImage(ScreenChain& chain) {
     auto& xr = Xr();
     if (chain.acquired && !chain.waited) {
@@ -476,6 +495,7 @@ void Runtime::DestroySession() {
     if (has_session.exchange(false)) {
         Settings::frame_flat_mono = true; // the window shows one eye: games draw one
     }
+    IdleBeforeDestroy(vulkan.get(), queue_lock); // AzaharFrame kiu140
     hud.Destroy(); // AzaharFrame vrqol
     if (ui) {
         ui->DestroyXr();
@@ -486,6 +506,7 @@ void Runtime::DestroySession() {
         std::unique_lock chains_lock{chains_mutex};
         std::scoped_lock lock{screens_mutex};
         DropOldScreens(true); // AzaharFrame flash3
+        IdleBeforeDestroy(vulkan.get(), queue_lock); // AzaharFrame kiu140
         for (auto& chain : screens) {
             if (chain.handle && xr.xrDestroySwapchain) {
                 ReturnHeldImage(chain, queue_lock);
@@ -507,6 +528,7 @@ void Runtime::DestroySession() {
     }
     view_space = local_space = XR_NULL_HANDLE;
     if (session && xr.xrDestroySession) {
+        IdleBeforeDestroy(vulkan.get(), queue_lock); // AzaharFrame kiu140: what the above released
         const XrResult r = xr.xrDestroySession(session);
         LOG_INFO(Frontend, "xr: session destroyed ({})", ResultName(r));
     }

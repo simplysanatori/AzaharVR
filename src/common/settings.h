@@ -1165,7 +1165,7 @@ struct Values {
     // AzaharFrame kiu140: Pit's Arm on the free hand.
     SwitchableSetting<u32, true> vr_kiu_arm{1, 0, 1, "vr_kiu_arm"};
     // AzaharFrame kiu140: Cutscenes in Angel's Aim: 0 in the view, 1 on the Primary Screen.
-    SwitchableSetting<u32, true> vr_kiu_cutscenes{1, 0, 1, "vr_kiu_cutscenes"};
+    SwitchableSetting<u32, true> vr_kiu_cutscenes{0, 0, 1, "vr_kiu_cutscenes"};
     // AzaharFrame kiu140: the Wrist's place: degrees round the wrist from Wrist Side's, and
     // centimetres up the arm from there (toward the hand below 0).
     SwitchableSetting<u32, true> vr_kiu_wrist_angle{0, 0, 360, "vr_kiu_wrist_angle"};

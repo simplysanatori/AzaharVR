@@ -50,10 +50,14 @@ public:
 
     /// Once a VBlank: `wide`: first person in a battle with the wide camera asked for and in; the
     /// camera uploads since the last one with its angle and with another. True: a cutscene.
-    bool Update(bool wide, uint32_t match, uint32_t other) {
+    /// `known`: the game's own flag says one plays (EventWatch): no settling.
+    bool Update(bool wide, uint32_t match, uint32_t other, bool known = false) {
         if (!wide) {
             *this = {};
             return false;
+        }
+        if (known) {
+            settled_ = kSettle;
         }
         match_[at_] = match;
         other_[at_] = other;

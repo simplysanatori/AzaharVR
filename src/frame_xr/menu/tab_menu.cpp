@@ -844,7 +844,9 @@ std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& m) {
     if (m.kiu_hud != 0) { // AzaharFrame kiu140
         rows.push_back(Id::KiuHudSize);
     }
-    rows.push_back(Id::KiuArm);
+    if (kPitArmOffered) {
+        rows.push_back(Id::KiuArm);
+    }
     if (m.kiu_hud != 0) { // AzaharFrame kiu140
         rows.push_back(Id::KiuHudLinked);
     }

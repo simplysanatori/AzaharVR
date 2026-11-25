@@ -435,4 +435,8 @@ TEST_CASE("FrameXr kiu140: the wrist screen's place round the wrist and up the a
     REQUIRE(Vis::UprightTurns(flat, up_at(35), 1) == 1);
     REQUIRE(Vis::UprightTurns(flat, up_at(25), 1) == 0);
     REQUIRE(Vis::UprightTurns(flat, {0, 0, 1}, 2) == 2); // edge on: kept
+    // While it shows: a quarter turn of the hand flips nothing, its head down does.
+    REQUIRE(Vis::UprightTurns(flat, up_at(65), 0, Vis::kUprightShownDeg) == 0);
+    REQUIRE(Vis::UprightTurns(flat, up_at(110), 0, Vis::kUprightShownDeg) == 0);
+    REQUIRE(Vis::UprightTurns(flat, up_at(170), 0, Vis::kUprightShownDeg) == 2);
 }

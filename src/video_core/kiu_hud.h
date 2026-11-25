@@ -48,6 +48,7 @@ struct Wanted {
 /// be if it were all that group).
 struct Place {
     bool on = false;
+    bool page = false; ///< not the HUD: a page's 2D, whole, over the game's own frame (PagePlace)
     float half_across = 1.0f, half_up = 1.0f;
     float middle_up = 0.0f;
     float bar_across = 0.0f, bar_up = 0.0f;
@@ -112,6 +113,20 @@ inline Place PlaceFor(const Wanted& w, float tan_half_x, float tan_half_y, float
     return p;
 }
 
+/// Outside a battle (the results, menus): the 2D is one page, drawn over the frame the game's own
+/// camera has in a picture `factor` times past it. Each piece as the others, so none is left at
+/// the edges of the whole view.
+inline Place PagePlace(float factor_across, float factor_up) {
+    Place p;
+    if (!(factor_across >= 1.0f) || !(factor_up >= 1.0f)) {
+        return p;
+    }
+    p.on = p.page = true;
+    p.half_across = 1.0f / factor_across;
+    p.half_up = 1.0f / factor_up;
+    return p;
+}
+
 /// The state of a draw that may be the HUD's.
 struct Draw {
     bool top_viewport = false; ///< 240 x 400
@@ -165,7 +180,9 @@ inline void Move(Vertex* t, std::size_t n, const Place& p, float factor_across, 
         across += t[i].y / static_cast<float>(n);
     }
     float at_across = 0.0f, at_up = p.middle_up, rise = 0.0f;
-    if (up > kTopUp && across < kBarAside) {
+    if (p.page) {
+        at_up = 0.0f;
+    } else if (up > kTopUp && across < kBarAside) {
         at_across = p.bar_across;
         at_up = p.bar_up;
     } else if (up > kTopUp && across > kScoreAside) {
@@ -212,7 +229,7 @@ inline bool MoveSubtitle(Vertex* v, std::size_t n, const Place& p, float factor_
 /// draw; a read across a write mixes two frames' numbers, which are the same or next to it.
 struct Live {
     std::array<std::atomic<float>, 10> f{};
-    std::atomic<bool> on{false};
+    std::atomic<bool> on{false}, page{false};
 
     void Set(const Place& p) {
         const float v[10] = {p.half_across, p.half_up,      p.middle_up, p.bar_across,
@@ -221,11 +238,13 @@ struct Live {
         for (int i = 0; i < 10; ++i) {
             f[i].store(v[i], std::memory_order_relaxed);
         }
+        page.store(p.page, std::memory_order_relaxed);
         on.store(p.on, std::memory_order_release);
     }
     Place Get() const {
         Place p;
         p.on = on.load(std::memory_order_acquire);
+        p.page = page.load(std::memory_order_relaxed);
         float* const v[10] = {&p.half_across, &p.half_up,      &p.middle_up, &p.bar_across,
                              &p.bar_up,      &p.score_across, &p.score_up,  &p.subtitle_up,
                              &p.subtitle_half_across, &p.subtitle_half_up};

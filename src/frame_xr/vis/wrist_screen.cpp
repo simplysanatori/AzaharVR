@@ -105,7 +105,7 @@ Posef WristScreenPose(const Posef& aim, Input::Hand hand, bool beside_stats, Wri
             Input::Transform(aim, local.position)};
 }
 
-int UprightTurns(const Posef& panel, const Vec3f& head_up, int now) {
+int UprightTurns(const Posef& panel, const Vec3f& head_up, int now, float keep_deg) {
     const float x = Input::Dot(head_up, Input::Rotate(panel.orientation, {1.0f, 0.0f, 0.0f}));
     const float y = Input::Dot(head_up, Input::Rotate(panel.orientation, {0.0f, 1.0f, 0.0f}));
     if (x * x + y * y < 0.04f) {
@@ -114,7 +114,7 @@ int UprightTurns(const Posef& panel, const Vec3f& head_up, int now) {
     const float turned = std::atan2(-x, y) * 180.0f / 3.14159265f; // the picture's top to it
     float off = turned - 90.0f * static_cast<float>(now);
     off -= 360.0f * std::round(off / 360.0f);
-    if (std::abs(off) < kUprightDeg) {
+    if (std::abs(off) < keep_deg) {
         return now;
     }
     return (static_cast<int>(std::lround(turned / 90.0f)) + 4) % 4;
@@ -135,7 +135,7 @@ WristScreen::Out WristScreen::Update(bool wanted, bool tracked, const Posef& aim
     const bool was = shown_;
     if (wanted && tracked) {
         out.pose = WristScreenPose(aim, hand, beside_stats, side, width, at);
-        turns_ = UprightTurns(out.pose, head_up, turns_);
+        turns_ = UprightTurns(out.pose, head_up, turns_, shown_ ? kUprightShownDeg : kUprightDeg);
         out.pose = TurnedQuarters(out.pose, turns_);
         out.facing_deg = WristFacingDeg(out.pose, eye);
         out.distance_m = Input::Length(out.pose.position - eye);

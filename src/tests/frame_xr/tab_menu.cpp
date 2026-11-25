@@ -1620,6 +1620,12 @@ TEST_CASE("Tab menu: a hand model from a zip", "[frame_xr][tabmenu][kiu140]") {
     const Id id = Id::InstallFromZip;
     const int hand = static_cast<int>(ZipTarget::Hand);
     d.Draw(m, v);
+    if (!kPitArmOffered) { // no arm yet: no row for its model
+        v.scroll[static_cast<std::size_t>(v.tab)] = d.menu.Layout().max_scroll;
+        d.Draw(m, v);
+        CHECK(!HasHit(d, id, hand));
+        return;
+    }
     v.scroll[static_cast<std::size_t>(v.tab)] = d.menu.Layout().max_scroll; // the page's end
     for (const bool installed : {false, true}) {
         m.mods.angels_aim.hand_installed = installed;
