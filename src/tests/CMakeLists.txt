@@ -112,6 +112,7 @@ add_executable(tests
     core/sharkive.cpp # AzaharFrame cheats
     core/game_version.cpp # AzaharFrame versions
     core/cheats_online.cpp # AzaharFrame cheats
+    core/frame_covers.cpp # AzaharVR
     core/mods_library.cpp # AzaharFrame moddata
     core/mods_mega.cpp # AzaharFrame mega
     core/mods_catalog3.cpp # AzaharFrame catalog3

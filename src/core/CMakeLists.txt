@@ -49,6 +49,8 @@ add_library(citra_core STATIC EXCLUDE_FROM_ALL
     frame_crash_report.cpp # AzaharFrame crashreport
     frame_crash_report.h # AzaharFrame crashreport
     frame_crash_send.cpp # AzaharFrame crashreport
+    frame_covers.cpp # AzaharVR: the Games tab's covers
+    frame_covers.h
     frame_crash_send.h # AzaharFrame crashreport
     frame_angels_report.cpp # AzaharFrame kiumenus
     frame_angels_report.h

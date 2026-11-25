@@ -199,6 +199,16 @@
           </property>
          </widget>
         </item>
+        <item>
+         <widget class="QCheckBox" name="toggle_download_covers">
+          <property name="text">
+           <string>Download Cover Art</string>
+          </property>
+          <property name="toolTip">
+           <string>Covers of DS, GBA and Game Boy games for the VR Games tab, looked up by file name. Nothing else is sent.</string>
+          </property>
+         </widget>
+        </item>
        </layout>
       </item>
      </layout>

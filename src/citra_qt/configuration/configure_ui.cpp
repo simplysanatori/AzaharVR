@@ -68,6 +68,11 @@ void ConfigureUi::SetConfiguration() {
         UISettings::values.game_list_single_line_mode.GetValue());
     ui->show_advanced_frametime_info->setChecked(
         UISettings::values.show_advanced_frametime_info.GetValue());
+#if defined(ENABLE_ALT_CORES) && defined(ENABLE_FRAME_XR) // AzaharVR: the Games tab's covers
+    ui->toggle_download_covers->setChecked(UISettings::values.download_covers.GetValue());
+#else
+    ui->toggle_download_covers->hide();
+#endif
 }
 
 void ConfigureUi::ApplyConfiguration() {
@@ -82,6 +87,9 @@ void ConfigureUi::ApplyConfiguration() {
     UISettings::values.game_list_hide_no_icon = ui->toggle_hide_no_icon->isChecked();
     UISettings::values.game_list_single_line_mode = ui->toggle_single_line_mode->isChecked();
     UISettings::values.show_advanced_frametime_info = ui->show_advanced_frametime_info->isChecked();
+#if defined(ENABLE_ALT_CORES) && defined(ENABLE_FRAME_XR)
+    UISettings::values.download_covers = ui->toggle_download_covers->isChecked();
+#endif
 }
 
 void ConfigureUi::OnLanguageChanged(int index) {

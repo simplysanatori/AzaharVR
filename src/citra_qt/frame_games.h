@@ -8,13 +8,22 @@
 
 #pragma once
 
+#include <atomic>
+#include <condition_variable>
+#include <deque>
 #include <functional>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <set>
 #include <string>
+#include <thread>
 #include <vector>
 #include <QObject>
 #include <QString>
+#include <QTimer>
 
+#include "core/mods/transfer.h"
 #include "frame_xr/menu/games_snapshot.h"
 
 class FrameGames : public QObject {
@@ -38,9 +47,12 @@ public:
             ask;
         std::function<void()> close_menu;
         std::function<void(const QString& path)> boot; ///< BootGame (stops the running game first)
+        std::function<bool()> covers_on;          ///< Download Cover Art
+        std::string covers_dir;                   ///< the cache (core/frame_covers.h)
     };
 
     FrameGames(Hooks hooks, QObject* parent);
+    ~FrameGames() override;
 
     /// The game list's scan is done: its games from now on. The last scan's show until then.
     void Listed();
@@ -57,7 +69,28 @@ private:
     void Start(const QString& path);
     void SaveThenStart(const QString& path);
 
+    /// The covers of the listed games: the cached ones, then the others one by one (a thread).
+    void FindCovers();
+    void CoverThread();
+    void CoverFound(const std::string& path, std::shared_ptr<const FrameXr::Menu::GameIcon> cover);
+
     Hooks hooks;
+    std::map<std::string, std::shared_ptr<const FrameXr::Menu::GameIcon>> covers; ///< by path
+    QTimer covers_publish; ///< found covers show together, at most once a second
+    struct CoverJob {
+        std::string path;
+        Common::GameSystem system;
+        std::string stem;
+    };
+    std::mutex cover_mutex;
+    std::condition_variable cover_cv;
+    std::deque<CoverJob> cover_jobs;
+    std::set<std::string> covers_asked; ///< paths queued once this run
+    bool cover_stop = false;
+    std::atomic_bool covers_enabled = false;
+    std::atomic_bool cover_cancel = false;
+    std::unique_ptr<Mods::Transfer::Stopper> cover_stopper; ///< ends a request at once on quit
+    std::thread cover_thread;
     std::vector<FrameXr::Menu::GameEntry> rows; ///< the last whole scan's
     FrameXr::Menu::GamesList published;
     std::set<std::string> missing; ///< paths found gone when they were pressed

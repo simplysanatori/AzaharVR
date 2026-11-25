@@ -1158,6 +1158,7 @@ void QtConfig::ReadUIGameListValues() {
 #ifdef ENABLE_ALT_CORES
     ReadBasicSetting(UISettings::values.show_system_column);
     ReadBasicSetting(UISettings::values.game_list_system_filter);
+    ReadBasicSetting(UISettings::values.download_covers);
 #endif
 
     const int favorites_size = qt_config->beginReadArray(QStringLiteral("favorites"));
@@ -1859,6 +1860,7 @@ void QtConfig::SaveUIGameListValues() {
     };
     write_if_changed(UISettings::values.show_system_column);
     write_if_changed(UISettings::values.game_list_system_filter);
+    write_if_changed(UISettings::values.download_covers);
 #endif
 
     qt_config->beginWriteArray(Settings::QKeys::favorites);

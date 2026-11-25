@@ -6868,6 +6868,8 @@ void GMainWindow::FrameMakeGamesTab() {
         }
     };
     h.boot = [this](const QString& path) { BootGame(path); };
+    h.covers_on = [] { return UISettings::values.download_covers.GetValue(); };
+    h.covers_dir = FileUtil::GetUserPath(FileUtil::UserPath::CacheDir) + "covers/";
     g_frame_games = new FrameGames(std::move(h), this);
     connect(game_list, &GameList::PopulatingCompleted, g_frame_games,
             [] { g_frame_games->Listed(); });
