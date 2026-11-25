@@ -1268,9 +1268,9 @@ changed after). Run by the desktop's flat build and VR mock; see reports/102/rig
   speed's update replace the ring by the mean of the last two updates, held for two more when it is zero, and ease it at 60 not 30. What isn't
   changed: the six-update history a flick's speed is the biggest of (100 ms at 60, 200 at 30).
 - **Right Stick, Snap Turn.** By the host's clock (`kiu_turn.h`): no change.
-- **Turn Zone.** A push is taken once an update: it's scaled by the game's own update length (`UpdateShareFor`). Not run. With the stick's turning on
-  (always in Angel's Aim) the Turn Zone makes no push, and with the C-Stick mod's code the option is off, so a player meets it at 60 only with the mod's
-  `code.ips` and the C-Stick mod's code together.
+- **Turn Zone.** A push is taken once an update: it's scaled by the game's own update length (`UpdateShareFor`). V (Immersive Mode off, the C-Stick
+  mod's code, Direct Aim): five pushes, 60 against 30 from 0.961 to 0.997. With the stick's turning on (always in Angel's Aim) it makes none, and with the
+  C-Stick mod's code the option is off, so a player meets it at 60 only with the mod's `code.ips` and that mod's code together.
 - **Save states** carry the code and the rate they were made with. At a VBlank, if the code is the other of the two and the vsync manager's
   rate too, all of it is written over (`TurnTo`, logged) to what the run was started at (`g_run`, from the loader); otherwise it is left.
 - **A mod's `exefs/code.ips`** with the same words (made from this table by the test `[.kiu60mod]`): the loader finds its code there already, puts nothing on and says
