@@ -16,6 +16,7 @@
 #include "frame_cores/frame_driver.h"
 #include "frame_cores/second_screen.h"
 #include "video_core/renderer_vulkan/alt_present.h"
+#include "video_core/renderer_vulkan/alt_xr_renderer.h"
 
 using namespace FrameCores;
 namespace fs = std::filesystem;
@@ -419,7 +420,7 @@ TEST_CASE("DriverRunner: pages are the driver's, offered to GBA games gba-ds kno
 
 TEST_CASE("The overlay covers the screen it is drawn over", "[frame_cores]") {
     using namespace Vulkan;
-    STATIC_REQUIRE(kAltOverlaySlot != 0); // the Primary Screen's
+    STATIC_REQUIRE(kAltOverlaySlot != kAltPrimarySlot); // either eye's
     STATIC_REQUIRE(kAltOverlaySlot != 2); // the Secondary Screen's
     // Corner by corner: the whole texture, whatever its size, over the whole rectangle.
     const auto flat = AltScreenQuad(10, 20, 30, 40, true);
@@ -433,6 +434,33 @@ TEST_CASE("The overlay covers the screen it is drawn over", "[frame_cores]") {
         CHECK(v.u == (v.y == 20 ? 1.0f : 0.0f));
         CHECK(v.v == (v.x == 10 ? 0.0f : 1.0f));
     }
+}
+
+TEST_CASE("The right eye's picture has the left one's place and size", "[frame_cores]") {
+    using namespace Vulkan;
+    constexpr AltEyeSize eye{960, 640};
+    constexpr AltEyeSize unused{16, 16};
+    // Without one, packed or not.
+    for (const bool packed : {false, true}) {
+        const auto mono = AltEyeSwapchains(eye, unused, false, packed);
+        CHECK(mono[0] == eye);
+        CHECK(mono[1] == unused);
+    }
+    const auto apart = AltEyeSwapchains(eye, unused, true, false);
+    CHECK(apart[0] == eye);
+    CHECK(apart[1] == eye);
+    const auto packed = AltEyeSwapchains(eye, unused, true, true);
+    CHECK(packed[0].width == eye.width);
+    CHECK((packed[0].height - VideoCore::kXrPackedGap) / 2 == eye.height); // XrPresentTarget's
+    CHECK(packed[1] == AltEyeSize{});
+
+    const uint32_t pixel = 0;
+    const AltScreenImage left{&pixel, 240, 160};
+    CHECK(AltShowsStereo(left, left));
+    CHECK_FALSE(AltShowsStereo(left, {}));
+    CHECK_FALSE(AltShowsStereo(left, {nullptr, 240, 160}));
+    CHECK_FALSE(AltShowsStereo(left, {&pixel, 240, 159}));
+    CHECK_FALSE(AltShowsStereo(left, {&pixel, 160, 160}));
 }
 
 TEST_CASE("DriverRunner: the Secondary Screen's size and touch", "[frame_cores]") {

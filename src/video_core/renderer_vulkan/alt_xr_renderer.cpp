@@ -92,11 +92,13 @@ struct AltXrRenderer::Impl {
     vk::ShaderModule present_vertex_shader{};
     std::array<vk::Sampler, 2> samplers{};
     ScreenTexture primary_tex{};
+    ScreenTexture right_tex{}; ///< the Primary Screen for the right eye
     ScreenTexture secondary_tex{};
     ScreenTexture overlay_tex{};
     ScreenTexture dummy_tex{};
     std::unique_ptr<XrPresentTarget> xr_target;
     u64 xr_target_generation = 0;
+    bool xr_target_stereo = false; ///< xr_target was made for a right eye's picture
     vk::ShaderModule overlay_shader{}; ///< both made for xr_target with the first overlay
     vk::Pipeline overlay_pipeline{};
     Frontend::EmuWindow* window = nullptr;
@@ -114,11 +116,14 @@ struct AltXrRenderer::Impl {
 
     /// Both screens' newest pictures, for the present shader. A screen that has none is black; one
     /// that stops being sent keeps its last. `overlay`: the overlay is at kAltOverlaySlot, always
-    /// smooth (its pixels are no multiple of the screen's).
-    vk::DescriptorSet CommitScreens(vk::ImageView secondary_view, bool overlay) {
+    /// smooth (its pixels are no multiple of the screen's). `right`: for the right eye, its picture
+    /// in the Primary Screen's place.
+    vk::DescriptorSet CommitScreens(vk::ImageView secondary_view, bool overlay,
+                                    bool right = false) {
         const vk::Sampler sampler = samplers[!Settings::values.filter_mode.GetValue()];
         const vk::DescriptorSet set = present_heap->Commit();
-        const std::array views = {primary_tex.view, primary_tex.view, secondary_view};
+        const vk::ImageView primary_view = right ? right_tex.view : primary_tex.view;
+        const std::array views = {primary_view, primary_view, secondary_view};
         for (u32 i = 0; i < views.size(); i++) {
             const bool over = overlay && i == kAltOverlaySlot;
             const vk::ImageView view = over ? overlay_tex.view : views[i];
@@ -345,6 +350,11 @@ struct AltXrRenderer::Impl {
         return overlay_pipeline;
     }
 
+    /// The sink was told otherwise behind xr_target's back (the core's new screen sizes say mono).
+    bool StereoTurnedOff() const {
+        return xr_target && xr_target_stereo && !sink->TopStereo();
+    }
+
     /// With what was made for it; its destructor waits for the GPU.
     void DropXrTarget() {
         xr_target.reset();
@@ -357,6 +367,7 @@ struct AltXrRenderer::Impl {
         }
     }
 
+    /// The packed right eye's follows the left one's in the same render pass.
     void DrawQuad(const XrPresentTarget::Target& target, vk::DescriptorSet present_set,
                   vk::Pipeline pipe, u32 screen_id, u32 src_w, u32 src_h, int layer_flags) {
         const float w = static_cast<float>(target.width);
@@ -394,7 +405,9 @@ struct AltXrRenderer::Impl {
                 .clearValueCount = 1,
                 .pClearValues = &clear,
             };
-            cmdbuf.beginRenderPass(begin_info, vk::SubpassContents::eInline);
+            if (target.begin_pass) {
+                cmdbuf.beginRenderPass(begin_info, vk::SubpassContents::eInline);
+            }
             cmdbuf.bindPipeline(vk::PipelineBindPoint::eGraphics, pipe);
             cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0, present_set, {});
             const vk::Viewport viewport = {
@@ -417,7 +430,9 @@ struct AltXrRenderer::Impl {
             const u32 first_vertex = offset / sizeof(AltScreenVertex);
             cmdbuf.bindVertexBuffers(0, vbuf, {0});
             cmdbuf.draw(4, 1, first_vertex, 0);
-            cmdbuf.endRenderPass();
+            if (target.end_pass) {
+                cmdbuf.endRenderPass();
+            }
         });
     }
 
@@ -455,6 +470,7 @@ struct AltXrRenderer::Impl {
             instance->GetDevice().waitIdle();
         }
         DestroyTexture(primary_tex);
+        DestroyTexture(right_tex);
         DestroyTexture(secondary_tex);
         DestroyTexture(overlay_tex);
         DestroyTexture(dummy_tex);
@@ -618,11 +634,14 @@ bool AltXrRenderer::NeedsPresent() const {
         return false;
     }
     const bool vr = impl->XrShowsScreens();
-    return vr != impl->presented_vr || (!vr && impl->window_target && impl->window_target->Resized());
+    return vr != impl->presented_vr ||
+           (!vr && impl->window_target && impl->window_target->Resized()) ||
+           (vr && impl->StereoTurnedOff());
 }
 
 bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage& secondary,
-                            const AltScreenImage& overlay, bool skippable) {
+                            const AltScreenImage& overlay, const AltScreenImage& primary_right,
+                            bool skippable) {
     if (!impl || !impl->ready || !primary.pixels || primary.width == 0 || primary.height == 0) {
         return false;
     }
@@ -643,11 +662,21 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
         return true;
     }
     VideoCore::XrScreenSink* const sink = impl->sink;
-    if (impl->xr_target && impl->xr_target_generation != sink->SwapchainGeneration()) {
+    const bool stereo = AltShowsStereo(primary, primary_right);
+    if (impl->StereoTurnedOff() && stereo) {
+        sink->SetTopStereo(true);
+    }
+    // The layout of the eyes is the target's for its life: made again when it changes, with the
+    // screens off in between, so no refresh shows one layout as the other.
+    if (impl->xr_target &&
+        (impl->xr_target_generation != sink->SwapchainGeneration() ||
+         impl->xr_target_stereo != stereo ||
+         (stereo && impl->xr_target->Packed() != sink->PackedTop()))) {
         impl->DropXrTarget();
     }
     if (!impl->xr_target) {
-        sink->SetTopStereo(false);
+        sink->SetTopStereo(stereo);
+        impl->xr_target_stereo = stereo;
         impl->xr_target_generation = sink->SwapchainGeneration();
         impl->xr_target = std::make_unique<XrPresentTarget>(
             *impl->instance, *impl->scheduler, *sink, impl->present_vertex_shader,
@@ -663,9 +692,13 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
         bottom_size =
             TargetSwapchainExtent(impl->secondary_tex.width, impl->secondary_tex.height);
     }
+    const vk::Extent2D eye = TargetSwapchainExtent(primary.width, primary.height);
+    const auto eyes = AltEyeSwapchains({eye.width, eye.height},
+                                       {kDummySwapchainExtent, kDummySwapchainExtent}, stereo,
+                                       impl->xr_target->Packed());
     const std::array<vk::Extent2D, XrPresentTarget::kScreens> sizes = {
-        TargetSwapchainExtent(primary.width, primary.height),
-        vk::Extent2D{kDummySwapchainExtent, kDummySwapchainExtent},
+        vk::Extent2D{eyes[0].width, eyes[0].height},
+        vk::Extent2D{eyes[1].width, eyes[1].height},
         bottom_size,
     };
     if (!impl->xr_target->Prepare(sizes)) {
@@ -679,11 +712,17 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
         return false;
     }
 
+    // Failed: the right eye gets the left one's picture. All uploads before the sets: a texture made
+    // again submits.
+    const bool has_right = stereo && impl->UploadImage(impl->right_tex, primary_right);
     const bool has_overlay = impl->UploadOverlay(overlay);
     const vk::Pipeline plain = impl->xr_target->Pipeline();
     const vk::Pipeline top = has_overlay ? impl->OverlayPipeline() : plain;
-    const vk::DescriptorSet present_set = impl->CommitScreens(
-        has_secondary ? impl->secondary_tex.view : vk::ImageView{}, has_overlay);
+    const vk::ImageView secondary_view =
+        has_secondary ? impl->secondary_tex.view : vk::ImageView{};
+    const vk::DescriptorSet present_set = impl->CommitScreens(secondary_view, has_overlay);
+    const vk::DescriptorSet right_set =
+        has_right ? impl->CommitScreens(secondary_view, has_overlay, true) : present_set;
 
     Common::XrPacer::Get().game_swaps.fetch_add(1, std::memory_order_relaxed);
 
@@ -695,7 +734,12 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
 
     impl->DrawQuad(targets[static_cast<std::size_t>(VideoCore::XrScreen::TopLeft)], present_set,
                    top, 0, primary.width, primary.height, 0);
-    impl->ClearTarget(targets[static_cast<std::size_t>(VideoCore::XrScreen::TopRight)]);
+    const auto& right_target = targets[static_cast<std::size_t>(VideoCore::XrScreen::TopRight)];
+    if (stereo) {
+        impl->DrawQuad(right_target, right_set, top, 0, primary.width, primary.height, 0);
+    } else {
+        impl->ClearTarget(right_target);
+    }
     if (has_secondary) {
         const float dim = sink->ScreenDim(VideoCore::XrScreen::Bottom);
         const float alpha = sink->ScreenAlpha(VideoCore::XrScreen::Bottom);
