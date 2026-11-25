@@ -14,7 +14,7 @@
 // Every change applies from the next start of the game (the snackbar's Restart).
 //
 // Download Packs (core/custom_tex/download.h): one Downloader for the session; a download over
-// 1 GB asks "Download 2.1 GB?" first, and Delete (downloaded packs only) asks too. Finished packs
+// 1 GB asks "Download 2.1 GB?" first. Delete on a pack (core/custom_tex/delete.h) asks too. Finished packs
 // show up in the pack list.
 //
 // Install from Zip (core/mods/zip_install.h; AzaharFrame zipinstall): in VR the menu's own file
@@ -38,6 +38,7 @@
 #include <QObject>
 
 #include "common/common_types.h"
+#include "core/custom_tex/delete.h"
 #include "core/custom_tex/layers.h" // AzaharFrame texlayers
 #include "core/custom_tex/packs.h"
 #include "core/custom_tex/parts.h" // AzaharFrame texparts
@@ -130,6 +131,7 @@ private:
         std::string id;
         std::vector<std::string> packs; ///< Delete: the packs' ids (AzaharFrame texrow: a pair's two)
         bool shared = false;            ///< Delete: the dialog said another game uses it
+        bool outside = false;           ///< Delete: the dialog said where the packs are
     };
 
     void AllowAnyway(const std::string& id, int value); // AzaharFrame compat
@@ -284,7 +286,8 @@ private:
     bool catalog_fetched = false;       ///< the texture catalog's one request a run
     u64 mods_network_title = ~0ULL;     ///< AzaharFrame stall: the title the mod list's requests ran for
     bool mods_network_running = false;  ///< AzaharFrame stall: they run now
-    std::set<std::string> deletable;    ///< the packs (ids) with Delete, from RefreshPacks
+    /// The packs (by id) with Delete, from RefreshPacks
+    std::map<std::string, CustomTex::Deletion::Target> deletable;
     std::set<std::string> deleting;     ///< the packs (ids) being deleted now
     /// AzaharFrame fixd: folder names of installed packs whose catalog entry is verified (the chip)
     std::set<std::string> verified_folders;

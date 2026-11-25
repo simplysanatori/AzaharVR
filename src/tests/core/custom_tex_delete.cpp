@@ -357,6 +357,149 @@ TEST_CASE("texdelete: links", "[texdelete]") {
     }
 }
 
+TEST_CASE("texdelete: packs outside the load folder", "[texdelete]") {
+    Temp t;
+    const fs::path home = t.root / "home";
+    const fs::path azahar = home / ".local" / "share" / "azahar-emu" / "load";
+    const fs::path big = azahar / "textures-4k" / kTid;
+    const fs::path mine = home / "Packs" / (kTid + "-HD");
+    PutPack(big);
+    PutPack(mine);
+    PutPack(t.Library() / "Keep");
+    t.paths.home = home.generic_string();
+    t.paths.extra_roots = {(azahar / "textures-*").generic_string(), (home / "Packs").generic_string()};
+    t.paths.link_roots = {(azahar / "textures").generic_string()};
+    const std::string keep = Id(t.Library() / "Keep");
+    const Deletion::Options told{.outside = true};
+
+    SECTION("another Azahar's and the player's own place") {
+        CHECK(Check(t, Id(big)).place == Place::Outside);
+        CHECK(Check(t, Id(big)).other_azahar);
+        CHECK(Check(t, Id(mine)).place == Place::Outside);
+        CHECK_FALSE(Check(t, Id(mine)).other_azahar);
+        CheckRefused(t, {Id(big)}); // only when the player was told where it is
+        CheckRefused(t, {Id(mine)}, {.shared = true});
+        REQUIRE(Deletion::Delete(t.paths, kTitle, {Id(big)}, told).ok);
+        CHECK_FALSE(fs::exists(big));
+        CHECK(fs::is_directory(azahar / "textures-4k"));
+        REQUIRE(Deletion::Delete(t.paths, kTitle, {Id(mine)}, told).ok);
+        CHECK(fs::is_directory(home / "Packs"));
+        CHECK(Listed(t) == std::vector<std::string>{keep});
+    }
+    SECTION("the one the game reads, through the game's link") {
+        REQUIRE(Layers::TurnOn(t.paths, kTitle, keep).ok);
+        REQUIRE(Layers::TurnOn(t.paths, kTitle, Id(big)).ok);
+        REQUIRE(Layers::Linked(t.paths, kTitle) == Id(big));
+        REQUIRE(Deletion::Delete(t.paths, kTitle, {Id(big)}, told).ok);
+        CHECK_FALSE(fs::exists(big));
+        CHECK(Layers::Linked(t.paths, kTitle) == keep); // the next pack
+    }
+    SECTION("another Azahar's load/textures: listed and deletable only through the game's link") {
+        const fs::path read = azahar / "textures" / kTid;
+        PutPack(read);
+        CheckRefused(t, {Id(read)}, told);
+        Link(read, t.Place());
+        CHECK(Check(t, Id(read)).place == Place::Outside);
+        REQUIRE(Deletion::Delete(t.paths, kTitle, {Id(read)}, told).ok);
+        CHECK_FALSE(fs::exists(read));
+        CHECK_FALSE(fs::exists(fs::symlink_status(t.Place())));
+        CHECK(fs::is_directory(azahar / "textures"));
+        CHECK(fs::exists(big / "UI"));
+    }
+    SECTION("the other Azahar's link to it stays, dangling") {
+        Link(big, azahar / "textures" / kTid);
+        REQUIRE(Deletion::Delete(t.paths, kTitle, {Id(big)}, told).ok);
+        CHECK(fs::exists(fs::symlink_status(azahar / "textures" / kTid)));
+        CHECK_FALSE(fs::exists(azahar / "textures" / kTid));
+    }
+    SECTION("a link in another place: never what it points at, when that is in no known place") {
+        const fs::path far = home / "Documents" / kTid;
+        PutPack(far);
+        Link(far, azahar / "textures-4k" / (kTid + "-link"));
+        const auto listed = Listed(t);
+        REQUIRE(std::find(listed.begin(), listed.end(), Id(far)) != listed.end());
+        CheckRefused(t, {Id(far)}, told);
+    }
+    SECTION("deeper in a known place, beside it, or the place itself") {
+        const fs::path deep = azahar / "textures-4k" / "more" / kTid;
+        PutPack(deep);
+        Link(deep, t.Place());
+        CheckRefused(t, {Id(deep)}, told);
+        fs::remove(t.Place());
+        for (const fs::path& p : {azahar, azahar / "textures-4k", home, home / "Packs", t.root}) {
+            CheckRefused(t, {Id(p)}, told);
+            CheckRefused(t, {Id(big), Id(p)}, told);
+        }
+    }
+    SECTION("a pack outside the home folder") {
+        const fs::path far = t.root / "srv" / "textures" / kTid;
+        PutPack(far);
+        t.paths.extra_roots.push_back((t.root / "srv" / "textures").generic_string());
+        CheckRefused(t, {Id(far)}, told);
+        t.paths.home.clear(); // not known: none
+        CheckRefused(t, {Id(big)}, told);
+        t.paths.home = Id(big); // never the home folder itself
+        CheckRefused(t, {Id(big)}, told);
+    }
+    SECTION("a link in the home folder that leads out of it") {
+        const fs::path far = t.root / "srv" / "textures";
+        PutPack(far / kTid);
+        Link(far, home / "far");
+        t.paths.extra_roots = {(home / "far").generic_string()};
+        REQUIRE(Listed(t).size() == 2);
+        CheckRefused(t, {Id(far / kTid)}, told);
+    }
+    SECTION("a pair, and a pair of two places") {
+        const fs::path copy = azahar / "textures-4k" / (kTid + "-astc4x4");
+        PutCopy(copy, "../" + kTid);
+        REQUIRE(Deletion::Delete(t.paths, kTitle, {Id(copy), Id(big)}, told).ok);
+        CHECK_FALSE(fs::exists(copy));
+        CHECK_FALSE(fs::exists(big));
+    }
+    SECTION("the roots file of the load folder") {
+        // <load>/textures-4k through roots.txt: not another Azahar's
+        const fs::path own = t.Load() / "textures-4k" / kTid;
+        PutPack(own);
+        t.paths.home = t.root.generic_string();
+        t.paths.extra_roots = {(t.Load() / "textures-*").generic_string()};
+        CHECK(Check(t, Id(own)).place == Place::Outside);
+        CHECK_FALSE(Check(t, Id(own)).other_azahar);
+    }
+#ifndef _WIN32
+    SECTION("its folder is not writable: nothing changes") {
+        if (::geteuid() == 0) {
+            SKIP("root may delete anything");
+        }
+        REQUIRE(Layers::TurnOn(t.paths, kTitle, Id(big)).ok);
+        const auto before = Tree(big);
+        const auto on = On(t);
+        for (const fs::path& p : {azahar / "textures-4k", big}) {
+            fs::permissions(p, fs::perms::owner_read | fs::perms::owner_exec);
+            const auto r = Deletion::Delete(t.paths, kTitle, {Id(big)}, told);
+            fs::permissions(p, fs::perms::owner_all);
+            CHECK_FALSE(r.ok);
+            CHECK_FALSE(r.changed);
+            CHECK(On(t) == on);
+            CHECK(Tree(big) == before);
+        }
+    }
+    SECTION("a folder in it is not writable: not all deleted, listed, off") {
+        if (::geteuid() == 0) {
+            SKIP("root may delete anything");
+        }
+        REQUIRE(Layers::TurnOn(t.paths, kTitle, Id(big)).ok);
+        fs::permissions(big / "UI", fs::perms::owner_read | fs::perms::owner_exec);
+        const auto r = Deletion::Delete(t.paths, kTitle, {Id(big)}, told);
+        fs::permissions(big / "UI", fs::perms::owner_all);
+        CHECK_FALSE(r.ok);
+        CHECK(r.changed);
+        CHECK(On(t).empty());
+        CHECK(Deletion::Delete(t.paths, kTitle, {Id(big)}, told).ok); // again
+        CHECK_FALSE(fs::exists(big));
+    }
+#endif
+}
+
 TEST_CASE("texdelete: roots and odd names", "[texdelete]") {
     Temp t;
     PutPack(t.Library() / "Mine");

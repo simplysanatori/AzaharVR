@@ -753,6 +753,8 @@ std::string RemoveOriginalBody(const std::string& size, bool catalog) {
 namespace {
 // Delete's sentences
 constexpr const char* kDeleteBoth = "Deletes the optimized pack and the original PNG pack.";
+constexpr const char* kDeleteOtherAzahar =
+    "It's in another Azahar's folder, and that Azahar uses it too.";
 constexpr const char* kDeleteShared = "Another game uses it too.";
 constexpr const char* kDeleteDownload = "You can download it again.";
 constexpr const char* kDeleteZip = "You can install it again from its zip.";
@@ -767,11 +769,44 @@ std::string DeletePackBody(const DeletePackText& text) {
         }
     };
     add(text.both, kDeleteBoth); // AzaharFrame texrow
+    add(text.other_azahar, kDeleteOtherAzahar);
     add(text.shared, kDeleteShared);
     add(text.origin == PackOrigin::Download, kDeleteDownload);
     add(text.origin == PackOrigin::Zip, kDeleteZip);
     add(text.origin == PackOrigin::Own, kDeleteOwn);
     return body;
+}
+
+std::string ShortenMiddle(const std::string& text,
+                          const std::function<bool(const std::string&)>& fits) {
+    if (fits(text)) {
+        return text;
+    }
+    std::vector<std::string> chars; // code points
+    for (std::size_t i = 0; i < text.size();) {
+        std::size_t end = i + 1;
+        while (end < text.size() && (static_cast<unsigned char>(text[end]) & 0xC0) == 0x80) {
+            end++;
+        }
+        chars.push_back(text.substr(i, end - i));
+        i = end;
+    }
+    // A bit more of the end is kept: the folder's own name
+    for (std::size_t keep = chars.empty() ? 0 : chars.size() - 1; keep > 1; keep--) {
+        const std::size_t head = keep * 2 / 5;
+        std::string s;
+        for (std::size_t i = 0; i < head; i++) {
+            s += chars[i];
+        }
+        s += "\u2026";
+        for (std::size_t i = chars.size() - (keep - head); i < chars.size(); i++) {
+            s += chars[i];
+        }
+        if (fits(s)) {
+            return s;
+        }
+    }
+    return "\u2026";
 }
 
 std::string ModVersionText(const std::string& version) { // AzaharFrame ui3
@@ -1228,7 +1263,9 @@ void TabMenu::DrawModsDialog(Kit& kit, const ModsDialog& d, const MenuView& view
     // AzaharFrame ctgp7: a checkbox row under the supporting text (Material's list item with a
     // leading checkbox, 48 dp)
     const float check_h = d.check.empty() ? 0.0f : 8.0f + 48.0f;
-    const float h = kP + head_lh * static_cast<float>(head_lines.size()) + 16.0f +
+    const float places_h =
+        d.places.empty() ? 0.0f : body_lh * static_cast<float>(d.places.size()) + 8.0f;
+    const float h = kP + head_lh * static_cast<float>(head_lines.size()) + 16.0f + places_h +
                     body_lh * static_cast<float>(body_lines.size()) + numbers_h + rows_h + check_h +
                     24.0f + kButtonH + kP;
     const Rect box{(kPanelW - kW) * 0.5f, (kPanelH - h) * 0.5f, (kPanelW + kW) * 0.5f,
@@ -1241,6 +1278,17 @@ void TabMenu::DrawModsDialog(Kit& kit, const ModsDialog& d, const MenuView& view
         y += head_lh;
     }
     y += 16.0f;
+    for (const std::string& place : d.places) {
+        const std::string text = ShortenMiddle(place, [&](const std::string& s) {
+            return kit.TextWidthSized(kSmall, true, s) <= tw;
+        });
+        kit.TextSized(box.x0 + kP, y + body_lh * 0.5f + kit.CapHeightSized(kSmall, true) * 0.5f,
+                      kSmall, true, Tok::kOnSurface, text);
+        y += body_lh;
+    }
+    if (!d.places.empty()) {
+        y += 8.0f;
+    }
     for (const std::string& l : body_lines) {
         kit.TextSized(box.x0 + kP, y + body_lh * 0.5f + kit.CapHeightSized(kBody, false) * 0.5f,
                       kBody, false, Tok::kOnSurfaceVariant, l);
@@ -1303,10 +1351,10 @@ void TabMenu::DrawModsDialog(Kit& kit, const ModsDialog& d, const MenuView& view
     // The actions: text buttons at the end, the confirming one last.
     float right = box.x1 - kP + 12.0f; // a text button's own padding lines its label up
     const float by = box.y1 - kP - kButtonH;
-    const auto action = [&](Id id, const std::string& label) {
-        const float w = ButtonWidth(kit, label, false, 12.0f);
+    const auto action = [&](Id id, const std::string& label, bool tonal = false) {
+        const float w = ButtonWidth(kit, label, false, tonal ? 24.0f : 12.0f);
         const Rect b{right - w, by, right, by + kButtonH};
-        kit.Button(b, ButtonStyle::Text, 0, label, StateOf(view, {id}));
+        kit.Button(b, tonal ? ButtonStyle::Tonal : ButtonStyle::Text, 0, label, StateOf(view, {id}));
         // AzaharFrame kiuweap2: a short label ("OK") still gets a 48 dp target.
         const float grow = std::max(0.0f, (48.0f - b.W()) * 0.5f);
         AddHit({b.x0 - grow, b.Cy() - 24.0f, b.x1 + grow, b.Cy() + 24.0f}, {id}, panel);
@@ -1324,7 +1372,7 @@ void TabMenu::DrawModsDialog(Kit& kit, const ModsDialog& d, const MenuView& view
         }
     } else {
         action(Id::DialogConfirm, confirm);
-        action(Id::DialogCancel, "Cancel");
+        action(Id::DialogCancel, "Cancel", !d.places.empty());
     }
 }
 

@@ -296,6 +296,12 @@ Paths DefaultPaths() {
         paths.load_dir.pop_back();
     }
     paths.extra_roots = ReadExtraRoots(paths.load_dir);
+#ifdef _WIN32
+    const char* home_env = std::getenv("USERPROFILE");
+#else
+    const char* home_env = std::getenv("HOME");
+#endif
+    paths.home = home_env ? home_env : "";
 #if defined(__unix__) || defined(__APPLE__)
     std::string data_home;
     if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg && *xdg) {
@@ -308,6 +314,7 @@ Paths DefaultPaths() {
         std::error_code ec;
         if (fs::is_directory(desktop, ec) && Canonical(desktop) != Canonical(paths.load_dir)) {
             paths.extra_roots.push_back((desktop / "textures-*").generic_string());
+            paths.link_roots.push_back((desktop / "textures").generic_string());
         }
     }
 #endif

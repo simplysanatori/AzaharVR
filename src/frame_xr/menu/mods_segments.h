@@ -24,6 +24,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility> // AzaharFrame memguard
@@ -151,6 +152,9 @@ struct ModsDialog {
     /// AzaharFrame ctgp7: a checkbox under the supporting text with this label ("" none), off when
     /// the dialog opens (MenuView::dialog_check; Id::DialogCheck)
     std::string check;
+    /// DeletePack: where the packs are, when that is outside Azahar's own folders; each on a line of
+    /// its own over the body, shortened in the middle. Cancel is then the emphasized button.
+    std::vector<std::string> places;
     bool operator==(const ModsDialog&) const = default;
 };
 
@@ -456,13 +460,17 @@ std::string RemoveOriginalBody(const std::string& size, bool catalog);
 /// Where a pack came from: Download Packs, Install from Zip, or the player put it there.
 enum class PackOrigin : uint8_t { Download, Zip, Own };
 /// Delete's supporting text. AzaharFrame texrow: `both`: the row is an Optimize for Frame pair and
-/// both copies go. `shared`: another game has it on.
+/// both copies go. `shared`: another game has it on. `other_azahar`: it is another Azahar's.
 struct DeletePackText {
     PackOrigin origin = PackOrigin::Download;
     bool both = false;
     bool shared = false;
+    bool other_azahar = false;
 };
 std::string DeletePackBody(const DeletePackText& text);
+/// `text` with as little as needed cut out of its middle ("~/.local/.../00040000") for `fits`.
+std::string ShortenMiddle(const std::string& text,
+                          const std::function<bool(const std::string&)>& fits);
 /// "Optimize 4K (PNG) for Frame?"
 std::string OptimizeNudgeText(const std::string& pack);
 /// "2,308"

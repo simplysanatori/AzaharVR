@@ -37,7 +37,6 @@
 #include "core/core.h"                 // AzaharFrame ui2
 #include "core/custom_tex/download.h"
 #include "core/custom_tex/layers.h" // AzaharFrame texlayers
-#include "core/custom_tex/delete.h"
 #include "core/custom_tex/optimize.h" // AzaharFrame ui3
 #include "core/mods/transfer.h" // AzaharFrame fixes7
 #include "core/mods/library.h"
@@ -1106,12 +1105,12 @@ void FrameMods::RefreshPacks() {
             const CustomTex::Paths paths = CustomTex::DefaultPaths();
             auto game = std::make_shared<CustomTex::Layers::Game>(
                 CustomTex::Layers::Game::Load(paths, tid));
-            std::set<std::string> removable; // the packs with Delete
+            std::map<std::string, CustomTex::Deletion::Target> removable; // the packs with Delete
             // AzaharFrame texparts: which packs have Customize, and "6 of 7 Parts"
             std::map<std::string, PackParts> parts;
             for (const CustomTex::Pack& p : game->packs) {
-                if (CustomTex::Deletion::Check(paths, tid, game->packs, p.id).Ok()) {
-                    removable.insert(p.id);
+                if (auto t = CustomTex::Deletion::Check(paths, tid, game->packs, p.id); t.Ok()) {
+                    removable.emplace(p.id, std::move(t));
                 }
                 namespace P = CustomTex::Parts;
                 const CustomTex::Layers::PackData& d = game->data[p.id];
@@ -1127,7 +1126,8 @@ void FrameMods::RefreshPacks() {
             }
             return std::make_tuple(std::move(game), std::move(removable), std::move(parts));
         },
-        [this, tid](const std::tuple<std::shared_ptr<CustomTex::Layers::Game>, std::set<std::string>,
+        [this, tid](const std::tuple<std::shared_ptr<CustomTex::Layers::Game>,
+                                     std::map<std::string, CustomTex::Deletion::Target>,
                                      std::map<std::string, PackParts>>& result) {
             if (tid != title_id) {
                 return;
@@ -1809,6 +1809,26 @@ void FrameMods::PollDownload() {
 
 // ---- Delete ----
 
+namespace {
+
+std::string HomeDir() {
+    return QDir::homePath().toStdString();
+}
+
+/// "~/Downloads/Packs" for a folder under the home folder.
+std::string FolderText(const std::string& folder) {
+    const std::string home = HomeDir();
+    if (folder == home) {
+        return "~";
+    }
+    if (!home.empty() && folder.rfind(home + "/", 0) == 0) {
+        return "~" + folder.substr(home.size());
+    }
+    return folder;
+}
+
+} // namespace
+
 Menu::PackOrigin FrameMods::PackOriginOf(const std::string& pack_id) const {
     const CustomTex::Pack* p = layers ? layers->Find(pack_id) : nullptr;
     if (!p || !p->managed) {
@@ -1843,19 +1863,26 @@ bool FrameMods::PacksBusy(const std::vector<std::string>& ids) const {
 }
 
 void FrameMods::DeletePackAsk(const std::string& pack_id) {
+    using Place = CustomTex::Deletion::Place;
     const CustomTex::Pack* pack = layers ? layers->Find(pack_id) : nullptr;
-    if (!pack || deletable.count(pack_id) == 0 || textures.busy || textures.downloading ||
+    const auto target = deletable.find(pack_id);
+    if (!pack || target == deletable.end() || textures.busy || textures.downloading ||
         textures.dialog.kind != Menu::ModsDialogKind::None) {
         return;
     }
     Pending p{Pending::Kind::Delete, pack_id};
     Menu::DeletePackText text;
     text.origin = PackOriginOf(pack_id);
-    // AzaharFrame texrow: the row is the pair: its other copy goes too, when it can
-    if (const auto o = layers->partners.find(pack_id);
-        o != layers->partners.end() && deletable.count(o->second) != 0) {
+    p.outside = target->second.place == Place::Outside;
+    text.other_azahar = target->second.other_azahar;
+    // AzaharFrame texrow: the row is the pair: its other copy goes too, when it can (and is in
+    // Azahar's own folders or outside them as the row's is)
+    const auto o = layers->partners.find(pack_id);
+    const auto other = o != layers->partners.end() ? deletable.find(o->second) : deletable.end();
+    if (other != deletable.end() && (other->second.place == Place::Outside) == p.outside) {
         p.packs.push_back(o->second);
         text.both = true;
+        text.other_azahar |= other->second.other_azahar;
         if (text.origin == Menu::PackOrigin::Own) {
             text.origin = PackOriginOf(o->second); // an optimized copy has no marker of its own
         }
@@ -1873,6 +1900,11 @@ void FrameMods::DeletePackAsk(const std::string& pack_id) {
     text.shared = p.shared;
     pack_pending = std::move(p);
     textures.dialog = {Menu::ModsDialogKind::DeletePack, pack->name, Menu::DeletePackBody(text)};
+    if (pack_pending.outside) {
+        for (const std::string& id : pack_pending.packs) {
+            textures.dialog.places.push_back(FolderText(deletable.at(id).path));
+        }
+    }
     PublishTextures();
 }
 
@@ -1909,7 +1941,7 @@ void FrameMods::DeletePacks(const Pending& p) {
         this,
         [tid, p] {
             return CustomTex::Deletion::Delete(CustomTex::DefaultPaths(), tid, p.packs,
-                                               {.shared = p.shared});
+                                               {.shared = p.shared, .outside = p.outside});
         },
         [this, tid, p, was_active, dropped](const CustomTex::Deletion::Result& out) {
             deleting.clear();
@@ -1944,10 +1976,6 @@ std::string LoadDirPath() {
     return CustomTex::DefaultPaths().load_dir;
 }
 
-std::string HomeDir() {
-    return QDir::homePath().toStdString();
-}
-
 /// Downloads, Documents and Home, those that exist.
 std::vector<Menu::ZipChip> QuickFolders() {
     std::vector<Menu::ZipChip> chips;
@@ -1960,18 +1988,6 @@ std::vector<Menu::ZipChip> QuickFolders() {
     add("Documents", QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation));
     add("Home", QDir::homePath());
     return chips;
-}
-
-/// "~/Downloads/Packs" for a folder under the home folder.
-std::string FolderText(const std::string& folder) {
-    const std::string home = HomeDir();
-    if (folder == home) {
-        return "~";
-    }
-    if (!home.empty() && folder.rfind(home + "/", 0) == 0) {
-        return "~" + folder.substr(home.size());
-    }
-    return folder;
 }
 
 bool EndsWithNoCase(const std::string& name, std::string_view e) {

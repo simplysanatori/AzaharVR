@@ -6,8 +6,10 @@
 #include "core/custom_tex/delete.h"
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <filesystem>
+#include <fstream>
 #include <set>
 #include <system_error>
 #include <utility>
@@ -51,13 +53,34 @@ fs::path LibraryRoot(const Paths& paths, u64 title_id) {
     return fs::path(paths.load_dir) / "texture-packs" / TitleFolder(title_id);
 }
 
+/// The folders packs are in elsewhere.
+std::vector<std::string> OutsideRoots(const Paths& paths) {
+    std::vector<std::string> roots = ExtraRootFolders(paths);
+    roots.insert(roots.end(), paths.link_roots.begin(), paths.link_roots.end());
+    return roots;
+}
+
+/// <user>/load/textures, or .../load/textures-4k: an Azahar's layout.
+bool AzaharLayout(const fs::path& root) {
+    const auto lower = [](std::string s) {
+        std::transform(s.begin(), s.end(), s.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return s;
+    };
+    return lower(root.filename().generic_string()).rfind("textures", 0) == 0 &&
+           lower(root.parent_path().filename().generic_string()) == "load";
+}
+
 /// The folders that are never a pack, nor inside one.
 std::vector<fs::path> Roots(const Paths& paths, u64 title_id) {
     const fs::path load = paths.load_dir;
     std::vector<fs::path> roots{Canon(load), Canon(load / "textures"), Canon(load / "texture-packs"),
                                 Canon(LibraryRoot(paths, title_id))};
-    for (const std::string& root : ExtraRootFolders(paths)) {
+    for (const std::string& root : OutsideRoots(paths)) {
         roots.push_back(Canon(root));
+    }
+    if (!paths.home.empty()) {
+        roots.push_back(Canon(paths.home));
     }
     return roots;
 }
@@ -110,6 +133,17 @@ std::string Remove(const fs::path& path, bool link) {
         return "Cannot remove the folder: " + ec.message();
     }
     return fs::exists(fs::symlink_status(path, ec)) ? "Cannot remove the folder" : "";
+}
+
+/// A file can be made and removed in the folder.
+bool Writable(const fs::path& folder) {
+    const fs::path probe = folder / ".azaharvr-probe";
+    std::error_code ec;
+    if (fs::exists(fs::symlink_status(probe, ec))) {
+        return false;
+    }
+    const bool made = static_cast<bool>(std::ofstream(probe));
+    return made && fs::remove(probe, ec);
 }
 
 } // namespace
@@ -179,6 +213,21 @@ Target Check(const Paths& paths, u64 title_id, const std::vector<Pack>& packs,
         IsTitleFolder(real.filename().string(), tid)) {
         t.place = Place::Load;
     }
+    if (t.place == Place::None && IsTitleFolder(real.filename().string(), tid)) {
+        for (const std::string& r : OutsideRoots(paths)) {
+            const fs::path root = Canon(r);
+            if (real.parent_path() != root) {
+                continue;
+            }
+            const fs::path home = Canon(paths.home);
+            if (paths.home.empty() || real == home || !Within(real, home)) {
+                return refuse("Not in the home folder");
+            }
+            t.place = Place::Outside;
+            t.other_azahar = AzaharLayout(root) && root.parent_path() != load;
+            break;
+        }
+    }
     if (t.place == Place::None) {
         return refuse("Not in the texture folders");
     }
@@ -215,6 +264,13 @@ Result Delete(const Paths& paths, u64 title_id, const std::vector<std::string>& 
         const Target t = Check(paths, title_id, packs, id);
         if (!t.Ok()) {
             return fail(t.error);
+        }
+        if (t.place == Place::Outside && !options.outside) {
+            return fail("Outside the texture folders");
+        }
+        if (t.place == Place::Outside && !t.link &&
+            !(Writable(t.path) && Writable(fs::path(t.path).parent_path()))) {
+            return fail("Not writable");
         }
         if (Convert::IsRunning(id)) {
             return fail("Being converted");

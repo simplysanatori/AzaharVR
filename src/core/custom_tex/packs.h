@@ -70,10 +70,15 @@ struct Pack {
 struct Paths {
     std::string load_dir;                 // <user>/load (FileUtil's LoadDir)
     std::vector<std::string> extra_roots; // see the header comment
+    /// Another Azahar's <load>/textures: its packs are listed only when load/textures/<TITLEID>
+    /// here points at them
+    std::vector<std::string> link_roots{};
+    /// The player's home folder: no pack outside <load> is deleted elsewhere (delete.h); "" none is
+    std::string home{};
 };
 
 /// LoadDir, plus the extra roots from ReadExtraRoots(), plus (when it exists) the folders
-/// ~/.local/share/azahar-emu/load/textures-* of a desktop Azahar.
+/// ~/.local/share/azahar-emu/load/textures-* of a desktop Azahar (its load/textures: link_roots).
 Paths DefaultPaths();
 
 /// The extra roots saved in <load>/texture-packs/roots.txt (one path per line, '#' comments) and

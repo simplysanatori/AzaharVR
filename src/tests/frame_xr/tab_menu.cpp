@@ -1091,8 +1091,60 @@ TEST_CASE("texrow: Delete's text for a pack and an Optimize for Frame pair", "[t
     CHECK(DeletePackBody({O::Own, true}) == both + "You'd need your own copy to install it again.");
     CHECK(DeletePackBody({O::Own, false, true}) ==
           "Another game uses it too. You'd need your own copy to install it again.");
+    CHECK(DeletePackBody({O::Own, false, false, true}) ==
+          "It's in another Azahar's folder, and that Azahar uses it too. You'd need your own copy to "
+          "install it again.");
     CHECK(DeletePackBody({O::Own, true, true}) ==
           both + "Another game uses it too. You'd need your own copy to install it again.");
+}
+
+TEST_CASE("Delete's dialog for a pack outside the app's folders", "[frame_xr][tabmenu]") {
+    Drawn d;
+    MenuModel m = Sample();
+    MenuView v;
+    v.tab = kModsTab;
+    v.mods_segment = ModsSegment::Textures;
+    m.mods.textures = Packs(2);
+    m.mods.textures.packs[1].can_delete = true;
+    d.Draw(m, v);
+    REQUIRE(FindHit(d, Id::PackDelete, 1));
+    const auto del = FindHit(d, Id::PackDelete, 1)->r;
+    const auto drawn = [&](std::vector<std::string> places) {
+        m.mods.textures.dialog = {ModsDialogKind::DeletePack, "4K",
+                                  DeletePackBody({PackOrigin::Own, false, false, true})};
+        m.mods.textures.dialog.places = std::move(places);
+        d.Draw(m, v);
+        REQUIRE(FindHit(d, Id::DialogConfirm, -1));
+        REQUIRE(FindHit(d, Id::DialogCancel, -1));
+        const auto yes = FindHit(d, Id::DialogConfirm, -1)->r;
+        const auto no = FindHit(d, Id::DialogCancel, -1)->r;
+        CHECK(no.x1 <= yes.x0 + 0.01f);
+        CHECK(yes.H() >= 48.0f);
+        CHECK(no.H() >= 48.0f);
+        // never under the pointer that pressed the row's Delete
+        CHECK(d.menu.HitTest(del.Cx(), del.Cy()).id != Id::DialogConfirm);
+        CheckTargets(d);
+        return no.W();
+    };
+    const float plain = drawn({});
+    const std::string place = "~/.local/share/azahar-emu/load/textures-4k/0004000000033500";
+    CHECK(drawn({place}) > plain); // Cancel is the emphasized one
+    drawn({place + "-astc4x4", place});
+
+    const auto upto = [](std::size_t n) {
+        return [n](const std::string& s) { return s.size() <= n; };
+    };
+    CHECK(ShortenMiddle(place, upto(200)) == place);
+    const std::string cut = ShortenMiddle(place, upto(40));
+    CHECK(cut.size() <= 40);
+    CHECK(cut.rfind("~/.local", 0) == 0);
+    CHECK(cut.find("\u2026") != std::string::npos);
+    CHECK(cut.substr(cut.size() - 16) == "0004000000033500");
+    CHECK(ShortenMiddle("", upto(0)).empty());
+    CHECK(ShortenMiddle("ab", upto(0)) == "\u2026");
+    // whole characters only
+    const std::string letters = ShortenMiddle("\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9", upto(11));
+    CHECK(letters == "\u00e9\u2026\u00e9\u00e9\u00e9");
 }
 
 // AzaharFrame menuux: Switch to Flat, the Settings tab's renderer rows, the Touchpad row's line,

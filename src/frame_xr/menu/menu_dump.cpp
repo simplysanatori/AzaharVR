@@ -2482,6 +2482,17 @@ int main(int argc, char** argv) {
                 ModsDialogKind::DeletePack, "Original",
                 DeletePackBody({.origin = PackOrigin::Own, .both = true, .shared = true})};
             ok &= shot("textures-own-delete-pair", own, v);
+            ModsDialog& out = own.mods.textures.dialog; // in another Azahar's folder
+            out = {ModsDialogKind::DeletePack, "4K",
+                   DeletePackBody({.origin = PackOrigin::Own, .other_azahar = true})};
+            out.places = {"~/.local/share/azahar-emu/load/textures-4k/0004000000055D00"};
+            v.hover = {};
+            ok &= shot("textures-outside-delete", own, v);
+            out = {ModsDialogKind::DeletePack, "4K",
+                   DeletePackBody({.origin = PackOrigin::Own, .both = true, .other_azahar = true})};
+            out.places = {"~/.local/share/azahar-emu/load/textures-4k/0004000000055D00-astc4x4",
+                          "~/.local/share/azahar-emu/load/textures-4k/0004000000055D00"};
+            ok &= shot("textures-outside-delete-pair", own, v);
         }
         // AzaharFrame memguard: Preload Textures? with this machine's memory now (run the dump
         // inside the launcher's scope to see Azahar's Limit): OoT3D 4K as ASTC (6034295947

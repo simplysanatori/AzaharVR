@@ -9,9 +9,13 @@
 //   Library  a folder right inside <load>/texture-packs/<TITLEID>
 //   Load     the folder <load>/textures/<TITLEID> itself, or one named <TITLEID>-... beside it,
 //            when that is a real folder
+//   Outside  a folder named <TITLEID> or <TITLEID>-... right inside a root the app knows elsewhere
+//            (Paths::extra_roots and link_roots: the player's roots.txt, another Azahar's textures
+//            folders), in the player's home folder; only when the player was told where it is
 // Never a root, a folder that holds one, or a folder that holds another pack of the game. Paths
 // are compared after every link on the way is resolved, so nothing is reached through a link that
-// leads out of the load folder. An entry of the library that is a link itself is unlinked; what it
+// leads out of the load folder, except an Outside pack that the game's link points at: the folder
+// the scan lists. An entry of the library that is a link itself is unlinked; what it
 // points at stays.
 //
 // The pack goes off in the game's list first (layers.h), so the link moves to the next pack. A
@@ -32,6 +36,7 @@ enum class Place {
     None,    ///< may not be deleted
     Library, ///< <load>/texture-packs/<TITLEID>/<folder>
     Load,    ///< <load>/textures/<TITLEID>
+    Outside, ///< in another place: another Azahar's, or one from roots.txt
 };
 
 struct Target {
@@ -39,6 +44,7 @@ struct Target {
     std::string path;  ///< what goes: the folder, or the link
     bool link = false; ///< a link in the library: unlinked, its target stays
     Place place = Place::None;
+    bool other_azahar = false; ///< Outside: in a texture folder of another Azahar (or Citra)
     std::string error; ///< why not, for the log ("" it may go)
     bool Ok() const {
         return place != Place::None && error.empty();
@@ -54,6 +60,7 @@ std::vector<u64> OtherGames(const Paths& paths, u64 title_id, const std::string&
 
 struct Options {
     bool shared = false; ///< the player was told that another game uses it (else it is refused)
+    bool outside = false; ///< the player was told where it is: Outside packs may go
 };
 
 struct Result {
