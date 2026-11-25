@@ -146,7 +146,7 @@ struct GbCore::Impl {
         services.picture = [this] {
             return DriverPicture{fb.data(), width, height, stride}; // XBGR8888
         };
-        services.layer_shift = [this] { return shadow.FarthestShift(); };
+        services.layer_shift = [this] { return shadow.EdgeShift(); };
         services.rom_path = rom_path;
         services.game_dir = paths.game_dir;
 
@@ -394,7 +394,7 @@ void GbCore::RunFrame(FrameOutput& out) {
     impl->driver.RunFrame(impl->input, out, impl->caps);
     impl->driver.SetRightEye(impl->shadow.Picture(),
                              {impl->fb.data(), impl->width, impl->height, impl->stride},
-                             impl->shadow.FarthestShift(), out);
+                             impl->shadow.EdgeShift(), out);
 }
 
 uint32_t GbCore::AudioSampleRate() const {

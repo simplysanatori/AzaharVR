@@ -372,6 +372,95 @@ struct InvertDepth {
     }
 };
 
+/// What a GBA ROM has its code's place taken by: it stores these words, then goes on as before.
+std::vector<uint8_t> StoreFirst(std::vector<uint8_t> rom,
+                                const std::vector<std::pair<uint32_t, uint32_t>>& words) {
+    constexpr size_t kCode = 0xC0, kMoved = 0x800;
+    REQUIRE(words.size() * 24 + kCode < kMoved);
+    std::copy_n(rom.begin() + kCode, 0x400, rom.begin() + kMoved); // it is all relative
+    size_t pc = kCode;
+    const auto put = [&](uint32_t word) {
+        PutLE32(rom, pc, word);
+        pc += 4;
+    };
+    for (const auto& [address, value] : words) {
+        put(0xE59F0004u); // ldr r0, =address
+        put(0xE59F1004u); // ldr r1, =value
+        put(0xEA000001u); // b past the two
+        put(address);
+        put(value);
+        put(0xE5801000u); // str r1, [r0]
+    }
+    put(0xEA000000u | static_cast<uint32_t>((kMoved - pc - 8) / 4));
+    return rom;
+}
+
+/// The same with a Game Boy ROM's bytes; the screen is off then.
+std::vector<uint8_t> StoreFirstGb(std::vector<uint8_t> rom,
+                                  const std::vector<std::pair<uint16_t, uint8_t>>& bytes) {
+    constexpr size_t kCode = 0x400;
+    size_t pc = kCode;
+    const auto put = [&](std::initializer_list<int> code) {
+        for (const int byte : code) {
+            rom[pc++] = static_cast<uint8_t>(byte);
+        }
+    };
+    put({0xAF, 0xE0, 0x40}); // xor a; ldh (0x40), a
+    for (const auto& [address, value] : bytes) {
+        put({0x3E, value, 0xEA, address & 0xFF, address >> 8}); // ld a, value; ld (address), a
+    }
+    put({0xC3, 0x50, 0x01}); // jp 0x150
+    rom[0x102] = kCode & 0xFF;
+    rom[0x103] = kCode >> 8;
+    return rom;
+}
+
+/// A word (or run of bytes) of a ROM's code, changed.
+template <typename T>
+std::vector<uint8_t> Patched(std::vector<uint8_t> rom, const T& from, const T& to) {
+    const auto* bytes = reinterpret_cast<const uint8_t*>(&from);
+    const auto at = std::search(rom.begin(), rom.end(), bytes, bytes + sizeof(T));
+    REQUIRE(at != rom.end());
+    std::memcpy(&*at, &to, sizeof(T));
+    return rom;
+}
+
+/// MakeLayersGbaRom with another backdrop than black; with another DISPCNT; with these layers (its
+/// upper byte).
+std::vector<uint8_t> WithBackdrop(std::vector<uint8_t> rom) {
+    return Patched(std::move(rom), 0x03FF0000u, 0x03FF56B5u);
+}
+std::vector<uint8_t> WithDispcnt(std::vector<uint8_t> rom, uint32_t dispcnt) {
+    const auto find = [&rom](uint32_t word) {
+        const auto* bytes = reinterpret_cast<const uint8_t*>(&word);
+        return static_cast<size_t>(std::search(rom.begin(), rom.end(), bytes, bytes + 4) -
+                                   rom.begin());
+    };
+    const size_t load = find(0xE3A01C03u);
+    const size_t literal = find(0xF0800000u) + 4; // after the last one
+    PutLE32(rom, literal, dispcnt);
+    PutLE32(rom, load, 0xE59F1000u | static_cast<uint32_t>(literal - load - 8)); // ldr r1
+    return rom;
+}
+std::vector<uint8_t> WithLayers(std::vector<uint8_t> rom, uint32_t layers) {
+    return WithDispcnt(std::move(rom), layers << 8);
+}
+
+/// Columns a layer that is moved this far leaves at the right eye's edge.
+int EdgeOf(int shift) {
+    return Common::LayerDepth::EdgeColumns(shift);
+}
+
+/// `all` from column `to` on, `near` from column `from` on; nothing before.
+Pixels Edged(const Pixels& all, const Pixels& near, size_t width, int from, int to) {
+    Pixels out = all;
+    for (size_t i = 0; i < out.size(); ++i) {
+        const int x = static_cast<int>(i % width);
+        out[i] = x < from ? Common::LayerDepth::kBeyond : x < to ? near[i] : all[i];
+    }
+    return out;
+}
+
 /// Pictures where nothing is to be nearer or farther.
 std::vector<uint8_t> MakeFlatRom(bool gba) {
     return gba ? MakeLayersGbaRom(0, 0) : MakeLayersGbRom(true);
@@ -2007,19 +2096,26 @@ TEST_CASE("Layer Depth: each layer moves by its priority", "[frame_cores]") {
     const int step = inverted ? -static_cast<int>(level) : static_cast<int>(level);
     const auto moved =
         gba ? MakeLayersGbaRom(1, 3, step, step * 3) : MakeLayersGbRom(false, step * 2);
-    DepthGame game(gba, MakeDeepRom(gba), level);
-    DepthGame expected(gba, moved, 0);
+    DepthGame game(gba, gba ? WithBackdrop(MakeDeepRom(gba)) : MakeDeepRom(gba), level);
+    DepthGame expected(gba, gba ? WithBackdrop(moved) : moved, 0);
+    DepthGame near(gba, gba ? WithLayers(moved, 1) : moved, 0);
+    const size_t width = gba ? 240 : 160;
+    const int edge = EdgeOf(gba ? step : step * 2);
+    const int far_edge = EdgeOf(gba ? step * 3 : step * 2);
     int different = 0;
     for (int i = 0; i < 120; ++i) {
         INFO("frame " << i);
         game.Run();
         expected.Run();
+        near.Run();
         if (i < 20) {
             continue; // until the game has scrolled
         }
-        REQUIRE((game.Right() == expected.Left()));
+        REQUIRE((game.Right() == Edged(expected.Left(), near.Left(), width, edge, far_edge)));
         REQUIRE(game.out.layer_shift ==
-                Catch::Approx(gba ? step * 3 / 240.0 : step * 2 / 160.0));
+                (inverted || Common::LayerDepth::kCutsEdge
+                     ? Catch::Approx(gba ? step * 3 / 240.0 : step * 2 / 160.0)
+                     : Catch::Approx(0.0)));
         different += game.Right() != game.Left();
     }
     CHECK(different >= 98); // the Game Boy's palette is all one colour now and then
@@ -2038,14 +2134,288 @@ TEST_CASE("Layer Depth: the limit moves the layers less", "[frame_cores]") {
     DepthGame game(gba, MakeDeepRom(gba), 3);
     game.core->SetMaxLayerShift(limit);
     DepthGame expected(gba, moved, 0);
+    DepthGame near(gba, gba ? WithLayers(moved, 1) : moved, 0);
+    const int far_edge = EdgeOf(static_cast<int>(most));
+    const int edge = gba ? EdgeOf(static_cast<int>(nearer)) : far_edge;
     for (int i = 0; i < 60; ++i) {
         INFO("frame " << i);
         game.Run();
         expected.Run();
-        REQUIRE(game.out.layer_shift * static_cast<float>(width) ==
-                Catch::Approx(static_cast<float>(most)));
+        near.Run();
+        REQUIRE(game.out.layer_shift ==
+                Common::LayerDepth::EdgeShift(static_cast<int32_t>(most), width));
         if (i >= 20) {
-            REQUIRE((game.Right() == expected.Left()));
+            REQUIRE((game.Right() == Edged(expected.Left(), near.Left(), width, edge, far_edge)));
+        }
+    }
+}
+
+TEST_CASE("Layer Depth: nothing beyond a GBA picture's edge", "[frame_cores]") {
+    // Level 3: priorities 0 to 3 are moved 0, 3, 6, 9 pixels, the sprites 3
+    const auto run = [](const std::vector<uint8_t>& rom, const std::vector<uint8_t>& moved,
+                        const std::vector<uint8_t>& near, int edge, int far_edge) {
+        DepthGame game(true, rom, 3);
+        DepthGame all(true, moved, 0);
+        DepthGame some(true, near, 0);
+        for (int i = 0; i < 40; ++i) {
+            INFO("frame " << i);
+            game.Run();
+            all.Run();
+            some.Run();
+            if (i >= 20) {
+                REQUIRE((game.Right() == Edged(all.Left(), some.Left(), 240, edge, far_edge)));
+                REQUIRE((game.Left() != game.Right()));
+                REQUIRE(game.out.layer_shift == Common::LayerDepth::EdgeShift(9, 240));
+            }
+        }
+    };
+    SECTION("a layer on the screen stays whole, over nothing") {
+        const auto moved = MakeLayersGbaRom(0, 2, 0, 6);
+        run(WithBackdrop(MakeLayersGbaRom(0, 2)), WithBackdrop(moved), WithLayers(moved, 1), 0,
+            EdgeOf(6));
+    }
+    SECTION("a blended one is blended with nothing") {
+        // BG0 half over BG1 (then: half over a black backdrop)
+        const std::vector<std::pair<uint32_t, uint32_t>> blend{{0x04000050u, 0x08080241u}};
+        const std::vector<std::pair<uint32_t, uint32_t>> black{{0x04000050u, 0x08082041u}};
+        const auto moved = MakeLayersGbaRom(0, 3, 0, 9);
+        run(StoreFirst(WithBackdrop(MakeLayersGbaRom(0, 3)), blend),
+            StoreFirst(WithBackdrop(moved), blend), StoreFirst(WithLayers(moved, 1), black), 0,
+            EdgeOf(9));
+    }
+    SECTION("nor one that is blended with other layers only") {
+        // BG0 half over the sprites, which it is not over
+        const std::vector<std::pair<uint32_t, uint32_t>> blend{{0x04000050u, 0x08081041u}};
+        const auto moved = MakeLayersGbaRom(0, 3, 0, 9);
+        run(StoreFirst(WithBackdrop(MakeLayersGbaRom(0, 3)), blend),
+            StoreFirst(WithBackdrop(moved), blend), WithLayers(moved, 1), 0, EdgeOf(9));
+    }
+    SECTION("the game's picture ends where its farthest layer does, whatever the sprites are") {
+        const std::vector<std::pair<uint32_t, uint32_t>> blend{{0x04000050u, 0x08081041u}};
+        const auto moved = MakeLayersGbaRom(0, 2, 0, 6);
+        run(StoreFirst(WithLayers(WithBackdrop(MakeLayersGbaRom(0, 2)), 0x13), blend),
+            StoreFirst(WithLayers(WithBackdrop(moved), 0x13), blend), WithLayers(moved, 1), 0,
+            EdgeOf(6));
+    }
+    SECTION("a layer on the screen that turns stays whole") {
+        // Mode 1: BG0, and BG2, which goes on 1.5 pixels a line
+        const std::vector<std::pair<uint32_t, uint32_t>> turned{
+            {0x0400000Cu, 0x00002800u}, {0x04000020u, 0x01800100u}, {0x04000024u, 0x01000040u}};
+        const auto moved = MakeLayersGbaRom(3, 3, 9, 9);
+        run(StoreFirst(WithDispcnt(WithBackdrop(MakeLayersGbaRom(3, 3)), 0x0501), turned),
+            StoreFirst(WithDispcnt(WithBackdrop(moved), 0x0501), turned),
+            StoreFirst(WithDispcnt(moved, 0x0401), turned), 0, EdgeOf(9));
+    }
+    SECTION("a backdrop that is faded to white") {
+        // The backdrop alone gets brighter
+        const std::vector<std::pair<uint32_t, uint32_t>> fade{{0x04000050u, 0x000000A0u},
+                                                              {0x04000054u, 0x00000010u}};
+        const auto moved = MakeLayersGbaRom(0, 3, 0, 9);
+        run(StoreFirst(WithBackdrop(MakeLayersGbaRom(0, 3)), fade),
+            StoreFirst(WithBackdrop(moved), fade), WithLayers(moved, 1), 0, EdgeOf(9));
+    }
+}
+
+/// A solid white sprite of 8x8 at -4, 40, of this mode.
+std::vector<std::pair<uint32_t, uint32_t>> SpriteWords(uint32_t mode) {
+    std::vector<std::pair<uint32_t, uint32_t>> words{{0x05000204u, 0x7FFF7FFFu}};
+    for (uint32_t i = 0; i < 8; ++i) {
+        words.emplace_back(0x06010000u + i * 4, 0x33333333u);
+    }
+    words.emplace_back(0x07000000u, 0x01FC0000u | mode << 10 | 40u);
+    return words;
+}
+
+TEST_CASE("Layer Depth: a GBA picture's sprites end at its edge", "[frame_cores]") {
+    const auto words = SpriteWords(0);
+    const bool behind = GENERATE(false, true); // a background of priority 3 or of 0
+    const auto with_sprites = [&](std::vector<uint8_t> rom) {
+        return StoreFirst(WithLayers(WithBackdrop(std::move(rom)), 0x11), words);
+    };
+    const auto rom = behind ? MakeLayersGbaRom(3, 3) : MakeLayersGbaRom(0, 3);
+    DepthGame game(true, with_sprites(rom), 3);
+    DepthGame plain(true, with_sprites(rom), 0);
+    for (int i = 0; i < 40; ++i) {
+        game.Run();
+        plain.Run();
+        if (i < 20) {
+            continue;
+        }
+        INFO("frame " << i);
+        REQUIRE((game.Left() == plain.Left()));
+        const Pixels left = game.Left();
+        const Pixels right = game.Right();
+        const auto at = [](const Pixels& p, int x, int y) { return p[y * 240 + x]; };
+        constexpr uint32_t kWhite = 0xFFFFFFFFu; // the sprite's
+        // Its 4 columns in the left eye; in the right, moved by 3, what is of them
+        for (int y = 40; y < 48; ++y) {
+            for (int x = 0; x < 4; ++x) {
+                REQUIRE((at(left, x, y) & 0x00F8F8F8u) == (kWhite & 0x00F8F8F8u));
+                REQUIRE((at(right, x + 3, y) & 0x00F8F8F8u) == (kWhite & 0x00F8F8F8u));
+            }
+            for (int x = 0; x < EdgeOf(3); ++x) {
+                REQUIRE((at(right, x, y) & 0x00F8F8F8u) != (kWhite & 0x00F8F8F8u));
+            }
+            if (behind) { // BG0 is moved by 9
+                for (int x = 7; x < EdgeOf(9); ++x) {
+                    REQUIRE(at(right, x, y) == Common::LayerDepth::kBeyond);
+                }
+            }
+        }
+        for (int x = 0; x < (behind ? EdgeOf(9) : 0); ++x) {
+            REQUIRE(at(right, x, 100) == Common::LayerDepth::kBeyond);
+        }
+    }
+}
+
+TEST_CASE("Layer Depth: a GBA picture with nothing behind the screen has no edge",
+          "[frame_cores]") {
+    // Both backgrounds on it, with a backdrop, and with sprites on; or no background
+    const uint32_t layers = GENERATE(0x03u, 0x13u, 0x00u, 0x10u);
+    DepthGame game(true, WithLayers(WithBackdrop(MakeFlatRom(true)), layers), 3);
+    for (int i = 0; i < 40; ++i) {
+        INFO("frame " << i);
+        game.Run();
+        REQUIRE((game.Right() == game.Left()));
+    }
+}
+
+TEST_CASE("Layer Depth: a see-through GBA sprite over nothing", "[frame_cores]") {
+    // It is half there, over BG1, and the backdrop alone is faded to white
+    auto words = SpriteWords(1);
+    words.emplace_back(0x04000050u, 0x080822A0u);
+    words.emplace_back(0x04000054u, 0x00000010u);
+    DepthGame game(true, StoreFirst(WithLayers(MakeLayersGbaRom(3, 3), 0x12), words), 3);
+    for (int i = 0; i < 30; ++i) {
+        game.Run();
+    }
+    const Pixels right = game.Right();
+    for (int y = 40; y < 48; ++y) {
+        for (int x = 3; x < EdgeOf(7); ++x) {
+            CHECK((right[y * 240 + x] & 0xF8u) == 0x78u);
+        }
+    }
+}
+
+TEST_CASE("Layer Depth: a GBA picture whose farthest layer is not drawn has no edge",
+          "[frame_cores]") {
+    auto rom = WithBackdrop(MakeLayersGbaRom(3, 3));
+    SECTION("the mode has no such layer") {
+        rom = WithDispcnt(std::move(rom), 0x0104); // mode 4 with BG0
+    }
+    SECTION("blanked while it shows") {
+        rom = WithLayers(std::move(rom), 1);
+        rom = Patched(std::move(rom), 0xE1C081B6u, 0xE3A01D06u); // mov r1, #0x180
+        rom = Patched(std::move(rom), 0xE2877003u, 0xE1C010B0u); // strh r1, [r0]
+    }
+    DepthGame game(true, rom, 3);
+    for (int i = 0; i < 40; ++i) {
+        INFO("frame " << i);
+        game.Run();
+        if (i >= 20) {
+            REQUIRE((game.Right() == game.Left()));
+            REQUIRE((game.Left().front() & 0x00FFFFFFu) != 0);
+        }
+    }
+}
+
+TEST_CASE("Layer Depth: nothing beyond a Game Boy picture's edge", "[frame_cores]") {
+    // The background is moved by 6; a window from column 4 and a line on, sprites of 8x8 at -4, 40
+    // (in front) and 0, 60 (behind the background)
+    const bool window = GENERATE(false, true);
+    const int window_y = GENERATE(0, 11);
+    const bool inverted = GENERATE(false, true);
+    const InvertDepth invert{inverted};
+    const int edge = inverted ? 0 : EdgeOf(6);
+    std::vector<std::pair<uint16_t, uint8_t>> bytes{{0xFF48, 0x40}, {0xFF49, 0x40}};
+    for (uint16_t i = 0; i < 16; ++i) {
+        bytes.emplace_back(static_cast<uint16_t>(0x8200 + i), uint8_t{0xFF});
+    }
+    for (uint16_t i = 0; i < 160; ++i) {
+        bytes.emplace_back(static_cast<uint16_t>(0xFE00 + i), uint8_t{0});
+    }
+    const uint8_t sprites[] = {56, 4, 0x20, 0, 76, 8, 0x20, 0x80};
+    for (uint16_t i = 0; i < std::size(sprites); ++i) {
+        bytes.emplace_back(static_cast<uint16_t>(0xFE00 + i), sprites[i]);
+    }
+    const auto with_sprites = [&](std::vector<uint8_t> rom) {
+        using Code = std::array<uint8_t, 4>;
+        const uint8_t lcdc = window ? 0xF1 : 0x91;
+        rom = Patched(std::move(rom), Code{0x3E, lcdc, 0xE0, 0x40},
+                      Code{0x3E, static_cast<uint8_t>(lcdc | 2), 0xE0, 0x40});
+        rom = Patched(std::move(rom), Code{0x3E, 0x07, 0xE0, 0x4B}, Code{0x3E, 11, 0xE0, 0x4B});
+        if (window_y) { // ldh (0x4A), a before the xor a
+            rom =
+                Patched(std::move(rom), Code{0xAF, 0xE0, 0x4A, 0x3E}, Code{0xE0, 0x4A, 0xAF, 0x3E});
+        }
+        return StoreFirstGb(std::move(rom), bytes);
+    };
+    DepthGame game(false, with_sprites(MakeLayersGbRom(window)), 3);
+    DepthGame moved(false, with_sprites(MakeLayersGbRom(window, inverted ? -6 : 6)), 0);
+    int black = 0;
+    for (int i = 0; i < 60; ++i) {
+        game.Run();
+        moved.Run();
+        if (i < 20) {
+            continue;
+        }
+        INFO("frame " << i);
+        Pixels expected = moved.Left();
+        for (int y = 0; y < 144; ++y) {
+            for (int x = 0; x < edge; ++x) {
+                const bool first = y >= 40 && y < 48 && x < 4;
+                const bool second = y >= 60 && y < 68;
+                if (first || (window && y >= window_y && x >= 4)) {
+                    continue; // on the screen, as in the left eye
+                }
+                expected[y * 160 + x] = second ? expected[42 * 160] : Common::LayerDepth::kBeyond;
+                black += !second;
+            }
+        }
+        REQUIRE((game.Right() == expected));
+    }
+    CHECK((black > 0) == (edge > 0));
+}
+
+TEST_CASE("Layer Depth: a Game Boy picture without its background has no edge", "[frame_cores]") {
+    using Code = std::array<uint8_t, 4>;
+    const auto rom =
+        Patched(MakeLayersGbRom(false), Code{0x3E, 0x91, 0xE0, 0x40}, Code{0x3E, 0x90, 0xE0, 0x40});
+    DepthGame game(false, rom, 3);
+    for (int i = 0; i < 40; ++i) {
+        INFO("frame " << i);
+        game.Run();
+        REQUIRE((game.Right() == game.Left()));
+    }
+}
+
+TEST_CASE("Layer Depth: a Game Boy window turned on within a frame", "[frame_cores]") {
+    // From line 80 to 130, off the left edge: too late for it to show
+    const auto turned_on = [](std::vector<uint8_t> rom) {
+        rom = Patched(std::move(rom), std::array<uint8_t, 4>{0x3E, 0x07, 0xE0, 0x4B},
+                      std::array<uint8_t, 4>{0x3E, 0x03, 0xE0, 0x4B});
+        rom = Patched(std::move(rom), std::array<uint8_t, 3>{0xC3, 0x8E, 0x01},
+                      std::array<uint8_t, 3>{0xC3, 0x00, 0x05});
+        const uint8_t code[] = {
+            0xF0, 0x44, 0xFE, 80,   0x20, 0xFA, // until line 80
+            0xF0, 0x41, 0xE6, 0x03, 0x20, 0xFA, // until it is drawn
+            0x3E, 0xF1, 0xE0, 0x40,             // ld a, 0xF1; ldh (0x40), a
+            0xF0, 0x44, 0xFE, 130,  0x20, 0xFA, // until line 130
+            0x3E, 0x91, 0xE0, 0x40,             // ld a, 0x91; ldh (0x40), a
+            0xC3, 0x8E, 0x01,                   // jp loop
+        };
+        std::memcpy(&rom[0x500], code, sizeof(code));
+        return rom;
+    };
+    DepthGame game(false, turned_on(MakeLayersGbRom(false)), 3);
+    DepthGame moved(false, turned_on(MakeLayersGbRom(false, 6)), 0);
+    for (int i = 0; i < 40; ++i) {
+        INFO("frame " << i);
+        game.Run();
+        moved.Run();
+        if (i >= 20) {
+            const Pixels all = moved.Left();
+            REQUIRE((game.Right() == Edged(all, all, 160, EdgeOf(6), EdgeOf(6))));
         }
     }
 }

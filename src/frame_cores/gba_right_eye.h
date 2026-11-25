@@ -43,8 +43,8 @@ public:
     DriverPicture Picture() const;
     /// The game's, as its renderer drew it: without what a driver painted on it since.
     DriverPicture GamePicture() const;
-    /// Of Picture's farthest layer, a share of its width.
-    float FarthestShift() const;
+    /// FrameOutput::layer_shift for Picture.
+    float EdgeShift() const;
 
 private:
     struct Impl;
