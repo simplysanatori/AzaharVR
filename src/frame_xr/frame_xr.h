@@ -405,6 +405,7 @@ enum class MenuSetting {
     KiuCutscenes, ///< AzaharFrame kiu140: `value` index: Cutscenes' In View, Primary Screen (vr_kiu_cutscenes)
     KiuHud, ///< AzaharFrame kiu140: `value` index: HUD's Game's Own, In View (vr_kiu_hud)
     KiuHudSize, ///< AzaharFrame kiu140: `value` a slider, 40 to 200 percent (vr_kiu_hud_size)
+    KiuHudOpacity, ///< AzaharFrame kiuhs3a: `value` a slider, 20 to 100 percent (vr_kiu_hud_opacity)
     KiuArm, ///< AzaharFrame kiu140: `value` index: Off, On (vr_kiu_arm)
     KiuHudLinked, ///< AzaharFrame kiu140: `value` index: Separate, Linked (vr_kiu_hud_linked)
     KiuHudAcross, ///< AzaharFrame kiu140: `value` a slider, -40 to 40 degrees (vr_kiu_hud_across)

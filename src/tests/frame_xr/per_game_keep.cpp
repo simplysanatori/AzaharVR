@@ -572,6 +572,7 @@ TEST_CASE("Per-Game: the Angel's Aim page's own rows write the settings they alw
         {Id::KiuCutscenes, {"vr_kiu_cutscenes"}},
         {Id::KiuHud, {"vr_kiu_hud"}},
         {Id::KiuHudSize, {"vr_kiu_hud_size"}},
+        {Id::KiuHudOpacity, {"vr_kiu_hud_opacity"}},
         {Id::KiuHudLinked, {"vr_kiu_hud_linked"}},
         {Id::KiuHudAcross, {"vr_kiu_hud_across"}},
         {Id::KiuHudHeight, {"vr_kiu_hud_height"}},

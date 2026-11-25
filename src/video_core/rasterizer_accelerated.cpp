@@ -657,6 +657,7 @@ void RasterizerAccelerated::MoveCard(const VideoCore::KiuHud::Place& place) {
 }
 
 void RasterizerAccelerated::TurnSoftwareVertices() {
+    hud_piece = {}; // AzaharFrame kiuhs3a
     // AzaharFrame kiu140: a cloud sheet's soft rim; the turn below takes it with the sheet.
     if (!vertex_batch.empty() &&
         VideoCore::KiuSheets::g_mode.load(std::memory_order_relaxed) ==
@@ -712,7 +713,11 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
             done = "subtitle";
         } else if (H::Movable(flat.data(), flat.size())) {
             if (as == As::Piece) { // AzaharFrame kiu1s: the whole draw is one piece
-                H::MovePiece(flat.data(), flat.size(), place, vr_factor, vr_factor_y);
+                const H::Group group =
+                    H::MovePiece(flat.data(), flat.size(), place, vr_factor, vr_factor_y);
+                hud_piece = KiuHudFade::PieceFor( // AzaharFrame kiuhs3a
+                    KiuHudFade::g_opacity.load(std::memory_order_relaxed), place, group,
+                    flat.data(), flat.size(), vr_factor, vr_factor_y);
                 done = "piece, exact";
             } else if (as == As::WithScore) {
                 H::MoveAs(flat.data(), flat.size(), place, vr_factor, vr_factor_y, H::Group::Score);

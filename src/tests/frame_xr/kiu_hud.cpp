@@ -3,10 +3,12 @@
 // Refer to the license.txt file included.
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include "video_core/kiu_hud.h"
+#include "video_core/kiu_hud_fade.h"
 
 using Catch::Approx;
 using namespace VideoCore::KiuHud;
@@ -411,4 +413,76 @@ TEST_CASE("Kid Icarus HUD: the hub's cards go with its words; the veil has no bo
     CHECK(dark_low == Approx(-0.9f)); // the words, 0.7 to 0.9 down, are over its dark part
     CHECK(dark_high == Approx(-0.7f));
     CHECK(inside == 6.0f + 4 * 3.0f + 4 * 2.0f); // the middle, the sides, two a corner
+}
+
+// AzaharFrame kiuhs3a: HUD Opacity (video_core/kiu_hud_fade.h).
+TEST_CASE("Kid Icarus HUD: HUD Opacity is the bar's and the score's only",
+          "[frame_xr][kiuhud][kiuhs3a]") {
+    namespace F = VideoCore::KiuHudFade;
+    CHECK(F::OpacityFor(100, true) == 1.0f);
+    CHECK(F::OpacityFor(50, true) == 0.5f);
+    CHECK(F::OpacityFor(0, true) == 0.2f);
+    CHECK(F::OpacityFor(250, true) == 1.0f);
+    CHECK(F::OpacityFor(50, false) == 1.0f); // a page, the hub, Game's Own
+    const auto quad = [](Vertex* v, float u0, float u1, float y0, float y1) {
+        const float up[6] = {u0, u1, u0, u1, u1, u0};
+        const float at[6] = {y0, y0, y1, y0, y1, y1};
+        for (int i = 0; i < 6; ++i) {
+            v[i] = {up[i], at[i], 0.1f, 1.0f};
+        }
+    };
+    const Place p = At();
+    const auto piece = [&](float opacity, const Place& place, float u0, float u1, float y0,
+                           float y1) {
+        Vertex v[6];
+        quad(v, u0, u1, y0, y1);
+        const Group g = MovePiece(v, 6, place, 2.5f, 1.5f);
+        return F::PieceFor(opacity, place, g, v, 6, 2.5f, 1.5f);
+    };
+    CHECK(piece(0.5f, p, 0.7f, 1.0f, 0.3f, 1.0f).Fades());   // the bar
+    CHECK(piece(0.5f, p, 0.6f, 1.0f, -1.0f, -0.6f).Fades()); // the score
+    CHECK_FALSE(piece(1.0f, p, 0.7f, 1.0f, 0.3f, 1.0f).Fades());
+    CHECK_FALSE(piece(0.5f, p, -0.2f, 0.3f, -0.3f, 0.3f).Fades());  // the middle's
+    CHECK_FALSE(piece(0.5f, p, -1.0f, -0.6f, -0.3f, 0.3f).Fades()); // the lower part's
+    CHECK_FALSE(piece(0.5f, PagePlace(2.0f, 2.0f), 0.7f, 1.0f, 0.3f, 1.0f).Fades());
+
+    // What is kept holds every piece, wherever the HUD is put.
+    for (const int size : {40, 100, 200}) {
+        for (const bool linked : {true, false}) {
+            for (const float height : {-30.0f, 0.0f, 22.0f, 40.0f}) {
+                Wanted w;
+                w.size = size;
+                w.linked = linked;
+                w.height = w.bar_height = height;
+                w.score_height = -height;
+                const Place at = PlaceFor(w, 1.9f, 1.15f, -0.09f);
+                for (const auto& q : {std::array{0.7f, 1.0f, 0.28f, 1.02f}, // the bar
+                                      std::array{0.55f, 1.05f, -1.02f, -0.55f}}) {
+                    const F::Piece got = piece(0.5f, at, q[0], q[1], q[2], q[3]);
+                    REQUIRE(got.Fades());
+                    const F::Box& in = got.groups[got.group == Group::Bar ? 0 : 1];
+                    CHECK(in.x0 < got.box.x0);
+                    CHECK(in.x1 > got.box.x1);
+                    CHECK(in.y0 < got.box.y0);
+                    CHECK(in.y1 > got.box.y1);
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("Kid Icarus HUD: HUD Opacity's pixels", "[frame_xr][kiuhud][kiuhs3a]") {
+    namespace F = VideoCore::KiuHudFade;
+    const F::Pixels all{0, 0, 1600, 3200};
+    const F::Box b{-0.5f, -0.25f, 0.5f, 0.75f};
+    CHECK(F::ToPixels(b, 0, 0, 1600, 3200, all) == F::Pixels{400, 1200, 800, 1600});
+    CHECK(F::ToPixels(b, 0, 3200, 1600, -3200, all) == F::Pixels{400, 400, 800, 1600}); // turned
+    CHECK(F::ToPixels({-3.0f, -3.0f, 3.0f, 3.0f}, 0, 0, 1600, 3200, all) == all);
+    CHECK(F::ToPixels({1.5f, 0.0f, 2.0f, 1.0f}, 0, 0, 1600, 3200, all).Empty()); // out of the view
+    CHECK(F::ToPixels(F::Box{}, 0, 0, 1600, 3200, all).Empty());
+    const F::Pixels l{0, 0, 10, 10}, r{8, 4, 10, 10}, apart{30, 0, 5, 5};
+    CHECK(F::Intersect(l, r) == F::Pixels{8, 4, 2, 6});
+    CHECK(F::Intersect(l, apart).Empty());
+    CHECK(F::Union(l, r) == F::Pixels{0, 0, 18, 14});
+    CHECK(F::Union(F::Pixels{}, r) == r);
 }

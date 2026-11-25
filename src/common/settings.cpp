@@ -383,6 +383,7 @@ void RestoreGlobalState(bool is_powered_on) {
     values.vr_kiu_cutscenes.SetGlobal(true); // AzaharFrame kiu140
     values.vr_kiu_hud.SetGlobal(true); // AzaharFrame kiu140
     values.vr_kiu_hud_size.SetGlobal(true); // AzaharFrame kiu140
+    values.vr_kiu_hud_opacity.SetGlobal(true); // AzaharFrame kiuhs3a
     values.vr_kiu_arm.SetGlobal(true); // AzaharFrame kiu140
     values.vr_kiu_hud_linked.SetGlobal(true); // AzaharFrame kiu140
     values.vr_kiu_hud_across.SetGlobal(true); // AzaharFrame kiu140

@@ -197,6 +197,7 @@ const std::vector<AimPlace>& AimPlaces() {
         {G::View, true, Id::Kiu60Fps}, // AzaharFrame kiu60
         {G::Hud, false, Id::KiuHud},
         {G::Hud, false, Id::KiuHudSize},
+        {G::Hud, false, Id::KiuHudOpacity}, // AzaharFrame kiuhs3a
         {G::Hud, false, Id::KiuSubtitleSize},
         {G::Hud, false, Id::KiuPowerMenu},
         {G::Hud, true, Id::KiuHudLinked},
@@ -210,7 +211,7 @@ const std::vector<AimPlace>& AimPlaces() {
         {G::Hud, true, Id::KiuPowerMenuAcross},
         {G::Hud, true, Id::KiuPowerMenuHeight},
         {G::Hud, true, Id::KiuPowerMenuOpacity},
-        // (HUD Position, HUD Opacity)
+        // (HUD Position)
         {G::BottomScreen, false, Id::KiuBottomScreen},
         {G::BottomScreen, false, Id::KiuBottomSize},
         {G::BottomScreen, false, Id::KiuBottomOpacity},

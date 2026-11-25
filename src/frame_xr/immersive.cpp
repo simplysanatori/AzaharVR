@@ -42,6 +42,7 @@
 #include "frame_xr/test_switches.h" // AzaharFrame integ9
 #include "frame_xr/vis/wrist_screen.h" // AzaharFrame kiu1s: the off hand
 #include "video_core/kiu_hud.h" // AzaharFrame kiu140
+#include "video_core/kiu_hud_fade.h" // AzaharFrame kiuhs3a
 #include "video_core/kiu_view_tap.h" // AzaharFrame kiu140
 #include "video_core/vr_immersive.h"
 
@@ -1729,6 +1730,15 @@ void OnFrame(const FrameInfo& info) {
         }
     }
     VideoCore::KiuHud::g_live.Set(hud_place);
+    { // AzaharFrame kiuhs3a: HUD Opacity (test switch AZAHARFRAME_KIU_HUD_OPACITY: percent, from 0)
+        const bool hud = hud_place.on && !hud_place.page;
+        float opacity = VideoCore::KiuHudFade::OpacityFor(
+            static_cast<int>(Settings::values.vr_kiu_hud_opacity.GetValue()), hud);
+        if (const auto text = Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_HUD_OPACITY")) {
+            opacity = hud ? std::clamp(std::atoi(text->c_str()), 0, 100) / 100.0f : 1.0f;
+        }
+        VideoCore::KiuHudFade::g_opacity.store(opacity, std::memory_order_relaxed);
+    }
     VideoCore::Immersive::g_text_as_drawn.store(KiuFirstPerson(), std::memory_order_relaxed);
 
     VideoCore::Immersive::VRData data; // CitraVR's "off" values

@@ -317,8 +317,9 @@ inline void Move(Vertex* t, std::size_t n, const Place& p, float factor_across, 
 
 /// AzaharFrame kiu1s: a whole draw of the battle UI's batch moved as one (the game draws a piece, or
 /// a part of one, a draw): its group by its own middle, so no quad of it goes elsewhere than the rest.
-inline void MovePiece(Vertex* v, std::size_t n, const Place& p, float factor_across,
-                      float factor_up) {
+/// Returns the group.
+inline Group MovePiece(Vertex* v, std::size_t n, const Place& p, float factor_across,
+                       float factor_up) {
     float u0 = 1e9f, u1 = -1e9f, a0 = 1e9f, a1 = -1e9f;
     for (std::size_t i = 0; i < n; ++i) {
         u0 = std::min(u0, v[i].x);
@@ -326,7 +327,9 @@ inline void MovePiece(Vertex* v, std::size_t n, const Place& p, float factor_acr
         a0 = std::min(a0, v[i].y);
         a1 = std::max(a1, v[i].y);
     }
-    MoveBy(v, n, p, factor_across, factor_up, 0.5f * (u0 + u1), -0.5f * (a0 + a1));
+    const Group group = GroupAt(0.5f * (u0 + u1), -0.5f * (a0 + a1));
+    MoveAs(v, n, p, factor_across, factor_up, group);
+    return group;
 }
 
 /// AzaharFrame kiuhud: a page's draw: each quad (or triangle) that is flat and not the whole frame

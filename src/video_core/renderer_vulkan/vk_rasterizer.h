@@ -5,6 +5,7 @@
 #pragma once
 
 #include "video_core/kiu_powers.h" // AzaharFrame kiupowers
+#include "video_core/renderer_vulkan/vk_kiu_hud_fade.h" // AzaharFrame kiuhs3a
 #include "video_core/renderer_vulkan/vk_kiu_talk.h" // AzaharFrame kiutalk
 #include "video_core/rasterizer_accelerated.h"
 #include "video_core/renderer_vulkan/vk_descriptor_update_queue.h"
@@ -194,6 +195,7 @@ private:
     u32 powers_offset = UINT32_MAX;        ///< the last draw's place in the batch's indices
     static constexpr std::size_t kMostPowersSprites = 64; ///< the bar has 25
     KiuTalkDraws kiu_talk; ///< AzaharFrame kiutalk
+    KiuHudFade kiu_hud_fade; ///< AzaharFrame kiuhs3a
 };
 
 } // namespace Vulkan

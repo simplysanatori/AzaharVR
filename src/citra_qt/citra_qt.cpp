@@ -5800,6 +5800,9 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::KiuHudSize: // AzaharFrame kiu140
         set(v.vr_kiu_hud_size, std::clamp<u32>(u, 40, 200));
         break;
+    case S::KiuHudOpacity: // AzaharFrame kiuhs3a
+        set(v.vr_kiu_hud_opacity, std::clamp<u32>(u, 20, 100));
+        break;
     case S::KiuArm: // AzaharFrame kiu140
         set(v.vr_kiu_arm, std::clamp<u32>(u, 0, 1));
         break;

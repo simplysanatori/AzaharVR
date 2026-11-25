@@ -267,7 +267,13 @@ TEST_CASE("Angel's Aim page: counts, and every row reachable", "[frame_xr][kiuai
                           Id::KiuStickClick}); // Right Stick Click
     CHECK(AimPageRows(m, AimGroup::View).more == std::vector<Id>{Id::Kiu60Fps}); // AzaharFrame kiu60
     CHECK(AimPageRows(m, AimGroup::Hud).rows ==
-          std::vector<Id>{Id::KiuHud, Id::KiuHudSize, Id::KiuSubtitleSize, Id::KiuPowerMenu});
+          std::vector<Id>{Id::KiuHud, Id::KiuHudSize, Id::KiuHudOpacity, Id::KiuSubtitleSize,
+                          Id::KiuPowerMenu});
+    {
+        MenuModel p = m; // HUD: Game's Own
+        p.kiu_hud = 0;
+        CHECK_FALSE(Has(AimPageRows(p, AimGroup::Hud).rows, Id::KiuHudOpacity));
+    }
     for (const int place : {0, 1, 2, 3, 4}) { // Off, Off Hand, then the HUD's places
         MenuModel p = m;
         p.kiu_power_menu = place;
@@ -1053,6 +1059,23 @@ TEST_CASE("Angel's Aim page: Power Menu", "[frame_xr][kiuaim]") {
     CHECK_FALSE(Has(AngelsAimFirstPersonRows(ModelFor(Case::OtherGame)), Id::KiuPowerMenu));
     CHECK_FALSE(Has(AngelsAimFirstPersonRows(ModelFor(Case::ModeOff)), Id::KiuPowerMenu));
     CHECK(Has(AngelsAimFirstPersonRows(ModelFor(Case::ModeOn)), Id::KiuPowerMenu));
+}
+
+// AzaharFrame kiuhs3a: HUD Opacity, after HUD Size.
+TEST_CASE("Angel's Aim page: HUD Opacity", "[frame_xr][kiuaim][kiuhs3a]") {
+    CHECK(PerGameSetting(Id::KiuHudOpacity));
+    CHECK(SectionOf(Id::KiuHudOpacity) == SettingsSection::Immersive);
+    CHECK(LabelFor(Id::KiuHudOpacity) == "HUD Opacity");
+    CHECK(ExplainFor(Id::KiuHudOpacity) == "How solid the health bar and score are.");
+    CHECK(SliderFor(Id::KiuHudOpacity).min == 20.0f);
+    CHECK(SliderFor(Id::KiuHudOpacity).max == 100.0f);
+    Kit kit{1.0f};
+    CHECK(kit.TextWidth(Type::Tooltip, kKiuHudOpacityTip) + 28.0f <= 2.0f * kPanelW * 0.7f);
+    MenuModel m = ModelFor(Case::ModeOn);
+    CHECK(m.kiu_hud_opacity == 100);
+    CHECK(Has(AimScopeRows(m), Id::KiuHudOpacity)); // the page's count
+    m.kiu_hud = 0;                                  // Game's Own
+    CHECK_FALSE(Has(AimScopeRows(m), Id::KiuHudOpacity));
 }
 
 // AzaharFrame kiu60: 60 FPS, under View's More.

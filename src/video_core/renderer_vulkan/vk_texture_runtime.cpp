@@ -1226,7 +1226,7 @@ vk::PipelineStageFlags Surface::PipelineStageFlags() const noexcept {
                        : vk::PipelineStageFlagBits::eNone);
 }
 
-vk::ImageView Surface::CopyImageView() noexcept {
+vk::ImageView Surface::CopyImageView(std::span<const vk::Rect2D> parts) noexcept {
     auto& copy_handle = handles[Type::Copy];
     vk::ImageLayout copy_layout = vk::ImageLayout::eGeneral;
     if (!copy_handle) {
@@ -1249,8 +1249,15 @@ vk::ImageView Surface::CopyImageView() noexcept {
         .dst_image = copy_handle.image,
     };
 
+    boost::container::static_vector<vk::Rect2D, 2> only; // AzaharFrame kiuhs3a
+    for (const vk::Rect2D& part : parts) {
+        if (only.size() < only.capacity()) {
+            only.push_back(part);
+        }
+    }
+
     scheduler.Record([params, copy_layout, levels = this->levels, width = GetScaledWidth(),
-                      height = GetScaledHeight()](vk::CommandBuffer cmdbuf) {
+                      height = GetScaledHeight(), only](vk::CommandBuffer cmdbuf) {
         std::array pre_barriers = {
             vk::ImageMemoryBarrier{
                 .srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite,
@@ -1297,7 +1304,7 @@ vk::ImageView Surface::CopyImageView() noexcept {
         };
 
         boost::container::small_vector<vk::ImageCopy, 3> image_copies;
-        for (u32 level = 0; level < levels; level++) {
+        for (u32 level = 0; level < levels && only.empty(); level++) {
             image_copies.push_back(vk::ImageCopy{
                 .srcSubresource{
                     .aspectMask = vk::ImageAspectFlagBits::eColor,
@@ -1314,6 +1321,22 @@ vk::ImageView Surface::CopyImageView() noexcept {
                 },
                 .dstOffset = {0, 0, 0},
                 .extent = {width >> level, height >> level, 1},
+            });
+        }
+        for (const vk::Rect2D& part : only) { // AzaharFrame kiuhs3a
+            constexpr vk::ImageSubresourceLayers layers = {
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .mipLevel = 0,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            };
+            const vk::Offset3D at = {part.offset.x, part.offset.y, 0};
+            image_copies.push_back(vk::ImageCopy{
+                .srcSubresource = layers,
+                .srcOffset = at,
+                .dstSubresource = layers,
+                .dstOffset = at,
+                .extent = {part.extent.width, part.extent.height, 1},
             });
         }
 

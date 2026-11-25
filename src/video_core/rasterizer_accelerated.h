@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include "video_core/kiu_hud.h" // AzaharFrame kiuhud
+#include "video_core/kiu_hud_fade.h" // AzaharFrame kiuhs3a
 #include "video_core/rasterizer_interface.h"
 #include "video_core/shader/generator/pica_fs_config.h"
 #include "video_core/shader/generator/shader_uniforms.h"
@@ -153,6 +154,8 @@ public:
     /// mode 3's world (vr_soft_clip), when g_soft_draw_turn is on and they go to the buffer the
     /// world went to. The backends call it before drawing them.
     void TurnSoftwareVertices();
+    /// AzaharFrame kiuhs3a: what TurnSoftwareVertices found of it for HUD Opacity.
+    KiuHudFade::Piece hud_piece;
     /// AzaharFrame kiuhud: the hub's veil or heart bag (hud_flat holds it) to the page's frame.
     void MoveCard(const VideoCore::KiuHud::Place& place);
     /// AzaharFrame kiu131: whether this draw is the reticle Reticle Size scales (kiu_view_tap.h):
