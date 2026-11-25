@@ -418,7 +418,11 @@ TEST_CASE("NormalizeTyped: Add Cheat's code, checked for the system", "[frame_co
     for (const System s : {System::Gb, System::Gbc}) {
         CHECK(NormalizeTyped("916412cb\n007-e48 007-E48-A1B", s, code).empty());
         CHECK(code == "916412CB\n007-E48\n007-E48-A1B");
-        CHECK(NormalizeTyped("221A02BC 00000001", s, code) == "Line 1: Not a Code");
+        // mGBA reads any 8 digits as a GameShark word (it ignores the type byte), so two of them on
+        // a line are two codes; another system's code form is refused
+        CHECK(NormalizeTyped("221A02BC 00000001", s, code).empty());
+        CHECK(code == "221A02BC\n00000001");
+        CHECK(NormalizeTyped("3300397F 00FF", s, code) == "Line 1: Not a Code"); // GBA type
         CHECK(NormalizeTyped("00-E48", s, code) == "Line 1: Not a Code");
         CHECK(NormalizeTyped("", s, code) == "Enter a Code");
     }
