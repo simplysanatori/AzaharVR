@@ -45,6 +45,8 @@ public:
     bool StateSafeNow() const override;
     void AfterStateLoad() override;
     void SetEditing(bool on) override;
+    void SetLayerDepth(uint32_t level) override;
+    void SetMaxLayerShift(float share) override;
     void TurnPage() override;
 
     bool ImportBatterySave(const std::string& sav_path) override;

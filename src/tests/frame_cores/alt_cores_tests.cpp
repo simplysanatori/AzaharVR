@@ -19,10 +19,12 @@
 #include <thread>
 #include <vector>
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
 #include "common/alt_core_types.h"
+#include "common/layer_depth.h"
 #include "common/xr_pacer.h"
 #include "common/zstd_compression.h"
 #include "core/autosave.h"
@@ -1824,6 +1826,22 @@ TEST_CASE("Layer Depth: with nothing moved both eyes see the same", "[frame_core
     CHECK(changes > 500);
 }
 
+TEST_CASE("Layer Depth: no shift on a screen too wide for one", "[frame_cores]") {
+    const bool gba = GENERATE(true, false);
+    DepthGame game(gba, MakeDeepRom(gba), 3);
+    game.core->SetMaxLayerShift(Common::LayerDepth::kOnScreen);
+    for (int i = 0; i < 600; ++i) {
+        INFO("frame " << i);
+        game.Run(i % 7 == 0 ? Common::AltCore::BtnA : 0);
+        REQUIRE((game.Left() == game.Right()));
+        REQUIRE(game.out.layer_shift == 0.0f);
+    }
+    game.core->SetMaxLayerShift(0.0f); // no headset
+    game.Run();
+    CHECK(game.out.primary.HasPicture());
+    CHECK(!game.out.primary_right.HasPicture());
+}
+
 TEST_CASE("Layer Depth: lines mGBA left undrawn at the start", "[frame_cores]") {
     // At line 0 forced blank goes off and no register was ever set to anything but 0. mGBA takes
     // the lines of its first, short frame as unchanged and leaves them blank; the right eye's
@@ -1865,6 +1883,7 @@ TEST_CASE("Layer Depth: each layer moves by its priority", "[frame_cores]") {
                            : MakeLayersGbRom(false, static_cast<uint8_t>(level * 2));
     DepthGame game(gba, MakeDeepRom(gba), level);
     DepthGame expected(gba, moved, 0);
+    int different = 0;
     for (int i = 0; i < 120; ++i) {
         INFO("frame " << i);
         game.Run();
@@ -1873,8 +1892,73 @@ TEST_CASE("Layer Depth: each layer moves by its priority", "[frame_cores]") {
             continue; // until the game has scrolled
         }
         REQUIRE((game.Right() == expected.Left()));
-        REQUIRE((game.Right() != game.Left()));
+        different += game.Right() != game.Left();
     }
+    CHECK(different >= 98); // the Game Boy's palette is all one colour now and then
+}
+
+TEST_CASE("Layer Depth: the limit moves the layers less", "[frame_cores]") {
+    const bool gba = GENERATE(true, false);
+    const uint32_t width = gba ? 240 : 160;
+    // Level 3's farthest layer would move 9 pixels of 240, 6 of 160
+    const uint32_t most = GENERATE(1u, 2u, 4u, 5u);
+    const float limit = (static_cast<float>(most) + 0.5f) / static_cast<float>(width);
+    const uint32_t nearer = Common::LayerDepth::LayerShift(3, 1, 3, 240, limit);
+    const auto moved = gba ? MakeLayersGbaRom(1, 3, nearer, most)
+                           : MakeLayersGbRom(false, static_cast<uint8_t>(most));
+    DepthGame game(gba, MakeDeepRom(gba), 3);
+    game.core->SetMaxLayerShift(limit);
+    DepthGame expected(gba, moved, 0);
+    for (int i = 0; i < 60; ++i) {
+        INFO("frame " << i);
+        game.Run();
+        expected.Run();
+        REQUIRE(game.out.layer_shift * static_cast<float>(width) ==
+                Catch::Approx(static_cast<float>(most)));
+        if (i >= 20) {
+            REQUIRE((game.Right() == expected.Left()));
+        }
+    }
+}
+
+TEST_CASE("Layer Depth: changed while the game runs", "[frame_cores]") {
+    const bool gba = GENERATE(true, false);
+    DepthGame game(gba, MakeDeepRom(gba), 0);
+    DepthGame plain(gba, MakeDeepRom(gba), 0);
+    CHECK(game.core->GetCapabilities().layer_depth);
+    std::vector<std::unique_ptr<DepthGame>> expected;
+    for (uint32_t level = 0; level <= 3; ++level) {
+        expected.push_back(std::make_unique<DepthGame>(gba, MakeDeepRom(gba), level));
+    }
+    int frame = 0;
+    const auto run = [&](uint32_t level, int frames) {
+        game.core->SetLayerDepth(level);
+        for (int i = 0; i < frames; ++i, ++frame) {
+            INFO("frame " << frame << " level " << level);
+            game.Run();
+            plain.Run();
+            for (auto& other : expected) {
+                other->Run();
+            }
+            REQUIRE((game.Left() == plain.Left()));
+            REQUIRE((game.out.audio_pcm == plain.out.audio_pcm));
+            REQUIRE((game.Right() == expected[level]->Right()));
+            REQUIRE(game.out.layer_shift == expected[level]->out.layer_shift);
+        }
+    };
+    run(0, 30);
+    for (const uint32_t level : {2u, 0u, 3u, 1u, 1u, 0u, 2u}) {
+        run(level, 10);
+    }
+    // Import Save starts the core again, at the level it had
+    const fs::path save = game.tmp.path / "import.sav";
+    WriteFile(save, std::vector<uint8_t>(0x8000, 0x5A));
+    REQUIRE(game.core->ImportBatterySave(save.string()));
+    for (int i = 0; i < 30; ++i) {
+        game.Run();
+    }
+    CHECK(game.out.primary_right.HasPicture());
+    CHECK((game.Right() != game.Left()));
 }
 
 TEST_CASE("Layer Depth leaves the game's picture and sound alone", "[frame_cores]") {
@@ -1981,13 +2065,15 @@ TEST_CASE("Layer Depth goes by the driver", "[frame_cores]") {
         for (int i = 0; i < 5; ++i) {
             runner.RunFrame({}, out, caps);
             CHECK(!out.primary_right.HasPicture());
-            runner.SetRightEye({pixels.data(), 16, 8, 16}, out);
+            CHECK(out.layer_shift == 0.0f);
+            runner.SetRightEye({pixels.data(), 16, 8, 16}, 0.5f, out);
             CHECK(out.primary_right.HasPicture() == plain);
+            CHECK(out.layer_shift == (plain ? 0.5f : 0.0f));
         }
         runner.RunFrame({}, out, caps);
-        runner.SetRightEye({pixels.data(), 8, 8, 16}, out); // another size
+        runner.SetRightEye({pixels.data(), 8, 8, 16}, 0.5f, out); // another size
         CHECK(!out.primary_right.HasPicture());
-        runner.SetRightEye({}, out);
+        runner.SetRightEye({}, 0.0f, out);
         CHECK(!out.primary_right.HasPicture());
         CHECK(steps == 6);
         CHECK(runner.Missteps() == 0);

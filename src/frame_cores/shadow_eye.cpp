@@ -33,7 +33,7 @@ namespace FrameCores {
 namespace {
 
 constexpr uint32_t kOpaque = 0xFF000000u;
-constexpr uint32_t kMaxDepth = 3;
+constexpr uint32_t kGbaFarthest = 3;    ///< the last of the background priorities
 constexpr uint32_t kGbaObjPriority = 1; ///< the sprites are one layer, at this priority's depth
 /// The Game Boy has no priorities: its background is as far back, for its width, as the GBA's
 /// farthest (3 of 240, 2 of 160).
@@ -93,13 +93,22 @@ ShadowEye::~ShadowEye() {
     Stop();
 }
 
-bool ShadowEye::Start(mCore* game_, uint32_t width_, uint32_t height_) {
-    Stop();
-    const mPlatform platform = game_->platform(game_);
-    if ((platform != mPLATFORM_GBA && platform != mPLATFORM_GB) || HasProxy(game_) ||
-        width_ == 0 || height_ == 0) {
+bool ShadowEye::Fits(mCore* game) {
+    const mPlatform platform = game->platform(game);
+    if ((platform != mPLATFORM_GBA && platform != mPLATFORM_GB) || HasProxy(game)) {
         return false;
     }
+    VFile* rom = platform == mPLATFORM_GBA ? Gba(game)->romVf : Gb(game)->romVf;
+    const ssize_t size = rom ? rom->size(rom) : 0;
+    return size > 0 && static_cast<std::size_t>(size) <= kMaxRom;
+}
+
+bool ShadowEye::Start(mCore* game_, uint32_t width_, uint32_t height_) {
+    Stop();
+    if (!Fits(game_) || width_ == 0 || height_ == 0) {
+        return false;
+    }
+    const mPlatform platform = game_->platform(game_);
     VFile* rom = CopyRom(game_);
     if (!rom) {
         LOG_ERROR(Core, "ShadowEye: no ROM to copy");
@@ -176,14 +185,21 @@ void ShadowEye::Stop() {
 }
 
 void ShadowEye::SetDepth(uint32_t level) {
-    depth = std::min(level, kMaxDepth);
+    depth = std::min(level, Common::LayerDepth::kMaxLevel);
     if (depth == 0) {
         drawn = false;
     }
 }
 
+void ShadowEye::SetMaxShift(float share) {
+    max_shift = share;
+    if (max_shift <= 0.0f) {
+        drawn = false;
+    }
+}
+
 void ShadowEye::Run(uint32_t keys) {
-    if (!core || depth == 0) {
+    if (!core || depth == 0 || max_shift <= 0.0f) {
         return;
     }
     drawn = false;
@@ -199,6 +215,7 @@ void ShadowEye::Run(uint32_t keys) {
         return;
     }
     ShiftLayers();
+    farthest_shift = static_cast<float>(Shift(Farthest())) / static_cast<float>(width);
     core->setKeys(core, keys);
     core->runFrame(core);
     if (mAudioBuffer* sound = core->getAudioBuffer(core)) {
@@ -213,6 +230,19 @@ void ShadowEye::Run(uint32_t keys) {
 
 DriverPicture ShadowEye::Picture() const {
     return drawn ? DriverPicture{pixels.data(), width, height, width} : DriverPicture{};
+}
+
+float ShadowEye::FarthestShift() const {
+    return drawn ? farthest_shift : 0.0f;
+}
+
+uint32_t ShadowEye::Farthest() const {
+    return game->platform(game) == mPLATFORM_GBA ? kGbaFarthest : kGbBackgroundPriority;
+}
+
+int32_t ShadowEye::Shift(uint32_t step) const {
+    return static_cast<int32_t>(
+        Common::LayerDepth::LayerShift(depth, step, Farthest(), width, max_shift));
 }
 
 bool ShadowEye::CopyGame() {
@@ -274,14 +304,11 @@ void ShadowEye::ShiftLayers() {
         const uint16_t* io = Gba(game)->memory.io; // busRead16 is a read by the game
         for (uint32_t bg = 0; bg < 4; ++bg) {
             const uint32_t priority = io[GBA_REG(BG0CNT) + bg] & 3u;
-            core->adjustVideoLayer(core, GBA_LAYER_BG0 + bg,
-                                   static_cast<int32_t>(depth * priority), 0);
+            core->adjustVideoLayer(core, GBA_LAYER_BG0 + bg, Shift(priority), 0);
         }
-        core->adjustVideoLayer(core, GBA_LAYER_OBJ, static_cast<int32_t>(depth * kGbaObjPriority),
-                               0);
+        core->adjustVideoLayer(core, GBA_LAYER_OBJ, Shift(kGbaObjPriority), 0);
     } else {
-        core->adjustVideoLayer(core, GB_LAYER_BACKGROUND,
-                               static_cast<int32_t>(depth * kGbBackgroundPriority), 0);
+        core->adjustVideoLayer(core, GB_LAYER_BACKGROUND, Shift(kGbBackgroundPriority), 0);
     }
 }
 

@@ -59,9 +59,9 @@ public:
     bool PrimaryIsGame() const {
         return primary_is_game;
     }
-    /// After RunFrame: `picture` (ShadowEye's) for the right eye, where `out` has the game's
-    /// picture at the same size.
-    void SetRightEye(const DriverPicture& picture, FrameOutput& out) const;
+    /// After RunFrame: `picture` (ShadowEye's, its farthest layer moved by `shift`) for the right
+    /// eye, where `out` has the game's picture at the same size.
+    void SetRightEye(const DriverPicture& picture, float shift, FrameOutput& out) const;
 
     /// Calls of RunFrame that did not step exactly once, or in a held frame did (a step outside
     /// RunFrame is one too).
