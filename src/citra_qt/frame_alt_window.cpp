@@ -109,7 +109,7 @@ bool GMainWindow::AltWindowOpen(const FrameCores::RomInfo& info) {
     g_microphone = MicrophoneSetting();
     frontend.resolution = [this] {
         // As RendererBase::GetResolutionScaleFactor: 0 (Auto) goes by the window
-        const u32 setting = Settings::values.resolution_factor.GetValue();
+        const u32 setting = Settings::RunningGraphics().resolution_factor.GetValue();
         bool dynamic = false;
 #ifdef ENABLE_FRAME_XR
         dynamic = FrameXr::VrShowing() && Settings::values.vr_dynamic_resolution.GetValue();
@@ -335,7 +335,7 @@ void GMainWindow::AltNotify(const std::string& text) {
 void GMainWindow::AltCaptureScreenshot() {
     const u32 scale = std::max(1u, UISettings::values.screenshot_resolution_factor.GetValue() != 0
                                        ? UISettings::values.screenshot_resolution_factor.GetValue()
-                                       : Settings::values.resolution_factor.GetValue());
+                                       : Settings::RunningGraphics().resolution_factor.GetValue());
     // The window's layout at that many 3DS pixels, as a 3DS game's screenshot; a game with one
     // screen has the whole picture.
     const auto screens = Layout::GetAltScreens().value_or(Layout::AltScreens{});

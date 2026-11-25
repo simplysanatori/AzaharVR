@@ -385,6 +385,18 @@ if (NOT WIN32)
     endif()
 endif()
 
+# Each console group's own settings through the real QtConfig (tests/frame_xr/console_settings.cpp).
+if (ENABLE_FRAME_XR AND ENABLE_TESTS AND NOT WIN32)
+    add_executable(frame_qt_config_tests ../tests/frame_xr/console_settings.cpp
+                                         configuration/config.cpp configuration/config.h
+                                         uisettings.cpp uisettings.h)
+    target_link_libraries(frame_qt_config_tests PRIVATE audio_core citra_common citra_core
+                          input_common network video_core frame_xr catch2 Qt6::Widgets
+                          Boost::boost nihstro-headers Threads::Threads ${PLATFORM_LIBRARIES})
+    target_include_directories(frame_qt_config_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    add_test(NAME frame_qt_config_tests COMMAND frame_qt_config_tests)
+endif()
+
 # AzaharFrame stall: the windows kept off the screen and Qt's modal list, on Qt's offscreen
 # platform (tests/frame_xr/offscreen_modal.cpp).
 if (ENABLE_FRAME_XR AND ENABLE_TESTS AND NOT WIN32)

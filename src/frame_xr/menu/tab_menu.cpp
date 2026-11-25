@@ -74,7 +74,6 @@ struct Row {
     /// (`note_warn`), otherwise in the label's secondary colour
     std::string note;
     bool note_warn = false;
-    std::string title; ///< AzaharFrame kiu132: a Header's own title (else LabelFor)
     bool Enabled() const {
         return lock == Lock::None;
     }
@@ -172,9 +171,8 @@ std::string SliderText(Id id, float value) {
     return Format("%.0f", value);
 }
 
-// AzaharFrame kiu132: the row of an Angel's Aim option with its value, as its own place draws it
-// (the Settings tab's first-person rows, the Controls tab's Aiming rows, the Stats tab's Wrist
-// Side): the Angel's Aim segment's settings are made of these.
+// AzaharFrame kiu132: the row of an Angel's Aim option with its value: the Angel's Aim page's rows
+// are made of these (DrawAimRows).
 Row RowFor(Id id, const MenuModel& m) {
     Row r{id, RowKind::Switch, m.locked[static_cast<std::size_t>(id)]};
     const auto slider = [&](int value) {
@@ -183,10 +181,12 @@ Row RowFor(Id id, const MenuModel& m) {
         const float v = std::clamp(static_cast<float>(value), sr.min, sr.max);
         r.t = (v - sr.min) / (sr.max - sr.min);
         r.value = SliderText(id, v);
-        // The Controls tab's sliders show their stops (Reticle Speed's rule); the first-person
-        // ones none, as on the Settings tab.
+        // Aiming's sliders show their stops (Reticle Speed's rule, on the Controls tab too); the
+        // first-person ones none.
         const auto& controls = ControlsScopeRows();
-        if (std::find(controls.begin(), controls.end(), id) != controls.end() && sr.step > 1.5f) {
+        if ((KiuOnlyControlsRow(id) ||
+             std::find(controls.begin(), controls.end(), id) != controls.end()) &&
+            sr.step > 1.5f) {
             r.stops = static_cast<int>((sr.max - sr.min) / sr.step);
         }
     };
@@ -268,8 +268,7 @@ Row RowFor(Id id, const MenuModel& m) {
     case Id::TurnSpeedVertical:
         slider(m.turn_speed_vertical);
         break;
-    case Id::CalibrateAim:      // drawn as on the Controls tab (DrawRowItems)
-    case Id::AngelsAimSettings: // a full-width button: the Controls tab at Aiming
+    case Id::CalibrateAim: // drawn with its own buttons (DrawRowItems)
     case Id::KiuBottomReset:
         r.kind = RowKind::Button;
         break;
@@ -371,13 +370,6 @@ Row RowFor(Id id, const MenuModel& m) {
         break;
     case Id::KiuReticleSize:
         slider(m.kiu_reticle_size);
-        break;
-    case Id::WristSide:
-        segmented(std::clamp(m.wrist_side, 0, 1));
-        break;
-    case Id::ImmersiveMode:
-        r.kind = RowKind::MenuButton;
-        r.selected = Immersive::Names::ModeIndexOf(static_cast<std::uint32_t>(m.immersive_mode));
         break;
     default:
         break;
@@ -571,12 +563,10 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
         rows.push_back(
             row(Id::ImmersiveMode, RowKind::MenuButton, // AzaharFrame kiumode
                 Immersive::Names::ModeIndexOf(static_cast<std::uint32_t>(m.immersive_mode))));
-        // AzaharFrame kiutoggles: Angel's Aim's first-person options, under the row that shows
-        // them (so choosing Angel's Aim moves nothing above the beam), only while Kid Icarus:
-        // Uprising is open and Angel's Aim is chosen: they act in no other game or mode.
-        // AzaharFrame kiu132: the same list the Angel's Aim segment shows (European game only).
-        for (const Id id : AngelsAimFirstPersonRows(m)) {
-            rows.push_back(RowFor(id, m));
+        // AzaharFrame kiuaim: Angel's Aim's own options are on its page; the link to it, under the
+        // row that shows it (so choosing Angel's Aim moves nothing above the beam).
+        if (AngelsAimRowsShown(m.mods.angels_aim.shown, m.immersive_mode)) {
+            rows.push_back(row(Id::AngelsAimLink, RowKind::Link));
         }
         // AzaharFrame fovaxis: Fill View, once (a button; the values stay ordinary)
         rows.push_back(full(row(Id::FillView, RowKind::Button)));
@@ -752,6 +742,7 @@ SettingsSection SectionOf(Id id) {
     case Id::MatchBottomNormal:
         return SettingsSection::Graphics;
     case Id::ImmersiveMode:
+    case Id::AngelsAimLink: // AzaharFrame kiuaim
     case Id::MarginX: // AzaharFrame fovaxis
     case Id::MarginY:
     case Id::GameFov:
@@ -823,6 +814,7 @@ bool PerGameSetting(Id id) {
     switch (id) {
     case Id::HideBottomScreen:
     case Id::ScreenLayout:
+    case Id::ScreenCurve: // AzaharVR: per game too
     case Id::ScreenShape:
     case Id::ImmersiveMode:
     case Id::MarginX: // AzaharFrame fovaxis
@@ -952,22 +944,16 @@ ModsDialog AngelsIntroDialog(const MenuModel& m) {
 
 // AzaharFrame reticle
 const std::vector<Id>& ControlsScopeRows() {
-    // AzaharFrame kiufix: and Aiming's rows, moved here from Settings, General.
-    // AzaharVR: and the Buttons section's and Motion's first (Face Buttons is global).
+    // AzaharFrame kiufix: and Aiming's rows, moved here from Settings, General. AzaharFrame
+    // kiuaim: those that act in any game; the Kid Icarus: Uprising ones are the Angel's Aim
+    // page's (AimScopeRows). AzaharVR: and the Buttons section's and Motion's first (Face Buttons
+    // is global).
     static const std::vector<Id> kRows{
         Id::ShowControllers, Id::ControllersInFront, Id::MotionControls,
-        Id::TouchpadTouch, Id::BottomScreenReticle, Id::ReticleSpeed,  Id::ReticleAtEdge,
-        Id::ReticleCenter, Id::ReticleStick,        Id::GyroAim,       Id::GyroSensitivity,
-        Id::Recoil,        Id::RecoilCharged,       Id::RecoilRapid,   Id::WeaponInHand,
-        Id::WeaponOpacity, Id::WeaponSize,          Id::WeaponScale,   Id::MuzzleFlash,
-        Id::MuzzleFlashSize, Id::Projectiles,       Id::ProjectileOpacity, Id::ProjectileSize,
-        Id::ProjectileSpeed, Id::LaserSight,        Id::TurnZone,      Id::TurnSpeed,
-        Id::TurnSpeedVertical, // AzaharFrame fixa
-        Id::KeepOnScreen,  Id::GripFreesAim,        Id::TurnZoneFrom,
-        Id::TriggerLayout}; // AzaharFrame kiufire
-    // fixes7; AzaharFrame kiuflash: Muzzle Flash, Projectiles and theirs; kiuopacity: the
-    // opacities, each first under its switch; kiuweap2: Muzzle Flash Size under its switch;
-    // kiuaim3: the last three
+        Id::TouchpadTouch, Id::BottomScreenReticle, Id::ReticleSpeed, Id::ReticleAtEdge,
+        Id::ReticleCenter, Id::ReticleStick,        Id::GyroAim,      Id::GyroSensitivity,
+        Id::Recoil,        Id::RecoilCharged,       Id::RecoilRapid,  Id::LaserSight,
+        Id::KeepOnScreen,  Id::GripFreesAim};
     return kRows;
 }
 
@@ -996,17 +982,7 @@ bool KiuOnlyControlsRow(Id id) {
     }
 }
 
-std::vector<Id> ControlsScopeRows(bool kiu) {
-    std::vector<Id> rows;
-    for (const Id id : ControlsScopeRows()) {
-        if (kiu || !KiuOnlyControlsRow(id)) {
-            rows.push_back(id);
-        }
-    }
-    return rows;
-}
-
-// AzaharFrame kiu132: the Controls tab's Aiming rows (they were built in DrawControls).
+// AzaharFrame kiu132: Aiming's rows (they were built in DrawControls).
 std::vector<Id> AimingRows(const MenuModel& model) {
     std::vector<Id> aim_rows{Id::GyroAim, Id::GyroSensitivity};
     if (model.gyro_aim != 0) {
@@ -1050,6 +1026,12 @@ std::vector<Id> AimingRows(const MenuModel& model) {
                        aim_rows.end());
     }
     return aim_rows;
+}
+
+std::vector<Id> ControlsAimingRows(const MenuModel& model) { // AzaharFrame kiuaim
+    std::vector<Id> rows = AimingRows(model);
+    rows.erase(std::remove_if(rows.begin(), rows.end(), KiuOnlyControlsRow), rows.end());
+    return rows;
 }
 
 std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& m) {
@@ -1140,81 +1122,6 @@ std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& m) {
     return rows;
 }
 
-std::vector<AngelsAimRowGroup> AngelsAimGroups(const MenuModel& model) {
-    std::vector<AngelsAimRowGroup> groups;
-    if (!model.mods.angels_aim.shown) {
-        return groups;
-    }
-    const std::vector<Id> aim = AimingRows(model);
-    const std::vector<Id> fp = AngelsAimFirstPersonRows(model);
-    const auto has = [](const std::vector<Id>& v, Id id) {
-        return std::find(v.begin(), v.end(), id) != v.end();
-    };
-    static constexpr std::array<Id, 13> kWeapon{
-        Id::Recoil,          Id::RecoilCharged,     Id::RecoilRapid,    Id::WeaponInHand,
-        Id::WeaponOpacity,   Id::WeaponSize,        Id::WeaponScale,    Id::MuzzleFlash,
-        Id::MuzzleFlashSize, Id::Projectiles,       Id::ProjectileOpacity, Id::ProjectileSize,
-        Id::ProjectileSpeed};
-    const auto weapon = [&](Id id) {
-        return std::find(kWeapon.begin(), kWeapon.end(), id) != kWeapon.end();
-    };
-    AngelsAimRowGroup aiming{AngelsAimGroupKind::Aiming, {}};
-    AngelsAimRowGroup weapons{AngelsAimGroupKind::Weapon, {}};
-    for (const Id id : aim) {
-        (weapon(id) ? weapons : aiming).rows.push_back(id);
-    }
-    if (has(fp, Id::KiuReticleSize)) {
-        aiming.rows.push_back(Id::KiuReticleSize);
-    }
-    aiming.rows.push_back(Id::AngelsAimSettings); // the Controls tab at Aiming, as before
-    AngelsAimRowGroup view{AngelsAimGroupKind::View, {Id::ImmersiveMode}};
-    for (const Id id : {Id::KiuOverShoulder, Id::KiuPitOpacity, Id::KiuSnapTurn, Id::KiuCutscenes, Id::KiuStickClick, Id::KiuHud, Id::KiuHudSize, Id::KiuHudLinked, Id::KiuHudAcross, Id::KiuHudHeight, Id::KiuBarAcross, Id::KiuBarHeight, Id::KiuScoreAcross, Id::KiuScoreHeight, Id::KiuSubtitleHeight, Id::KiuSubtitleSize, Id::KiuPowerMenu, Id::KiuPowerMenuAcross, Id::KiuPowerMenuHeight, Id::KiuPowerMenuOpacity}) {
-        if (has(fp, id)) {
-            view.rows.push_back(id);
-        }
-    }
-    if (has(fp, Id::KiuHideOffHand)) { // AzaharFrame kiuhands
-        view.rows.push_back(Id::KiuHideOffHand);
-    }
-    AngelsAimRowGroup bottom{AngelsAimGroupKind::BottomScreen, {}};
-    for (const Id id : {Id::KiuBottomScreen, Id::KiuBottomSize, Id::KiuBottomOpacity,
-                        Id::KiuWristAngle, Id::KiuWristAlong, Id::KiuBottomReset,
-                        Id::KiuTalkPortraits, Id::KiuTalkPortraitsOpacity, Id::KiuPortraitsLinked,
-                        Id::KiuPortraitsAcross, Id::KiuPortraitsHeight}) { // kiuaim
-        if (has(fp, id)) {
-            bottom.rows.push_back(id);
-        }
-    }
-    if (has(fp, Id::KiuArm)) { // AzaharFrame kiu140
-        weapons.rows.push_back(Id::KiuArm);
-    }
-    bottom.rows.push_back(Id::WristSide); // global: every wrist display (the Stats tab's too)
-    for (AngelsAimRowGroup* g : {&aiming, &view, &bottom, &weapons}) {
-        AimPageFilter(model, g->rows); // AzaharFrame kiuaim
-        if (!g->rows.empty()) {
-            groups.push_back(std::move(*g));
-        }
-    }
-    return groups;
-}
-
-const char* AngelsAimGroupName(AngelsAimGroupKind kind) {
-    switch (kind) {
-    case AngelsAimGroupKind::Aiming:
-        return kAngelsAimGroupAiming;
-    case AngelsAimGroupKind::View:
-        return kAngelsAimGroupView;
-    case AngelsAimGroupKind::BottomScreen:
-        return kAngelsAimGroupBottomScreen;
-    case AngelsAimGroupKind::Weapon:
-        return kAngelsAimGroupWeapon;
-    case AngelsAimGroupKind::ModsAndPack:
-    case AngelsAimGroupKind::Count:
-        break;
-    }
-    return kAngelsAimGroupModsAndPack;
-}
-
 int RecommendedModeIndex(const MenuModel& model) {
     return model.mods.angels_aim.recommended && model.scope == 1
                ? Immersive::Names::ModeIndexOf(Immersive::Names::kModeStoredAngelsAim)
@@ -1231,14 +1138,12 @@ std::vector<Id> GameValueRows(const MenuModel& model, Tab tab, SettingsSection s
         }
     };
     if (tab == Tab::Controls) {
-        for (const Id id : ControlsScopeRows(model.mods.angels_aim.shown)) { // kiurows
+        for (const Id id : ControlsScopeRows()) {
             add(id);
         }
-    } else if (tab == Tab::Mods) { // AzaharFrame kiu132: the Angel's Aim segment's settings
-        for (const AngelsAimRowGroup& g : AngelsAimGroups(model)) {
-            for (const Id id : g.rows) {
-                add(id);
-            }
+    } else if (tab == Tab::Mods) { // AzaharFrame kiu132: the Angel's Aim page's
+        for (const Id id : AimScopeRows(model)) {
+            add(id);
         }
     } else if (tab == Tab::Settings || tab == Tab::Position) {
         for (const Row& r : RowsFor(tab, model, section)) {
@@ -1726,8 +1631,8 @@ std::string LabelFor(Id id) {
         return kTurningRow;
     case Id::CalibrateAimReset:
         return "Reset";
-    case Id::AngelsAimSettings:
-        return "Aiming Settings";
+    case Id::AngelsAimLink: // AzaharFrame kiuaim
+        return kAimPageTitle;
     case Id::AngelsAimReport:
         return "Report an Issue";
     case Id::AngelsAimSend:
@@ -3489,15 +3394,11 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
     const float picture_h = buttons ? 320.0f : 0.0f;
     const float button_rows_h =
         buttons ? kChoiceH * (model.show_controllers ? 3.0f : 2.0f) : 0.0f;
-    // Aiming's rows: Aiming and Gyro Sensitivity always; Recoil and Weapon in Hand (with their
-    // own rows; Weapon in Hand's: Weapon Opacity, Weapon Size, Weapon Scale, Muzzle Flash (Muzzle
-    // Flash Size while it is on), Projectiles (Projectile Opacity, Size and Speed while it is on))
-    // while it is on; Laser Sight, Keep Reticle on Screen, Grip Frees Aim, Turn Zone From
-    // (AzaharFrame kiuaim3), Turn Zone, Turn Speed and Check Aim with Direct
-    // Aim (stored 2).
-    // AzaharFrame kiurows: the rows only Kid Icarus: Uprising has (KiuOnlyControlsRow) are added
-    // only while it is the game (model.mods.angels_aim.shown).
-    const std::vector<Id> aim_rows = show_aim_rows ? AimingRows(model) : std::vector<Id>{}; // AzaharFrame kiu132: shared
+    // Aiming's rows: Aiming and Gyro Sensitivity always; Recoil (with its own rows) while it is on;
+    // Laser Sight, Keep Reticle on Screen and Grip Frees Aim (AzaharFrame kiuaim3) with Direct Aim
+    // (stored 2). Kid Icarus: Uprising's own are on the Angel's Aim page (AzaharFrame kiuaim).
+    const std::vector<Id> aim_rows =
+        show_aim_rows ? ControlsAimingRows(model) : std::vector<Id>{};
     const float motion_h = show_motion_rows ? kChoiceH : 0.0f;
     const float aim_block_h = kChoiceH * static_cast<float>(aim_rows.size());
     const float content_h =
@@ -3507,7 +3408,7 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
     layout.scroll_step = kChoiceH;
     const float scroll =
         std::clamp(view.scroll[static_cast<std::size_t>(view.tab)], 0.0f, max_scroll);
-    // Where Aiming is: the scroll that brings it to the top (Angel's Aim's Aiming Settings).
+    // Where Aiming is: the scroll that brings it to the top.
     layout.aiming_scroll = std::min(max_scroll, 4.0f + motion_h);
     layout.controls = show_aim_rows;
     const float top = list.y0 - scroll;
@@ -3560,9 +3461,7 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
         const bool enabled = lock == Lock::None;
         AddHit(row, {id, kLabelIndex}, list);
         if (visible(row)) {
-            // AzaharFrame kiufire: Trigger Layout's label says what the chosen layout does.
-            anchors.push_back({id, c.x0, row.y0 + 6.0f, lock, -1, -1.0f,
-                               id == Id::TriggerLayout ? ExplainOption(id, value) : std::string()});
+            anchors.push_back({id, c.x0, row.y0 + 6.0f, lock});
         }
         kit.TextMid(c.x0, row.Cy(), Type::Body, Tok::kOnSurface, LabelFor(id), 0,
                     enabled ? 1.0f : kDisabledContent);
@@ -3693,17 +3592,8 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
         case Id::GyroAim:
             choice_row(id, y, AimingIndexOf(model.gyro_aim));
             break;
-        case Id::WeaponSize:
-            choice_row(id, y, std::clamp(model.weapon_size, 0, 1));
-            break;
         case Id::GripFreesAim: // AzaharFrame kiuaim3
             choice_row(id, y, std::clamp(model.grip_frees_aim, 0, 1));
-            break;
-        case Id::TurnZoneFrom:
-            choice_row(id, y, std::clamp(model.turn_zone_from, 0, 1));
-            break;
-        case Id::TriggerLayout: // AzaharFrame kiufire: shown Fire and Power, Original
-            choice_row(id, y, TriggerLayoutIndexOf(model.trigger_layout));
             break;
         case Id::KeepOnScreen:
             switch_row(id, model.keep_on_screen);
@@ -3717,78 +3607,12 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
         case Id::RecoilRapid:
             slider_row(id, y, model.recoil_rapid);
             break;
-        case Id::WeaponScale:
-            slider_row(id, y, model.weapon_scale);
-            break;
-        case Id::WeaponOpacity: // AzaharFrame kiuopacity
-            slider_row(id, y, model.weapon_opacity);
-            break;
-        case Id::ProjectileOpacity:
-            slider_row(id, y, model.projectile_opacity);
-            break;
-        case Id::MuzzleFlashSize: // AzaharFrame kiuweap2
-            slider_row(id, y, model.flash_size);
-            break;
-        case Id::TurnZone:
-            slider_row(id, y, model.turn_zone);
-            break;
-        case Id::TurnSpeed:
-            slider_row(id, y, model.turn_speed);
-            break;
-        case Id::TurnSpeedVertical: // AzaharFrame fixa
-            slider_row(id, y, model.turn_speed_vertical);
-            break;
         case Id::Recoil:
             switch_row(id, model.recoil);
-            break;
-        case Id::WeaponInHand:
-            switch_row(id, model.weapon_in_hand);
             break;
         case Id::LaserSight:
             switch_row(id, model.laser_sight);
             break;
-        case Id::MuzzleFlash: // AzaharFrame kiuflash
-            switch_row(id, model.muzzle_flash);
-            break;
-        case Id::Projectiles:
-            switch_row(id, model.projectiles);
-            break;
-        case Id::ProjectileSize:
-            slider_row(id, y, model.projectile_size);
-            break;
-        case Id::ProjectileSpeed:
-            slider_row(id, y, model.projectile_speed);
-            break;
-        case Id::CalibrateAim: {
-            // The label, then Reset (while this game has one) and Start, as buttons.
-            const Rect row{c.x0 - 12.0f, y, c.x1 + 12.0f, y + kChoiceH};
-            const bool can = model.aim_calibration_ok;
-            AddHit(row, {id, kLabelIndex}, list);
-            if (visible(row)) {
-                anchors.push_back({id, c.x0, row.y0 + 6.0f, Lock::None});
-            }
-            kit.TextMid(c.x0, row.Cy(), Type::Body, Tok::kOnSurface, LabelFor(id), 0,
-                        can ? 1.0f : kDisabledContent);
-            const std::string start = "Start";
-            const float sw = kit.TextWidth(Type::Label, start) + 48.0f;
-            const Rect sb{c.x1 - sw, row.Cy() - 20.0f, c.x1, row.Cy() + 20.0f};
-            kit.Button(sb, ButtonStyle::Tonal, 0, start, StateOf(view, {Id::CalibrateAim}, can));
-            if (can) {
-                AddHit({sb.x0, row.Cy() - 24.0f, sb.x1, row.Cy() + 24.0f}, {Id::CalibrateAim}, list);
-            }
-            if (model.aim_calibrated) {
-                const std::string reset = LabelFor(Id::CalibrateAimReset);
-                const float rw = kit.TextWidth(Type::Label, reset) + 24.0f;
-                const Rect rb{sb.x0 - 8.0f - rw, sb.y0, sb.x0 - 8.0f, sb.y1};
-                kit.Button(rb, ButtonStyle::Text, 0, reset,
-                           StateOf(view, {Id::CalibrateAimReset}, can));
-                if (can) {
-                    AddHit({rb.x0, row.Cy() - 24.0f, rb.x1, row.Cy() + 24.0f},
-                           {Id::CalibrateAimReset}, list);
-                }
-            }
-            break;
-        }
         default:
             break;
         }
@@ -3971,7 +3795,7 @@ void TabMenu::DrawRows(Kit& kit, const MenuModel& model, const MenuView& view, c
 }
 
 // AzaharFrame kiu132: the rows of DrawRows from `y` (the Settings and Position tabs' lists, and the
-// Angel's Aim segment's settings), each kRowH tall; returns where they end.
+// Angel's Aim page's), each kRowH tall; returns where they end.
 float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& view,
                             const std::vector<Row>& rows, const Rect& c, const Rect& list, float y,
                             float control_x0, Rect& open_anchor, int& open_selected) {
@@ -3984,14 +3808,13 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
             // AzaharFrame autosave: a divider and the group's name in the primary colour, at the
             // bottom of the row so it reads with the rows under it.
             kit.Line(c.x0, y + 20.0f, c.x1, y + 20.0f, 1.0f, Tok::kOutlineVariant);
-            kit.TextSized(c.x0, y + 58.0f, 14.0f, true, Tok::kPrimary,
-                          r.title.empty() ? LabelFor(r.id) : r.title); // kiu132: a group's own
+            kit.TextSized(c.x0, y + 58.0f, 14.0f, true, Tok::kPrimary, LabelFor(r.id));
             y += kRowH;
             continue;
         }
         if (r.id == Id::CalibrateAim) {
-            // AzaharFrame kiu132: Check Aim as on the Controls tab: its label, then Reset (while
-            // this game has its own map) and Start, as buttons.
+            // AzaharFrame kiu132: Check Aim: its label, then Reset (while this game has its own
+            // map) and Start, as buttons.
             const bool can = model.aim_calibration_ok;
             AddHit(row, {r.id, kLabelIndex}, list);
             if (row.y1 > list.y0 && row.y0 < list.y1) {
@@ -4030,7 +3853,6 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
                        : r.id == Id::FillView          ? Sym::kFitScreen
                        : r.id == Id::DownloadThumbnails ? Sym::kDownload // AzaharVR
                        : r.id == Id::KiuBottomReset    ? Sym::kRecenter // AzaharFrame kiu131
-                       : r.id == Id::AngelsAimSettings ? Sym::kTune     // AzaharFrame kiu132
                                                        : Sym::kTv,
                        LabelFor(r.id),
                        StateOf(view, whole, enabled), Type::Title);
@@ -4043,8 +3865,7 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
         const float own_x0 = c.x0 + LabelRoom(kit, model, r.id) + kLabelGap; // useglobal
         const bool row_hit = r.kind == RowKind::Switch || r.kind == RowKind::Link;
         if (row.y1 > list.y0 && row.y0 < list.y1) {
-            // AzaharFrame kiu132: Trigger Layout's label says what the chosen layout does, as on
-            // the Controls tab.
+            // AzaharFrame kiufire: Trigger Layout's label says what the chosen layout does.
             anchors.push_back({r.id, c.x0, std::max(row.y0, list.y0) + 6.0f, r.lock, -1, -1.0f,
                                r.id == Id::TriggerLayout ? ExplainOption(r.id, r.selected)
                                                          : std::string()});
@@ -4177,7 +3998,10 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
             break;
         }
         case RowKind::Link:
-            kit.Icon(c.x1 - 12.0f, cy, 24.0f, Sym::kOpenInNew, false, Tok::kOnSurfaceVariant);
+            // AzaharFrame kiuaim: the Angel's Aim page is in the menu, as its rows' chevrons say
+            kit.Icon(c.x1 - 12.0f, cy, 24.0f,
+                     r.id == Id::AngelsAimLink ? Sym::kChevronRight : Sym::kOpenInNew, false,
+                     Tok::kOnSurfaceVariant);
             break;
         case RowKind::Button:
         case RowKind::Header:
@@ -4217,52 +4041,6 @@ void TabMenu::DrawOpenMenu(Kit& kit, const MenuModel& model, const MenuView& vie
                    {view.open_menu, i}, everything);
         }
     }
-}
-
-// ---- AzaharFrame kiu132: the Angel's Aim segment's settings (angels_aim_tab.cpp draws the page) --
-namespace {
-constexpr float kHubTitleH = kControlH + 16.0f; ///< "Settings" and the scope control
-} // namespace
-
-float TabMenu::AngelsAimSettingsHeight(const MenuModel& model) {
-    float h = kHubTitleH + kRowH; // and Mods & Pack's title at the end
-    for (const AngelsAimRowGroup& g : AngelsAimGroups(model)) {
-        h += kRowH * static_cast<float>(g.rows.size() + 1);
-    }
-    return h;
-}
-
-float TabMenu::DrawAngelsAimSettings(Kit& kit, const MenuModel& model, const MenuView& view,
-                                     const Rect& c, const Rect& list, float y, Rect& open_anchor,
-                                     int& open_selected) {
-    // The title, and the scope control at its right: the same toggle as on the Settings,
-    // Controls and Position tabs (one scope for the whole menu), so a change here goes where it
-    // would go there.
-    kit.TextMid(c.x0, y + kControlH * 0.5f, Type::Title, Tok::kOnSurface, kAngelsAimSettings);
-    DrawScope(kit, model, view, {c.x0, y, c.x1, y + kControlH}, list, &list);
-    y += kHubTitleH;
-    std::vector<Row> rows;
-    for (const AngelsAimRowGroup& g : AngelsAimGroups(model)) {
-        Row header{Id::AngelsAimGroup, RowKind::Header};
-        header.selected = static_cast<int>(g.kind);
-        header.title = AngelsAimGroupName(g.kind);
-        rows.push_back(header);
-        for (const Id id : g.rows) {
-            rows.push_back(RowFor(id, model));
-        }
-    }
-    Row mods{Id::AngelsAimGroup, RowKind::Header};
-    mods.selected = static_cast<int>(AngelsAimGroupKind::ModsAndPack);
-    mods.title = AngelsAimGroupName(AngelsAimGroupKind::ModsAndPack);
-    rows.push_back(mods);
-    float label_w = 0.0f; // as DrawRows: the widest label of a row whose control starts at it
-    for (const Row& r : rows) {
-        if (r.kind == RowKind::Slider || r.kind == RowKind::MenuButton) {
-            label_w = std::max(label_w, LabelRoom(kit, model, r.id));
-        }
-    }
-    return DrawRowItems(kit, model, view, rows, c, list, y, c.x0 + label_w + kLabelGap,
-                        open_anchor, open_selected);
 }
 
 // AzaharFrame kiuaim: `ids` as rows from `y`, for the Angel's Aim page (angels_aim_tab.cpp; Row

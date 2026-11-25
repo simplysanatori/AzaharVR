@@ -923,7 +923,7 @@ void TestResolutionHook() {
     }
     if (VideoCore::Immersive::SteadyMs() - g.game_start_ms >= static_cast<int64_t>(at * 1000)) {
         done = true;
-        Settings::values.resolution_factor.SetValue(factor);
+        Settings::RunningGraphics().resolution_factor.SetValue(factor);
         LOG_INFO(Frontend, "xr: immersive: test: Internal Resolution {}x", factor);
     }
 }
@@ -1337,7 +1337,7 @@ void OnFrame(const FrameInfo& info) {
         g.estimate.Reset(); // AzaharFrame fovonce
         g.follow.Reset();
         g.angles.Reset();
-        g.hide_bottom = Settings::values.vr_hide_bottom_screen.GetValue();
+        g.hide_bottom = Settings::RunningGraphics().hide_bottom_screen.GetValue();
         LOG_INFO(Frontend, "xr: bottom screen {} at start", g.hide_bottom ? "hidden" : "shown");
         // The screen shape and the game camera's angle (per game as well) are read below.
         g.shape_logged = false;

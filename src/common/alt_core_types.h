@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <functional>
+#include "common/console_group.h"
 
 namespace Common::AltCore {
 
@@ -202,6 +203,20 @@ constexpr ScreenPixels OwnPixels(CoreKind kind) {
 
 constexpr bool IsDs(CoreKind kind) {
     return kind == CoreKind::NDS || kind == CoreKind::DSi;
+}
+
+/// The group of settings of this console's games (Settings::Graphics).
+constexpr Settings::ConsoleGroup GroupOf(CoreKind kind) {
+    switch (kind) {
+    case CoreKind::GBA:
+    case CoreKind::GB:
+        return Settings::ConsoleGroup::GBA;
+    case CoreKind::NDS:
+    case CoreKind::DSi:
+        return Settings::ConsoleGroup::DS;
+    default:
+        return Settings::ConsoleGroup::N3DS;
+    }
 }
 
 /// Whether the Secondary Screen takes touches. Touch Screen Input is the DS's alone.

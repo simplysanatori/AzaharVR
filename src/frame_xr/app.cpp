@@ -236,7 +236,7 @@ ScreenPlacement WithSecondSlot(ScreenPlacement place) {
         place.bottom_size = NormalBottomSize(place.second_scale);
         return place;
     }
-    const uint32_t layout = Settings::values.vr_screen_layout.GetValue();
+    const uint32_t layout = Settings::RunningGraphics().screen_layout.GetValue();
     const Common::AltCore::ScreenMetrics screens = GetCoreCapabilities().screens;
     place.bottom_size =
         NormalBottomSize(Input::ScreenRig::LinkedScale(screens.equal_screens, layout));
@@ -253,7 +253,7 @@ ScreenPlacement WithSecondSlot(ScreenPlacement place) {
     const Input::Posef b = Input::ScreenRig::SecondFromMain(
         top, place.top_scale, main.width, second.width, layout,
         main.height / Input::ScreenRig::ClampScale(place.top_scale), second.height,
-        static_cast<float>(Settings::values.vr_screen_gap.GetValue()));
+        static_cast<float>(Settings::RunningGraphics().screen_gap.GetValue()));
     place.bottom_pose = {{b.orientation.x, b.orientation.y, b.orientation.z, b.orientation.w},
                          {b.position.x, b.position.y, b.position.z}};
     return place;

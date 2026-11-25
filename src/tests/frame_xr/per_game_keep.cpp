@@ -138,15 +138,25 @@ struct AllGlobal {
 TEST_CASE("Per-Game: every per-game row's key is kept across the read of the game's file",
           "[frame_xr][fixa]") {
     const std::vector<std::string> labels = Labels();
-    for (int i = 0; i < FrameXr::Menu::kIdCount; i++) {
-        const Id id = static_cast<Id>(i);
-        const std::vector<std::string> keys = FrameXr::PerGame::KeysOf(id);
-        CHECK(keys.empty() == !FrameXr::Menu::PerGameSetting(id));
-        for (const std::string& key : keys) {
-            INFO("row " << i << " key " << key);
-            CHECK(std::find(labels.begin(), labels.end(), key) != labels.end());
+    // each console's games write their own group's keys (settings.h Graphics)
+    for (const Settings::ConsoleGroup group :
+         {Settings::ConsoleGroup::N3DS, Settings::ConsoleGroup::DS, Settings::ConsoleGroup::GBA}) {
+        Settings::SetActiveConsole(group);
+        for (int i = 0; i < FrameXr::Menu::kIdCount; i++) {
+            const Id id = static_cast<Id>(i);
+            if (group == Settings::ConsoleGroup::N3DS &&
+                (id == Id::LayerDepth || id == Id::InvertDepth)) {
+                continue; // a 3DS game has no such row
+            }
+            const std::vector<std::string> keys = FrameXr::PerGame::KeysOf(id);
+            CHECK(keys.empty() == !FrameXr::Menu::PerGameSetting(id));
+            for (const std::string& key : keys) {
+                INFO("group " << static_cast<int>(group) << " row " << i << " key " << key);
+                CHECK(std::find(labels.begin(), labels.end(), key) != labels.end());
+            }
         }
     }
+    Settings::SetActiveConsole(Settings::ConsoleGroup::N3DS);
     // The two that reverted in session 651, by name.
     // AzaharFrame bfidr: and Black Frame Insertion's helpers, written at its scope.
     for (const char* key : {"vr_motion_clarity_immersive", "vr_screens_in_projection",
@@ -424,6 +434,8 @@ TEST_CASE("Per-Game: Trigger Layout's key, Original by default", "[frame_xr][kiu
 TEST_CASE("Per-Game: Screen Layout's key", "[frame_xr][tabmenu]") {
     const AllGlobal restore;
     auto& layout = Settings::values.vr_screen_layout;
+    CHECK(FrameXr::PerGame::KeysOf(Id::ScreenCurve) ==
+          std::vector<std::string>{"vr_screen_curve"}); // AzaharVR: per game too
     CHECK(FrameXr::PerGame::KeysOf(Id::ScreenLayout) ==
           std::vector<std::string>{"vr_screen_layout"});
     CHECK(layout.GetDefault() == 0u);
@@ -492,7 +504,7 @@ TEST_CASE("Per-Game: a moved row keeps its key", "[frame_xr][tabmenu]") {
         CHECK(FrameXr::PerGame::KeysOf(id) == keys);
     }
     // Global ones: no key of a game's file
-    for (const Id id : {Id::FaceButtons, Id::ScreenCurve, Id::MoveScreens, Id::Background}) {
+    for (const Id id : {Id::FaceButtons, Id::MoveScreens, Id::Background}) {
         CHECK(FrameXr::PerGame::KeysOf(id).empty());
         CHECK_FALSE(FrameXr::Menu::PerGameSetting(id));
     }
@@ -617,6 +629,135 @@ TEST_CASE("Per-Game: a save during Angel's Aim stores mode 4 and no registers",
     }
 }
 
+// AzaharFrame kiuaim: the rows that are on the Angel's Aim page only now write the settings they wrote
+// from the Controls and Settings tabs, per game and global, and the page's count and Use Global Values
+// for All reach each.
+TEST_CASE("Per-Game: the Angel's Aim page's own rows write the settings they always did",
+          "[frame_xr][kiuaim]") {
+    using namespace FrameXr::Menu;
+    namespace PerGame = FrameXr::PerGame;
+    AllGlobal reset;
+    const std::vector<std::pair<Id, std::vector<std::string>>> rows{
+        {Id::TriggerLayout, {"vr_kiu_trigger_layout"}},
+        {Id::WeaponInHand, {"vr_light_gun_weapon"}},
+        {Id::WeaponOpacity, {"vr_light_gun_weapon_opacity"}},
+        {Id::WeaponSize, {"vr_light_gun_weapon_size"}},
+        {Id::WeaponScale, {"vr_light_gun_weapon_scale"}},
+        {Id::MuzzleFlash, {"vr_light_gun_flash"}},
+        {Id::MuzzleFlashSize, {"vr_light_gun_muzzle_flash_size"}},
+        {Id::Projectiles, {"vr_light_gun_projectile"}},
+        {Id::ProjectileOpacity, {"vr_light_gun_projectile_opacity"}},
+        {Id::ProjectileSize, {"vr_light_gun_projectile_size"}},
+        {Id::ProjectileSpeed, {"vr_light_gun_projectile_speed"}},
+        {Id::TurnZoneFrom, {"vr_light_gun_turn_zone_from"}},
+        {Id::TurnZone, {"vr_light_gun_turn_zone"}},
+        {Id::TurnSpeed, {"vr_light_gun_turn_speed"}},
+        {Id::TurnSpeedVertical, {"vr_light_gun_turn_speed_vertical"}},
+        {Id::KiuBottomScreen, {"vr_kiu_bottom_screen"}},
+        {Id::KiuBottomSize, {"vr_kiu_bottom_size"}},
+        {Id::KiuBottomOpacity, {"vr_kiu_bottom_opacity"}},
+        {Id::KiuOverShoulder, {"vr_kiu_over_shoulder", "vr_kiu_game_camera"}},
+        {Id::KiuPitOpacity, {"vr_kiu_pit_opacity"}},
+        {Id::KiuSnapTurn, {"vr_kiu_snap_turn"}},
+        {Id::KiuWristAngle, {"vr_kiu_wrist_angle"}},
+        {Id::KiuWristAlong, {"vr_kiu_wrist_along"}},
+        {Id::KiuCutscenes, {"vr_kiu_cutscenes"}},
+        {Id::KiuHud, {"vr_kiu_hud"}},
+        {Id::KiuHudSize, {"vr_kiu_hud_size"}},
+        {Id::KiuHudLinked, {"vr_kiu_hud_linked"}},
+        {Id::KiuHudAcross, {"vr_kiu_hud_across"}},
+        {Id::KiuHudHeight, {"vr_kiu_hud_height"}},
+        {Id::KiuBarAcross, {"vr_kiu_bar_across"}},
+        {Id::KiuBarHeight, {"vr_kiu_bar_height"}},
+        {Id::KiuScoreAcross, {"vr_kiu_score_across"}},
+        {Id::KiuScoreHeight, {"vr_kiu_score_height"}},
+        {Id::KiuSubtitleHeight, {"vr_kiu_subtitle_height"}},
+        {Id::KiuSubtitleSize, {"vr_kiu_subtitle_size"}},
+        {Id::KiuPowerMenu, {"vr_kiu_power_menu"}},
+        {Id::KiuPowerMenuAcross, {"vr_kiu_power_menu_across"}},
+        {Id::KiuPowerMenuHeight, {"vr_kiu_power_menu_height"}},
+        {Id::KiuPowerMenuOpacity, {"vr_kiu_power_menu_opacity"}},
+        {Id::KiuStickClick, {"vr_kiu_stick_click"}},
+        {Id::KiuHideOffHand, {"vr_kiu_hide_off_hand"}},
+        {Id::KiuTalkPortraits, {"vr_kiu_talk_portraits"}},
+        {Id::KiuTalkPortraitsOpacity, {"vr_kiu_talk_portraits_opacity"}},
+        {Id::KiuPortraitsLinked, {"vr_kiu_portraits_linked"}},
+        {Id::KiuPortraitsAcross, {"vr_kiu_portraits_across"}},
+        {Id::KiuPortraitsHeight, {"vr_kiu_portraits_height"}},
+        {Id::KiuReticleSize, {"vr_kiu_reticle_size"}}};
+    const auto has = [](const std::vector<Id>& ids, Id id) {
+        return std::find(ids.begin(), ids.end(), id) != ids.end();
+    };
+    // The states that show every row between them.
+    std::vector<MenuModel> models;
+    for (const int bits : {0, 1, 2, 3}) {
+        MenuModel m;
+        m.scope = 1;
+        m.mods.angels_aim.shown = m.mods.angels_aim.mapped = true;
+        m.immersive_mode = 4;
+        m.gyro_aim = 2;
+        m.recoil = m.weapon_in_hand = m.muzzle_flash = m.projectiles = true;
+        m.kiu_bottom_screen = 1 + (bits & 1);
+        m.kiu_view = 1;
+        m.kiu_hud = 1;
+        m.kiu_hud_linked = bits >> 1;
+        m.kiu_power_menu = 2;
+        m.kiu_talk_portraits = 1;
+        m.kiu_portraits_linked = bits & 1;
+        models.push_back(m);
+    }
+    // All of the page's own are in the table, and nothing else is.
+    for (const MenuModel& m : models) {
+        std::vector<Id> own = AngelsAimFirstPersonRows(m);
+        for (const Id id : AimingRows(m)) {
+            if (KiuOnlyControlsRow(id)) {
+                own.push_back(id);
+            }
+        }
+        for (const Id id : own) {
+            INFO(LabelFor(id));
+            CHECK(PerGameSetting(id) == std::any_of(rows.begin(), rows.end(), [&](const auto& r) {
+                      return r.first == id;
+                  }));
+        }
+    }
+    for (const auto& [id, keys] : rows) {
+        INFO(LabelFor(id));
+        CHECK(PerGame::KeysOf(id) == keys);
+        const auto each = [&keys = keys](const auto& f) {
+            PerGame::ForEachMenuKey([&](auto& s) {
+                if (std::find(keys.begin(), keys.end(), s.GetLabel()) != keys.end()) {
+                    f(s);
+                }
+            });
+        };
+        // Per-Game: the game's own value; the page counts it, the general tabs do not.
+        PerGame::ForEachMenuKey([](auto& s) { s.SetGlobal(true); });
+        each([](auto& s) {
+            s.SetGlobal(false);
+            SetOtherGameValue(s);
+        });
+        bool counted = false;
+        for (MenuModel m : models) {
+            PerGame::FillGameValues(m);
+            CHECK(GameValueRows(m, Tab::Controls).empty());
+            CHECK(GameValueRows(m, Tab::Settings, SettingsSection::Immersive).empty());
+            const auto page = GameValueRows(m, Tab::Mods);
+            CHECK((page.empty() || page == std::vector<Id>{id}));
+            counted |= has(page, id);
+        }
+        CHECK(counted);
+        CHECK_FALSE(PerGame::UsesGlobal(id)); // in Global: locked
+        // Use Global Values for All.
+        CHECK(PerGame::UseGlobalValue(id));
+        each([](auto& s) { CHECK(s.UsingGlobal()); });
+        for (MenuModel m : models) {
+            PerGame::FillGameValues(m);
+            CHECK(GameValueRows(m, Tab::Mods).empty());
+        }
+    }
+}
+
 // AzaharFrame kiutoggles: Angel's Aim's first-person options are per-game keys, off (Smooth) by
 // default as their test switches were, kept like the others.
 TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_xr][kiutoggles]") {
@@ -691,9 +832,16 @@ TEST_CASE("Per-Game: the DS and GBA rows' values in two games' files", "[frame_x
     CHECK(v.gba_second_screen.GetDefault() == 0u); // PokeDaisy
     CHECK(!v.gba_allow_editing.GetDefault());
     CHECK(v.layer_depth.GetDefault() == 0u);
+    // a GBA or Game Boy game's own key (Settings::Graphics), a DS game's another
+    Settings::SetActiveConsole(Settings::ConsoleGroup::GBA);
     CHECK(FrameXr::PerGame::KeysOf(Id::LayerDepth) == std::vector<std::string>{"layer_depth"});
     CHECK(!v.invert_depth.GetDefault());
     CHECK(FrameXr::PerGame::KeysOf(Id::InvertDepth) == std::vector<std::string>{"invert_depth"});
+    Settings::SetActiveConsole(Settings::ConsoleGroup::DS);
+    CHECK(FrameXr::PerGame::KeysOf(Id::LayerDepth) == std::vector<std::string>{"ds_layer_depth"});
+    CHECK(FrameXr::PerGame::KeysOf(Id::InvertDepth) ==
+          std::vector<std::string>{"ds_invert_depth"});
+    Settings::SetActiveConsole(Settings::ConsoleGroup::N3DS);
     CHECK(FrameXr::PerGame::KeysOf(Id::SecondScreen) ==
           std::vector<std::string>{"gba_second_screen"});
     CHECK(FrameXr::PerGame::KeysOf(Id::AllowGameEditing) ==
