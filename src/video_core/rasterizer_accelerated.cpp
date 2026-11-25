@@ -522,7 +522,7 @@ void RasterizerAccelerated::HudCensus(const char* done) {
         // A draw through a camera: its place in the frame, and the camera's rows and the first
         // bone's, as the game set them.
         const int r = Settings::values.vr_si_mode_register_offset.GetValue();
-        if (!flat && r >= 4 && r + 2 < 96) {
+        if (!flat && r >= 4 && r + 5 < 96) {
             float n0 = 1e9f, n1 = -1e9f, m0 = 1e9f, m1 = -1e9f, w0 = 1e9f, w1 = -1e9f;
             for (const auto& v : vertex_batch) {
                 w0 = std::min(w0, v.position.w);
@@ -533,7 +533,7 @@ void RasterizerAccelerated::HudCensus(const char* done) {
                 m1 = std::max(m1, v.position.y / v.position.w);
             }
             std::string rows;
-            for (const int at : {r - 4, r - 3, r, r + 1, r + 2, 25, 26, 27}) {
+            for (const int at : {r - 4, r - 3, r, r + 1, r + 2, r + 3, r + 4, r + 5, 25, 26, 27}) {
                 const auto& f = pica.vs_setup.uniforms.f[at];
                 rows += fmt::format(" c{} {:.3f},{:.3f},{:.3f},{:.3f}", at, f.x.ToFloat32(),
                                     f.y.ToFloat32(), f.z.ToFloat32(), f.w.ToFloat32());
