@@ -33,6 +33,7 @@
 #include <cstdint>
 #include <optional>
 #include "frame_xr/frame_xr.h"
+#include "frame_xr/kiu_first_person.h" // AzaharFrame kiu1s: Cut
 
 namespace FrameXr::Input {
 struct InputFrame;
@@ -82,6 +83,14 @@ struct ScreenLayers {
     /// the wrist; 1 elsewhere).
     bool bottom_persistent = false;
     float bottom_alpha = 1.0f;
+    /// AzaharFrame kiu1s: the part of the bottom screen's picture that is shown (Angel's Aim's
+    /// portraits), in its 320 x 240 pixels.
+    Kiu::FirstPerson::Cut bottom_cut;
+    /// AzaharFrame kiu1s: the bottom screen is Angel's Aim's pause panel, in front, to point at.
+    bool pause_panel = false;
+    /// AzaharFrame kiu1s: both screens are where the game's menu puts them (Angel's Aim's menu
+    /// panel): the grips move neither.
+    bool screens_fixed = false;
     /// AzaharFrame flash: the top screen is the Full modes' screen, engaged: the game draws its
     /// picture for the head pose (modes 2 and 3, not paused by the menu or the bottom screen).
     /// Motion Clarity flashes it (motion_clarity.h).
@@ -121,6 +130,10 @@ PathState ScreensPathState();
 /// there while first person is engaged, without pausing it; another frame's is ignored. XR
 /// thread.
 void SetWristScreen(bool shown, const XrPosef& pose, XrExtent2Df size, XrTime display_time);
+
+/// AzaharFrame kiu1s: one of Kid Icarus's own menus is up in Angel's Aim and shows both screens
+/// instead of the view (AZAHARFRAME_KIU_MENU_SCREENS, _MENU_PANEL). XR thread.
+bool GameMenu();
 
 /// The in-game menu (Azahar's window over the paused game) is open: immersive modes 2 and 3
 /// pause, as when the bottom screen is shown. XR thread.

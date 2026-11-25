@@ -104,6 +104,7 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     kiu_first_person.cpp
     kiu_first_person.h
     kiu_cutscene.h # AzaharFrame kiu140
+    kiu_ui.h # AzaharFrame kiu1s
     kiu_pit_opacity.cpp # AzaharFrame kiu133
     kiu_pit_opacity.h
     input/screen_rig.cpp

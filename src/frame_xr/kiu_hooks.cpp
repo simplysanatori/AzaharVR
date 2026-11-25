@@ -29,6 +29,8 @@
 #include "frame_xr/kiu_scan.h"
 #include "frame_xr/test_switches.h"
 #include "frame_xr/kiu_cutscene.h" // AzaharFrame kiu140
+#include "frame_xr/kiu_ui.h" // AzaharFrame kiu1s
+#include "video_core/kiu_hud.h" // AzaharFrame kiu1s
 #include "video_core/kiu_sheets.h" // AzaharFrame kiu140
 #include "video_core/kiu_view_tap.h" // AzaharFrame kiuvr: the view register's tap
 
@@ -63,6 +65,13 @@ constexpr const char* kSwitchSheets = "AZAHARFRAME_KIU_SHEETS"; // AzaharFrame k
 constexpr const char* kSwitchSheetsOut = "AZAHARFRAME_KIU_SHEETS_OUT"; // AzaharFrame kiu140
 constexpr const char* kSwitchSheetsSky = "AZAHARFRAME_KIU_SHEETS_SKY"; // AzaharFrame kiu140
 constexpr const char* kSwitchTrace = "AZAHARFRAME_KIU_HOOK_TRACE";
+// AzaharFrame kiu1s: the single screen's, all off by default (KIU_HOOKS.md, "Single screen").
+constexpr const char* kSwitchPage = "AZAHARFRAME_KIU_PAGE";
+constexpr const char* kSwitchHudExact = "AZAHARFRAME_KIU_HUD_EXACT";
+constexpr const char* kSwitchPausePanel = "AZAHARFRAME_KIU_PAUSE_PANEL";
+constexpr const char* kSwitchMenuScreens = "AZAHARFRAME_KIU_MENU_SCREENS";
+constexpr const char* kSwitchMenuPanel = "AZAHARFRAME_KIU_MENU_PANEL";
+constexpr const char* kSwitchUiTrace = "AZAHARFRAME_KIU_UI_TRACE";
 // AzaharFrame kiuvr (kiu_first_person.h)
 constexpr const char* kSwitchFpTrace = "AZAHARFRAME_KIU_FP_TRACE";
 constexpr const char* kSwitchFpProbe = "AZAHARFRAME_KIU_FP_PROBE";
@@ -170,6 +179,13 @@ struct State {
     /// AzaharFrame kiu140: cutscenes told by the angle drawn, and the trace's counts.
     Kiu::CutsceneWatch cutscene_watch;
     Kiu::WideAngle wide_angle;
+    // AzaharFrame kiu1s: the battle UI (kiu_ui.h): its code looked at (-1 not yet), the last state.
+    int ui_code = -1;
+    Ui::State ui;
+    Ui::Steady ui_page, ui_pause, ui_pictures;
+    Ui::SteadyMenu ui_menu;
+    Ui::SteadyMenu ui_weapon_menu; ///< the same, read whatever the switches say (the weapon)
+    int menu_up = Ui::kNoMenu; ///< as said to the view
     Kiu::EventWatch event_watch;
     bool cutscene = false;
     uint32_t angle_match = 0, angle_other = 0;
@@ -452,8 +468,97 @@ void TraceFirstPerson(State& s, const KH::GameMemory& mem, const KH::Player& p,
     LOG_INFO(Frontend, "xr: Kid Icarus first person: {}", line);
 }
 
+/// AzaharFrame kiu1s: nothing asked of the battle UI: nothing said of it.
+void UiQuiet(State& s);
+/// AzaharFrame kiu1s: the battle UI not read (no first person): the menu neither.
+void UiOff(State& s) {
+    s.ui_code = -1;
+    s.ui_weapon_menu = {};
+    Kiu::FirstPerson::SetWeaponHidden(false);
+    UiQuiet(s);
+}
+void UiQuiet(State& s) {
+    s.ui = {};
+    s.ui_page = s.ui_pause = s.ui_pictures = {};
+    s.ui_menu = {};
+    s.menu_up = Ui::kNoMenu;
+    Kiu::FirstPerson::SetBattleUi(false, false);
+    Kiu::FirstPerson::SetPortraits(Kiu::FirstPerson::PortraitState::Off);
+    Kiu::FirstPerson::SetMenu(Ui::kNoMenu, false);
+    VideoCore::KiuHud::g_batch.Set({});
+}
+
+/// AzaharFrame kiu1s: what the game's battle UI shows (kiu_ui.h), for the switches that ask.
+void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
+    const bool page = SwitchIs(kSwitchPage, "1"), exact = SwitchIs(kSwitchHudExact, "1"),
+               pause = SwitchIs(kSwitchPausePanel, "1"), trace = SwitchIs(kSwitchUiTrace, "1"),
+               portraits = Kiu::FirstPerson::PortraitsWanted(),
+               menu_panel = SwitchIs(kSwitchMenuPanel, "1"),
+               menu_screens = menu_panel || SwitchIs(kSwitchMenuScreens, "1");
+    const bool usa = s.build == &Input::KiuTurn::kBuildUsaRev1;
+    if (s.ui_code < 0) {
+        s.ui_code = Ui::CodeMatches(mem, usa) ? 1 : 0;
+        LOG_INFO(Frontend, "xr: Kid Icarus hooks: the battle UI: {}",
+                 s.ui_code != 0 ? "its code matches" : "off: the game's code differs");
+    }
+    // The menu, whatever the switches say: no weapon in the hand in one (WeaponHiddenFor).
+    {
+        const int raw =
+            s.ui_code != 0 ? Ui::Menu(mem, usa ? Ui::kMenuUsaRev1 : Ui::kMenuEur) : Ui::kNoMenu;
+        const bool hidden =
+            Kiu::FirstPerson::WeaponHiddenFor(s.ui_weapon_menu.Update(raw), battle);
+        if (hidden != Kiu::FirstPerson::WeaponHidden()) {
+            LOG_INFO(Frontend, "xr: Kid Icarus hooks: the weapon in the hand {}",
+                     hidden ? "hidden (a menu of the game)" : "shown again");
+        }
+        Kiu::FirstPerson::SetWeaponHidden(hidden);
+    }
+    if (!page && !exact && !pause && !trace && !portraits && !menu_screens) {
+        UiQuiet(s);
+        return;
+    }
+    const Ui::State now =
+        s.ui_code != 0 ? Ui::Read(mem, usa ? Ui::kMenuUsaRev1 : Ui::kMenuEur) : Ui::State{};
+    const bool is_page = s.ui_page.Update(now.page || now.menu != Ui::kNoMenu);
+    const bool is_paused = s.ui_pause.Update(now.paused);
+    Kiu::FirstPerson::SetBattleUi(page && is_page, pause && is_paused && battle);
+    const bool pictures = s.ui_pictures.Update(now.pictures);
+    // The pause and menu panels' layer is there whenever the view is (LayerFor).
+    Kiu::FirstPerson::SetPortraits(Kiu::FirstPerson::LayerFor(
+        Kiu::FirstPerson::PortraitsFor(portraits, battle, pictures,
+                                       now.paused || s.ui_pause.On()),
+        pause || menu_panel));
+    if (!menu_screens) {
+        s.ui_menu = {}; // switched off with a menu up: nothing kept for the next time
+    }
+    const int menu = menu_screens ? s.ui_menu.Update(now.menu) : Ui::kNoMenu;
+    if (menu != s.menu_up) {
+        LOG_INFO(Frontend, "xr: Kid Icarus hooks: menu {} -> {}", s.menu_up, menu);
+        s.menu_up = menu;
+    }
+    Kiu::FirstPerson::SetMenu(menu, menu_panel);
+    VideoCore::KiuHud::Batch batch;
+    if (exact && battle) {
+        batch = {now.vertex_base, now.index_offset, now.quads};
+    }
+    VideoCore::KiuHud::g_batch.Set(batch);
+    if (trace && !(now == s.ui)) {
+        LOG_INFO(Frontend,
+                 "xr: Kid Icarus hooks: the battle UI {:08X}, menu {}: {}{}{}{}{}{}; vertices "
+                 "{:08X}, indices {:X}",
+                 now.context, now.menu, now.known ? "" : "not there",
+                 now.known && !now.shown ? "not shown" : "", now.page ? "a page" : "",
+                 now.paused ? " paused" : "",
+                 now.talk ? (now.talk_below ? " talk (bottom)" : " talk (top)") : "",
+                 now.illustration ? " an illustration" : now.pictures ? " pictures" : "",
+                 now.vertex_base, now.index_offset);
+    }
+    s.ui = now;
+}
+
 /// AzaharFrame kiu140: no game of this kind, or nothing asked for: no cutscene and nothing counted.
 void CutsceneOff(State& s) {
+    UiOff(s); // AzaharFrame kiu1s
     s.cutscene_watch = {};
     s.wide_angle = {};
     s.event_watch = {};
@@ -787,6 +892,9 @@ void Hook(int64_t ticks) {
                             (want_aim_hold ? KH::Bit(KH::Group::AimHold) : 0u) |
                             (want_aim_box ? KH::Bit(KH::Group::AimBox) : 0u) |
                             (want_player_shadow ? KH::Bit(KH::Group::PlayerShadow) : 0u) |
+                            (first_person && Kiu::FirstPerson::TalkTopWanted()
+                                 ? KH::Bit(KH::Group::TalkTop)
+                                 : 0u) | // AzaharFrame kiu1s
                             (mailbox.wide_node != 0 ? KH::Bit(KH::Group::WideCamera) : 0u);
     const KH::SyncResult r = KH::Sync(mem, wanted, mailbox, code);
     LogChanges(s, r);
@@ -813,6 +921,9 @@ void Hook(int64_t ticks) {
         const bool own_camera = s.cutscene_watch.Update(counted, match, other, event_cutscene);
         cutscene = own_camera || event_cutscene;
         Kiu::FirstPerson::SetBattle(wide_in);
+        if (first_person) { // AzaharFrame kiu1s
+            ReadUi(s, mem, wide_in);
+        }
         if (cutscene != s.cutscene) {
             LOG_INFO(Frontend,
                      "xr: Kid Icarus hooks: cutscene {} ({}; the world drawn {:.1f} degrees high, "

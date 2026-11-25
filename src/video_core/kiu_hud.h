@@ -127,6 +127,22 @@ inline Place PagePlace(float factor_across, float factor_up) {
     return p;
 }
 
+/// AzaharFrame kiu1s: a page while the battle's camera is still in (the results as they start): the
+/// game's frame is then the whole view, so the page gets the frame the game's own camera has (45
+/// degrees high), as PagePlace gives it once that camera is out.
+inline constexpr float kPageHighDeg = 45.0f;
+inline Place PagePlaceInBattle(float tan_half_x, float tan_half_y) {
+    Place p;
+    if (!(tan_half_x > 0.05f) || !(tan_half_y > 0.05f)) {
+        return p;
+    }
+    const float t = std::tan(0.5f * kPageHighDeg * 3.14159265f / 180.0f);
+    p.on = p.page = true;
+    p.half_up = std::min(t / tan_half_y, 1.0f);
+    p.half_across = std::min(t * kFrameAspect / tan_half_x, 1.0f);
+    return p;
+}
+
 /// The state of a draw that may be the HUD's.
 struct Draw {
     bool top_viewport = false; ///< 240 x 400
@@ -163,6 +179,30 @@ constexpr bool IsTextTarget(float width, float height) {
     return width > height && height > 0.0f;
 }
 
+/// AzaharFrame kiu1s: the battle UI's own 2D batch (frame_xr/kiu_ui.h): every draw of the game's
+/// 2D context names its first quad by its index offset, off one vertex base, so a draw of it is
+/// known exactly, whatever its blend or texture. Off: not known, the guess above decides.
+struct Batch {
+    uint32_t vertex_base = 0, index_offset = 0; ///< physical; bytes from the base
+    uint32_t quads = 0;                         ///< 0: not known
+};
+constexpr bool InBatch(const Batch& b, uint32_t vertex_base, uint32_t index_offset,
+                       uint32_t vertices) {
+    if (b.quads == 0 || vertex_base != b.vertex_base || index_offset < b.index_offset ||
+        vertices == 0 || vertices % 6 != 0) {
+        return false;
+    }
+    const uint32_t at = index_offset - b.index_offset; // 6 indices of 2 bytes a quad
+    return at % 12 == 0 && at / 12 + vertices / 6 <= b.quads;
+}
+
+/// The console's battery (a desktop draw log, air and land: one quad, 256 x 128, format 9): the
+/// dialogs' 2D, not the battle's, so never in the batch. The guess still moves it with the score, else
+/// it would be left large in the corner of the whole view.
+constexpr bool IsBattery(const Draw& d) {
+    return MayBeHud(d) && d.vertices == 6 && d.width == 256 && d.height == 128 && d.format == 9;
+}
+
 struct Vertex {
     float x, y, z, w; ///< clip: x up, y across
 };
@@ -181,15 +221,9 @@ inline bool Movable(const Vertex* v, std::size_t n) {
     }
     return n >= 3 && !(x1 - x0 > 1.9f && y1 - y0 > 1.9f);
 }
-/// One piece moved: a quad (two triangles in a row) or a triangle, by its middle. `factor`s: what
-/// the vertex shader divides by (the game drawing past its frame). The result has w = 2, so the
-/// shader's rule for flat vertices leaves it alone.
-inline void Move(Vertex* t, std::size_t n, const Place& p, float factor_across, float factor_up) {
-    float up = 0.0f, across = 0.0f;
-    for (std::size_t i = 0; i < n; ++i) {
-        up += t[i].x / static_cast<float>(n);
-        across += t[i].y / static_cast<float>(n);
-    }
+/// `up`, `across`: the middle that decides its group.
+inline void MoveBy(Vertex* t, std::size_t n, const Place& p, float factor_across, float factor_up,
+                   float up, float across) {
     float at_across = 0.0f, at_up = p.middle_up, rise = 0.0f;
     if (p.page) {
         at_up = 0.0f;
@@ -208,6 +242,31 @@ inline void Move(Vertex* t, std::size_t n, const Place& p, float factor_across, 
         const float a = at_across + p.half_across * v.y;
         v = {2.0f * u * factor_up, 2.0f * a * factor_across, 2.0f * v.z, 2.0f};
     }
+}
+/// One piece moved: a quad (two triangles in a row) or a triangle, by its middle. `factor`s: what
+/// the vertex shader divides by (the game drawing past its frame). The result has w = 2, so the
+/// shader's rule for flat vertices leaves it alone.
+inline void Move(Vertex* t, std::size_t n, const Place& p, float factor_across, float factor_up) {
+    float up = 0.0f, across = 0.0f;
+    for (std::size_t i = 0; i < n; ++i) {
+        up += t[i].x / static_cast<float>(n);
+        across += t[i].y / static_cast<float>(n);
+    }
+    MoveBy(t, n, p, factor_across, factor_up, up, across);
+}
+
+/// AzaharFrame kiu1s: a whole draw of the battle UI's batch moved as one (the game draws a piece, or
+/// a part of one, a draw): its group by its own middle, so no quad of it goes elsewhere than the rest.
+inline void MovePiece(Vertex* v, std::size_t n, const Place& p, float factor_across,
+                      float factor_up) {
+    float u0 = 1e9f, u1 = -1e9f, a0 = 1e9f, a1 = -1e9f;
+    for (std::size_t i = 0; i < n; ++i) {
+        u0 = std::min(u0, v[i].x);
+        u1 = std::max(u1, v[i].x);
+        a0 = std::min(a0, v[i].y);
+        a1 = std::max(a1, v[i].y);
+    }
+    MoveBy(v, n, p, factor_across, factor_up, 0.5f * (u0 + u1), 0.5f * (a0 + a1));
 }
 
 /// The subtitles' quads (the line and its shadow) moved whole, their middle straight ahead at the
@@ -266,5 +325,23 @@ struct Live {
     }
 };
 inline Live g_live;
+
+/// AzaharFrame kiu1s: the batch in force (AZAHARFRAME_KIU_HUD_EXACT=1; the emulation thread sets it
+/// each VBlank and reads it at each draw).
+struct LiveBatch {
+    std::atomic<uint32_t> vertex_base{0}, index_offset{0}, quads{0};
+
+    void Set(const Batch& b) {
+        vertex_base.store(b.vertex_base, std::memory_order_relaxed);
+        index_offset.store(b.index_offset, std::memory_order_relaxed);
+        quads.store(b.quads, std::memory_order_relaxed);
+    }
+    Batch Get() const {
+        return {vertex_base.load(std::memory_order_relaxed),
+                index_offset.load(std::memory_order_relaxed),
+                quads.load(std::memory_order_relaxed)};
+    }
+};
+inline LiveBatch g_batch;
 
 } // namespace VideoCore::KiuHud

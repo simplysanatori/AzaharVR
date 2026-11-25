@@ -121,7 +121,8 @@ FakeMemory Game() {
 constexpr uint32_t kAll = Bit(Group::NoCull) | Bit(Group::BulletKeep) | Bit(Group::Eye) |
                           Bit(Group::Shot) | Bit(Group::EnemyKeepTimed) | Bit(Group::GroupKeep) |
                           Bit(Group::NoFollow) | Bit(Group::AimHold) | Bit(Group::AimBox) |
-                          Bit(Group::PlayerShadow) | Bit(Group::WideCamera);
+                          Bit(Group::PlayerShadow) | Bit(Group::WideCamera) |
+                          Bit(Group::TalkTop);
 constexpr std::size_t kAllWords = kPatches.size() - 1;
 
 bool SiteIs(const FakeMemory& m, Group g, bool patched) {
@@ -1550,7 +1551,7 @@ TEST_CASE("Kid Icarus hooks: USA Rev 1's tables are the European ones relocated"
             ++branches_moved;
         }
     }
-    CHECK(branches_moved == 3);
+    CHECK(branches_moved == 4);
     for (std::size_t i = 0; i < KT::kCodeCheck.size(); ++i) {
         CHECK(KT::kCodeCheckUsaRev1[i].word == KT::kCodeCheck[i].word);
     }

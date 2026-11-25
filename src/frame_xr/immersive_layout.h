@@ -1492,6 +1492,7 @@ struct ScreenState {
     bool bottom_focused = false; ///< the bottom screen is the screen in focus
     bool menu_open = false;     ///< the in-game menu shows
     bool cutscene = false;      ///< AzaharFrame kiu140: Angel's Aim's game plays a cutscene
+    bool game_menu = false;     ///< AzaharFrame kiu1s: Angel's Aim's game is in one of its menus
     bool view_valid = false;    ///< the head pose is known
 };
 
@@ -1503,7 +1504,8 @@ struct ScreenDecision {
 /// The bottom screen starts hidden with "Hide Bottom Screen" or any immersive mode; the bumper
 /// chord flips it; it always shows while in focus. Immersive mode pauses (modes 2 and 3) while
 /// the bottom screen shows or the in-game menu is open, and (all modes) while the bottom screen
-/// is in focus. A hidden bottom screen is never drawn.
+/// is in focus. A hidden bottom screen is never drawn. AzaharFrame kiu1s: in one of Kid Icarus's
+/// menus (modes 2 and 3) both screens are shown, whatever was chosen for the bottom one.
 ScreenDecision Decide(const ScreenState& s);
 
 // ---- The grip gesture ----

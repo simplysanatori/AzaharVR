@@ -182,8 +182,11 @@ enum class Group : uint8_t {
     /// the game's own frame is as wide as the view in first person; the game's zooms do nothing
     /// (a stub).
     WideCamera,
+    /// AzaharFrame kiu1s: AZAHARFRAME_KIU_TALK_TOP: the talk's words are drawn on the top screen
+    /// too when the game puts them on the bottom one (its own drawing for Subtitles: Upper).
+    TalkTop,
 };
-inline constexpr std::size_t kGroupCount = 12;
+inline constexpr std::size_t kGroupCount = 13;
 
 constexpr uint32_t Bit(Group g) {
     return 1u << static_cast<uint32_t>(g);
@@ -218,6 +221,8 @@ inline const char* GroupName(Group g) {
         return "player shadow";
     case Group::WideCamera:
         return "wide camera";
+    case Group::TalkTop:
+        return "talk on top";
     }
     return "?";
 }
@@ -229,7 +234,7 @@ struct Patch {
     uint32_t original; ///< the game's word: anything else there and the group stays out
     uint32_t patched;
 };
-inline constexpr std::array<Patch, 14> kPatches{{
+inline constexpr std::array<Patch, 15> kPatches{{
     // and r0, r1, #0xFF (the top of the sphere-against-six-planes loop) -> b 0x77DC4C, the
     // function's own "wholly inside" exit (the same stack: sub sp, #0xC before, add after).
     {Group::NoCull, kSiteSceneCull, 0xE20100FF, B(kSiteSceneCull, kSceneCullInside)},
@@ -276,6 +281,10 @@ inline constexpr std::array<Patch, 14> kPatches{{
     // setter: r0 the node, s0 the angle) -> b fov_stub, which for the mailbox's node makes the
     // angle and shape the mailbox's and otherwise runs the vldr and goes on.
     {Group::WideCamera, kSiteNodeFov, 0xEDD00A0F, B(kSiteNodeFov, kFovStub)},
+    // AzaharFrame kiu1s. bne 0x60D834 (the top screen's battle pass: the message is the bottom
+    // screen's, skip it) -> mov r0, r0: drawn with the game's own place for the top screen (what
+    // Subtitles: Upper does). Only r0 to r3 are set after it, before they are read.
+    {Group::TalkTop, 0x60D804, 0x1A00000A, kNop},
 }};
 
 /// Words a group relies on without changing them (where it jumps to, what the stub assumes of the
@@ -285,7 +294,7 @@ struct Context {
     uint32_t addr;
     uint32_t word;
 };
-inline constexpr std::array<Context, 75> kContext{{
+inline constexpr std::array<Context, 91> kContext{{
     {Group::NoCull, 0x77DB24, 0xE24DD00C},   // sub sp, sp, #0xC (the frame the exit undoes)
     {Group::NoCull, 0x77DC4C, 0xE1C401D8},   // ldrd r0, r1, [r4, #0x18]
     {Group::NoCull, 0x77DC50, 0xE28DD00C},   // add sp, sp, #0xC
@@ -381,6 +390,23 @@ inline constexpr std::array<Context, 75> kContext{{
     {Group::WideCamera, 0x45DFF4, 0xED841A10},     // vstr s2, [r4, #0x40] (the shape)
     {Group::WideCamera, 0xB4FB38, 0xED910A04},     // vldr s0, [r1, #0x10] (the angle)
     {Group::WideCamera, 0xB4FB40, 0xED919A05},     // vldr s18, [r1, #0x14] (the shape)
+    // AzaharFrame kiu1s: the message, its tests and the call after the site.
+    {Group::TalkTop, 0x60D7D8, 0xE2845A03}, // add r5, r4, #0x3000
+    {Group::TalkTop, 0x60D7DC, 0xE2855F49}, // add r5, r5, #0x124 (the message)
+    {Group::TalkTop, 0x60D7E0, 0xE5D50000}, // ldrb r0, [r5] (shown)
+    {Group::TalkTop, 0x60D7F0, 0x15950004}, // ldrne r0, [r5, #4] (its line)
+    {Group::TalkTop, 0x60D7F8, 0x0A00000D}, // beq 0x60D834 (none)
+    {Group::TalkTop, 0x60D7FC, 0xE5D50003}, // ldrb r0, [r5, #3] (its screen)
+    {Group::TalkTop, 0x60D800, 0xE3500000}, // cmp r0, #0
+    {Group::TalkTop, 0x60D808, 0xE1A00008}, // mov r0, r8
+    {Group::TalkTop, 0x60D81C, 0xE1A00007}, // mov r0, r7
+    {Group::TalkTop, 0x60D828, 0xE1A01004}, // mov r1, r4 (the 2D context)
+    {Group::TalkTop, 0x60D82C, 0xE1A00005}, // mov r0, r5
+    {Group::TalkTop, 0x60D830, 0xEB0F713D}, // bl 0x9E9D2C (the line, the top's place)
+    {Group::TalkTop, 0x60D834, 0xE594003C}, // ldr r0, [r4, #0x3C]
+    {Group::TalkTop, 0x9E9D2C, 0xE92D41F0}, // push {r4-r8, lr}
+    {Group::TalkTop, 0x9E9D54, 0xE3A00014}, // mov r0, #20 (the line's texture)
+    {Group::TalkTop, 0x9E9D8C, 0xEE318A81}, // vadd.f32 s16, s3, s2 (its place)
 }};
 
 // ---- USA Rev 1 (AzaharFrame kiuusa; KIU_HOOKS.md, "The builds") ----
@@ -418,7 +444,7 @@ inline constexpr std::array<uint32_t, Stubs::kImage.size()> kImageUsaRev1 =
     ImageFor(kStubTargetsUsaRev1);
 
 /// kPatches' rows, in order.
-inline constexpr std::array<Patch, 14> kPatchesUsaRev1{{
+inline constexpr std::array<Patch, 15> kPatchesUsaRev1{{
     {Group::NoCull, 0x77D9AC, 0xE20100FF, B(0x77D9AC, 0x77DAB4)},
     {Group::NoCull, 0x7730FC, 0xE1A01004, B(0x7730FC, 0x7730E8)},
     {Group::BulletKeep, 0x41FE84, 0xEB0331B9, kMovR0One}, // bl 0x4EC570
@@ -433,9 +459,10 @@ inline constexpr std::array<Patch, 14> kPatchesUsaRev1{{
     {Group::AimBox, 0x6D1534, 0x0A00001F, B(0x6D1534, 0x6D15B8)},
     {Group::PlayerShadow, 0x57AF84, 0xE92D4030, B(0x57AF84, kShadowStub)},
     {Group::WideCamera, 0x45DFB4, 0xEDD00A0F, B(0x45DFB4, kFovStub)},
+    {Group::TalkTop, 0x60D6B8, 0x1A00000A, kNop},
 }};
 /// kContext's rows, in order (the same instructions; see kContext for what each is).
-inline constexpr std::array<Context, 75> kContextUsaRev1{{
+inline constexpr std::array<Context, 91> kContextUsaRev1{{
     {Group::NoCull, 0x77D98C, 0xE24DD00C},
     {Group::NoCull, 0x77DAB4, 0xE1C401D8},
     {Group::NoCull, 0x77DAB8, 0xE28DD00C},
@@ -511,6 +538,22 @@ inline constexpr std::array<Context, 75> kContextUsaRev1{{
     {Group::WideCamera, 0x45DF5C, 0xED841A10},
     {Group::WideCamera, 0xB4F8B8, 0xED910A04},
     {Group::WideCamera, 0xB4F8C0, 0xED919A05},
+    {Group::TalkTop, 0x60D68C, 0xE2845A03},
+    {Group::TalkTop, 0x60D690, 0xE2855F49},
+    {Group::TalkTop, 0x60D694, 0xE5D50000},
+    {Group::TalkTop, 0x60D6A4, 0x15950004},
+    {Group::TalkTop, 0x60D6AC, 0x0A00000D},
+    {Group::TalkTop, 0x60D6B0, 0xE5D50003},
+    {Group::TalkTop, 0x60D6B4, 0xE3500000},
+    {Group::TalkTop, 0x60D6BC, 0xE1A00008},
+    {Group::TalkTop, 0x60D6D0, 0xE1A00007},
+    {Group::TalkTop, 0x60D6DC, 0xE1A01004},
+    {Group::TalkTop, 0x60D6E0, 0xE1A00005},
+    {Group::TalkTop, 0x60D6E4, 0xEB0F712A},
+    {Group::TalkTop, 0x60D6E8, 0xE594003C},
+    {Group::TalkTop, 0x9E9B94, 0xE92D41F0},
+    {Group::TalkTop, 0x9E9BBC, 0xE3A00014},
+    {Group::TalkTop, 0x9E9BF4, 0xEE318A81},
 }};
 // The game's own words, from the encoders (the USA Rev 1 places).
 static_assert(Bl(0x504314, kStubTargetsUsaRev1.spawn) == 0xEBFE04A1);
@@ -528,8 +571,8 @@ static_assert(kStubTargetsUsaRev1.sink_continue == 0x633F50 + 4 &&
 /// One build's code tables (its addresses in the data segments: KiuTurn::Build).
 struct Code {
     const KiuTurn::Build* build;
-    const std::array<Patch, 14>* patches;
-    const std::array<Context, 75>* context;
+    const std::array<Patch, 15>* patches;
+    const std::array<Context, 91>* context;
     const std::array<uint32_t, Stubs::kImage.size()>* image;
 };
 inline constexpr Code kCodeEur{&KiuTurn::kBuildEur, &kPatches, &kContext, &Stubs::kImage};
