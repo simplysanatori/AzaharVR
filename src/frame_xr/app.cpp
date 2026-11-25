@@ -35,6 +35,7 @@
 #include "common/settings.h" // AzaharFrame vrqol: Background
 #include "common/stall_telemetry.h"
 #include "common/thread.h"
+#include "core/file_sys/kiu_60fps.h" // AzaharFrame kiuhs3a
 #include "frame_xr/kiu_first_person.h" // AzaharFrame kiuview
 #include "frame_xr/auto_shape.h" // AzaharFrame fixes7
 #include "frame_xr/controls.h"
@@ -585,6 +586,10 @@ void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
     dr_second.screen_factor =
         bfi_second.screen_n ? bfi_second.screen_sum / bfi_second.screen_n : 0.0;
     dr_second.bfi_asked = frames > 0 && bfi_second.asked * 2 >= frames;
+    // AzaharFrame kiuhs3a: its floor (g_run is Kid Icarus's, as its last run had it).
+    dr_second.sixty_fps = FileSys::Kiu60::BuildFor(GameTitleId()) != nullptr &&
+                          FileSys::Kiu60::g_run.load(std::memory_order_relaxed) ==
+                              FileSys::Kiu60::Run::At60;
     // AzaharFrame bfidr: the perf line's window, from the values taken above.
     const bool flashed = dr_second.bfi;
     const uint32_t late_lit = bfi_second.late_lit;
