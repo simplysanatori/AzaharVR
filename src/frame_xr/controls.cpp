@@ -1437,6 +1437,31 @@ void VrUi::CycleScreenLayout() {
     }
 }
 
+void VrUi::SwitchCamera(int view) {
+    if (GameTitleId() == 0 || !Kiu::FirstPerson::On()) {
+        return; // stopped meanwhile: the settings are the global ones again
+    }
+    const auto apply = [](Settings::SwitchableSetting<bool>& s, bool value) {
+        s.SetGlobal(false);
+        s.SetValue(value);
+    };
+    apply(Settings::values.vr_kiu_over_shoulder, Kiu::FirstPerson::ViewOverShoulder(view));
+    apply(Settings::values.vr_kiu_game_camera, Kiu::FirstPerson::ViewGameCamera(view));
+    const std::string name = Menu::OptionsFor(Menu::Id::KiuOverShoulder)[static_cast<size_t>(view)];
+    ShowToastText(Menu::LabelFor(Menu::Id::KiuOverShoulder) + ": " + name);
+    LOG_INFO(Frontend, "xr: Angel's Aim: right stick click: {}", name);
+    // Its file is written by the Qt side, as after the menu's row.
+    MenuRequest r;
+    r.command = MenuCommand::SetSetting;
+    r.setting = MenuSetting::KiuOverShoulder;
+    r.value = view;
+    r.per_game = true;
+    std::scoped_lock lock{hooks_mutex};
+    if (hooks.menu_request) {
+        hooks.menu_request(r);
+    }
+}
+
 void VrUi::StepScreenCurve(int dir) {
     if (!cylinder_ok) {
         ShowToastText("Screen Curve: Not Available", ToastTime::Long);
@@ -1496,6 +1521,9 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
         Immersive::SetBottomFocused(false);
     }
     WatchPlacement(info.screens_live); // AzaharFrame move
+    if (camera_switch.Due(info.display_time)) { // AzaharFrame kiucam
+        SwitchCamera(camera_switch.View());
+    }
     if (Immersive::TakeIpdSaved()) {   // AzaharFrame ipd
         SaveVrSettingSoon();
     }
@@ -2644,6 +2672,21 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         } else if (cmd.swap_screens && shown.screens_fixed && !screen_view.bottom_focus()) {
             // AzaharFrame kiu1s: the menu panel's large screen is the one to touch: no swap.
             LOG_INFO(Frontend, "xr: no swap on the game's menu panel");
+        } else if (cmd.swap_screens &&
+                   Kiu::CameraTap::Switches(
+                       {.first_person = Kiu::FirstPerson::On(),
+                        .battle = Kiu::FirstPerson::Battle(),
+                        .cutscene = Kiu::FirstPerson::Cutscene(),
+                        .paused = Kiu::CameraTap::g_ui.paused.load(std::memory_order_relaxed),
+                        .game_menu = Kiu::CameraTap::g_ui.menu.load(std::memory_order_relaxed),
+                        .swapped = screen_view.bottom_focus(),
+                        .setting = Settings::values.vr_kiu_stick_click.GetValue()})) {
+            // AzaharFrame kiucam: Angel's Aim, in a battle.
+            const auto& v = Settings::values;
+            camera_switch.Begin(Kiu::CameraTap::NextView(Kiu::FirstPerson::ViewFor(
+                                    v.vr_kiu_over_shoulder.GetValue(),
+                                    v.vr_kiu_game_camera.GetValue())),
+                                info.display_time, in_projection);
         } else if (cmd.swap_screens) {
             effect = screen_view.Swap(managed); // right stick click, tap
             LOG_INFO(Frontend, "xr: {} screen in focus",

@@ -23,6 +23,7 @@
 #include "frame_xr/immersive_layout.h" // 1.2.0 fix lane B: Layout::ScaleChord
 #include "frame_xr/input/actions.h"
 #include "frame_xr/input/hand_joints.h"
+#include "frame_xr/kiu_camera_tap.h" // AzaharFrame kiucam
 #include "frame_xr/kiu_first_person.h" // AzaharFrame kiupanel: Hand
 #include "frame_xr/input/chord_latch.h"
 #include "frame_xr/input/flat_vr_hold.h" // AzaharFrame flat
@@ -103,6 +104,11 @@ public:
     /// AzaharFrame projscreen (vis/proj_screen.h), app.cpp: before Frame; after the screens.
     void SetScreensInProjection(bool on, float scale) {
         visuals.SetScreensInProjection(on, scale);
+        in_projection = on; // AzaharFrame kiucam
+    }
+    /// AzaharFrame kiucam, app.cpp: the fade round a camera switch in Angel's Aim, 1 to 0.
+    float CameraBrightness(int64_t display_time) const {
+        return camera_switch.Brightness(display_time);
     }
     Vis::ProjLayer ProjectionScreens(Runtime& runtime, const Vis::ProjScreens& screens) {
         return visuals.ProjectionScreens(runtime, screens);
@@ -181,6 +187,9 @@ private:
     /// Buttons held as the in-game menu closed stay away from the game until let go.
     void FilterAfterMenu(Input::InputFrame& in);
     void ResetPlacement(Runtime& runtime);
+    /// AzaharFrame kiucam: Angel's Aim's Camera (FirstPerson::ViewFor's number) as the menu's row
+    /// sets it, for the game on view.
+    void SwitchCamera(int view);
     /// AzaharFrame curve: grip + D-pad up (+1) or down (-1) on the normal screens.
     void StepScreenCurve(int dir);
     /// AzaharFrame layout: the next Screen Layout (left stick click held 1 s), with its toast.
@@ -215,6 +224,8 @@ private:
 
     Input::Actions actions;
     Input::InputBridge bridge;
+    Kiu::CameraTap::Switch camera_switch; ///< AzaharFrame kiucam, XR thread only
+    bool in_projection = false;           ///< the top screen goes to the projection layer
     Input::ScreenView screen_view; ///< AzaharFrame screenswap: focus and hiding, XR thread only
     /// AzaharFrame vrsize: grip + D-pad turns the held screen a step (XR thread only).
     Input::ScreenRig::DpadNudger nudger;

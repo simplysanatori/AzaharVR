@@ -22,6 +22,7 @@
 #include "frame_xr/input/kiu_hooks.h"
 #include "frame_xr/input/kiu_model.h" // AzaharFrame kiu133
 #include "frame_xr/input/kiu_room.h" // AzaharFrame kiuvr
+#include "frame_xr/kiu_camera_tap.h" // AzaharFrame kiucam
 #include "frame_xr/kiu_first_person.h"
 #include "frame_xr/kiu_hooks.h"
 #include "frame_xr/kiu_pit_opacity.h" // AzaharFrame kiu133
@@ -478,6 +479,7 @@ void UiQuiet(State& s);
 void UiOff(State& s) {
     s.ui_code = -1;
     s.ui_weapon_menu = {};
+    Kiu::CameraTap::SetGameUi(false, false); // AzaharFrame kiucam
     Kiu::FirstPerson::SetWeaponHidden(false);
     UiQuiet(s);
 }
@@ -512,8 +514,12 @@ void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
     {
         const int raw =
             s.ui_code != 0 ? Ui::Menu(mem, usa ? Ui::kMenuUsaRev1 : Ui::kMenuEur) : Ui::kNoMenu;
-        const bool hidden =
-            Kiu::FirstPerson::WeaponHiddenFor(s.ui_weapon_menu.Update(raw), battle);
+        const int steady = s.ui_weapon_menu.Update(raw);
+        Kiu::CameraTap::SetGameUi( // AzaharFrame kiucam
+            s.ui_code != 0 && battle &&
+                Ui::Read(mem, usa ? Ui::kMenuUsaRev1 : Ui::kMenuEur).paused,
+            steady != Ui::kNoMenu);
+        const bool hidden = Kiu::FirstPerson::WeaponHiddenFor(steady, battle);
         if (hidden != Kiu::FirstPerson::WeaponHidden()) {
             LOG_INFO(Frontend, "xr: Kid Icarus hooks: the weapon in the hand {}",
                      hidden ? "hidden (a menu of the game)" : "shown again");
