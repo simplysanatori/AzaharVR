@@ -78,6 +78,8 @@ struct Capabilities {
     bool has_alt_cheats = false;
     bool has_flat_mode = true;
     bool has_bfi = true;
+    bool has_internal_resolution = true;
+    bool has_texture_filter = true;
     bool has_dynamic_resolution = true;
     bool has_render_margin = true;
     bool has_solar_sensor = false;
@@ -154,6 +156,8 @@ struct Capabilities {
         c.has_3ds_cheats = false;
         c.has_alt_cheats = true;
         c.has_bfi = false;
+        c.has_internal_resolution = false;
+        c.has_texture_filter = false;
         c.has_dynamic_resolution = false;
         c.has_render_margin = false;
         c.has_mic_blow = true;
@@ -172,6 +176,26 @@ struct Capabilities {
         return c;
     }
 };
+
+/// A screen in the console's own pixels, upright (the 3DS's Primary Screen).
+struct ScreenPixels {
+    int width = 0;
+    int height = 0;
+};
+
+constexpr ScreenPixels OwnPixels(CoreKind kind) {
+    switch (kind) {
+    case CoreKind::GBA:
+        return {240, 160};
+    case CoreKind::GB:
+        return {160, 144};
+    case CoreKind::NDS:
+    case CoreKind::DSi:
+        return {256, 192};
+    default:
+        return {400, 240};
+    }
+}
 
 constexpr bool IsDs(CoreKind kind) {
     return kind == CoreKind::NDS || kind == CoreKind::DSi;

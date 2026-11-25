@@ -17,6 +17,7 @@
 #include "core/frontend/alt_screens.h"
 #include "core/frontend/emu_window.h"
 #include "video_core/host_shaders/vulkan_present_vert.h"
+#include "video_core/renderer_vulkan/alt_picture_filter.h"
 #include "video_core/renderer_vulkan/alt_pipeline.h"
 #include "video_core/renderer_vulkan/alt_present.h"
 #include "video_core/renderer_vulkan/alt_window_target.h"
@@ -30,6 +31,7 @@
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
 #include "video_core/renderer_vulkan/vk_xr_target.h"
 #include "video_core/vulkan_hooks.h"
+#include "video_core/xr_screen_cover.h"
 
 #include <vk_mem_alloc.h>
 
@@ -69,12 +71,27 @@ vk::Extent2D TargetSwapchainExtent(u32 width, u32 height) {
     return vk::Extent2D{safe_w * scale, safe_h * scale};
 }
 
-struct ScreenTexture {
-    u32 width = 0;
-    u32 height = 0;
+struct Image2D {
     vk::Image image{};
     vk::ImageView view{};
     VmaAllocation allocation{};
+    vk::Framebuffer framebuffer{}; ///< made when a texture filter first draws into it
+};
+
+struct ScreenTexture {
+    u32 width = 0; ///< the picture's own size
+    u32 height = 0;
+    Image2D picture{};
+    Image2D scaled{}; ///< the picture `scale` times as big, if that is drawn
+    u32 scale = 1;
+    vk::ImageView view{}; ///< what is shown: either's
+};
+
+/// A picture's scale, for one screen.
+struct PictureScale {
+    u32 scale = 0;        ///< of what the headset's image or the window's texture is (0: none yet)
+    bool texture = false; ///< the picture's texture is scaled (else the headset's image alone)
+    bool filtered = false; ///< by Texture Filter
 };
 
 } // namespace
@@ -88,6 +105,7 @@ struct AltXrRenderer::Impl {
     std::unique_ptr<StreamBuffer> upload_buffer;
     std::unique_ptr<DescriptorUpdateQueue> update_queue;
     std::unique_ptr<DescriptorHeap> present_heap;
+    std::unique_ptr<AltPictureFilter> picture_filter; ///< made with the first filtered picture
     vk::UniquePipelineLayout present_pipeline_layout;
     vk::ShaderModule present_vertex_shader{};
     std::array<vk::Sampler, 2> samplers{};
@@ -107,6 +125,11 @@ struct AltXrRenderer::Impl {
     u64 previous_frame_tick = 0;
     bool presented_vr = false; ///< the last Present's output
     bool ready = false;
+    bool sharp_pixels = false;
+    u32 presented_setting = 0; ///< the last Present's Internal Resolution
+    Settings::TextureFilter presented_filter{}; ///< and Texture Filter
+    PictureScale primary_scale{};
+    PictureScale secondary_scale{};
 
     bool XrShowsScreens() const {
         return sink && sink->IsActive() && UsesXrDevice(*instance);
@@ -116,7 +139,9 @@ struct AltXrRenderer::Impl {
     /// that stops being sent keeps its last. `overlay`: the overlay is at kAltOverlaySlot, always
     /// smooth (its pixels are no multiple of the screen's).
     vk::DescriptorSet CommitScreens(vk::ImageView secondary_view, bool overlay) {
-        const vk::Sampler sampler = samplers[!Settings::values.filter_mode.GetValue()];
+        // Sharp pixels are drawn whole times in the headset, where no filter applies.
+        const vk::Sampler sampler =
+            samplers[(sharp_pixels && presented_vr) || !Settings::values.filter_mode.GetValue()];
         const vk::DescriptorSet set = present_heap->Commit();
         const std::array views = {primary_tex.view, primary_tex.view, secondary_view};
         for (u32 i = 0; i < views.size(); i++) {
@@ -177,26 +202,53 @@ struct AltXrRenderer::Impl {
             tex = {};
             return;
         }
-        const vk::Device device = instance->GetDevice();
-        if (tex.view) {
-            device.destroyImageView(tex.view);
-        }
-        if (tex.image) {
-            vmaDestroyImage(instance->GetAllocator(), static_cast<VkImage>(tex.image),
-                            tex.allocation);
-        }
+        DestroyImage(tex.picture);
+        DestroyImage(tex.scaled);
         tex = {};
     }
 
-    bool EnsureTexture(ScreenTexture& tex, u32 width, u32 height) {
-        if (tex.image && tex.width == width && tex.height == height) {
+    void DestroyImage(Image2D& img) {
+        if (img.framebuffer) {
+            instance->GetDevice().destroyFramebuffer(img.framebuffer);
+        }
+        if (img.view) {
+            instance->GetDevice().destroyImageView(img.view);
+        }
+        if (img.image) {
+            vmaDestroyImage(instance->GetAllocator(), static_cast<VkImage>(img.image),
+                            img.allocation);
+        }
+        img = {};
+    }
+
+    /// The picture's texture, and one `scale` times as big if that is more than once.
+    bool EnsureTexture(ScreenTexture& tex, u32 width, u32 height, u32 scale) {
+        const bool same = tex.picture.image && tex.width == width && tex.height == height;
+        if (same && tex.scale == scale) {
             return true;
         }
-        if (tex.image && scheduler) {
+        if (tex.picture.image && scheduler) {
             scheduler->Finish();
         }
-        DestroyTexture(tex);
+        if (!same) {
+            DestroyTexture(tex);
+            if (!CreateImage(tex.picture, width, height)) {
+                return false;
+            }
+            tex.width = width;
+            tex.height = height;
+        }
+        DestroyImage(tex.scaled);
+        tex.scale = scale;
+        tex.view = tex.picture.view;
+        if (scale > 1 && CreateImage(tex.scaled, width * scale, height * scale, true)) {
+            tex.view = tex.scaled.view;
+        }
+        return true;
+    }
 
+    /// `target`: a texture filter may draw into it.
+    bool CreateImage(Image2D& img, u32 width, u32 height, bool target = false) {
         const vk::ImageCreateInfo image_info = {
             .imageType = vk::ImageType::e2D,
             .format = vk::Format::eR8G8B8A8Unorm,
@@ -205,7 +257,10 @@ struct AltXrRenderer::Impl {
             .arrayLayers = 1,
             .samples = vk::SampleCountFlagBits::e1,
             .tiling = vk::ImageTiling::eOptimal,
-            .usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+            .usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc |
+                     vk::ImageUsageFlagBits::eSampled |
+                     (target ? vk::ImageUsageFlagBits::eColorAttachment
+                             : vk::ImageUsageFlags{}),
             .initialLayout = vk::ImageLayout::eUndefined,
         };
         const VmaAllocationCreateInfo alloc_info = {
@@ -215,16 +270,16 @@ struct AltXrRenderer::Impl {
         VkImage raw_image{};
         const VkImageCreateInfo raw_info = static_cast<VkImageCreateInfo>(image_info);
         const VkResult res = vmaCreateImage(instance->GetAllocator(), &raw_info, &alloc_info,
-                                            &raw_image, &tex.allocation, nullptr);
+                                            &raw_image, &img.allocation, nullptr);
         if (res != VK_SUCCESS) {
             LOG_ERROR(Render_Vulkan, "alt_xr: failed to allocate {}x{} screen texture ({})", width,
                       height, static_cast<int>(res));
-            tex.allocation = {};
+            img.allocation = {};
             return false;
         }
-        tex.image = vk::Image{raw_image};
-        tex.view = instance->GetDevice().createImageView({
-            .image = tex.image,
+        img.image = vk::Image{raw_image};
+        img.view = instance->GetDevice().createImageView({
+            .image = img.image,
             .viewType = vk::ImageViewType::e2D,
             .format = vk::Format::eR8G8B8A8Unorm,
             .subresourceRange{
@@ -235,14 +290,165 @@ struct AltXrRenderer::Impl {
                 .layerCount = 1,
             },
         });
-        tex.width = width;
-        tex.height = height;
         return true;
+    }
+
+    /// The whole picture into its bigger image through Texture Filter. False: not drawn.
+    bool DrawFiltered(ScreenTexture& tex) {
+        const PictureScale& pick = &tex == &secondary_tex ? secondary_scale : primary_scale;
+        if (!pick.filtered) {
+            return false;
+        }
+        try {
+            if (!picture_filter) {
+                picture_filter =
+                    std::make_unique<AltPictureFilter>(*instance, *scheduler, *update_queue);
+            }
+            const u32 width = tex.width * tex.scale;
+            const u32 height = tex.height * tex.scale;
+            if (!tex.scaled.framebuffer) {
+                tex.scaled.framebuffer =
+                    picture_filter->MakeFramebuffer(tex.scaled.view, width, height);
+            }
+            return picture_filter->Draw(presented_filter, tex.picture.view,
+                                        tex.scaled.framebuffer, width, height, tex.scale);
+        } catch (const std::exception& e) {
+            LOG_ERROR(Render_Vulkan, "alt_xr: texture filter not drawn: {}", e.what());
+            return false;
+        }
+    }
+
+    /// The whole picture into its bigger image, each pixel a block.
+    void DrawScaled(const ScreenTexture& tex) {
+        scheduler->Record([src = tex.picture.image, dst = tex.scaled.image, w = tex.width,
+                           h = tex.height, scale = tex.scale](vk::CommandBuffer cmdbuf) {
+            const auto barrier = [](vk::Image image, vk::AccessFlags from, vk::AccessFlags to,
+                                    vk::ImageLayout before, vk::ImageLayout after) {
+                return vk::ImageMemoryBarrier{
+                    .srcAccessMask = from,
+                    .dstAccessMask = to,
+                    .oldLayout = before,
+                    .newLayout = after,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .image = image,
+                    .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
+                };
+            };
+            using Access = vk::AccessFlagBits;
+            using Layout = vk::ImageLayout;
+            using Stage = vk::PipelineStageFlagBits;
+            const std::array before = {
+                barrier(src, {}, Access::eTransferRead, Layout::eShaderReadOnlyOptimal,
+                        Layout::eTransferSrcOptimal),
+                barrier(dst, {}, Access::eTransferWrite, Layout::eUndefined,
+                        Layout::eTransferDstOptimal),
+            };
+            cmdbuf.pipelineBarrier(Stage::eFragmentShader, Stage::eTransfer, {}, {}, {}, before);
+            const vk::ImageSubresourceLayers layers{vk::ImageAspectFlagBits::eColor, 0, 0, 1};
+            const auto end = [w, h](u32 times) {
+                return vk::Offset3D{static_cast<s32>(w * times), static_cast<s32>(h * times), 1};
+            };
+            const vk::ImageBlit region = {
+                .srcSubresource = layers,
+                .srcOffsets = std::array{vk::Offset3D{}, end(1)},
+                .dstSubresource = layers,
+                .dstOffsets = std::array{vk::Offset3D{}, end(scale)},
+            };
+            cmdbuf.blitImage(src, Layout::eTransferSrcOptimal, dst, Layout::eTransferDstOptimal,
+                             region, vk::Filter::eNearest);
+            const std::array after = {
+                barrier(src, {}, Access::eShaderRead, Layout::eTransferSrcOptimal,
+                        Layout::eShaderReadOnlyOptimal),
+                barrier(dst, Access::eTransferWrite, Access::eShaderRead,
+                        Layout::eTransferDstOptimal, Layout::eShaderReadOnlyOptimal),
+            };
+            cmdbuf.pipelineBarrier(Stage::eTransfer, Stage::eFragmentShader, {}, {}, {}, after);
+        });
+    }
+
+    /// The scales of both screens for the output `presented_vr` says.
+    void PickScales(const AltScreenImage& primary, const AltScreenImage& secondary,
+                    bool has_overlay) {
+        presented_setting = Settings::values.resolution_factor.GetValue();
+        presented_filter = Settings::values.texture_filter.GetValue();
+        if (!sharp_pixels) {
+            return;
+        }
+        u32 setting = presented_setting;
+        if (has_overlay && setting > 0) {
+            setting = std::max(setting, kAltOverlayScale);
+        }
+        PickScale(primary_scale, setting, primary.width, primary.height, false);
+        if (secondary.HasPicture()) {
+            PickScale(secondary_scale, presented_setting, secondary.width, secondary.height, true);
+        }
+    }
+
+    void PickScale(PictureScale& pick, u32 setting, u32 width, u32 height, bool bottom) {
+        const float shown =
+            presented_vr ? kAltXrOversample *
+                               VideoCore::XrScreenCover::Get(bottom
+                                                                 ? VideoCore::XrScreen::Bottom
+                                                                 : VideoCore::XrScreen::TopLeft) /
+                               static_cast<float>(width)
+                         : ShownInWindows(width, height, bottom);
+        const u32 scale = AltPictureScale(setting, width, height, shown, pick.scale);
+        if (scale != pick.scale) {
+            LOG_INFO(Render_Vulkan,
+                     "alt_xr: the {} Screen's {}x{} picture at {}x (Internal Resolution {}, a pixel "
+                     "shown {:.2f} wide)",
+                     bottom ? "Secondary" : "Primary", width, height, scale, setting, shown);
+            pick.scale = scale;
+        }
+        // The window's scale is no whole number: it samples the scaled texture smoothly. A filter
+        // draws the scaled texture in the headset too.
+        pick.filtered = AltPictureFiltered(presented_filter, scale);
+        pick.texture = scale > 1 && (!presented_vr || pick.filtered);
+    }
+
+    /// Window pixels one of the picture's covers, the most of the places it is shown at.
+    float ShownInWindows(u32 width, u32 height, bool bottom) const {
+        float most = 0.0f;
+        const auto add = [&](const Common::Rectangle<u32>& rect) {
+            const u32 length = std::max(rect.GetWidth(), rect.GetHeight()); // either way up
+            most = std::max(most, static_cast<float>(length) /
+                                      static_cast<float>(std::max(width, height)));
+        };
+        for (const Frontend::EmuWindow* const w :
+             {window, secondary_target ? secondary_window : nullptr}) {
+            if (!w) {
+                continue;
+            }
+            const Layout::FramebufferLayout& layout = w->GetFramebufferLayout();
+            if (bottom ? layout.bottom_screen_enabled : layout.top_screen_enabled) {
+                add(bottom ? layout.bottom_screen : layout.top_screen);
+            }
+            if (layout.additional_screen_enabled && layout.additional_screen_is_bottom == bottom) {
+                add(layout.additional_screen);
+            }
+        }
+        return most;
+    }
+
+    /// Of a screen's (not the overlay's) texture.
+    u32 TextureScale(const ScreenTexture& tex) const {
+        const PictureScale& pick = &tex == &secondary_tex ? secondary_scale : primary_scale;
+        return sharp_pixels && pick.texture ? std::max(pick.scale, 1u) : 1;
+    }
+
+    /// The headset's image for a picture.
+    vk::Extent2D XrExtent(u32 width, u32 height, const PictureScale& pick) const {
+        if (!sharp_pixels) {
+            return TargetSwapchainExtent(width, height);
+        }
+        const u32 scale = std::max(pick.scale, 1u);
+        return vk::Extent2D{width * scale, height * scale};
     }
 
     /// `see_through`: with the picture's own alpha (RGBA), else opaque.
     bool UploadImage(ScreenTexture& tex, const AltScreenImage& img, bool see_through = false) {
-        if (!EnsureTexture(tex, img.width, img.height)) {
+        if (!EnsureTexture(tex, img.width, img.height, see_through ? 1 : TextureScale(tex))) {
             return false;
         }
         const u32 byte_size = img.width * img.height * sizeof(u32);
@@ -275,7 +481,7 @@ struct AltXrRenderer::Impl {
         upload_buffer->Commit(byte_size);
 
         const vk::Buffer src_buf = upload_buffer->Handle();
-        const vk::Image dst_image = tex.image;
+        const vk::Image dst_image = tex.picture.image;
         const u32 w = img.width;
         const u32 h = img.height;
         scheduler->Record([src_buf, buf_offset, dst_image, w, h](vk::CommandBuffer cmdbuf) {
@@ -324,6 +530,9 @@ struct AltXrRenderer::Impl {
             cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
                                    vk::PipelineStageFlagBits::eFragmentShader, {}, {}, {}, to_read);
         });
+        if (tex.scaled.image && !DrawFiltered(tex)) {
+            DrawScaled(tex);
+        }
         return true;
     }
 
@@ -458,6 +667,7 @@ struct AltXrRenderer::Impl {
         DestroyTexture(secondary_tex);
         DestroyTexture(overlay_tex);
         DestroyTexture(dummy_tex);
+        picture_filter.reset();
         if (instance) {
             const vk::Device device = instance->GetDevice();
             for (auto& sampler : samplers) {
@@ -486,6 +696,9 @@ struct AltXrRenderer::Impl {
         window = nullptr;
         secondary_window = nullptr;
         xr_target_generation = 0;
+        sharp_pixels = false;
+        primary_scale = {};
+        secondary_scale = {};
     }
 };
 
@@ -618,6 +831,11 @@ bool AltXrRenderer::NeedsPresent() const {
         return false;
     }
     const bool vr = impl->XrShowsScreens();
+    if (impl->sharp_pixels &&
+        (impl->presented_setting != Settings::values.resolution_factor.GetValue() ||
+         impl->presented_filter != Settings::values.texture_filter.GetValue())) {
+        return true;
+    }
     return vr != impl->presented_vr || (!vr && impl->window_target && impl->window_target->Resized());
 }
 
@@ -635,6 +853,7 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
             std::chrono::steady_clock::now() - impl->window_presented < kSkippableInterval) {
             return true;
         }
+        impl->PickScales(primary, secondary, overlay.HasPicture() || impl->overlay_tex.view);
         if (!impl->UploadImage(impl->primary_tex, primary) ||
             (secondary.pixels && !impl->UploadImage(impl->secondary_tex, secondary))) {
             return false;
@@ -654,17 +873,18 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
             *impl->present_pipeline_layout);
     }
 
+    impl->PickScales(primary, secondary, overlay.HasPicture() || impl->overlay_tex.view);
     const bool has_secondary =
         secondary.pixels != nullptr && secondary.width > 0 && secondary.height > 0;
     vk::Extent2D bottom_size{kDummySwapchainExtent, kDummySwapchainExtent};
     if (has_secondary) {
-        bottom_size = TargetSwapchainExtent(secondary.width, secondary.height);
-    } else if (impl->secondary_tex.image) { // hidden (the GBA map in a menu): its size stays
-        bottom_size =
-            TargetSwapchainExtent(impl->secondary_tex.width, impl->secondary_tex.height);
+        bottom_size = impl->XrExtent(secondary.width, secondary.height, impl->secondary_scale);
+    } else if (impl->secondary_tex.view) { // hidden (the GBA map in a menu): its size stays
+        bottom_size = impl->XrExtent(impl->secondary_tex.width, impl->secondary_tex.height,
+                                     impl->secondary_scale);
     }
     const std::array<vk::Extent2D, XrPresentTarget::kScreens> sizes = {
-        TargetSwapchainExtent(primary.width, primary.height),
+        impl->XrExtent(primary.width, primary.height, impl->primary_scale),
         vk::Extent2D{kDummySwapchainExtent, kDummySwapchainExtent},
         bottom_size,
     };
@@ -713,6 +933,12 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
     impl->xr_target->EndFrame(tick);
     impl->KeepWindowAlive();
     return true;
+}
+
+void AltXrRenderer::SetSharpPixels(bool on) {
+    if (impl) {
+        impl->sharp_pixels = on;
+    }
 }
 
 bool AltXrRenderer::IsReady() const {

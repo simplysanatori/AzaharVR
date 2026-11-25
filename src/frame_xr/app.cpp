@@ -58,6 +58,7 @@
 #include "frame_xr/xr_loader.h"
 #include "video_core/vr_content_repeat.h" // AzaharFrame bfikit
 #include "video_core/vr_dynamic_resolution.h" // AzaharFrame menuux
+#include "video_core/xr_screen_cover.h"
 #include "input_common/main.h" // AzaharFrame flat: SDL pump count
 
 namespace FrameXr {
@@ -1223,10 +1224,7 @@ void Runtime::FrameLoop() {
             const Immersive::ScreenLayers shown = Immersive::Screens(local_space, view_space, place);
             // AzaharFrame kiu131: Bottom Screen Opacity, for the bottom screen's next pictures.
             shader_alpha_bottom.store(shown.show_bottom ? shown.bottom_alpha : 1.0f);
-            // AzaharFrame bfidr: what the head-driven top screen can show (Dynamic Resolution's
-            // ceiling in the Full modes): its size over its distance from the left eye,
-            // against the eye's field of view and recommended image, averaged over the second.
-            if (shown.full_mode && shown.head_driven && shown.show_top) {
+            const auto ask_eye_pixels = [&] {
                 if (eye_px_w == 0) {
                     uint32_t n = 0;
                     XrViewConfigurationView v[2]{{XR_TYPE_VIEW_CONFIGURATION_VIEW},
@@ -1245,6 +1243,12 @@ void Runtime::FrameLoop() {
                         eye_px_h = 0;
                     }
                 }
+            };
+            // AzaharFrame bfidr: what the head-driven top screen can show (Dynamic Resolution's
+            // ceiling in the Full modes): its size over its distance from the left eye,
+            // against the eye's field of view and recommended image, averaged over the second.
+            if (shown.full_mode && shown.head_driven && shown.show_top) {
+                ask_eye_pixels();
                 const ViewPose vp = LatestViewPose();
                 const XrVector3f at = shown.top_pose[0].position;
                 const XrVector3f eye =
@@ -1418,6 +1422,20 @@ void Runtime::FrameLoop() {
             }
             const auto add_screen = [&](VideoCore::XrScreen s, XrSpace space, const XrPosef& pose,
                                         XrExtent2Df size, XrEyeVisibility eye, float curve) {
+                if (core_caps.kind != Common::AltCore::CoreKind::N3DS) {
+                    ask_eye_pixels();
+                    const ViewPose vp = LatestViewPose();
+                    const XrVector3f eye =
+                        space == view_space ? XrVector3f{0, 0, 0} : vp.eye[0].position;
+                    const XrFovf& fov = vp.fov[0];
+                    VideoCore::XrScreenCover::Note(
+                        s, VideoCore::XrScreenCover::Across(
+                               vp.views_valid ? size.width : 0.0f,
+                               std::hypot(pose.position.x - eye.x, pose.position.y - eye.y,
+                                          pose.position.z - eye.z),
+                               std::tan(fov.angleRight) - std::tan(fov.angleLeft),
+                               eye_px_h > 0 ? static_cast<float>(eye_px_w) : 0.0f));
+                }
                 // AzaharFrame doubling: a packed top screen is one swapchain, the left eye in
                 // the upper half and the right eye in the lower one (kXrPackedGap between).
                 const bool top = s != VideoCore::XrScreen::Bottom;

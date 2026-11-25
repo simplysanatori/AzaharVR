@@ -1278,6 +1278,19 @@ std::vector<int> SecondScreenHas(const CoreCaps& core) {
 }
 } // namespace
 
+std::vector<std::string> ResolutionOptions(const CoreCaps& core) {
+    if (Is3ds(core)) {
+        return OptionsFor(Id::InternalResolution);
+    }
+    const auto own = Common::AltCore::OwnPixels(core.kind);
+    std::vector<std::string> out;
+    for (int n = 1; n <= kMaxResolution; n++) {
+        out.push_back(std::to_string(n) + "x (" + std::to_string(own.width * n) + "x" +
+                      std::to_string(own.height * n) + ")");
+    }
+    return out;
+}
+
 std::vector<std::string> SecondScreenOptions(const CoreCaps& core) {
     const auto& all = OptionsFor(Id::SecondScreen);
     std::vector<std::string> out;
@@ -1779,6 +1792,9 @@ bool HasOptionTips(Id id) {
 std::string ExplainFor(Id id, const CoreCaps& core) {
     if (id == Id::FaceButtons && !Is3ds(core)) {
         return "How A, B, X and Y map to the game's buttons.";
+    }
+    if (id == Id::InternalResolution && !Is3ds(core)) { // GBA and Game Boy games
+        return "Higher is sharper.";
     }
     return ExplainFor(id);
 }
@@ -3802,7 +3818,10 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
             break;
         }
         case RowKind::MenuButton: {
-            const auto& opts = OptionsFor(r.id);
+            const std::vector<std::string> own_opts =
+                r.id == Id::InternalResolution ? ResolutionOptions(model.core)
+                                               : std::vector<std::string>();
+            const auto& opts = r.id == Id::InternalResolution ? own_opts : OptionsFor(r.id);
             const Rect mb{std::max(ctl.x0, ctl.x1 - 420.0f), ctl.y0, ctl.x1, ctl.y1};
             const std::size_t sel =
                 std::min(static_cast<std::size_t>(std::max(r.selected, 0)), opts.size() - 1);
@@ -3855,7 +3874,10 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
 void TabMenu::DrawOpenMenu(Kit& kit, const MenuModel& model, const MenuView& view,
                            const Rect& pane, const Rect& open_anchor, int open_selected) {
     if (view.open_menu != Id::None && open_anchor.W() > 0.0f) {
-        const std::vector<std::string>& opts = OptionsFor(view.open_menu);
+        const bool resolution = view.open_menu == Id::InternalResolution;
+        const std::vector<std::string> own_opts =
+            resolution ? ResolutionOptions(model.core) : std::vector<std::string>();
+        const std::vector<std::string>& opts = resolution ? own_opts : OptionsFor(view.open_menu);
         const float item = Kit::MenuItemHeight();
         const float h = item * static_cast<float>(opts.size()) + 16.0f;
         float y0 = open_anchor.y1 + 4.0f;
