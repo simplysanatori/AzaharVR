@@ -103,6 +103,7 @@ struct FrameInfo {
     XrSessionState state;
     bool should_render;
     bool screens_live;     ///< a game is producing images
+    bool game_on;          ///< a game runs, also while its screens are made again
 };
 
 /// Called on the XR thread once per display frame, after xrBeginFrame and the view

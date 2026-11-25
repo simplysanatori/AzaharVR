@@ -769,6 +769,9 @@ struct AltXrRenderer::Impl {
     void Shutdown() {
         ready = false;
         DropXrTarget();
+        if (sink) {
+            sink->SetScreensRemade(false);
+        }
         window_target.reset();
         secondary_target.reset();
         previous_frame_tick = 0;
@@ -1021,6 +1024,7 @@ bool AltXrRenderer::Present(const AltScreenImage& whole, const AltScreenImage& w
         (impl->xr_target_generation != sink->SwapchainGeneration() ||
          impl->xr_target_stereo != stereo ||
          (stereo && impl->xr_target->Packed() != sink->PackedTop()))) {
+        sink->SetScreensRemade(true);
         impl->DropXrTarget();
     }
     if (!impl->xr_target) {

@@ -32,6 +32,7 @@
 #include "frame_xr/instance_policy.h" // AzaharFrame flat2
 #include "frame_xr/pacing.h" // AzaharFrame pacing
 #include "frame_xr/perf_line.h" // AzaharFrame bfidr
+#include "frame_xr/screens_state.h"
 #include "frame_xr/vulkan_bridge.h"
 
 namespace FrameXr {
@@ -204,6 +205,7 @@ public:
     std::atomic<float> shader_alpha_bottom{1.0f};
     void SetQueueMutex(std::mutex* mutex) override;
     void SetScreensLive(bool live) override;
+    void SetScreensRemade(bool remade) override;
     void NoteLateRelease(VideoCore::XrScreen screen) override;
     void NoteEmuFrame() override;
     void NoteSpillShown() override;
@@ -237,7 +239,7 @@ public:
     // XR thread submits them (held across xrEndFrame).
     mutable std::mutex screens_mutex;
     std::array<ScreenChain, kScreens> screens;
-    std::atomic<bool> screens_live{false};
+    ScreensState screens_state;
     /// AzaharFrame flash3: per screen, the swapchain a new one replaced, kept with its last
     /// picture on view until the new one has one (screen_handover.h), and the refreshes it has
     /// been kept; under screens_mutex.

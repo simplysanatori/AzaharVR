@@ -204,7 +204,7 @@ private:
                       const Input::PanelQuad* held = nullptr, bool curve = true);
     /// AzaharFrame move: once a frame. The per-game placement at a game's start, and the changes
     /// of Detach Screens (Off links the second slot again) and of Screen Layout (re-places it).
-    void WatchPlacement(bool screens_live);
+    void WatchPlacement(bool game_on);
     /// AzaharFrame move: this game's placement into screen-placement.txt (or out of it).
     void SavePlacement(const char* why);
     void ErasePlacement();
