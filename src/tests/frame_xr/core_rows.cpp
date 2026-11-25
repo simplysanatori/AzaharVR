@@ -136,6 +136,21 @@ TEST_CASE("Core rows: the table for each other console", "[frame_xr][tabmenu]") 
         touch.has_save_import = false;
         CHECK(!RowApplies(Id::CoreHeader, touch));
     }
+    // A core that draws at a chosen resolution has the row, and Graphics with it.
+    for (CoreCaps own : OtherConsoles()) {
+        CHECK(!RowApplies(Id::InternalResolution, own));
+        CHECK(!RowApplies(Id::DynamicResolution, own));
+        own.has_internal_resolution = true;
+        CHECK(RowApplies(Id::InternalResolution, own));
+        CHECK(!RowApplies(Id::DynamicResolution, own));
+        CHECK(SectionShown(SettingsSection::Graphics, Game(own)));
+        own.has_dynamic_resolution = true;
+        CHECK(RowApplies(Id::DynamicResolution, own));
+        const auto drawn = Drawn(Game(own), SettingsView(SettingsSection::Graphics));
+        CHECK(drawn.contains(Id::InternalResolution));
+        CHECK(drawn.contains(Id::DynamicResolution));
+        CHECK(!drawn.contains(Id::TextureFilter));
+    }
     // Black Frame Insertion brings its rows and Graphics back.
     map.has_bfi = true;
     CHECK(RowApplies(Id::MotionClarityNormal, map));
