@@ -3,6 +3,8 @@
 // Refer to the LICENSE.txt file included.
 
 #include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <cstring>
 #include <iterator>
 #include "common/alignment.h"
@@ -382,16 +384,45 @@ bool RasterizerAccelerated::ReticleDraw() const {
            VideoCore::Immersive::ReticleScaled(regs.texturing.texture0.GetPhysicalAddress());
 }
 
-bool RasterizerAccelerated::HudDraw(bool* subtitle, bool* exact) const {
+namespace {
+/// AzaharFrame kiuhud: AZAHARFRAME_KIU_HUD_COST (kiu_view_tap.h).
+struct HudCost {
+    explicit HudCost(std::atomic<u64>& count)
+        : on{VideoCore::Immersive::g_hud_cost.load(std::memory_order_relaxed)} {
+        if (on) {
+            count.fetch_add(1, std::memory_order_relaxed);
+            from = std::chrono::steady_clock::now();
+        }
+    }
+    ~HudCost() {
+        if (on) {
+            VideoCore::Immersive::g_hud_cost_ns.fetch_add(
+                static_cast<u64>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                     std::chrono::steady_clock::now() - from)
+                                     .count()),
+                std::memory_order_relaxed);
+        }
+    }
+    bool on;
+    std::chrono::steady_clock::time_point from;
+};
+} // namespace
+
+VideoCore::KiuHud::As RasterizerAccelerated::HudDraw() const {
+    using VideoCore::KiuHud::As;
+    const HudCost cost{VideoCore::Immersive::g_hud_cost_asked};
     if (!VideoCore::KiuHud::g_live.on.load(std::memory_order_relaxed) || vr_immersive_mode < 2 ||
         regs.pipeline.use_gs != Pica::PipelineRegs::UseGS::No) {
-        return false;
+        return As::Not;
     }
     using F = Pica::FramebufferRegs::BlendFactor;
     const auto& om = regs.framebuffer.output_merger;
     VideoCore::KiuHud::Draw d;
     d.top_viewport = f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f == 240.0f &&
                      f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f == 400.0f;
+    if (!d.top_viewport) {
+        return As::Not;
+    }
     d.depth_test = om.depth_test_enable != 0;
     // The HUD's own two blends (over, and its bars masked by the picture's alpha); added light isn't.
     const F from = om.alpha_blending.factor_source_rgb, to = om.alpha_blending.factor_dest_rgb;
@@ -404,25 +435,119 @@ bool RasterizerAccelerated::HudDraw(bool* subtitle, bool* exact) const {
     d.width = regs.texturing.texture0.width;
     d.height = regs.texturing.texture0.height;
     d.format = static_cast<u32>(regs.texturing.texture0_format.Value());
-    if (subtitle) {
-        *subtitle = VideoCore::KiuHud::IsSubtitle(d);
-    }
     // The reticle is the hand's, not the HUD's.
     const u32 reticle = VideoCore::Immersive::g_reticle_texture.load(std::memory_order_relaxed);
-    const bool is_reticle = reticle != 0 && d.textured && d.texture == reticle;
-    // AzaharFrame kiu1s: in a battle whose 2D batch is known, its draws and no others.
+    // AzaharFrame kiu1s: a battle whose 2D batch is known: its draws are told exactly.
     const auto batch = VideoCore::KiuHud::g_batch.Get();
-    if (batch.quads != 0 && !VideoCore::KiuHud::g_live.page.load(std::memory_order_relaxed)) {
-        const bool in = d.top_viewport && regs.pipeline.index_array.format.Value() != 0 &&
-                        VideoCore::KiuHud::InBatch(
-                            batch, regs.pipeline.vertex_attributes.GetPhysicalBaseAddress(),
-                            regs.pipeline.index_array.offset, d.vertices);
-        if (exact) {
-            *exact = in;
-        }
-        return (in && !is_reticle) || VideoCore::KiuHud::IsBattery(d);
+    const bool in = batch.quads != 0 && regs.pipeline.index_array.format.Value() != 0 &&
+                    VideoCore::KiuHud::InBatch(
+                        batch, regs.pipeline.vertex_attributes.GetPhysicalBaseAddress(),
+                        regs.pipeline.index_array.offset, d.vertices);
+    if (VideoCore::KiuHud::g_live.cards.load(std::memory_order_relaxed) &&
+        VideoCore::KiuHud::MayBeCard(d)) {
+        return As::Card;
     }
-    return VideoCore::KiuHud::IsText(d) || (VideoCore::KiuHud::MayBeHud(d) && !is_reticle);
+    return VideoCore::KiuHud::Decide(d, in, batch.quads != 0,
+                                     VideoCore::KiuHud::g_live.page.load(std::memory_order_relaxed),
+                                     reticle != 0 && d.textured && d.texture == reticle);
+}
+
+bool RasterizerAccelerated::HudCensusDraw() const {
+    return VideoCore::Immersive::g_hud_census.load(std::memory_order_relaxed) != 0 &&
+           regs.pipeline.use_gs == Pica::PipelineRegs::UseGS::No &&
+           regs.pipeline.num_vertices <=
+               (regs.framebuffer.output_merger.depth_test_enable != 0 ? 96u : 1024u) &&
+           f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f == 240.0f &&
+           f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f == 400.0f;
+}
+
+void RasterizerAccelerated::HudCensus(const char* done) {
+    const u32 key = VideoCore::Immersive::g_hud_census.load(std::memory_order_relaxed) * 0x10000u +
+                    VideoCore::Immersive::g_hud_census_state.load(std::memory_order_relaxed);
+    if (key != hud_census_key) {
+        hud_census_key = key;
+        hud_census_seen.clear();
+    }
+    if (hud_census_seen.size() > 1500 || vertex_batch.empty()) {
+        return;
+    }
+    const auto& om = regs.framebuffer.output_merger;
+    const auto batch = VideoCore::KiuHud::g_batch.Get();
+    const u32 base = regs.pipeline.vertex_attributes.GetPhysicalBaseAddress();
+    const u32 index = regs.pipeline.index_array.offset;
+    int quad = -1;
+    if (batch.quads != 0 && base == batch.vertex_base && index >= batch.index_offset) {
+        quad = static_cast<int>((index - batch.index_offset) / 12);
+    }
+    float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f, u0 = 1e9f, u1 = -1e9f, v0 = 1e9f,
+          v1 = -1e9f;
+    bool flat = true;
+    for (const auto& v : vertex_batch) {
+        flat = flat && std::abs(v.position.w - 1.0f) < 1e-4f;
+        x0 = std::min(x0, v.position.x);
+        x1 = std::max(x1, v.position.x);
+        y0 = std::min(y0, v.position.y);
+        y1 = std::max(y1, v.position.y);
+        u0 = std::min(u0, v.tex_coord0.x);
+        u1 = std::max(u1, v.tex_coord0.x);
+        v0 = std::min(v0, v.tex_coord0.y);
+        v1 = std::max(v1, v.tex_coord0.y);
+    }
+    const auto& c = vertex_batch[0].color;
+    const auto& sc = regs.rasterizer.scissor_test;
+    const bool tex = regs.texturing.main_config.texture0_enable != 0;
+    std::string line = fmt::format(
+        "tex {:08X} {}x{} f{} blend {} {}>{} verts {} base {:08X} idx {:X} stride {} attrs {:X} quad {} {} up {:.1f}..{:.1f} "
+        "across {:.1f}..{:.1f} uv {:.2f}..{:.2f},{:.2f}..{:.2f} rgba {:.1f},{:.1f},{:.1f},{:.1f} "
+        "scissor {} {},{}..{},{} depth {} to {:08X}: {}",
+        tex ? regs.texturing.texture0.GetPhysicalAddress() : 0u,
+        tex ? regs.texturing.texture0.width.Value() : 0u,
+        tex ? regs.texturing.texture0.height.Value() : 0u,
+        static_cast<u32>(regs.texturing.texture0_format.Value()), om.alphablend_enable.Value(),
+        static_cast<u32>(om.alpha_blending.factor_source_rgb.Value()),
+        static_cast<u32>(om.alpha_blending.factor_dest_rgb.Value()), vertex_batch.size(), base,
+        index, static_cast<u32>(regs.pipeline.vertex_attributes.attribute_loaders[0].byte_count),
+        regs.pipeline.vertex_attributes.max_attribute_index.Value() + 1,
+        quad, flat ? "flat" : "deep", x0, x1, y0, y1, u0, u1, v0, v1, c.x, c.y, c.z, c.w,
+        static_cast<u32>(sc.mode.Value()), sc.x1.Value(), sc.y1.Value(), sc.x2.Value(),
+        sc.y2.Value(), om.depth_test_enable.Value(),
+        regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress(), done);
+    // One line a kind: the same texture, blend, size, first quad, and place to a third of the frame.
+    const std::string kind = fmt::format(
+        "{:08X} {} {} {} {} {} {} {} {} {} {} {} {}", tex ? regs.texturing.texture0.GetPhysicalAddress() : 0u,
+        static_cast<u32>(om.alpha_blending.factor_dest_rgb.Value()), vertex_batch.size(), base, quad,
+        flat, static_cast<int>(std::floor((x0 + x1) * 0.75f)), static_cast<int>(std::floor((y0 + y1) * 0.75f)),
+        static_cast<int>(u0 * 8.0f), static_cast<int>(v0 * 8.0f), om.depth_test_enable.Value(),
+        static_cast<int>(c.x * 2.0f + c.y * 4.0f + c.z * 8.0f), done);
+    const bool all = (key >> 16) >= 100; // AZAHARFRAME_KIU_HUD_CENSUS=100 and up: the deep ones too
+    if ((flat || om.depth_test_enable == 0 || all) && (flat || all || vertex_batch.size() <= 96) &&
+        hud_census_seen.insert(kind).second) {
+        LOG_INFO(Render, "kiu census {:X}: {}", key, line);
+        // A draw through a camera: its place in the frame, and the camera's rows and the first
+        // bone's, as the game set them.
+        const int r = Settings::values.vr_si_mode_register_offset.GetValue();
+        if (!flat && r >= 4 && r + 5 < 96) {
+            float n0 = 1e9f, n1 = -1e9f, m0 = 1e9f, m1 = -1e9f, w0 = 1e9f, w1 = -1e9f;
+            for (const auto& v : vertex_batch) {
+                w0 = std::min(w0, v.position.w);
+                w1 = std::max(w1, v.position.w);
+                n0 = std::min(n0, v.position.x / v.position.w);
+                n1 = std::max(n1, v.position.x / v.position.w);
+                m0 = std::min(m0, v.position.y / v.position.w);
+                m1 = std::max(m1, v.position.y / v.position.w);
+            }
+            std::string rows;
+            for (const int at : {r - 4, r - 3, r, r + 1, r + 2, r + 3, r + 4, r + 5, 25, 26, 27}) {
+                const auto& f = pica.vs_setup.uniforms.f[at];
+                rows += fmt::format(" c{} {:.3f},{:.3f},{:.3f},{:.3f}", at, f.x.ToFloat32(),
+                                    f.y.ToFloat32(), f.z.ToFloat32(), f.w.ToFloat32());
+            }
+            LOG_INFO(Render, "kiu census {:X}: tex {:08X} verts {} ndc up {:.2f}..{:.2f} across "
+                     "{:.2f}..{:.2f} w {:.1f}..{:.1f}:{}", key,
+                     tex ? regs.texturing.texture0.GetPhysicalAddress() : 0u, vertex_batch.size(),
+                     n0, n1, m0, m1, w0, w1, rows);
+        }
+    }
 }
 
 bool RasterizerAccelerated::SheetDraw() const {
@@ -501,6 +626,36 @@ void RasterizerAccelerated::AddSheetRim() {
     }
 }
 
+void RasterizerAccelerated::MoveCard(const VideoCore::KiuHud::Place& place) {
+    namespace H = VideoCore::KiuHud;
+    std::vector<H::Vertex>& flat = hud_flat;
+    if (H::IsVeil(flat.data(), flat.size())) {
+        const auto veil = H::SoftVeil(flat.data(), flat.size());
+        HardwareVertex dark = vertex_batch[0];
+        for (const auto& v : vertex_batch) {
+            if (v.color.w > dark.color.w) {
+                dark = v;
+            }
+        }
+        vertex_batch.assign(veil.size(), dark);
+        flat.resize(veil.size());
+        for (std::size_t i = 0; i < veil.size(); ++i) {
+            flat[i] = veil[i].v;
+            vertex_batch[i].color.w *= veil[i].alpha;
+        }
+    }
+    // The end of the depth range its own test calls nearest (clip z over w is -1 to 0).
+    using C = Pica::FramebufferRegs::CompareFunc;
+    const auto func = regs.framebuffer.output_merger.depth_test_func.Value();
+    const bool greater = func == C::GreaterThan || func == C::GreaterThanOrEqual;
+    const bool rises = f24::FromRaw(regs.rasterizer.viewport_depth_range).ToFloat32() > 0.0f;
+    H::MoveCard(flat.data(), flat.size(), place, vr_factor, vr_factor_y,
+                greater == rises ? 0.0f : -1.0f);
+    for (std::size_t i = 0; i < flat.size(); ++i) {
+        vertex_batch[i].position = {flat[i].x, flat[i].y, flat[i].z, flat[i].w};
+    }
+}
+
 void RasterizerAccelerated::TurnSoftwareVertices() {
     // AzaharFrame kiu140: a cloud sheet's soft rim; the turn below takes it with the sheet.
     if (!vertex_batch.empty() &&
@@ -510,51 +665,80 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
         AddSheetRim();
     }
     // AzaharFrame kiu140: a piece of the HUD, moved into the view (kiu_hud.h); never with the world.
-    bool subtitle = false, exact = false;
-    if (vertex_batch.size() >= 3 && HudDraw(&subtitle, &exact)) {
-        std::vector<VideoCore::KiuHud::Vertex> flat(vertex_batch.size());
+    using VideoCore::KiuHud::As;
+    const bool census = VideoCore::Immersive::g_hud_census.load(std::memory_order_relaxed) != 0;
+    const As as = vertex_batch.size() >= 3 ? HudDraw() : As::Not;
+    if (as != As::Not) {
+        const HudCost cost{VideoCore::Immersive::g_hud_cost_moved};
+        namespace H = VideoCore::KiuHud;
+        hud_flat.resize(vertex_batch.size());
+        std::vector<H::Vertex>& flat = hud_flat;
         for (std::size_t i = 0; i < flat.size(); ++i) {
             const auto& q = vertex_batch[i].position;
             flat[i] = {q.x, q.y, q.z, q.w};
         }
-        const VideoCore::KiuHud::Place place = VideoCore::KiuHud::g_live.Get();
+        const H::Place place = H::g_live.Get();
         if (VideoCore::Immersive::g_draw_log.load(std::memory_order_relaxed)) { // test aid
             std::string at;
             for (std::size_t k = 0; k < std::min<std::size_t>(flat.size(), 18); ++k) {
-                at += fmt::format(" {:.2f},{:.2f},{:.2f},{:.2f}", flat[k].x, flat[k].y, flat[k].z,
+                at += fmt::format(" {:.3f},{:.3f},{:.3f},{:.3f}", flat[k].x, flat[k].y, flat[k].z,
                                   flat[k].w);
             }
             LOG_INFO(Render, "kiu hud: texture {:08X} {}:{}",
                      regs.texturing.texture0.GetPhysicalAddress(),
-                     subtitle ? "the subtitles" : exact ? "a piece (exact)" : "a piece", at);
+                     as == As::Subtitle ? "the subtitles"
+                     : as == As::Piece  ? "a piece (exact)"
+                                        : "a piece",
+                     at);
         }
         const auto put = [&] {
             for (std::size_t i = 0; i < flat.size(); ++i) {
                 vertex_batch[i].position = {flat[i].x, flat[i].y, flat[i].z, flat[i].w};
             }
         };
-        if (subtitle && !place.page && VideoCore::KiuHud::MoveSubtitle(flat.data(), flat.size(), place, vr_factor,
-                                                        vr_factor_y)) {
-            put();
-            return;
+        const char* done = nullptr;
+        if (as == As::Card) {
+            if (H::IsCard(flat.data(), flat.size())) {
+                MoveCard(place);
+                done = "card";
+            }
+        } else if (as == As::Page || place.page) {
+            // A page (whatever the draw was taken for a VBlank ago): every quad to its frame.
+            done = H::MovePage(flat.data(), flat.size(), place, vr_factor, vr_factor_y) != 0
+                       ? "page"
+                       : nullptr;
+        } else if (as == As::Subtitle &&
+                   H::MoveSubtitle(flat.data(), flat.size(), place, vr_factor, vr_factor_y)) {
+            done = "subtitle";
+        } else if (H::Movable(flat.data(), flat.size())) {
+            if (as == As::Piece) { // AzaharFrame kiu1s: the whole draw is one piece
+                H::MovePiece(flat.data(), flat.size(), place, vr_factor, vr_factor_y);
+                done = "piece, exact";
+            } else if (as == As::WithScore) {
+                H::MoveAs(flat.data(), flat.size(), place, vr_factor, vr_factor_y, H::Group::Score);
+                done = "with the score";
+            } else {
+                const std::size_t step = flat.size() % 6 == 0 ? 6 : 3; // quads
+                for (std::size_t i = 0; i + step <= flat.size(); i += step) {
+                    H::Move(flat.data() + i, step, place, vr_factor, vr_factor_y);
+                }
+                done = "guess, by quad";
+            }
         }
-        if (VideoCore::KiuHud::Movable(flat.data(), flat.size())) {
-            const std::size_t step = flat.size() % 6 == 0 ? 6 : 3; // quads
-            if (exact && !place.page) { // AzaharFrame kiu1s: the whole draw is one piece
-                VideoCore::KiuHud::MovePiece(flat.data(), flat.size(), place, vr_factor,
-                                             vr_factor_y);
+        if (census) {
+            HudCensus(done ? done : "the 2D's, left (the whole frame, or not flat)");
+        }
+        if (done) {
+            if (as != As::Card) {
                 put();
-                return;
             }
-            for (std::size_t i = 0; i + step <= flat.size(); i += step) {
-                VideoCore::KiuHud::Move(flat.data() + i, step, place, vr_factor, vr_factor_y);
-            }
-            put();
             return;
         }
-        if (exact) { // AzaharFrame kiu1s: the battle UI's, the whole frame (a fade): not the world's
+        if (as == As::Piece) { // the battle UI's own over the whole frame (a fade): not the world's
             return;
         }
+    } else if (census && HudCensusDraw()) {
+        HudCensus("not hud");
     }
     // AzaharFrame kiu131: Reticle Size: the reticle's draw about its middle on the screen.
     if (!vertex_batch.empty() && ReticleDraw()) {

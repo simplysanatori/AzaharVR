@@ -40,6 +40,7 @@ Memory Land() {
                {kCtx + Ui::kPause, 0},               {kCtx + Ui::kMessage, 0},
                {kCtx + Ui::kMessage + 4, 0},         {kCtx + Ui::kFlags, 1},
                {kCtx + Ui::kVertexBase, 0x24155000}, {kCtx + Ui::kIndexOffset, 0x12C00},
+               {kCtx + Ui::kBuffer, 0x14155000},
                {kP + G::kFlags, 0},                  {kP + G::kShown, G::kName},
                {kP + G::kPlace, 2},                  {kP + G::kCount, 5},
                {kP + G::kNameTimer, std::bit_cast<uint32_t>(5.0f)},

@@ -2,6 +2,7 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
+#include <algorithm>
 #include <cmath>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -24,13 +25,14 @@ struct Seen {
 };
 Seen See(float across, float up, const Place& p, float f = 1.0f, float fy = 1.0f) {
     // A small triangle about the point, so the point's own group decides.
-    Vertex t[3] = {{up, across, 0.2f, 1.0f},
-                   {up + 1e-4f, across, 0.2f, 1.0f},
-                   {up, across + 1e-4f, 0.2f, 1.0f}};
+    // `across` to the right: clip's y is to the left.
+    Vertex t[3] = {{up, -across, 0.2f, 1.0f},
+                   {up + 1e-4f, -across, 0.2f, 1.0f},
+                   {up, -across + 1e-4f, 0.2f, 1.0f}};
     Move(t, 3, p, f, fy);
     REQUIRE(t[0].w == 2.0f);
     REQUIRE(t[0].z / t[0].w == Approx(0.2f));
-    return {std::atan(t[0].y / t[0].w / f * kTanX) / kRad,
+    return {std::atan(-t[0].y / t[0].w / f * kTanX) / kRad,
             std::atan(t[0].x / t[0].w / fy * kTanY) / kRad - 5.0f};
 }
 } // namespace
@@ -211,4 +213,202 @@ TEST_CASE("Kid Icarus HUD: the text texture's other draws are pieces; text targe
     REQUIRE_FALSE(IsTextTarget(240.0f, 400.0f));
     REQUIRE_FALSE(IsTextTarget(240.0f, 320.0f));
     REQUIRE_FALSE(IsTextTarget(128.0f, 256.0f));
+}
+
+TEST_CASE("Kid Icarus HUD: what a draw is, by what is known of the game's 2D",
+          "[frame_xr][kiuhud]") {
+    const Draw piece{true, false, true, true, 0x218D1300, 42, 256, 256, 9};
+    const Draw battery{true, false, true, true, 0x2188B680, 6, 256, 128, 9};
+    const Draw subtitle{true, false, true, true, 0x181A8000, 12, 512, 128, 0};
+    const Draw list{true, false, true, true, 0x181A8000, 24, 512, 128, 0};
+    Draw line{true, false, true, false, 0, 12}; // a page's rule: no texture
+    Draw mark{true, false, false, true, 0x18400000, 30, 256, 256, 12}; // added light, from VRAM
+    Draw glyphs{true, false, true, true, 0x27C06080, 60, 128, 32, 11}; // a menu's words
+
+    SECTION("the batch not known (another build, the code differs): the old way") {
+        CHECK(Decide(piece, false, false, false, false) == As::Guess);
+        CHECK(Decide(battery, false, false, false, false) == As::WithScore);
+        CHECK(Decide(subtitle, false, false, false, false) == As::Subtitle);
+        CHECK(Decide(list, false, false, false, false) == As::Guess);
+        CHECK(Decide(line, false, false, false, false) == As::Not);
+        CHECK(Decide(mark, false, false, false, false) == As::Not);
+        CHECK(Decide(piece, false, false, false, true) == As::Not); // the reticle
+    }
+    SECTION("a battle whose batch is known: its draws and the battery, no others") {
+        CHECK(Decide(piece, true, true, false, false) == As::Piece);
+        CHECK(Decide(line, true, true, false, false) == As::Piece); // whatever its state
+        CHECK(Decide(subtitle, true, true, false, false) == As::Subtitle);
+        CHECK(Decide(list, true, true, false, false) == As::Piece);
+        CHECK(Decide(battery, false, true, false, false) == As::WithScore);
+        CHECK(Decide(piece, false, true, false, false) == As::Not); // another context's
+        CHECK(Decide(mark, false, true, false, false) == As::Not);
+        CHECK(Decide(piece, true, true, false, true) == As::Not);
+    }
+    SECTION("a page: the battle UI's draws whatever their state, the others by the guess") {
+        CHECK(Decide(line, true, true, true, false) == As::Page);
+        CHECK(Decide(piece, true, true, true, false) == As::Page);
+        CHECK(Decide(list, false, true, true, false) == As::Page);
+        CHECK(Decide(battery, false, true, true, false) == As::Page);
+        CHECK(Decide(glyphs, false, false, true, false) == As::Page); // the hub: no battle UI
+        CHECK(Decide(battery, false, false, true, false) == As::Page);
+        CHECK(Decide(line, false, false, true, false) == As::Not);
+        CHECK(Decide(mark, false, false, true, false) == As::Not);
+    }
+}
+
+TEST_CASE("Kid Icarus HUD: the battery and the health bar's ornament, as the census has them",
+          "[frame_xr][kiuhud]") {
+    // Clip's y is to the left: the health bar 0.3 to 1, the score and the battery -1 to -0.6.
+    const auto quad = [](Vertex* v, float u0, float u1, float y0, float y1) {
+        const float up[6] = {u0, u1, u0, u1, u1, u0};
+        const float at[6] = {y0, y0, y1, y0, y1, y1};
+        for (int i = 0; i < 6; ++i) {
+            v[i] = {up[i], at[i], 0.1f, 1.0f};
+        }
+    };
+    const Place p = At();
+    Vertex end[6], wing[6], score[6], battery[6], whole[6];
+    quad(end, 0.8f, 0.95f, 0.3f, 0.45f); // the ornament's right end: it was left behind
+    quad(wing, 0.7f, 0.9f, 0.8f, 1.0f);
+    quad(score, 0.6f, 1.0f, -1.0f, -0.6f);
+    quad(battery, 0.9f, 1.0f, -1.0f, -0.9f);
+    quad(whole, 0.9f, 1.0f, -1.0f, -0.9f);
+    CHECK(GroupAt(0.875f, -0.375f) == Group::Bar);
+    CHECK(GroupAt(0.8f, 0.8f) == Group::Score);
+    Move(end, 6, p, 1.0f, 1.0f);
+    Move(wing, 6, p, 1.0f, 1.0f);
+    MovePiece(score, 6, p, 1.0f, 1.0f);
+    Move(battery, 6, p, 1.0f, 1.0f);
+    MoveAs(whole, 6, p, 1.0f, 1.0f, Group::Score);
+    // Their places on view are theirs in the game's frame, to one another.
+    CHECK(wing[2].y / 2.0f - end[0].y / 2.0f == Approx(p.half_across * 0.7f).margin(1e-4));
+    CHECK(wing[0].x / 2.0f - end[0].x / 2.0f == Approx(p.half_up * -0.1f).margin(1e-4));
+    CHECK(battery[0].y / 2.0f == Approx(score[0].y / 2.0f).margin(1e-4));
+    CHECK(battery[1].x / 2.0f == Approx(score[1].x / 2.0f).margin(1e-4));
+    for (int i = 0; i < 6; ++i) {
+        CHECK(whole[i].x == battery[i].x);
+        CHECK(whole[i].y == battery[i].y);
+    }
+    // The bar left of the score.
+    CHECK(end[0].y > score[2].y);
+}
+
+TEST_CASE("Kid Icarus HUD: a page's draw, quad by quad the same way; the dim stays whole",
+          "[frame_xr][kiuhud]") {
+    const auto quad = [](Vertex* v, float u0, float u1, float a0, float a1) {
+        const float up[6] = {u0, u1, u0, u1, u1, u0};
+        const float at[6] = {a0, a0, a1, a0, a1, a1};
+        for (int i = 0; i < 6; ++i) {
+            v[i] = {up[i], at[i], 0.3f, 1.0f};
+        }
+    };
+    const Place p = PagePlaceInBattle(kTanX, kTanY);
+    REQUIRE(p.page);
+    Vertex v[18];
+    quad(v, -0.96f, 1.0f, -1.0f, 1.02f);   // the dim over the picture
+    quad(v + 6, 0.6f, 0.9f, -1.0f, -0.3f); // where the bar's group would be
+    quad(v + 12, -0.9f, -0.6f, 0.5f, 1.0f); // the frame's lower part
+    CHECK(MovePage(v, 18, p, 1.0f, 1.0f) == 18);
+    for (int i = 0; i < 6; ++i) { // the shader keeps it over the whole view
+        CHECK(v[i].w == 1.0f);
+        CHECK(std::abs(v[i].x) == 1.0f);
+        CHECK(std::abs(v[i].y) == 1.0f);
+    }
+    for (int i = 6; i < 18; ++i) {
+        CHECK(v[i].w == 2.0f);
+    }
+    // One scale and one middle for all of it: the layout is the game's.
+    CHECK(v[6].x / 2.0f == Approx(p.half_up * 0.6f));
+    CHECK(v[6].y / 2.0f == Approx(p.half_across * -1.0f));
+    CHECK(v[12].x / 2.0f == Approx(p.half_up * -0.9f));
+    CHECK(v[12].y / 2.0f == Approx(p.half_across * 0.5f));
+    Vertex world[6];
+    quad(world, 0.0f, 0.2f, 0.0f, 0.2f);
+    world[3].w = 7.0f;
+    CHECK(MovePage(world, 6, p, 1.0f, 1.0f) == 0);
+}
+
+TEST_CASE("Kid Icarus HUD: a menu's 2D in the view, in the HUD's frame", "[frame_xr][kiuhud]") {
+    Wanted w;
+    const Place hud = At(w), p = PageInView(w, kTanX, kTanY, -5.0f * kRad);
+    REQUIRE(p.on);
+    REQUIRE(p.page);
+    CHECK(p.half_across == hud.half_across);
+    CHECK(p.half_up == hud.half_up);
+    // The frame's corners: 30 degrees aside at HUD Size 100 %, whatever the game draws past it.
+    for (const float f : {1.0f, 2.8f, 5.0f}) {
+        Vertex v[3] = {{-0.8f, 1.0f, 0, 1}, {-0.7f, 1.0f, 0, 1}, {-0.8f, 0.9f, 0, 1}};
+        CHECK(MovePage(v, 3, p, f, f) == 3);
+        CHECK(std::atan(v[0].y / v[0].w / f * kTanX) / kRad == Approx(30.0f).margin(0.01f));
+        const float up = std::atan(v[0].x / v[0].w / f * kTanY) / kRad - 5.0f;
+        CHECK(up < kMiddleDeg);
+        CHECK(up > kMiddleDeg - 20.0f);
+    }
+    w.size = 150;
+    CHECK(PageInView(w, kTanX, kTanY, 0.0f).half_across > p.half_across);
+    CHECK_FALSE(PageInView(w, 0.0f, kTanY, 0.0f).on);
+}
+
+TEST_CASE("Kid Icarus HUD: the hub's cards go with its words; the veil has no border",
+          "[frame_xr][kiuhud]") {
+    Draw d;
+    d.top_viewport = d.depth_test = d.blended = d.textured = true;
+    d.vertices = 6;
+    d.width = d.height = 64;
+    d.format = 4;
+    CHECK(MayBeCard(d));
+    Draw room = d;
+    room.vertices = 24;
+    CHECK_FALSE(MayBeCard(room));
+    room = d;
+    room.depth_test = false;
+    CHECK_FALSE(MayBeCard(room));
+
+    const Place p = PageInView(Wanted{}, kTanX, kTanY, 0.0f);
+    REQUIRE(p.page);
+    REQUIRE(p.cards);
+    CHECK_FALSE(PagePlace(4.0f, 4.0f).cards);
+    CHECK_FALSE(PagePlaceInBattle(kTanX, kTanY).cards);
+
+    // The bag's middle and a digit at the same place of the frame land on the same place.
+    const float w = 40.0f;
+    Vertex bag[3] = {{-0.65f * w, -0.8f * w, -0.5f * w, w},
+                     {-0.80f * w, -1.0f * w, -0.5f * w, w},
+                     {-0.10f * w, -0.6f * w, -0.5f * w, w}};
+    REQUIRE(IsCard(bag, 3));
+    MoveCard(bag, 3, p, 3.0f, 4.0f, -1.0f);
+    Vertex digit[6] = {{-0.65f, -0.8f, 0, 1}, {-0.6f, -0.8f, 0, 1}, {-0.65f, -0.7f, 0, 1},
+                       {-0.6f, -0.8f, 0, 1},  {-0.6f, -0.7f, 0, 1}, {-0.65f, -0.7f, 0, 1}};
+    REQUIRE(MovePage(digit, 6, p, 3.0f, 4.0f) == 6);
+    CHECK(bag[0].x / bag[0].w == Approx(digit[0].x / digit[0].w));
+    CHECK(bag[0].y / bag[0].w == Approx(digit[0].y / digit[0].w));
+    CHECK(bag[0].w == w);
+    CHECK(bag[0].z / w == Approx(-1.0f + 0.5f * kCardDepth)); // in front of the room
+
+    Vertex room_quad[2] = {{0, 0, 0, 131.0f}, {0, 0, 0, 206.0f}};
+    CHECK_FALSE(IsCard(room_quad, 2)); // not at one distance
+    Vertex flat_quad[2] = {{0, 0, 0, 1.0f}, {0, 0, 0, 1.0f}};
+    CHECK_FALSE(IsCard(flat_quad, 2));
+
+    Vertex veil[12];
+    for (int i = 0; i < 12; ++i) {
+        veil[i] = {(i % 2 ? -0.67f : -1.32f) * w, (i % 3 ? 1.24f : -1.36f) * w, -0.5f * w, w};
+    }
+    REQUIRE(IsVeil(veil, 12));
+    CHECK_FALSE(IsVeil(bag, 3));
+    const auto soft = SoftVeil(veil, 12);
+    float inside = 0.0f, dark_low = 1e9f, dark_high = -1e9f;
+    for (const auto& q : soft) {
+        const float up = q.v.x / w, at = q.v.y / w;
+        const bool rim = up < -1.049f || up > -0.551f || at < -1.359f || at > 1.239f;
+        CHECK(q.alpha == (rim ? 0.0f : 1.0f));
+        inside += q.alpha;
+        if (!rim) {
+            dark_low = std::min(dark_low, up);
+            dark_high = std::max(dark_high, up);
+        }
+    }
+    CHECK(dark_low == Approx(-0.9f)); // the words, 0.7 to 0.9 down, are over its dark part
+    CHECK(dark_high == Approx(-0.7f));
+    CHECK(inside == 6.0f + 4 * 3.0f + 4 * 2.0f); // the middle, the sides, two a corner
 }

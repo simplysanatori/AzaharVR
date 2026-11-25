@@ -111,6 +111,16 @@ inline bool ReticleScaled(u32 texture0) {
 /// value changes (for 40 ms).
 inline std::atomic<bool> g_draw_log{false};
 
+/// AzaharFrame kiuhud: a test aid (AZAHARFRAME_KIU_HUD_CENSUS=<n>): every draw into the top
+/// screen's viewport without a depth test is shaded on the CPU and logged once a kind (its
+/// texture, blend, quads, place and what was done with it); a new n, or a new `state` (what the
+/// hooks know of the game's UI), lists them again. 0: off.
+inline std::atomic<u32> g_hud_census{0}, g_hud_census_state{0};
+/// AzaharFrame kiuhud: AZAHARFRAME_KIU_HUD_COST=1: the time spent telling and moving the HUD's
+/// draws (nanoseconds, draws asked, draws moved), taken by the hooks every few seconds.
+inline std::atomic<bool> g_hud_cost{false};
+inline std::atomic<u64> g_hud_cost_ns{0}, g_hud_cost_asked{0}, g_hud_cost_moved{0};
+
 /// AzaharFrame kiu133: Pit Opacity (frame_xr/kiu_pit_opacity.cpp). Pit's draws are known by their
 /// first vertex array's address: the hooks have the world's draws collected while he is drawn
 /// (phase 1) and while his model is hidden (phase 2); his are the ones only in phase 1. Then

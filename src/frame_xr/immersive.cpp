@@ -1692,15 +1692,7 @@ void OnFrame(const FrameInfo& info) {
 
     // AzaharFrame kiu140: HUD: In View (video_core/kiu_hud.h).
     VideoCore::KiuHud::Place hud_place;
-    if (g.engaged && IsViewMode(mode) && KiuFirstPerson() && Kiu::FirstPerson::HudInView() &&
-        Kiu::FirstPerson::WholePage(Kiu::FirstPerson::Battle(),
-                                    Kiu::FirstPerson::BattlePage())) { // AzaharFrame kiu1s
-        hud_place = Kiu::FirstPerson::Battle()
-                        ? VideoCore::KiuHud::PagePlaceInBattle(
-                              g.solved.tan_half_y * g.solved.aspect, g.solved.tan_half_y)
-                        : VideoCore::KiuHud::PagePlace(g.solved.factor, g.solved.factor_y);
-    } else if (g.engaged && IsViewMode(mode) && KiuFirstPerson() &&
-               Kiu::FirstPerson::HudInView()) {
+    if (g.engaged && IsViewMode(mode) && KiuFirstPerson() && Kiu::FirstPerson::HudInView()) {
         auto& v = Settings::values;
         VideoCore::KiuHud::Wanted wanted;
         wanted.size = static_cast<int>(v.vr_kiu_hud_size.GetValue());
@@ -1714,8 +1706,17 @@ void OnFrame(const FrameInfo& info) {
         wanted.link_gap = Kiu::Powers::HudGapNow(); // AzaharFrame kiupowers
         wanted.subtitle_size = static_cast<int>(v.vr_kiu_subtitle_size.GetValue());
         wanted.subtitle_height = static_cast<float>(v.vr_kiu_subtitle_height.GetValue());
-        hud_place = VideoCore::KiuHud::PlaceFor(wanted, g.solved.tan_half_y * g.solved.aspect,
-                                                g.solved.tan_half_y, g.solved.pitch_rad);
+        const float tan_x = g.solved.tan_half_y * g.solved.aspect, tan_y = g.solved.tan_half_y;
+        const bool battle = Kiu::FirstPerson::Battle(), page = Kiu::FirstPerson::BattlePage();
+        if (battle && page) { // AzaharFrame kiu1s: the results as they start
+            hud_place = VideoCore::KiuHud::PagePlaceInBattle(tan_x, tan_y);
+        } else if (Kiu::FirstPerson::MenuPage()) { // AzaharFrame kiuhud: the hub: in the view
+            hud_place = VideoCore::KiuHud::PageInView(wanted, tan_x, tan_y, g.solved.pitch_rad);
+        } else if (!battle) { // a page, over the game's own frame
+            hud_place = VideoCore::KiuHud::PagePlace(g.solved.factor, g.solved.factor_y);
+        } else {
+            hud_place = VideoCore::KiuHud::PlaceFor(wanted, tan_x, tan_y, g.solved.pitch_rad);
+        }
         static bool logged = false;
         if (!logged) {
             logged = true;

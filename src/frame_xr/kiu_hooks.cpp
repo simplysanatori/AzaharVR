@@ -75,6 +75,9 @@ constexpr const char* kSwitchPausePanel = "AZAHARFRAME_KIU_PAUSE_PANEL";
 constexpr const char* kSwitchMenuScreens = "AZAHARFRAME_KIU_MENU_SCREENS";
 constexpr const char* kSwitchMenuPanel = "AZAHARFRAME_KIU_MENU_PANEL";
 constexpr const char* kSwitchUiTrace = "AZAHARFRAME_KIU_UI_TRACE";
+// AzaharFrame kiuhud: test aids (video_core/kiu_view_tap.h).
+constexpr const char* kSwitchHudCensus = "AZAHARFRAME_KIU_HUD_CENSUS";
+constexpr const char* kSwitchHudCost = "AZAHARFRAME_KIU_HUD_COST";
 // AzaharFrame kiuvr (kiu_first_person.h)
 constexpr const char* kSwitchFpTrace = "AZAHARFRAME_KIU_FP_TRACE";
 constexpr const char* kSwitchFpProbe = "AZAHARFRAME_KIU_FP_PROBE";
@@ -186,6 +189,7 @@ struct State {
     int ui_code = -1;
     Ui::State ui;
     Ui::Steady ui_page, ui_pause, ui_pictures;
+    uint32_t hud_cost_vblanks = 0; ///< AzaharFrame kiuhud
     Ui::SteadyMenu ui_menu;
     Ui::SteadyMenu ui_weapon_menu; ///< the same, read whatever the switches say (the weapon)
     int menu_up = Ui::kNoMenu; ///< as said to the view
@@ -477,6 +481,7 @@ void TraceFirstPerson(State& s, const KH::GameMemory& mem, const KH::Player& p,
 void UiQuiet(State& s);
 /// AzaharFrame kiu1s: the battle UI not read (no first person): the menu neither.
 void UiOff(State& s) {
+    VideoCore::Immersive::g_hud_census.store(0, std::memory_order_relaxed);
     s.ui_code = -1;
     s.ui_weapon_menu = {};
     Kiu::CameraTap::SetGameUi(false, false); // AzaharFrame kiucam
@@ -499,11 +504,31 @@ void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
     const auto menus_text = Switch(kSwitchMenuScreens);
     const auto which_menus =
         Kiu::FirstPerson::MenuScreensFor(menus_text ? menus_text->c_str() : nullptr);
-    const bool page = SwitchIs(kSwitchPage, "1"), exact = SwitchIs(kSwitchHudExact, "1"),
+    // AzaharFrame kiuhud: both on in first person, off with 0.
+    const bool page = !SwitchIs(kSwitchPage, "0"), exact = !SwitchIs(kSwitchHudExact, "0"),
                pause = SwitchIs(kSwitchPausePanel, "1"), trace = SwitchIs(kSwitchUiTrace, "1"),
                portraits = Kiu::FirstPerson::PortraitsWanted(),
                menu_panel = SwitchIs(kSwitchMenuPanel, "1"),
                menu_screens = menu_panel || which_menus != Kiu::FirstPerson::MenuScreens::None;
+    const auto census_text = Switch(kSwitchHudCensus);
+    const uint32_t census =
+        census_text ? static_cast<uint32_t>(std::strtoul(census_text->c_str(), nullptr, 10)) : 0u;
+    VideoCore::Immersive::g_hud_census.store(census & 0xFFFFu, std::memory_order_relaxed);
+    {
+        const bool cost = SwitchIs(kSwitchHudCost, "1");
+        VideoCore::Immersive::g_hud_cost.store(cost, std::memory_order_relaxed);
+        if (cost && ++s.hud_cost_vblanks >= 300) {
+            const auto ns = VideoCore::Immersive::g_hud_cost_ns.exchange(0);
+            const auto asked = VideoCore::Immersive::g_hud_cost_asked.exchange(0);
+            const auto moved = VideoCore::Immersive::g_hud_cost_moved.exchange(0);
+            LOG_INFO(Frontend,
+                     "xr: Kid Icarus hooks: the HUD's cost: {:.1f} us a VBlank ({} draws asked, {} "
+                     "moved in {} VBlanks)",
+                     static_cast<double>(ns) / 1000.0 / s.hud_cost_vblanks, asked, moved,
+                     s.hud_cost_vblanks);
+            s.hud_cost_vblanks = 0;
+        }
+    }
     const bool usa = s.build == &Input::KiuTurn::kBuildUsaRev1;
     if (s.ui_code < 0) {
         s.ui_code = Ui::CodeMatches(mem, usa) ? 1 : 0;
@@ -526,7 +551,7 @@ void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
         }
         Kiu::FirstPerson::SetWeaponHidden(hidden);
     }
-    if (!page && !exact && !pause && !trace && !portraits && !menu_screens) {
+    if (!page && !exact && !pause && !trace && !portraits && !menu_screens && census == 0) {
         UiQuiet(s);
         return;
     }
@@ -534,7 +559,8 @@ void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
         s.ui_code != 0 ? Ui::Read(mem, usa ? Ui::kMenuUsaRev1 : Ui::kMenuEur) : Ui::State{};
     const bool is_page = s.ui_page.Update(now.page || now.menu != Ui::kNoMenu);
     const bool is_paused = s.ui_pause.Update(now.paused);
-    Kiu::FirstPerson::SetBattleUi(page && is_page, pause && is_paused && battle);
+    Kiu::FirstPerson::SetBattleUi(page && is_page, pause && is_paused && battle,
+                                  !battle && now.menu == Ui::kMenuHub);
     const bool pictures = s.ui_pictures.Update(now.pictures);
     // The pause and menu panels' layer is there whenever the view is (LayerFor).
     Kiu::FirstPerson::SetPortraits(Kiu::FirstPerson::LayerFor(
@@ -560,14 +586,20 @@ void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
     if (trace && !(now == s.ui)) {
         LOG_INFO(Frontend,
                  "xr: Kid Icarus hooks: the battle UI {:08X}, menu {}: {}{}{}{}{}{}; vertices "
-                 "{:08X}, indices {:X}",
+                 "{:08X}, indices {:X}; flags {:X} parts {:X} page {:X} battle {}",
                  now.context, now.menu, now.known ? "" : "not there",
                  now.known && !now.shown ? "not shown" : "", now.page ? "a page" : "",
                  now.paused ? " paused" : "",
                  now.talk ? (now.talk_below ? " talk (bottom)" : " talk (top)") : "",
                  now.illustration ? " an illustration" : now.pictures ? " pictures" : "",
-                 now.vertex_base, now.index_offset);
+                 now.vertex_base, now.index_offset, now.raw_flags, now.raw_parts, now.raw_page,
+                 battle);
     }
+    VideoCore::Immersive::g_hud_census_state.store(
+        (battle ? 1u : 0u) | (now.known ? 2u : 0u) | (now.shown ? 4u : 0u) |
+            (is_page ? 8u : 0u) | (now.paused ? 16u : 0u) | (now.talk ? 32u : 0u) |
+            (static_cast<uint32_t>(now.menu & 0xFF) << 8),
+        std::memory_order_relaxed);
     s.ui = now;
 }
 
