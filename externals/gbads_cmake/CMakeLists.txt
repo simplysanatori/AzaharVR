@@ -124,7 +124,51 @@ set(CMAKE_DISABLE_FIND_PACKAGE_ZLIB ON)
 set(CMAKE_DISABLE_FIND_PACKAGE_PkgConfig ON)
 set(MARKDOWN NOTFOUND)
 
+if (WIN32)
+    # AzaharVR: mGBA's CMakeLists.txt stops on Windows without epoxy, unless it is told that only
+    # the library is wanted; it then takes zlib and its zip files out, which are added again below.
+    set(LIBMGBA_ONLY ON)
+    # Its project() has to see the build's own compiler: this file comes right after it.
+    set(CMAKE_PROJECT_mGBA_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/win32/mgba_project.cmake")
+endif()
 add_subdirectory("${MGBA_SRC_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/mgba" EXCLUDE_FROM_ALL)
+if (WIN32)
+    # AzaharVR: what mGBA's CMakeLists.txt does for USE_ZLIB without a minizip of the system's
+    set(MGBA_MINIZIP_DIR "${MGBA_ZLIB_DIR}/contrib/minizip")
+    target_sources(mgba PRIVATE
+        "${MGBA_SRC_DIR}/src/util/vfs/vfs-zip.c"
+        "${MGBA_MINIZIP_DIR}/ioapi.c"
+        "${MGBA_MINIZIP_DIR}/unzip.c"
+        "${MGBA_MINIZIP_DIR}/zip.c"
+    )
+    target_compile_definitions(mgba PRIVATE USE_ZLIB USE_MINIZIP HAVE_CRC32)
+    target_include_directories(mgba PRIVATE "${MGBA_ZLIB_DIR}" "${MGBA_ZLIB_DIR}/contrib")
+    target_link_libraries(mgba mgba_zlib)
+    target_compile_options(mgba PRIVATE "/FI${CMAKE_CURRENT_SOURCE_DIR}/win32/mgba_shim.h")
+    alt_cores_compiler()
+
+    # AzaharVR: the POSIX names gba-ds's and PokeDaisy's files use. Only for targets that link this.
+    add_library(win32_posix STATIC EXCLUDE_FROM_ALL
+        win32/mgba_shim.h
+        win32/posix/win32_posix.c
+        win32/posix/win32_posix.h
+    )
+    target_include_directories(win32_posix PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/win32"
+        "${CMAKE_CURRENT_SOURCE_DIR}/win32/posix"
+    )
+    target_compile_definitions(win32_posix PUBLIC
+        WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE
+        STBIW_WINDOWS_UTF8
+    )
+    target_compile_options(win32_posix INTERFACE "/FI${CMAKE_CURRENT_SOURCE_DIR}/win32/posix/win32_posix.h")
+    target_link_libraries(win32_posix PRIVATE mgba)
+    set_target_properties(win32_posix PROPERTIES
+        C_STANDARD 11
+        C_STANDARD_REQUIRED ON
+        INTERPROCEDURAL_OPTIMIZATION FALSE
+    )
+endif()
 
 # Restore parent OpenGL cache entries if mGBA overwrote them.
 if (_GBADS_SAVED_OPENGL_LIB_CACHED)
@@ -221,6 +265,10 @@ target_compile_definitions(gbads_core PRIVATE
     _GNU_SOURCE
 )
 
+if (WIN32) # AzaharVR
+    target_link_libraries(gbads_core PRIVATE win32_posix)
+endif()
+
 find_library(GBADS_MATH_LIBRARY m)
 if (GBADS_MATH_LIBRARY)
     target_link_libraries(gbads_core PRIVATE ${GBADS_MATH_LIBRARY})
@@ -245,7 +293,8 @@ endif()
 
 # gba-ds's game.c (its second screens) and logo.c, whole and unmodified, behind a host interface: README.md.
 # POSIX only (pthread.h, dirent.h, typeof): without it a game has its maps alone.
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND EXISTS "${GBADS_SRC_DIR}/game.c"
+# AzaharVR: on Windows win32/ has what they use of POSIX.
+if ((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR WIN32) AND EXISTS "${GBADS_SRC_DIR}/game.c"
     AND EXISTS "${GBADS_SRC_DIR}/logo.c")
     add_library(gbads_game STATIC EXCLUDE_FROM_ALL
         "${CMAKE_CURRENT_SOURCE_DIR}/game/gbads_game.c"
@@ -276,7 +325,12 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND EXISTS "${GBADS_SRC_DIR}/game.c"
         INTERPROCEDURAL_OPTIMIZATION FALSE
         UNITY_BUILD OFF
     )
+    if (WIN32) # AzaharVR
+        target_link_libraries(gbads_game PRIVATE win32_posix)
+        target_compile_options(gbads_game PRIVATE /W0)
+    else()
     target_compile_options(gbads_game PRIVATE -w)
+    endif()
     if (COMMAND target_disable_warnings)
         target_disable_warnings(gbads_game)
     endif()

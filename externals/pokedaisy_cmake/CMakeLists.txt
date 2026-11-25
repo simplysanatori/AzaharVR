@@ -17,6 +17,10 @@ endif()
 
 set(PD_CPP "${PD_DIR}/app/src/main/cpp")
 
+if (WIN32) # AzaharVR
+    alt_cores_compiler()
+endif()
+
 add_library(pokedaisy STATIC EXCLUDE_FROM_ALL
     # 3ds/core minus pd_library* and pd_save* (their own library and save files; the host supplies those)
     "${PD_DIR}/3ds/core/pd_binput.c"
@@ -144,9 +148,16 @@ target_compile_definitions(pokedaisy PRIVATE
 )
 
 # Forced include: the mGBA names PokeDaisy uses that our mGBA renamed.
+if (WIN32) # AzaharVR: clang-cl's spelling, and the POSIX names (gbads_cmake/win32)
+    target_link_libraries(pokedaisy PRIVATE win32_posix)
+    target_compile_options(pokedaisy PRIVATE
+        "/FI${CMAKE_CURRENT_SOURCE_DIR}/stubs/pokedaisy_shim.h"
+    )
+else()
 target_compile_options(pokedaisy PRIVATE
     -include "${CMAKE_CURRENT_SOURCE_DIR}/stubs/pokedaisy_shim.h"
 )
+endif()
 
 set_target_properties(pokedaisy PROPERTIES
     C_STANDARD 11

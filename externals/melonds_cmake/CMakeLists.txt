@@ -3,6 +3,10 @@ cmake_minimum_required(VERSION 3.20)
 include(CheckLibraryExists)
 find_package(Threads REQUIRED)
 
+if (COMMAND alt_cores_compiler) # AzaharVR: Windows
+    alt_cores_compiler()
+endif()
+
 set(MELONDS_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../melonDS/src")
 
 # Detect target architecture for melonDS ARMJIT (supports both Azahar's ARCHITECTURE
@@ -153,7 +157,9 @@ set_source_files_properties("${MELONDS_SRC_DIR}/DSi_DSP.cpp"
 )
 
 if (MELONDS_ENABLE_JIT)
+    if (NOT WIN32) # AzaharVR: clang-cl assembles it, see below
     enable_language(ASM)
+    endif()
 
     target_sources(melonds_core PRIVATE
         "${MELONDS_SRC_DIR}/ARM_InstrInfo.cpp"
@@ -172,8 +178,25 @@ if (MELONDS_ENABLE_JIT)
             "${MELONDS_SRC_DIR}/ARMJIT_x64/ARMJIT_ALU.cpp"
             "${MELONDS_SRC_DIR}/ARMJIT_x64/ARMJIT_LoadStore.cpp"
             "${MELONDS_SRC_DIR}/ARMJIT_x64/ARMJIT_Branch.cpp"
-            "${MELONDS_SRC_DIR}/ARMJIT_x64/ARMJIT_Linkage.S"
         )
+        if (NOT WIN32)
+            target_sources(melonds_core PRIVATE "${MELONDS_SRC_DIR}/ARMJIT_x64/ARMJIT_Linkage.S")
+        else()
+            # AzaharVR: GNU assembler with the C preprocessor. CMake's ASM is cl here, which is neither.
+            set(MELONDS_LINKAGE_OBJ "${CMAKE_CURRENT_BINARY_DIR}/ARMJIT_Linkage.obj")
+            add_custom_command(
+                OUTPUT "${MELONDS_LINKAGE_OBJ}"
+                DEPENDS "${MELONDS_SRC_DIR}/ARMJIT_x64/ARMJIT_Linkage.S"
+                COMMAND "${CMAKE_C_COMPILER}" --target=x86_64-pc-windows-msvc /nologo /c
+                        "-I${MELONDS_SRC_DIR}" "/Fo${MELONDS_LINKAGE_OBJ}"
+                        "${MELONDS_SRC_DIR}/ARMJIT_x64/ARMJIT_Linkage.S"
+                COMMENT "Assembling ARMJIT_Linkage.S"
+                VERBATIM
+            )
+            set_source_files_properties("${MELONDS_LINKAGE_OBJ}" PROPERTIES
+                EXTERNAL_OBJECT TRUE GENERATED TRUE)
+            target_sources(melonds_core PRIVATE "${MELONDS_LINKAGE_OBJ}")
+        endif()
     elseif (MELONDS_ARCH_ARM64)
         target_sources(melonds_core PRIVATE
             "${MELONDS_SRC_DIR}/dolphin/Arm64Emitter.cpp"
@@ -191,7 +214,8 @@ if (MELONDS_ENABLE_JIT)
 
     if (WIN32)
         target_compile_definitions(melonds_core PRIVATE _WIN32_WINNT=_WIN32_WINNT_WIN8)
-        target_link_libraries(melonds_core PRIVATE onecore)
+        # AzaharVR: no onecore.lib: the two functions it was for (VirtualAlloc2, MapViewOfFile3) are
+        # looked up at run time, and it would take kernel32's place for the whole program.
     endif()
 endif()
 
@@ -212,6 +236,14 @@ target_include_directories(melonds_core
 )
 
 target_link_libraries(melonds_core PRIVATE melonds_teakra Threads::Threads)
+
+if (MSVC)
+    # AzaharVR: sha1.c knows the byte order of Linux, the BSDs and MinGW
+    set_source_files_properties("${MELONDS_SRC_DIR}/sha1/sha1.c" PROPERTIES COMPILE_DEFINITIONS
+        "BYTE_ORDER=1234;LITTLE_ENDIAN=1234;BIG_ENDIAN=4321;PDP_ENDIAN=3412")
+    # AzaharVR: an empty dirent.h: FATStorage.cpp includes it and goes by fatfs's own directories.
+    target_include_directories(melonds_core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/win32")
+endif()
 
 set_target_properties(melonds_core PROPERTIES
     C_STANDARD 11
