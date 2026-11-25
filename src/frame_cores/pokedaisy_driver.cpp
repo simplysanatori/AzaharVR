@@ -20,6 +20,7 @@
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -244,19 +245,6 @@ void HoldSettings(pd_settings& s) {
     s.showPerf = false;
     s.cheats = false;
     s.rewind = false;
-}
-
-std::pair<const uint8_t*, std::size_t> RomOf(mCore* core) {
-    if (core->platform(core) == mPLATFORM_GBA) {
-        std::size_t size = 0;
-        const void* rom = core->getMemoryBlock(core, GBA_REGION_ROM0, &size);
-        return {static_cast<const uint8_t*>(rom), rom ? size : 0};
-    }
-    if (core->platform(core) == mPLATFORM_GB) {
-        const auto* gb = static_cast<const GB*>(core->board);
-        return {gb->memory.rom, gb->memory.rom ? gb->memory.romSize : 0};
-    }
-    return {nullptr, 0};
 }
 
 std::string Sha1(const uint8_t* data, std::size_t size) {
@@ -1469,6 +1457,26 @@ private:
 
 } // namespace
 
+std::pair<const uint8_t*, std::size_t> RomOf(mCore* core) {
+    if (core->platform(core) == mPLATFORM_GBA) {
+        std::size_t size = 0;
+        const void* rom = core->getMemoryBlock(core, GBA_REGION_ROM0, &size);
+        return {static_cast<const uint8_t*>(rom), rom ? size : 0};
+    }
+    if (core->platform(core) == mPLATFORM_GB) {
+        const auto* gb = static_cast<const GB*>(core->board);
+        return {gb->memory.rom, gb->memory.rom ? gb->memory.romSize : 0};
+    }
+    return {nullptr, 0};
+}
+
+void SettleRom(mCore* core) {
+    if (RomOf(core).first) {
+        const uint32_t start = core->platform(core) == mPLATFORM_GBA ? GBA_BASE_ROM0 : 0;
+        core->rawWrite8(core, start, -1, core->rawRead8(core, start, -1));
+    }
+}
+
 HeldSettings DefaultSettings() {
     pd_settings s{};
     pd_settings_defaults(&s);
@@ -1538,7 +1546,7 @@ std::unique_ptr<FrameDriver> MakePokeDaisyDriver(const DriverServices& services)
         LOG_ERROR(Core, "PokeDaisy: already running a game");
         return nullptr;
     }
-    const auto [rom, size] = PokeDaisy::RomOf(core);
+    auto [rom, size] = PokeDaisy::RomOf(core);
     if (!rom || size < PokeDaisy::kMinRom) {
         return nullptr;
     }
@@ -1547,6 +1555,8 @@ std::unique_ptr<FrameDriver> MakePokeDaisyDriver(const DriverServices& services)
         LOG_INFO(Core, "PokeDaisy: not a ROM it lists ({})", sha1);
         return nullptr;
     }
+    PokeDaisy::SettleRom(core);
+    std::tie(rom, size) = PokeDaisy::RomOf(core);
     return std::make_unique<PokeDaisy::Driver>(services, rom, size, sha1);
 }
 
