@@ -5223,7 +5223,7 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     // AzaharFrame fovonce: Match Game Camera's Set Once value comes while the game plays.
     // AzaharFrame natural: and World Scale set by the grips or the migration, while it plays.
     // AzaharFrame natural: and the Full modes' 3D Depth stepped by the 3D Factor shortcuts.
-    // AzaharFrame kiu131: and Angel's Aim's Bottom Screen moved by a grip (Persistent).
+    // AzaharFrame kiu131: and Angel's Aim's Bottom Screen moved by a grip (In View).
     const bool measured_fov =
         r.command == C::SetSetting &&
         (r.setting == S::MeasuredGameFov || r.setting == S::WorldScaleSaved ||
