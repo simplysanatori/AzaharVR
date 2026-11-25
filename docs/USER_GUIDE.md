@@ -271,7 +271,7 @@ Angel's Aim is an alpha. It aims Kid Icarus: Uprising with your controller and p
 **Aiming**, on the in-game menu's **Controls** tab, is **Off**, **Direct Aim** or **Gyro Aim**. Kid Icarus: Uprising starts on **Direct Aim** once the mod is installed. **Direct Aim** puts the game's reticle where your weapon points on the Primary Screen. **Gyro Aim** moves the reticle as you turn your hand. The first time you turn Aiming on, **Angel's Aim Is On** lists what is on, with a button to the Aiming rows. Every row below can be set per game.
 
 - **Gyro Sensitivity**: scales the gyroscope, so the reticle moves more or less as you turn your hand. It scales **Motion Controls** too.
-- **Recoil** (on by default): a short buzz in the aiming controller on each shot. **Charged Shot** (100%) and **Rapid Fire** (50%) set how strong it is.
+- **Recoil** (on by default): haptic feedback in the aiming controller on each shot. **Charged Shot** (100%) and **Rapid Fire** (50%) set how strong it is.
 - **Weapon in Hand** (on by default): the weapon Pit holds, in place of the aiming controller. With a texture pack on, the weapon takes the pack's textures, from PNG packs and from packs optimized for the Frame (KTX). Under it:
   - **Weapon Opacity** (20% to 100%), to see through the weapon.
   - **Weapon Size**: **Game Size** (default) or **Hand Size**, which shrinks big weapons to fit your hand. **Weapon Scale** (50% to 150%) makes it bigger or smaller.

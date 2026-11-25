@@ -8,7 +8,7 @@ Azahar for Frame is now **Azahar VR**: the same app, now also for Windows and Li
 
 - New Immersive Mode **Full (6DoF): Kid Icarus: Uprising / Angel's Aim**, recommended for the game.
 - New **Turning** options: **Smooth** and **Snap** (steps of 30°, 45°, 60° and 90°).
-- New camera views: **First Person** and **Over the Shoulder**, with **Pit Opacity**.
+- New camera views: **First Person** and **Third Person**, with **Pit Opacity**.
 - New **Bottom Screen** placement: **Off**, **Persistent** and **Wrist**.
 - You can now change the **Reticle Size**.
 - **Trigger Layout** on the **Controls** tab, with **Aiming** on:
@@ -48,7 +48,7 @@ Azahar for Frame is now **Azahar VR**: the same app, now also for Windows and Li
 
 ### Known
 
-- Kid Icarus: Uprising: **Over the Shoulder** still shows a controller in your free hand.
+- Kid Icarus: Uprising: **Third Person** still shows a controller in your free hand.
 - PC: folders with characters outside English in their names aren't supported yet.
 - PC, streaming to a Steam Frame from SteamVR: a reminder that SteamVR uses foveated streaming. If it bothers you or you notice issues, change **Foveated Encoded Video Size** and **Preferred Foveated Sharpness** in SteamVR's **Streaming** settings to improve the experience.
 

@@ -554,7 +554,7 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
         CHECK(std::find(labels.begin(), labels.end(), key) != labels.end());
         CHECK(FrameXr::PerGame::KeysOf(id) == std::vector<std::string>{key});
     }
-    // AzaharFrame kiu133: Camera is two keys: Over the Shoulder's, as before, and the Game's
+    // AzaharFrame kiu133: Camera is two keys: Third Person's, as before, and the Game's
     // Camera's.
     CHECK(FrameXr::PerGame::KeysOf(Id::KiuOverShoulder) ==
           std::vector<std::string>{"vr_kiu_over_shoulder", "vr_kiu_game_camera"});

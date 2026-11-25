@@ -30,7 +30,7 @@ TEST_CASE("Kid Icarus camera tap: in a battle only, else Swap Screens", "[frame_
 
 TEST_CASE("Kid Icarus camera tap: the next camera", "[frame_xr][kiucam]") {
     CHECK(NextView(0) == 1); // First Person
-    CHECK(NextView(1) == 0); // Over the Shoulder
+    CHECK(NextView(1) == 0); // Third Person
     CHECK(NextView(2) == 0); // the Game's Camera
     // As the Camera row writes it: both keys, and back through ViewFor.
     for (const int view : {0, 1}) {

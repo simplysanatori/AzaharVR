@@ -62,7 +62,7 @@ inline constexpr const char* kAngelsAimStatus = "Alpha Pre-Release \xC2\xB7 Very
 inline constexpr const char* kAngelsAimAbout1 =
     "Angel's Aim brings Kid Icarus: Uprising into VR. Aim with your controller: Direct Aim puts "
     "the reticle where you point, Gyro Aim moves it as you turn your hand. Your equipped weapon "
-    "is in your hand, and each real shot buzzes.";
+    "is in your hand, with haptic feedback on every shot.";
 inline constexpr const char* kAngelsAimAbout2 =
     "It's the first step of a bigger project: full 6DOF aiming.";
 inline constexpr const char* kAngelsAimReportLine = "Bug reports and feature ideas welcome.";
@@ -204,14 +204,14 @@ inline constexpr const char* kKiuSubtitleSizeTip =
 inline constexpr const char* kKiuHideOffHandRow = "Free Hand"; // AzaharFrame kiuhands (the owner's choice)
 inline constexpr const char* kKiuHideOffHandTip =
     "Your free hand isn't drawn when Hidden. The Bottom Screen on your wrist stays.";
-/// AzaharFrame kiuaim: Talk Portraits (vr_kiu_talk_portraits, vr_kiu_talk_portraits_opacity:
+/// AzaharFrame kiuaim: Character Portraits (vr_kiu_talk_portraits, vr_kiu_talk_portraits_opacity:
 /// the single screen lane's settings). PROPOSED strings, the tips too.
-inline constexpr const char* kKiuTalkPortraitsRow = "Talk Portraits";
+inline constexpr const char* kKiuTalkPortraitsRow = "Character Portraits";
 inline constexpr const char* kKiuTalkPortraitsTip =
-    "Shows who is talking, with their portrait.";
-inline constexpr const char* kKiuTalkPortraitsOpacityRow = "Talk Portraits Opacity";
+    "Shows the characters when they talk.";
+inline constexpr const char* kKiuTalkPortraitsOpacityRow = "Character Portraits Opacity";
 inline constexpr const char* kKiuTalkPortraitsOpacityTip =
-    "How solid the talk portraits look. Lower lets you see through them.";
+    "How solid the characters look. Lower lets you see through them.";
 /// AzaharFrame kiuaim: Power Menu (vr_kiu_power_menu, _across, _height, _opacity: the power lane's
 /// settings). The row's tip is approved; the other tips PROPOSED.
 inline constexpr const char* kKiuPowerMenuRow = "Power Menu";
@@ -231,22 +231,22 @@ inline constexpr const char* kKiuPowerMenuHeightTip =
 inline constexpr const char* kKiuPowerMenuOpacityRow = "Power Menu Opacity";
 inline constexpr const char* kKiuPowerMenuOpacityTip =
     "How solid the power menu looks. Lower lets you see through it.";
-/// AzaharFrame kiucam: Right Stick Click (vr_kiu_stick_click). The row and its choices are the
+/// AzaharFrame kiucam: R3 (vr_kiu_stick_click). The row and its choices are the
 /// owner's; the tip PROPOSED.
-inline constexpr const char* kKiuStickClickRow = "Right Stick Click";
+inline constexpr const char* kKiuStickClickRow = "R3";
 inline constexpr const char* kKiuStickClickCamera = "Switch Camera";
 inline constexpr const char* kKiuStickClickSwap = "Swap Screens";
 inline constexpr const char* kKiuStickClickTip =
-    "In battles, a tap switches First Person and Over the Shoulder.";
-inline constexpr const char* kOverShoulderRow = "Over the Shoulder";
+    "In battles, R3 switches First Person and Third Person.";
+inline constexpr const char* kOverShoulderRow = "Third Person";
 inline constexpr const char* kOverShoulderTip =
     "Moves your view behind and above Pit, so you can see him.";
-/// AzaharFrame kiu133: Over the Shoulder became one of Camera's choices (the row's old name and
+/// AzaharFrame kiu133: Third Person became one of Camera's choices (the row's old name and
 /// tip, approved, are its choice name), with First Person and the Game's Camera; Pit Opacity for
 /// the two views from outside Pit. PROPOSED strings: they need the owner's approval.
 inline constexpr const char* kCameraRow = "Camera";
 /// AzaharFrame 1.3.0: the Game's Camera is not offered yet (its view is broken on the headset):
-/// Camera lists First Person and Over the Shoulder only, and a saved vr_kiu_game_camera is not
+/// Camera lists First Person and Third Person only, and a saved vr_kiu_game_camera is not
 /// used. AZAHARFRAME_KIU_GAME_CAMERA=1 still turns it on, for work on it.
 inline constexpr bool kGameCameraOffered = false;
 /// AzaharFrame kiu140: Pit's Arm is not offered yet (the owner, 2026-11-24): no row, no hand model
@@ -345,7 +345,7 @@ struct AimPage {
 /// A group's rows now: AimingRows' and AngelsAimFirstPersonRows' (so each keeps its own
 /// condition), less AimPageRowShown's. Mods & Pack and About have none (drawn, not rows).
 /// Places kept for rows that come with their own lanes: Power Menu after Subtitle Size (HUD);
-/// HUD Position, HUD Opacity and Power Menu Opacity at the end of HUD's More; Talk Portraits at
+/// HUD Position, HUD Opacity and Power Menu Opacity at the end of HUD's More; Character Portraits at
 /// the end of Bottom Screen; Single Screen on the front view after Immersive Mode, while the
 /// mode is not Angel's Aim. A row neither list places goes to Aiming's More (from AimingRows) or
 /// View's (from the first-person rows), so nothing is lost: AimPageUnplaced lists them.

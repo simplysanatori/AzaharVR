@@ -3,7 +3,7 @@
 // Refer to the license.txt file included.
 
 // AzaharFrame kiucam: Angel's Aim: a tap of the right stick's click in a battle switches the camera
-// (First Person, Over the Shoulder) in place of Swap Screens, with a short fade round the jump.
+// (First Person, Third Person) in place of Swap Screens, with a short fade round the jump.
 //
 // Pure, unit tested (src/tests/frame_xr/kiu_camera_tap.cpp); the atomics are the game's UI
 // for the XR thread.
@@ -32,7 +32,7 @@ constexpr bool Switches(const Now& n) {
     return n.setting == kSwitchCamera && n.first_person && n.battle && !n.cutscene && !n.paused &&
            !n.game_menu && !n.swapped;
 }
-/// The next camera (FirstPerson::ViewFor's numbers): First Person and Over the Shoulder in turn,
+/// The next camera (FirstPerson::ViewFor's numbers): First Person and Third Person in turn,
 /// First Person from the Game's Camera.
 constexpr int NextView(int view) {
     return view == 0 ? 1 : 0;

@@ -396,7 +396,7 @@ enum class MenuSetting {
     KiuBottomY,      ///< `value` tenths of a degree (vr_kiu_bottom_y)
     WristSide,       ///< `value` 0 Back, 1 Inside (vr_wrist_side, global)
     KiuReticleSize,  ///< `value` percent, 30 to 150 (vr_kiu_reticle_size)
-    KiuOverShoulder, ///< `value` Camera: 0 First Person, 1 Over the Shoulder, 2 Game's Camera
+    KiuOverShoulder, ///< `value` Camera: 0 First Person, 1 Third Person, 2 Game's Camera
                      ///< (vr_kiu_over_shoulder, vr_kiu_game_camera; AzaharFrame kiu133)
     KiuPitOpacity,   ///< `value` percent, 20 to 100 (vr_kiu_pit_opacity; AzaharFrame kiu133)
     KiuSnapTurn,     ///< `value` degrees: 0 Smooth, 30, 45, 60 or 90 (vr_kiu_snap_turn)

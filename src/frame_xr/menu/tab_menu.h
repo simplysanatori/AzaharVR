@@ -294,7 +294,7 @@ enum class Id : int {
     // AzaharFrame kiu131: Bottom Screen replaces Secondary Screen on Wrist and Talk Panel
     KiuBottomScreen, ///< index: Bottom Screen's Off, Persistent, Wrist (vr_kiu_bottom_screen)
     KiuBottomSize,   ///< a slider, 50 to 200 (percent), with Bottom Screen not Off
-    KiuOverShoulder, ///< index: Camera's First Person, Over the Shoulder, Game's Camera
+    KiuOverShoulder, ///< index: Camera's First Person, Third Person, Game's Camera
                      ///< (vr_kiu_over_shoulder, vr_kiu_game_camera; AzaharFrame kiu133: was a switch)
     KiuSnapTurn,     ///< index: Turning's Smooth, 30, 45, 60, 90 degrees (vr_kiu_snap_turn)
     KiuBottomOpacity, ///< AzaharFrame kiu131: a slider, 20 to 100 (percent), with it not Off

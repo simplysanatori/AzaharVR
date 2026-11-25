@@ -1702,7 +1702,7 @@ std::string ExplainFor(Id id) {
     case Id::TurnSpeedVertical:
         return "How fast the camera turns up and down in the Turn Zone.";
     case Id::Recoil:
-        return "A short buzz in the aiming controller on each shot.";
+        return "Haptic feedback in the aiming controller on each shot.";
     case Id::WeaponInHand: // AzaharFrame kiuguns
         return "Shows the weapon Pit holds in place of the aiming controller.";
     case Id::LaserSight:
@@ -1716,9 +1716,9 @@ std::string ExplainFor(Id id) {
     case Id::ProjectileSpeed:
         return "How fast your shots look as they fly.";
     case Id::RecoilCharged: // AzaharFrame kiufix
-        return "How strong the buzz is for a charged shot.";
+        return "How strong the haptic feedback is for a charged shot.";
     case Id::RecoilRapid:
-        return "How strong the buzz is for each rapid-fire shot.";
+        return "How strong the haptic feedback is for each rapid-fire shot.";
     case Id::WeaponSize:
         return "Game Size matches Pit's weapon. Hand Size shrinks big weapons to fit your hand.";
     case Id::WeaponScale:

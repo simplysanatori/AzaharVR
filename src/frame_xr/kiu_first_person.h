@@ -132,7 +132,7 @@
 //                                     (AzaharFrame kiufp3: why kiuview never saw it on the mock).
 //                                     At FP_FIELD 100 most of the edge is outside the view.
 //   AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]
-//                                     AzaharFrame kiuview: an over-the-shoulder view in first
+//                                     AzaharFrame kiuview: an third-person view in first
 //                                     person: the eye moved this many metres behind, above and
 //                                     to the right of the first-person eye (negative: in front,
 //                                     below, to the left), along the game camera's level view
@@ -224,7 +224,7 @@ constexpr bool ShotsFrom6DofFor(bool switch_on, bool first_person_on, bool angel
 bool On();
 /// AzaharFrame kiumode: Angel's Aim in effect (live): everything first person needs. Any thread.
 bool AngelsAim();
-/// AzaharFrame kiu130: the over-the-shoulder view is in effect (live): first person on, and Over
+/// AzaharFrame kiu130: the third-person view is in effect (live): first person on, and Over
 /// the Shoulder's setting (vr_kiu_over_shoulder) or AZAHARFRAME_KIU_SHOULDER (ShoulderFor: the
 /// switch, when set, wins), with no AZAHARFRAME_KIU_EYE_OFFSET (which wins over both). The game
 /// draws Pit with his own weapon there, so the weapon in hand is left out of the image
@@ -233,10 +233,10 @@ bool ShoulderOn();
 /// AzaharFrame kiu133: the Game's Camera view is in effect (live): first person on, and the
 /// setting (vr_kiu_game_camera) or AZAHARFRAME_KIU_GAME_CAMERA (GameCameraFor: the switch, when
 /// set, wins), with no AZAHARFRAME_KIU_EYE_OFFSET. The game's own camera places the eye (the eye
-/// hook stays out); everything else of first person stays. It wins over Over the Shoulder. Any
+/// hook stays out); everything else of first person stays. It wins over Third Person. Any
 /// thread.
 bool GameCameraOn();
-/// AzaharFrame kiu133: a view from outside Pit (Over the Shoulder or the Game's Camera): he is
+/// AzaharFrame kiu133: a view from outside Pit (Third Person or the Game's Camera): he is
 /// drawn with his own weapon, so the weapon in hand is left out, and Pit Opacity applies. Any
 /// thread.
 bool OutsideViewOn();
@@ -674,12 +674,12 @@ inline bool ParseShoulder(const char* text, float& back_m, float& up_m, float& s
     side_m = n == 3 ? std::clamp(v[2], -kMaxShoulderM, kMaxShoulderM) : 0.0f;
     return back_m != 0.0f || up_m != 0.0f || side_m != 0.0f;
 }
-/// AzaharFrame kiutoggles: Over the Shoulder (Settings::values.vr_kiu_over_shoulder) puts the eye
+/// AzaharFrame kiutoggles: Third Person (Settings::values.vr_kiu_over_shoulder) puts the eye
 /// this far behind and above first person's: Pit drawn solid (the game fades him at 2 m back or
 /// less with 0.5 m up; KIU_HOOKS.md, kiufp3).
 inline constexpr float kShoulderSettingBackM = 2.5f;
 inline constexpr float kShoulderSettingUpM = 0.5f;
-/// The over-the-shoulder offset in use: the switch's text when it is set (ParseShoulder: "0" or
+/// The third-person offset in use: the switch's text when it is set (ParseShoulder: "0" or
 /// anything unreadable is off), else the setting's fixed place; false when off.
 inline bool ShoulderFor(const char* switch_text, bool setting, float& back_m, float& up_m,
                         float& side_m) {
@@ -706,7 +706,7 @@ inline bool GameCameraFor(const char* switch_text, bool setting) {
 }
 /// AzaharFrame kiu133: the View row (Angel's Aim) from its two keys: 0 First Person, 1 Over the
 /// Shoulder (vr_kiu_over_shoulder, as before), 2 the Game's Camera (vr_kiu_game_camera, which
-/// wins). Choosing writes both: Over the Shoulder only for 1, the Game's Camera only for 2.
+/// wins). Choosing writes both: Third Person only for 1, the Game's Camera only for 2.
 constexpr int ViewFor(bool over_shoulder, bool game_camera) {
     return game_camera && kGameCameraOffered ? 2 : over_shoulder ? 1 : 0;
 }

@@ -1135,7 +1135,7 @@ struct Values {
     SwitchableSetting<bool> vr_kiu_wrist_screen{false, "vr_kiu_wrist_screen"};
     // The talk panel: the Secondary Screen with the head, below the view (AZAHARFRAME_KIU_FP_TALK).
     SwitchableSetting<bool> vr_kiu_talk_panel{false, "vr_kiu_talk_panel"};
-    // Over the shoulder: the eye 2.5 m behind and 0.5 m above first person's
+    // Third person: the eye 2.5 m behind and 0.5 m above first person's
     // (AZAHARFRAME_KIU_SHOULDER, which also takes other distances).
     SwitchableSetting<bool> vr_kiu_over_shoulder{false, "vr_kiu_over_shoulder"};
     // Right Stick turning's snap angle in degrees: 30, 45, 60 or 90; 0 (or anything else) smooth

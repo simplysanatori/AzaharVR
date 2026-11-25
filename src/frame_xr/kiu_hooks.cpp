@@ -12,7 +12,7 @@
 #include "common/frame_emu_poll.h"
 #include "common/frame_test_switches.h"
 #include "common/logging/log.h"
-#include "common/settings.h" // AzaharFrame kiutoggles: Over the Shoulder
+#include "common/settings.h" // AzaharFrame kiutoggles: Third Person
 #include "core/core.h"
 #include "core/core_timing.h"
 #include "core/hle/kernel/process.h"
@@ -876,7 +876,7 @@ void Hook(int64_t ticks) {
     const KH::Player p = KH::FindPlayer(mem, *s.build);
     KH::EyeRequest eye;
     // AzaharFrame kiu140: the game's own cutscene object (kiu_cutscene.h): its own camera, then.
-    // With Cutscenes In View the eye stays with him, behind and above (Over the Shoulder's place).
+    // With Cutscenes In View the eye stays with him, behind and above (Third Person's place).
     const bool event_cutscene =
         s.event_watch.Update(first_person && KH::CutsceneObject(mem) != 0);
     const bool cutscenes_on_screen = Kiu::FirstPerson::CutscenesOnScreen();
@@ -900,9 +900,9 @@ void Hook(int64_t ticks) {
             }
         }
     }
-    // AzaharFrame kiuview: the over-the-shoulder view (AZAHARFRAME_KIU_SHOULDER, metres back, up
+    // AzaharFrame kiuview: the third-person view (AZAHARFRAME_KIU_SHOULDER, metres back, up
     // and right of the first-person eye along the camera's level view); EYE_OFFSET wins.
-    // AzaharFrame kiutoggles: or Over the Shoulder's setting (vr_kiu_over_shoulder, a fixed
+    // AzaharFrame kiutoggles: or Third Person's setting (vr_kiu_over_shoulder, a fixed
     // place) when the switch is not set; the switch, when set, wins.
     if (first_person && !game_camera && !Switch(kSwitchEyeOffset)) {
         float back = 0.0f, up = 0.0f, side = 0.0f;

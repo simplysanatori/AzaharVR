@@ -873,7 +873,7 @@ struct EyeRequest {
     /// moved behind the player stays behind the camera's view when his body turns to fire.
     bool own_axes = false;
     Quat axes;
-    /// AzaharFrame kiuview: added after the offset is turned, world axes (the over-the-shoulder
+    /// AzaharFrame kiuview: added after the offset is turned, world axes (the third-person
     /// view, AZAHARFRAME_KIU_SHOULDER).
     Vec3 extra{0.0f, 0.0f, 0.0f};
 };
@@ -1012,7 +1012,7 @@ inline std::optional<uint32_t> HideWrite(uint32_t scale_bits, bool want) {
 /// picture out and he takes less damage; on land his hurt boxes were never checked), with the
 /// shots from the hand (their start is the mailbox's; where the game's own start, his weapon's
 /// muzzle, goes with him shrunk was never looked at) and with the eye at his middle (an eye moved
-/// behind him, over the shoulder or by EYE_OFFSET, is there to see him).
+/// behind him, in third person or by EYE_OFFSET, is there to see him).
 inline bool HideInFirstPerson(bool first_person, bool land, bool shots_from_hand,
                               bool eye_moved) {
     return first_person && land && shots_from_hand && !eye_moved;
@@ -1109,7 +1109,7 @@ inline HideBy HideByFrom(const char* text) {
 }
 /// First person hides his model by its draw on land and in the air, whatever the aiming (the
 /// game's own shot start, his weapon's muzzle, does not move: his bones are untouched), with the
-/// eye at his middle (not over the shoulder or moved by EYE_OFFSET: there he is to be seen).
+/// eye at his middle (not in third person or moved by EYE_OFFSET: there he is to be seen).
 inline bool HideByDrawInFirstPerson(bool first_person, bool eye_moved) {
     return first_person && !eye_moved;
 }

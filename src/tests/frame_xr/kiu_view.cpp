@@ -2,7 +2,7 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
-// AzaharFrame kiuview: first person's talk panel, HUD, field, soft edge and over-the-shoulder
+// AzaharFrame kiuview: first person's talk panel, HUD, field, soft edge and third-person
 // switches (kiu_first_person.h) and the field's share of the cover (immersive_layout.h).
 
 #include <cmath>
@@ -82,7 +82,7 @@ TEST_CASE("kiuview: the field, the soft edge and the shoulder", "[kiuview]") {
     CHECK_THAT(back.z, WithinAbs(0.0, 1e-5));
 }
 
-// AzaharFrame kiutoggles: Talk Panel's and Over the Shoulder's settings when their switches are
+// AzaharFrame kiutoggles: Talk Panel's and Third Person's settings when their switches are
 // not set; a switch, when set, wins either way.
 TEST_CASE("kiutoggles: the talk panel and the shoulder, switch or setting", "[kiuview][kiutoggles]") {
     CHECK_FALSE(FP::TalkOnFor(nullptr, false));
