@@ -681,7 +681,7 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
         if (VideoCore::Immersive::g_draw_log.load(std::memory_order_relaxed)) { // test aid
             std::string at;
             for (std::size_t k = 0; k < std::min<std::size_t>(flat.size(), 18); ++k) {
-                at += fmt::format(" {:.2f},{:.2f},{:.2f},{:.2f}", flat[k].x, flat[k].y, flat[k].z,
+                at += fmt::format(" {:.3f},{:.3f},{:.3f},{:.3f}", flat[k].x, flat[k].y, flat[k].z,
                                   flat[k].w);
             }
             LOG_INFO(Render, "kiu hud: texture {:08X} {}:{}",

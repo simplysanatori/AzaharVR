@@ -329,8 +329,9 @@ inline void MovePiece(Vertex* v, std::size_t n, const Place& p, float factor_acr
 
 /// AzaharFrame kiuhud: a page's draw: each quad (or triangle) that is flat and not the whole frame
 /// goes to the page's frame; one over the whole frame (the dim behind the page) stays over the
-/// whole view. All go the same way, so a draw of a band and of small pieces stays right.
-/// Returns how many vertices moved.
+/// whole view: its corners exactly at the frame's, where the shader keeps a flat vertex (VrFactor).
+/// All go the same way, so a draw of a band and of small pieces stays right.
+/// Returns how many vertices were placed.
 inline std::size_t MovePage(Vertex* v, std::size_t n, const Place& p, float factor_across,
                             float factor_up) {
     const std::size_t step = n % 6 == 0 ? 6 : 3;
@@ -339,6 +340,17 @@ inline std::size_t MovePage(Vertex* v, std::size_t n, const Place& p, float fact
         if (Movable(v + i, step)) {
             MoveAs(v + i, step, p, factor_across, factor_up, Group::Middle);
             moved += step;
+            continue;
+        }
+        bool frame = step == 6; // flat, every corner near the frame's
+        for (std::size_t k = i; frame && k < i + step; ++k) {
+            frame = std::abs(v[k].w - 1.0f) < 1e-4f && std::abs(v[k].x) > 0.9f &&
+                    std::abs(v[k].y) > 0.9f && std::isfinite(v[k].x) && std::isfinite(v[k].y);
+        }
+        for (std::size_t k = i; frame && k < i + step; ++k) {
+            v[k].x = std::copysign(1.0f, v[k].x);
+            v[k].y = std::copysign(1.0f, v[k].y);
+            ++moved;
         }
     }
     return moved;

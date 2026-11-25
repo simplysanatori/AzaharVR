@@ -304,12 +304,15 @@ TEST_CASE("Kid Icarus HUD: a page's draw, quad by quad the same way; the dim sta
     const Place p = PagePlaceInBattle(kTanX, kTanY);
     REQUIRE(p.page);
     Vertex v[18];
-    quad(v, -1.0f, 1.0f, -1.0f, 1.0f);     // the dim over the picture
+    quad(v, -0.96f, 1.0f, -1.0f, 1.02f);   // the dim over the picture
     quad(v + 6, 0.6f, 0.9f, -1.0f, -0.3f); // where the bar's group would be
     quad(v + 12, -0.9f, -0.6f, 0.5f, 1.0f); // the frame's lower part
-    CHECK(MovePage(v, 18, p, 1.0f, 1.0f) == 12);
-    CHECK(v[0].w == 1.0f); // as the game draws it: the shader keeps it over the whole view
-    CHECK(v[0].x == -1.0f);
+    CHECK(MovePage(v, 18, p, 1.0f, 1.0f) == 18);
+    for (int i = 0; i < 6; ++i) { // the shader keeps it over the whole view
+        CHECK(v[i].w == 1.0f);
+        CHECK(std::abs(v[i].x) == 1.0f);
+        CHECK(std::abs(v[i].y) == 1.0f);
+    }
     for (int i = 6; i < 18; ++i) {
         CHECK(v[i].w == 2.0f);
     }
