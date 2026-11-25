@@ -230,6 +230,9 @@ file(GLOB_RECURSE THEMES ${PROJECT_SOURCE_DIR}/dist/qt_themes/*)
 if (ENABLE_QT_UPDATE_CHECKER)
     target_link_libraries(citra_qt PRIVATE httplib json-headers)
     target_sources(citra_qt PRIVATE update_checker.cpp update_version.cpp update_prompt.cpp)
+    if (NOT ENABLE_FRAME_XR) # (with it, frame_open_link is in the Frame sources below)
+        target_sources(citra_qt PRIVATE frame_open_link.cpp frame_open_link.h)
+    endif()
     target_compile_definitions(citra_qt PUBLIC ENABLE_QT_UPDATE_CHECKER)
 endif()
 
@@ -315,7 +318,7 @@ if (ENABLE_FRAME_XR) # AzaharFrame
     # VR and flat in one run: the gamepad for flat, the mode file, the window in Game Mode.
     target_sources(citra_qt PRIVATE frame_mode.cpp frame_mode.h)
     # AzaharFrame texui: the in-game menu's Mods and Textures segments, the Qt side.
-    target_sources(citra_qt PRIVATE frame_mods.cpp frame_mods.h)
+    target_sources(citra_qt PRIVATE frame_mods.cpp frame_mods.h frame_open_link.cpp frame_open_link.h)
     # AzaharFrame memguard: "Preload Custom Textures" with the memory numbers, VR and Flat.
     target_sources(citra_qt PRIVATE frame_preload_confirm.cpp frame_preload_confirm.h)
     # AzaharFrame memwarn: the memory watch's toast and its pause before the limit, VR and Flat.
@@ -387,6 +390,7 @@ endif()
 if (ENABLE_FRAME_XR AND ENABLE_TESTS AND NOT WIN32)
     add_executable(frame_qt_tests ../tests/frame_xr/offscreen_modal.cpp frame_offscreen.cpp
                                   ../tests/frame_xr/update_prompt.cpp update_prompt.cpp # AzaharVR updatecheck
+                                  ../tests/frame_xr/open_link.cpp frame_open_link.cpp frame_open_link.h
                                   frame_offscreen.h
                                   ../tests/frame_xr/per_game_ini.cpp # AzaharFrame useglobal
                                   ../tests/frame_xr/wrist_angle_carry.cpp # AzaharFrame kiuaim
