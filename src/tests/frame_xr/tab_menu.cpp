@@ -344,6 +344,20 @@ TEST_CASE("Tab menu: Move Screens, Touchpad, Edit Controls, Cheats", "[frame_xr]
     CHECK(LabelFor(Id::ReticleAtEdge) == "At Edge");
 }
 
+// AzaharFrame cheatstab: the Mods tab and its Cheats segment.
+namespace {
+CheatsModel SampleCheats() {
+    CheatsModel c;
+    c.cheats = {{"No Bloom (USA)", CheatSource::Developer, true, ""},
+                {"Infinite HP", CheatSource::Sharkive, false, "for v1.0, this game is v1.1"},
+                {"Max Money", CheatSource::User, false, ""}};
+    for (int i = 0; i < 12; i++) {
+        c.cheats.push_back({"Sharkive " + std::to_string(i), CheatSource::Sharkive, false, ""});
+    }
+    c.download = DownloadState::Done;
+    c.status = "15 cheats added, 1 for another version";
+    return c;
+}
 } // namespace
 
 TEST_CASE("Tab menu: the Mods tab", "[frame_xr][tabmenu]") {
