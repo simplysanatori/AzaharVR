@@ -39,7 +39,7 @@ camera is near him; first person puts the eye inside him.
   seen to take him away on land (`KIU_HOOKS.md:205`). It was kept out of Angel's Aim because in
   the air it washes the picture out and he takes less damage there.
 
-So the over-the-shoulder view is not the cause (it is a test switch, `AZAHARFRAME_KIU_SHOULDER`,
+So the third-person view is not the cause (it is a test switch, `AZAHARFRAME_KIU_SHOULDER`,
 and the owner's pictures are first person). Neither is the stub being limited to a test switch.
 
 ## Changes (commit c40c850ae)

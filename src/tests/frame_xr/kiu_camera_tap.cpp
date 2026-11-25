@@ -26,6 +26,21 @@ TEST_CASE("Kid Icarus camera tap: in a battle only, else Swap Screens", "[frame_
     CHECK_FALSE(with([](Now& n) { n.swapped = true; })); // it swaps back
     CHECK_FALSE(with([](Now& n) { n.setting = kSwapScreens; }));
     CHECK_FALSE(Switches({}));
+    // In a cutscene it does nothing: no switch, no swap.
+    Now scene = battle;
+    scene.cutscene = true;
+    CHECK(Nothing(scene));
+    CHECK_FALSE(Nothing(battle));
+    CHECK_FALSE(Nothing({}));
+    Now other = scene;
+    other.swapped = true; // it swaps back
+    CHECK_FALSE(Nothing(other));
+    other = scene;
+    other.setting = kSwapScreens;
+    CHECK_FALSE(Nothing(other));
+    other = scene;
+    other.first_person = false;
+    CHECK_FALSE(Nothing(other));
 }
 
 TEST_CASE("Kid Icarus camera tap: the next camera", "[frame_xr][kiucam]") {

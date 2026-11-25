@@ -133,7 +133,7 @@ VideoCore::KiuTalk::Expected ExpectedOf(const Reader& m, uint32_t ctx, bool pict
     return e;
 }
 
-/// The cut-out: with Talk Portraits, unless the test switch AZAHARFRAME_KIU_TALK_CUTOUT is 0.
+/// The cut-out: with Character Portraits, unless the test switch AZAHARFRAME_KIU_TALK_CUTOUT is 0.
 constexpr bool CutoutFor(const char* switch_text, bool portraits) {
     return portraits && !(switch_text && *switch_text == '0');
 }

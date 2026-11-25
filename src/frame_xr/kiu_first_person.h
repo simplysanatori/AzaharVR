@@ -496,6 +496,11 @@ inline constexpr Cut kPortraitCut{0, 42, 320, 198};
 /// reach 28 degrees to each side, 15 and more below.
 inline constexpr float kPortraitSideDeg = 25.0f, kPortraitDownDeg = 7.5f,
                        kPortraitWidthDeg = 16.0f;
+/// Subtitle Height there (its default), and how far down the portraits are at another.
+inline constexpr float kPortraitWordsDeg = -18.0f;
+constexpr float PortraitDown(float words_deg) {
+    return kPortraitDownDeg + kPortraitWordsDeg - words_deg;
+}
 /// Where the cut is in an image of the whole Secondary Screen of this size.
 struct CutRect {
     int x = 0, y = 0, width = 0, height = 0;
@@ -611,11 +616,11 @@ constexpr bool PortraitsWantedFor(const char* switch_text, bool setting) {
     return switch_text ? std::string_view{switch_text} == "1" : setting;
 }
 /// The words on the Primary Screen too (the "talk on top" group): AZAHARFRAME_KIU_TALK_TOP when set
-/// ("1" on, anything else off), else with the card unless the Secondary Screen is in the view
-/// (Persistent): the card leaves the words out (rows 0 to 41), and on land the game has them on
-/// the Secondary Screen only, so without this there would be faces and no words.
-constexpr bool TalkTopFor(const char* switch_text, bool portraits, bool persistent) {
-    return switch_text ? std::string_view{switch_text} == "1" : portraits && !persistent;
+/// ("1" on, anything else off), else unless the Secondary Screen is in the view (Persistent): on
+/// land the game has them on the Secondary Screen only, which the Wrist's is not looked at for
+/// and Off has nowhere (the owner, 2026-11-25). The portraits' card leaves them out too.
+constexpr bool TalkTopFor(const char* switch_text, bool persistent) {
+    return switch_text ? std::string_view{switch_text} == "1" : !persistent;
 }
 /// The two above from the switches and settings now, and the card's opacity
 /// (vr_kiu_talk_portraits_opacity, 20 to 100 percent; live). Any thread.
@@ -624,9 +629,12 @@ bool TalkTopWanted();
 float PortraitAlpha();
 /// AzaharFrame kiu1s: where the portraits' card is, in the head's frame: the one place to change
 /// (the owner would later have it by the off hand itself). `right`: the off hand is the right one.
-inline PanelInView PortraitPlace(bool right) {
-    return PersistentInView(kPortraitSideDeg * (right ? 1.0f : -1.0f), kPortraitDownDeg,
-                            kPortraitWidthDeg,
+/// `words_deg`: Subtitle Height, degrees up, while the two move as one (the owner, 2026-11-25:
+/// Linked), else the usual one; `across` and `up`: degrees to the right and up from there.
+inline PanelInView PortraitPlace(bool right, float words_deg = kPortraitWordsDeg,
+                                 float across = 0.0f, float up = 0.0f) {
+    return PersistentInView(kPortraitSideDeg * (right ? 1.0f : -1.0f) + across,
+                            PortraitDown(words_deg) - up, kPortraitWidthDeg,
                             static_cast<float>(kPortraitCut.width) /
                                 static_cast<float>(kPortraitCut.height));
 }

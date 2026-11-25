@@ -3364,7 +3364,7 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
     CHECK(SectionOf(Id::KiuBottomReset) == SettingsSection::Immersive);
     CHECK_FALSE(PerGameSetting(Id::KiuBottomReset));
     CHECK(LabelFor(Id::KiuBottomScreen) == "Bottom Screen");
-    CHECK(OptionsFor(Id::KiuBottomScreen) == std::vector<std::string>{"Off", "Persistent", "Wrist"});
+    CHECK(OptionsFor(Id::KiuBottomScreen) == std::vector<std::string>{"Off", "In View", "Wrist"});
     CHECK(LabelFor(Id::KiuBottomSize) == "Bottom Screen Size");
     CHECK(LabelFor(Id::KiuBottomOpacity) == "Bottom Screen Opacity");
     CHECK(LabelFor(Id::KiuBottomReset) == "Reset Bottom Screen Position");

@@ -94,8 +94,7 @@ TEST_CASE("Angel's Aim page: rows that leave it or wait", "[frame_xr][kiuaim]") 
 
 TEST_CASE("Angel's Aim page: the approved tips, each within two lines", "[frame_xr][kiuaim]") {
     CHECK(std::string(AimPageTip(Id::GyroAim)) ==
-          "Direct Aim: the reticle goes where you point. Gyro Aim: it moves as you turn your "
-          "hand. Hold the grip to free it.");
+          "Hold the grip to free your aim.");
     CHECK(std::string(AimPageTip(Id::GyroSensitivity)) ==
           "How far the reticle moves as you turn your hand. Applies to every game.");
     CHECK(std::string(AimPageTip(Id::Recoil)) ==
@@ -105,7 +104,7 @@ TEST_CASE("Angel's Aim page: the approved tips, each within two lines", "[frame_
           "How strong it is for each rapid-fire shot.");
     CHECK(AimPageTip(Id::KiuBottomScreen) == nullptr); // its own constant, everywhere
     CHECK(std::string(kBottomScreenTip) ==
-          "Persistent: always in view, low in front of you; hold a grip on it to move it. Wrist: "
+          "In View: low in front of you; hold a grip on it to move it. Wrist: "
           "on your free hand's wrist; turn your wrist to see it, and point at it to touch.");
     Kit kit{1.0f};
     for (const char* tip : {kAimTipAiming, kAimTipGyroSensitivity, kAimTipRecoil,
@@ -233,6 +232,8 @@ std::vector<MenuModel> Sweep(Case c) {
                 m.muzzle_flash = bits & 4;
                 m.projectiles = bits & 1;
                 m.kiu_power_menu = bits % 5;
+                m.kiu_talk_portraits = bits & 1;
+                m.kiu_portraits_linked = (bits >> 1) & 1;
                 out.push_back(m);
             }
         }
@@ -355,6 +356,17 @@ TEST_CASE("Angel's Aim page: counts, and every row reachable", "[frame_xr][kiuai
         p.kiu_talk_portraits = shown;
         CHECK(Has(AimPageRows(p, AimGroup::BottomScreen).more, Id::KiuTalkPortraitsOpacity) ==
               (shown != 0));
+        for (const int hud : {0, 1}) { // Linked is with Subtitle Height: HUD: In View
+            for (const int linked : {0, 1}) {
+                p.kiu_hud = hud;
+                p.kiu_portraits_linked = linked;
+                const std::vector<Id> more = AimPageRows(p, AimGroup::BottomScreen).more;
+                const bool own = shown != 0 && (hud == 0 || linked == 0);
+                CHECK(Has(more, Id::KiuPortraitsLinked) == (shown != 0 && hud != 0));
+                CHECK(Has(more, Id::KiuPortraitsAcross) == own);
+                CHECK(Has(more, Id::KiuPortraitsHeight) == own);
+            }
+        }
     }
     CHECK(AimPageRows(m, AimGroup::Weapon).rows ==
           std::vector<Id>{Id::WeaponInHand, Id::MuzzleFlash, Id::Projectiles, Id::Recoil,
@@ -633,7 +645,7 @@ TEST_CASE("Angel's Aim page: Power Menu", "[frame_xr][kiuaim]") {
     }
     CHECK(LabelFor(Id::KiuPowerMenu) == "Power Menu");
     CHECK(LabelFor(Id::KiuPowerMenuOpacity) == "Power Menu Opacity");
-    CHECK(ExplainFor(Id::KiuPowerMenu) == "Shows your powers when you pick one. Choose where.");
+    CHECK(ExplainFor(Id::KiuPowerMenu) == "Off Hand: when you pick one. Elsewhere: always in battles.");
     CHECK(OptionsFor(Id::KiuPowerMenu) ==
           std::vector<std::string>{"Off", "Off Hand", "Health Bar", "Middle", "Score"}); // stored order
     CHECK(LabelFor(Id::KiuPowerMenuAcross) == "Power Menu Left/Right");

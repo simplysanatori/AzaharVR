@@ -22,7 +22,7 @@
 //   (the catalog's C-Stick & Gyro rows, as Install Mods draws them: Install, its versions)
 //   ─────────────────────────────────────────────────────────────
 //   Suggested                                                        (title)
-//   Kid Icarus Uprising Weapons HD                     Installed / Not Installed
+//   Kid Icarus: Uprising HD                            Installed / Not Installed
 //   (the catalog's weapons and effects texture pack: installed and on in the game's packs)
 //
 // The values come from the Qt side (citra_qt/frame_mods.cpp, FrameXr::SetInGameMenuAngelsAim).
@@ -60,11 +60,10 @@ inline constexpr const char* kAngelsAimTitle = "About Angel's Aim";
 inline constexpr const char* kAngelsAimAlpha = "Alpha";
 inline constexpr const char* kAngelsAimStatus = "Alpha Pre-Release \xC2\xB7 Very Experimental \xC2\xB7 Have Fun!";
 inline constexpr const char* kAngelsAimAbout1 =
-    "Angel's Aim brings Kid Icarus: Uprising into VR. Aim with your controller: Direct Aim puts "
-    "the reticle where you point, Gyro Aim moves it as you turn your hand. Your equipped weapon "
-    "is in your hand, with haptic feedback on every shot.";
+    "Kid Icarus: Uprising in first-person VR: full 6DoF, with weapon mesh models. Or play in "
+    "widescreen with Darkshade's C-Stick & Gyro mod.";
 inline constexpr const char* kAngelsAimAbout2 =
-    "It's the first step of a bigger project: full 6DOF aiming.";
+    "First step toward Uprising VR.";
 inline constexpr const char* kAngelsAimReportLine = "Bug reports and feature ideas welcome.";
 /// AzaharFrame kiu132: "Required" until 1.3.0. PROPOSED strings (kiu132): they need the owner's
 /// approval. The C-Stick mods are needed for the single-screen modes and are left out of a run
@@ -85,7 +84,7 @@ inline constexpr const char* kAngelsAimGroupModsAndPack = "Mods & Pack";
 inline constexpr const char* kAngelsAimModName = "Darkshade's C-Stick & Gyro Mod";
 inline constexpr const char* kAngelsAimSuggested = "Suggested";
 /// One row for the weapons and effects textures, named as the catalog names the pack.
-inline constexpr const char* kAngelsAimTexturesPack = "Kid Icarus Uprising Weapons HD";
+inline constexpr const char* kAngelsAimTexturesPack = "Kid Icarus: Uprising HD";
 /// AzaharFrame kiu140: the row that takes a hand model from a zip, and its toast (approved
 /// 2026-11-24).
 inline constexpr const char* kAngelsAimHandModel = "Pit's Hand Model";
@@ -136,10 +135,10 @@ inline constexpr const char* kTriggerLayoutOriginalTip =
 /// Reticle). PROPOSED strings: they need the owner's approval.
 inline constexpr const char* kBottomScreenRow = "Bottom Screen";
 inline constexpr const char* kBottomScreenOff = "Off";
-inline constexpr const char* kBottomScreenPersistent = "Persistent";
+inline constexpr const char* kBottomScreenPersistent = "In View";
 inline constexpr const char* kBottomScreenWrist = "Wrist";
 inline constexpr const char* kBottomScreenTip =
-    "Persistent: always in view, low in front of you; hold a grip on it to move it. Wrist: on "
+    "In View: low in front of you; hold a grip on it to move it. Wrist: on "
     "your free hand's wrist; turn your wrist to see it, and point at it to touch.";
 inline constexpr const char* kBottomScreenSizeRow = "Bottom Screen Size";
 inline constexpr const char* kBottomScreenSizeTip = "How big the Bottom Screen is, in view or on your wrist.";
@@ -212,6 +211,16 @@ inline constexpr const char* kKiuTalkPortraitsTip =
 inline constexpr const char* kKiuTalkPortraitsOpacityRow = "Character Portraits Opacity";
 inline constexpr const char* kKiuTalkPortraitsOpacityTip =
     "How solid the characters look. Lower lets you see through them.";
+/// Asked for by the owner (2026-11-25); the strings PROPOSED.
+inline constexpr const char* kKiuPortraitsLinkedRow = "Portraits and Subtitles";
+inline constexpr const char* kKiuPortraitsLinkedTip =
+    "Linked: moved as one. Separate: each has its own place.";
+inline constexpr const char* kKiuPortraitsAcrossRow = "Character Portraits Left/Right";
+inline constexpr const char* kKiuPortraitsAcrossTip =
+    "How far left or right the characters are. 0\u00B0 is their usual place.";
+inline constexpr const char* kKiuPortraitsHeightRow = "Character Portraits Height";
+inline constexpr const char* kKiuPortraitsHeightTip =
+    "How high the characters are. 0\u00B0 is their usual place.";
 /// AzaharFrame kiuaim: Power Menu (vr_kiu_power_menu, _across, _height, _opacity: the power lane's
 /// settings). The row's tip is approved; the other tips PROPOSED.
 inline constexpr const char* kKiuPowerMenuRow = "Power Menu";
@@ -221,13 +230,13 @@ inline constexpr const char* kKiuPowerMenuHealthBar = "Health Bar";
 inline constexpr const char* kKiuPowerMenuMiddle = "Middle";
 inline constexpr const char* kKiuPowerMenuScore = "Score";
 inline constexpr const char* kKiuPowerMenuTip =
-    "Shows your powers when you pick one. Choose where.";
+    "Off Hand: when you pick one. Elsewhere: always in battles.";
 inline constexpr const char* kKiuPowerMenuAcrossRow = "Power Menu Left/Right";
 inline constexpr const char* kKiuPowerMenuAcrossTip =
-    "How far left or right the power menu is. 0\u00B0 is straight ahead.";
+    "How far left or right the power menu is. 0\u00B0 is its usual place.";
 inline constexpr const char* kKiuPowerMenuHeightRow = "Power Menu Height";
 inline constexpr const char* kKiuPowerMenuHeightTip =
-    "How high the power menu is. 0\u00B0 is straight ahead.";
+    "How high the power menu is. 0\u00B0 is its usual place.";
 inline constexpr const char* kKiuPowerMenuOpacityRow = "Power Menu Opacity";
 inline constexpr const char* kKiuPowerMenuOpacityTip =
     "How solid the power menu looks. Lower lets you see through it.";
@@ -322,8 +331,7 @@ void AimPageFilter(const MenuModel& model, std::vector<Id>& rows);
 /// The page's own tooltip for a row whose text is ExplainFor's elsewhere (approved), or null.
 const char* AimPageTip(Id id);
 inline constexpr const char* kAimTipAiming =
-    "Direct Aim: the reticle goes where you point. Gyro Aim: it moves as you turn your hand. "
-    "Hold the grip to free it.";
+    "Hold the grip to free your aim.";
 inline constexpr const char* kAimTipGyroSensitivity =
     "How far the reticle moves as you turn your hand. Applies to every game.";
 inline constexpr const char* kAimTipRecoil =

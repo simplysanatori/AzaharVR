@@ -32,6 +32,11 @@ constexpr bool Switches(const Now& n) {
     return n.setting == kSwitchCamera && n.first_person && n.battle && !n.cutscene && !n.paused &&
            !n.game_menu && !n.swapped;
 }
+/// In a cutscene the tap does nothing (the owner, 2026-11-25): a swap there leaves the view for a
+/// small flat picture. With Swap Screens chosen it still swaps, and it always swaps back.
+constexpr bool Nothing(const Now& n) {
+    return n.setting == kSwitchCamera && n.first_person && n.cutscene && !n.swapped;
+}
 /// The next camera (FirstPerson::ViewFor's numbers): First Person and Third Person in turn,
 /// First Person from the Game's Camera.
 constexpr int NextView(int view) {

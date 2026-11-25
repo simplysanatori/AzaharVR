@@ -258,6 +258,9 @@ const std::vector<AimPlace>& AimPlaces() {
         // Under More: the page has five rows with Wrist already.
         {G::BottomScreen, true, Id::KiuTalkPortraits},
         {G::BottomScreen, true, Id::KiuTalkPortraitsOpacity},
+        {G::BottomScreen, true, Id::KiuPortraitsLinked},
+        {G::BottomScreen, true, Id::KiuPortraitsAcross},
+        {G::BottomScreen, true, Id::KiuPortraitsHeight},
         {G::Weapon, false, Id::WeaponInHand},
         {G::Weapon, false, Id::MuzzleFlash},
         {G::Weapon, false, Id::Projectiles},

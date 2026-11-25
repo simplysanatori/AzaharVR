@@ -1211,10 +1211,10 @@ in both builds by its code; no code or layout of it is used.
   V: START: up in the same frame, 6 layers before and after; head turned 25 left and 12 down: the panel 24.6 left, 16 down;
   Resume, Retreat and Yes by the beam and the trigger (246,83 and 225,171 asked and touched, ZL, ZR and L 0), the hub after.
   Not run: the Options pages, a re-centre while paused. The mock does not composite, so the panel over the picture was not seen.
-- **Talk Portraits** (`vr_kiu_talk_portraits`, off; `vr_kiu_talk_portraits_opacity`, 20 to 100, per game, live; no menu rows yet).
+- **Character Portraits** (`vr_kiu_talk_portraits`, off; `vr_kiu_talk_portraits_opacity`, 20 to 100, per game, live).
   The setting asks for the card below; `AZAHARFRAME_KIU_PORTRAITS`, when set, wins (1 on, else off). The card is at its own opacity,
-  blended as the Bottom Screen's. With the card and no `AZAHARFRAME_KIU_TALK_TOP` set, the words go on the Primary Screen too
-  (`TalkTopFor`) unless Bottom Screen is Persistent: the card leaves the words out, and on land the game has them below only.
+  blended as the Bottom Screen's. With no `AZAHARFRAME_KIU_TALK_TOP` set, the words go on the Primary Screen too (`TalkTopFor`;
+  with the card or without) unless Bottom Screen is Persistent: on land the game has them below only.
 - **`AZAHARFRAME_KIU_PORTRAITS=1`.** While the game draws the talk's portraits (or an illustration), that part of the Secondary
   Screen's own picture (rows 42 to 240 of 320 x 240, `kPortraitCut`; a plain card) is a quad with the head, 25 degrees to the off
   hand's side, 7.5 below, 16 wide, to look at only. No code patch. All through a battle the quad is there,
@@ -1224,7 +1224,7 @@ in both builds by its code; no code or layout of it is used.
   card at 13 below (the plan) was over the words' left end at their usual size, so it is above them. On land the same (25.3 left,
   7.2 below in the trace), away with Bottom Screen: Persistent. An illustration is in the same cut (rows 55 to 184) and shows in
   the card. A boss's card is not shown.
-- **The characters alone** (`video_core/kiu_talk.h`; with Talk Portraits, `AZAHARFRAME_KIU_TALK_CUTOUT=0` for the card). The draws of the
+- **The characters alone** (`video_core/kiu_talk.h`; with Character Portraits, `AZAHARFRAME_KIU_TALK_CUTOUT=0` for the card). The draws of the
   bottom pass that are the portraits' and the illustration's are drawn again, coloured as the game does, into a transparent copy of the
   bottom screen under its picture in the same XR image (below the powers' strip); the card's quad shows that, all rows (the tallest
   portraits reach over row 42). No frame, backdrop, words or power bar.

@@ -5223,7 +5223,7 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     // AzaharFrame fovonce: Match Game Camera's Set Once value comes while the game plays.
     // AzaharFrame natural: and World Scale set by the grips or the migration, while it plays.
     // AzaharFrame natural: and the Full modes' 3D Depth stepped by the 3D Factor shortcuts.
-    // AzaharFrame kiu131: and Angel's Aim's Bottom Screen moved by a grip (Persistent).
+    // AzaharFrame kiu131: and Angel's Aim's Bottom Screen moved by a grip (In View).
     const bool measured_fov =
         r.command == C::SetSetting &&
         (r.setting == S::MeasuredGameFov || r.setting == S::WorldScaleSaved ||
@@ -5856,6 +5856,15 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         break;
     case S::KiuTalkPortraitsOpacity:
         set(v.vr_kiu_talk_portraits_opacity, std::clamp<u32>(u, 20, 100));
+        break;
+    case S::KiuPortraitsLinked:
+        set(v.vr_kiu_portraits_linked, r.value != 0);
+        break;
+    case S::KiuPortraitsAcross:
+        set(v.vr_kiu_portraits_across, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuPortraitsHeight:
+        set(v.vr_kiu_portraits_height, std::clamp(r.value, -40, 40));
         break;
     case S::KiuReticleSize:
         set(v.vr_kiu_reticle_size, std::clamp<u32>(u, 30, 150));
