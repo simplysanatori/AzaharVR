@@ -136,6 +136,38 @@ TEST_CASE("texdl: the list is asked for once a run", "[texdl]") {
     CHECK(ShouldFetchList(F::Failed, true, false));
 }
 
+TEST_CASE("texdl: the list read last is kept", "[texdl]") {
+    Temp t;
+    const std::string list = DefaultCatalogJson(), built_in = R"({"schema":1,"packs":[]})";
+    const fs::path file = fs::path(t.load()) / "texture-packs" / ".azaharvr-list.json";
+    CHECK_FALSE(KeptList(t.load(), built_in));
+    KeepList(t.load(), list, built_in);
+    auto kept = KeptList(t.load(), built_in);
+    REQUIRE(kept);
+    CHECK(kept->packs.size() == DefaultCatalog().packs.size());
+    CHECK_FALSE(KeptList(t.load(), built_in + " ")); // another version of the app's
+    // Not whole, or not a list
+    std::string text;
+    {
+        std::ifstream in(file, std::ios::binary);
+        text.assign(std::istreambuf_iterator<char>(in), {});
+    }
+    for (const std::string& bad : {std::string{}, std::string("[]"), std::string("{"),
+                                   std::string(R"({"list":5})"), text.substr(0, text.size() / 2),
+                                   std::string(text).replace(text.find("DeathWrench"), 5, "Other")}) {
+        std::ofstream(file, std::ios::binary) << bad;
+        CHECK_FALSE(KeptList(t.load(), built_in));
+    }
+    for (const char* not_a_list : {"", "{}", R"({"schema":1,"packs":[]})", R"({"schema":99,"packs":[]})"}) {
+        KeepList(t.load(), not_a_list, built_in);
+        CHECK_FALSE(KeptList(t.load(), built_in));
+    }
+    // It is no pack and no game's folder
+    KeepList(t.load(), list, built_in);
+    CHECK(Downloader(t.load(), DefaultCatalog()).ListForTitle(kTitle).size() ==
+          Downloader(t.load(), *KeptList(t.load(), built_in)).ListForTitle(kTitle).size());
+}
+
 // AzaharFrame modcat2: the GameBanana source (the newest clean file of a mod).
 TEST_CASE("texdl: the gamebanana source parses, and bad ones are dropped", "[texdl]") {
     std::vector<std::string> warnings;

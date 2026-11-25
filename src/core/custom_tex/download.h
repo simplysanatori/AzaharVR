@@ -120,6 +120,12 @@ struct Catalog {
 /// are dropped with a note in `warnings`. nullopt when the text is not a catalog.
 std::optional<Catalog> ParseCatalog(std::string_view json, std::string* error = nullptr,
                                     std::vector<std::string>* warnings = nullptr);
+/// The list read last, kept in the load folder's texture-packs for the next run. `built_in`: the
+/// compiled-in copy. Kept returns it only when the same compiled-in copy kept it (one that comes
+/// with a newer version of the app wins), and it is whole and valid as a list just read must be.
+void KeepList(const std::string& load_dir, const std::string& list, const std::string& built_in);
+std::optional<Catalog> KeptList(const std::string& load_dir, const std::string& built_in);
+
 /// The list's one request a run: for the player's Download Packs (`player`; again after one that
 /// failed), or when the Textures segment shows for a game with a pack of the list (`pack_here`).
 enum class ListFetch : u8 { None, Running, Read, Failed };

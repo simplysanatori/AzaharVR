@@ -251,6 +251,20 @@ const Mods::Compat::Game& FrameMods::GameInfo() {
     return *game_info;
 }
 
+namespace {
+
+/// With the list read last, until the run's own request
+std::shared_ptr<CustomTex::Download::Downloader> MakeDownloader() {
+    namespace D = CustomTex::Download;
+    auto downloader = std::make_shared<D::Downloader>();
+    if (auto kept = D::KeptList(CustomTex::DefaultPaths().load_dir, D::DefaultCatalogJson())) {
+        downloader->SetCatalog(std::move(*kept));
+    }
+    return downloader;
+}
+
+} // namespace
+
 void FrameMods::Open(u64 title_id_, int run_) {
     if (title_id_ != title_id || run_ != run) {
         // Another game, or the same one started again: what waited for a restart has applied.
@@ -307,7 +321,7 @@ void FrameMods::Open(u64 title_id_, int run_) {
     RefreshPacks();
     RefreshAngelsAim(); // AzaharFrame kiufix
     if (!downloader) {
-        downloader = std::make_shared<CustomTex::Download::Downloader>();
+        downloader = MakeDownloader();
     }
     ListPackDownloads(); // which packs it brought (Delete), and a download that still runs
     if (mods.catalog == Menu::CatalogState::Ready) {
@@ -1600,7 +1614,7 @@ void FrameMods::PartsChanged() {
 
 void FrameMods::LoadPackDownloads() {
     if (!downloader) {
-        downloader = std::make_shared<CustomTex::Download::Downloader>();
+        downloader = MakeDownloader();
     }
     ListPackDownloads();
     FetchPackList(true);
@@ -1628,6 +1642,7 @@ void FrameMods::FetchPackList(bool player) {
             if (!parsed || parsed->packs.empty()) {
                 return false;
             }
+            D::KeepList(CustomTex::DefaultPaths().load_dir, r.body, D::DefaultCatalogJson());
             dl->SetCatalog(std::move(*parsed));
             return true;
         },

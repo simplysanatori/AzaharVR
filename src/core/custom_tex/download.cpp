@@ -1406,6 +1406,58 @@ std::string HexSha256(const std::string& path, const std::atomic_bool* cancel, b
 
 } // namespace
 
+namespace {
+
+std::string TextSha256(const std::string& text) {
+    CryptoPP::SHA256 hash;
+    hash.Update(reinterpret_cast<const CryptoPP::byte*>(text.data()), text.size());
+    CryptoPP::byte digest[CryptoPP::SHA256::DIGESTSIZE];
+    hash.Final(digest);
+    std::string out;
+    for (const auto b : digest) {
+        out += fmt::format("{:02x}", b);
+    }
+    return out;
+}
+
+fs::path KeptPath(const std::string& load_dir) {
+    return fs::path(load_dir) / "texture-packs" / ".azaharvr-list.json";
+}
+
+} // namespace
+
+void KeepList(const std::string& load_dir, const std::string& list, const std::string& built_in) {
+    std::error_code ec;
+    fs::create_directories(KeptPath(load_dir).parent_path(), ec);
+    nlohmann::json j;
+    j["built_in"] = TextSha256(built_in);
+    j["sha256"] = TextSha256(list);
+    j["list"] = list;
+    Common::WriteFileAtomic(KeptPath(load_dir).string(),
+                            j.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
+}
+
+std::optional<Catalog> KeptList(const std::string& load_dir, const std::string& built_in) {
+    std::error_code ec;
+    const auto size = fs::file_size(KeptPath(load_dir), ec);
+    if (ec || size > 2 * kMaxCatalogBytes) {
+        return std::nullopt;
+    }
+    std::ifstream in(KeptPath(load_dir), std::ios::binary);
+    const auto j = nlohmann::json::parse(in, nullptr, false);
+    const auto get = [&j](const char* key) {
+        const auto it = j.is_object() ? j.find(key) : j.end();
+        return j.is_object() && it != j.end() && it->is_string() ? it->get<std::string>()
+                                                                : std::string{};
+    };
+    const std::string list = get("list");
+    if (list.empty() || get("built_in") != TextSha256(built_in) || get("sha256") != TextSha256(list)) {
+        return std::nullopt;
+    }
+    auto catalog = ParseCatalog(list);
+    return catalog && !catalog->packs.empty() ? std::move(catalog) : std::nullopt;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Downloader
 
