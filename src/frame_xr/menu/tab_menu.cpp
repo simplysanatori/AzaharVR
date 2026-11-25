@@ -314,6 +314,9 @@ Row RowFor(Id id, const MenuModel& m) {
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
         slider(m.kiu_subtitle_size);
         break;
+    case Id::KiuHideOffHand: // AzaharFrame kiuhands
+        segmented(std::clamp(m.kiu_hide_off_hand, 0, 1));
+        break;
     case Id::KiuReticleSize:
         slider(m.kiu_reticle_size);
         break;
@@ -594,6 +597,7 @@ SettingsSection SectionOf(Id id) {
     case Id::KiuScoreHeight: // AzaharFrame kiu140
     case Id::KiuSubtitleHeight: // AzaharFrame kiu140
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
+    case Id::KiuHideOffHand: // AzaharFrame kiuhands
     case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
@@ -685,6 +689,7 @@ bool PerGameSetting(Id id) {
     case Id::KiuScoreHeight: // AzaharFrame kiu140
     case Id::KiuSubtitleHeight: // AzaharFrame kiu140
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
+    case Id::KiuHideOffHand: // AzaharFrame kiuhands
     case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
@@ -874,6 +879,7 @@ std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& m) {
     if (m.kiu_hud != 0) { // AzaharFrame kiu140
         rows.push_back(Id::KiuSubtitleSize);
     }
+    rows.push_back(Id::KiuHideOffHand);
     rows.push_back(Id::KiuReticleSize);
     return rows;
 }
@@ -910,6 +916,9 @@ std::vector<AngelsAimRowGroup> AngelsAimGroups(const MenuModel& model) {
         if (has(fp, id)) {
             view.rows.push_back(id);
         }
+    }
+    if (has(fp, Id::KiuHideOffHand)) { // AzaharFrame kiuhands
+        view.rows.push_back(Id::KiuHideOffHand);
     }
     AngelsAimRowGroup bottom{AngelsAimGroupKind::BottomScreen, {}};
     for (const Id id : {Id::KiuBottomScreen, Id::KiuBottomSize, Id::KiuBottomOpacity,
@@ -1130,6 +1139,10 @@ const std::vector<std::string>& OptionsFor(Id id) {
         static const std::vector<std::string> kChoices{"Separate", "Linked"};
         return kChoices;
     }
+    case Id::KiuHideOffHand: { // AzaharFrame kiuhands: the stored order (hidden or not)
+        static const std::vector<std::string> kChoices{"Shown", "Hidden"};
+        return kChoices;
+    }
     case Id::WristSide: { // AzaharFrame kiu131: the stored order
         static const std::vector<std::string> kSide{kWristSideBack, kWristSideInside};
         return kSide;
@@ -1322,6 +1335,8 @@ std::string LabelFor(Id id) {
         return kKiuSubtitleHeightRow;
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
         return kKiuSubtitleSizeRow;
+    case Id::KiuHideOffHand: // AzaharFrame kiuhands
+        return kKiuHideOffHandRow;
     case Id::KiuReticleSize:
         return kReticleSizeRow;
     case Id::KiuOverShoulder: // AzaharFrame kiu133
@@ -1735,6 +1750,8 @@ std::string ExplainFor(Id id) {
         return kKiuSubtitleHeightTip;
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
         return kKiuSubtitleSizeTip;
+    case Id::KiuHideOffHand: // AzaharFrame kiuhands
+        return kKiuHideOffHandTip;
     case Id::KiuReticleSize:
         return kReticleSizeTip;
     case Id::KiuOverShoulder: // AzaharFrame kiu133

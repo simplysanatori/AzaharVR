@@ -3031,6 +3031,15 @@ int main(int argc, char** argv) {
         kv133.kiu_pit_opacity = 60;
         hv.scroll[static_cast<int>(Tab::Mods)] = 1320.0f;
         ok &= shot("kiu133-hub-view", kv133, hv);
+        // AzaharFrame kiuhands: Free Hand, the View group's last row, Hidden, with its tooltip.
+        MenuModel khide = kh;
+        khide.kiu_hide_off_hand = 1;
+        hv.scroll[static_cast<int>(Tab::Mods)] = 2000.0f;
+        hv.hover = {Id::KiuHideOffHand, kLabelIndex};
+        hv.tooltip = Id::KiuHideOffHand;
+        ok &= shot("kiuhands-hide-off-hand", khide, hv);
+        hv.hover = {};
+        hv.tooltip = Id::None;
         // The C-Stick mods' two toasts (a mod left out of the run; Angel's Aim chosen with one
         // loaded).
         ok &= toast_shot("kiu132-cstick-toasts.png",

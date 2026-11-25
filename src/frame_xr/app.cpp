@@ -56,6 +56,7 @@
 #include "frame_xr/vis/proj_screen_layer.h"
 #include "frame_xr/watchdog.h"
 #include "frame_xr/xr_loader.h"
+#include "video_core/kiu_powers.h" // AzaharFrame kiupowers
 #include "video_core/vr_content_repeat.h" // AzaharFrame bfikit
 #include "video_core/vr_dynamic_resolution.h" // AzaharFrame menuux
 #include "input_common/main.h" // AzaharFrame flat: SDL pump count
@@ -1163,6 +1164,7 @@ void Runtime::FrameLoop() {
         proj_fallback.clear();
         std::size_t proj_at = 0;
         bool proj_placed = false;
+        PowerLayers::In powers_in; // AzaharFrame kiupowers
         const bool proj_mode = want_proj && ui && fs.shouldRender; // AzaharFrame projdef
         const bool proj_also_quads = // AzaharFrame projscreen: a mock check only
             proj_mode && TestSwitches::OnFrom(Common::FrameTestSwitches::Value(Vis::kProjAlsoQuadsSwitch));
@@ -1385,7 +1387,9 @@ void Runtime::FrameLoop() {
                                       top && top_layers.omit);
                 // AzaharFrame kiuwrist: Angel's Aim's wrist screen is no screen the toast keeps
                 // in front of (it is on the hand, under the view).
-                if (use.toast_input && !(!top && shown.bottom_on_wrist)) {
+                // AzaharFrame kiu1s: nor are the portraits while their layer is shrunk to nothing.
+                const bool shrunk = !top && size.width < 0.001f;
+                if (use.toast_input && !shrunk && !(!top && shown.bottom_on_wrist)) {
                     // AzaharFrame kiu2: where it is in LOCAL space, for the toast (toast_depth.h).
                     Input::PanelQuad tq;
                     tq.pose = {{pose.orientation.x, pose.orientation.y, pose.orientation.z,
@@ -1412,7 +1416,7 @@ void Runtime::FrameLoop() {
                 // other picture. By depth when the choice
                 // includes this screen's slot (Primary: the top screen, or the bottom one swapped
                 // in), else in front of the controllers wherever they are.
-                if (use.toast_input) {
+                if (use.toast_input && !shrunk) {
                     const bool by_depth = Vis::InFrontOfScreen(in_front, top != screens_swapped);
                     if (!by_depth || !top || !top_immersive) {
                         add_occluder(space, pose, size, curve, eye, !by_depth);
@@ -1453,6 +1457,10 @@ void Runtime::FrameLoop() {
                 q.image_rect = {{0, 0},
                                 {static_cast<int32_t>(chain.width),
                                  static_cast<int32_t>(chain.height)}};
+                if (!top) { // AzaharFrame kiupowers: the picture, not the strip under it
+                    q.image_rect.extent.height = static_cast<int32_t>(
+                        VideoCore::KiuPowers::PictureHeight(chain.width, chain.height));
+                }
                 if (packed_top && top) {
                     const int32_t half =
                         static_cast<int32_t>((chain.height - VideoCore::kXrPackedGap) / 2);
@@ -1461,6 +1469,12 @@ void Runtime::FrameLoop() {
                         q.image_rect.offset.y =
                             half + static_cast<int32_t>(VideoCore::kXrPackedGap);
                     }
+                }
+                if (!top && !shown.bottom_cut.Whole()) { // AzaharFrame kiu1s
+                    const Kiu::FirstPerson::CutRect r =
+                        Kiu::FirstPerson::CutIn(shown.bottom_cut, static_cast<int>(chain.width),
+                                                q.image_rect.extent.height);
+                    q.image_rect = {{r.x, r.y}, {r.width, r.height}};
                 }
                 q.pose = pose;
                 q.size = size;
@@ -1529,6 +1543,22 @@ void Runtime::FrameLoop() {
                     quad_layers.push_back(layer);
                 }
             };
+            { // AzaharFrame kiupowers
+                powers_in.playing = !draw.swapped && shown.head_driven && shown.show_top;
+                powers_in.bottom_shown = shown.show_bottom && draw.bottom_visible;
+                powers_in.bottom_persistent = shown.bottom_persistent;
+                powers_in.top_pose[0] = shown.top_pose[0];
+                powers_in.top_pose[1] = shown.top_pose[1];
+                powers_in.top_size = shown.top_size[0];
+                powers_in.top_in_view = shown.top_space == view_space;
+                const ScreenChain& chain =
+                    LayerChain(static_cast<std::size_t>(VideoCore::XrScreen::Bottom));
+                if (chain.handle != XR_NULL_HANDLE && chain.has_image) {
+                    powers_in.bottom = chain.handle;
+                    powers_in.bottom_width = chain.width;
+                    powers_in.bottom_height = chain.height;
+                }
+            }
             // AzaharFrame screenswap: with the bottom screen in focus the screens trade places
             // (immersive is paused then); a hidden screen is not added. (AzaharFrame flash: `draw`
             // is taken above, for Motion Clarity.)
@@ -1707,6 +1737,21 @@ void Runtime::FrameLoop() {
                     add_occluder(local_space, q.pose, q.size, 0.0f, q.eye, false);
                 }
             };
+            // AzaharFrame kiupowers: the powers and the dots, over the screens and under the rest;
+            // their places in the list from the first frame they may show on.
+            powers_in.head = LatestViewPose();
+            powers_in.time = fs.predictedDisplayTime;
+            for (const Quad& q : power_layers.Update(*this, powers_in)) {
+                const uint64_t chain = reinterpret_cast<uint64_t>(q.swapchain);
+                Quad stand_in = q;
+                stand_in.visible = true;
+                layer_slots.Reserve(LayerSlots::Group::Extra, chain, 0, 0,
+                                    SlotQuad{local_space, stand_in});
+                if (q.visible) {
+                    layer_slots.Add(LayerSlots::Group::Extra, chain, 0, 0,
+                                    SlotQuad{local_space, q});
+                }
+            }
             for (const Quad* q : extra) {
                 slot_add(LayerSlots::Group::Extra, local_space, *q);
                 panel_occluder(*q);

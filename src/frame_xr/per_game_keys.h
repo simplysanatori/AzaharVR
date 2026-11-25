@@ -109,6 +109,8 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_kiu_bottom_screen); // AzaharFrame kiu131
     f(v.vr_kiu_bottom_size);
     f(v.vr_kiu_bottom_opacity);
+    f(v.vr_kiu_talk_portraits); // AzaharFrame kiu1s
+    f(v.vr_kiu_talk_portraits_opacity);
     f(v.vr_kiu_bottom_x);
     f(v.vr_kiu_bottom_y);
     f(v.vr_kiu_wrist_angle); // AzaharFrame kiu140
@@ -126,6 +128,7 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_kiu_score_height); // AzaharFrame kiu140
     f(v.vr_kiu_subtitle_height); // AzaharFrame kiu140
     f(v.vr_kiu_subtitle_size); // AzaharFrame kiu140
+    f(v.vr_kiu_hide_off_hand); // AzaharFrame kiuhands
     f(v.vr_kiu_reticle_size);
     f(v.vr_kiu_game_camera); // AzaharFrame kiu133
     f(v.vr_kiu_pit_opacity);

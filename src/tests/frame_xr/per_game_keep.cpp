@@ -547,6 +547,7 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
                                                        {Id::KiuBottomOpacity, "vr_kiu_bottom_opacity"},
                                                        {Id::KiuReticleSize, "vr_kiu_reticle_size"},
                                                        {Id::KiuPitOpacity, "vr_kiu_pit_opacity"},
+                                                       {Id::KiuHideOffHand, "vr_kiu_hide_off_hand"},
                                                        {Id::KiuSnapTurn, "vr_kiu_snap_turn"}};
     for (const auto& [id, key] : rows) {
         INFO(key);
@@ -559,6 +560,7 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
           std::vector<std::string>{"vr_kiu_over_shoulder", "vr_kiu_game_camera"});
     CHECK(std::find(labels.begin(), labels.end(), "vr_kiu_game_camera") != labels.end());
     CHECK_FALSE(Settings::values.vr_kiu_game_camera.GetDefault());
+    CHECK_FALSE(Settings::values.vr_kiu_hide_off_hand.GetDefault());
     CHECK(Settings::values.vr_kiu_pit_opacity.GetDefault() == 100u);
     CHECK_FALSE(Settings::values.vr_kiu_wrist_screen.GetDefault());
     CHECK_FALSE(Settings::values.vr_kiu_talk_panel.GetDefault());
@@ -567,6 +569,13 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
     CHECK(Settings::values.vr_kiu_bottom_screen.GetDefault() == 0u);
     CHECK(Settings::values.vr_kiu_bottom_size.GetDefault() == 100u);
     CHECK(Settings::values.vr_kiu_bottom_opacity.GetDefault() == 100u);
+    // AzaharFrame kiu1s: the talk's portraits, off, and their opacity.
+    CHECK_FALSE(Settings::values.vr_kiu_talk_portraits.GetDefault());
+    CHECK(Settings::values.vr_kiu_talk_portraits_opacity.GetDefault() == 100u);
+    for (const char* key : {"vr_kiu_talk_portraits", "vr_kiu_talk_portraits_opacity"}) {
+        INFO(key);
+        CHECK(std::find(labels.begin(), labels.end(), key) != labels.end());
+    }
     CHECK(Settings::values.vr_wrist_side.GetDefault() == 0u); // Back
     CHECK(Settings::values.vr_kiu_reticle_size.GetDefault() == 100u);
     for (const char* key : {"vr_kiu_bottom_x", "vr_kiu_bottom_y", "vr_kiu_wrist_screen",

@@ -147,6 +147,7 @@ RasterizerVulkan::RasterizerVulkan(Memory::MemorySystem& memory, Pica::PicaCore&
 RasterizerVulkan::~RasterizerVulkan() = default;
 
 void RasterizerVulkan::TickFrame() {
+    ++powers_tick; // AzaharFrame kiupowers
     scheduler.WaitWorker();
     res_cache.TickFrame();
 }
@@ -570,9 +571,115 @@ void RasterizerVulkan::DrawTriangles() {
     Draw(false, false);
 }
 
+void RasterizerVulkan::NoteKiuPowersDraw() {
+    namespace KP = VideoCore::KiuPowers;
+    const VideoCore::KiuHud::Batch batch = KP::g_live.Get();
+    if (batch.quads == 0) {
+        powers_sprites.clear();
+        powers_textures.clear();
+        powers_offset = UINT32_MAX;
+        return;
+    }
+    const auto& va = regs.pipeline.vertex_attributes;
+    const auto& loader = va.attribute_loaders[0];
+    const u32 base = va.GetPhysicalBaseAddress();
+    // The bottom screen's, of the batch, its indices 16 bit and its vertices 24 bytes.
+    if (Pica::f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f != 320.0f ||
+        regs.pipeline.index_array.format.Value() == 0 ||
+        !VideoCore::KiuHud::InBatch(batch, base, regs.pipeline.index_array.offset,
+                                    regs.pipeline.num_vertices) ||
+        loader.byte_count != 24 || regs.texturing.main_config.texture0_enable == 0) {
+        return;
+    }
+    // A new picture's first draw: the batch's draws of one picture go up through its indices
+    // (a picture may be drawn over two of the emulator's frames).
+    if (regs.pipeline.index_array.offset <= powers_offset) {
+        powers_sprites.clear();
+        powers_textures.clear();
+    }
+    powers_offset = regs.pipeline.index_array.offset;
+    powers_drawn = powers_tick;
+    const u8* const index = memory.GetPhysicalPointer(base + regs.pipeline.index_array.offset);
+    if (!index) {
+        return;
+    }
+    // Drawn over what is there, coloured in one of the ways known (kiu_powers.h Tev).
+    using Factor = Pica::FramebufferRegs::BlendFactor;
+    const auto& om = regs.framebuffer.output_merger;
+    const auto stages = regs.texturing.GetTevStages();
+    std::array<KP::Stage, 6> tev_stages;
+    for (std::size_t i = 0; i < 6; ++i) {
+        tev_stages[i] = {stages[i].sources_raw, stages[i].modifiers_raw, stages[i].ops_raw,
+                         stages[i].scales_raw};
+    }
+    u32 constant_stage = 0;
+    const KP::Tev tev = KP::TevOf(tev_stages, &constant_stage);
+    if (tev == KP::Tev::None || om.alphablend_enable == 0 ||
+        om.alpha_blending.factor_source_rgb != Factor::SourceAlpha ||
+        om.alpha_blending.factor_dest_rgb != Factor::OneMinusSourceAlpha) {
+        return;
+    }
+    const float constant = static_cast<float>(stages[constant_stage].const_a.Value()) / 255.0f;
+    const bool gold = KP::g_live.gold.load(std::memory_order_relaxed);
+    bool texture_kept = false;
+    for (u32 q = 0; q < regs.pipeline.num_vertices / 6; ++q) {
+        u16 first = 0xFFFF;
+        for (u32 k = 0; k < 6; ++k) {
+            u16 i;
+            std::memcpy(&i, index + (q * 6 + k) * 2, 2);
+            first = std::min(first, i);
+        }
+        // Four vertices in a row: top left, top right, bottom left, bottom right.
+        KP::Sprite s;
+        u32 color = 0;
+        bool ok = true;
+        for (u32 k = 0; k < 4 && ok; ++k) {
+            const u8* const v =
+                memory.GetPhysicalPointer(base + loader.data_offset + (first + k) * 24u);
+            ok = v != nullptr;
+            if (ok) {
+                float f[6];
+                std::memcpy(f, v, sizeof f);
+                std::memcpy(&color, v + 12, 4);
+                s.x[k] = f[0];
+                s.y[k] = f[1];
+                s.u[k] = f[4];
+                s.v[k] = f[5];
+            }
+        }
+        if (!ok) {
+            continue;
+        }
+        const auto [x0, x1] = std::minmax_element(s.x.begin(), s.x.end());
+        const auto [y0, y1] = std::minmax_element(s.y.begin(), s.y.end());
+        const auto [u0, u1] = std::minmax_element(s.u.begin(), s.u.end());
+        const auto [v0, v1] = std::minmax_element(s.v.begin(), s.v.end());
+        const KP::Part part = KP::PartOf({*x0, *y0, *x1, *y1, *u0, *v0, *u1, *v1, tev});
+        if (!KP::Wanted(part, color, gold) || powers_sprites.size() >= kMostPowersSprites) {
+            continue;
+        }
+        s.part = part;
+        s.tev = tev;
+        s.constant = constant;
+        for (u32 c = 0; c < 4; ++c) {
+            s.color[c] = static_cast<float>(color >> (8 * c) & 0xFF) / 255.0f;
+        }
+        if (!texture_kept) {
+            texture_kept = true;
+            powers_textures.push_back(regs.texturing.GetTextures()[0]);
+        }
+        s.texture = static_cast<u32>(powers_textures.size() - 1);
+        powers_sprites.push_back(s);
+    }
+}
+
 bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     MICROPROFILE_SCOPE(Vulkan_Drawing);
     SyncDrawState();
+    if (accelerate && is_indexed &&
+        VideoCore::KiuPowers::g_live.strip.load(std::memory_order_relaxed)) { // kiupowers
+        NoteKiuPowersDraw();
+    }
     if (VideoCore::Immersive::g_draw_log.load(std::memory_order_relaxed)) { // AzaharFrame kiu133
         const auto& om = regs.framebuffer.output_merger;
         const auto& va = regs.pipeline.vertex_attributes;

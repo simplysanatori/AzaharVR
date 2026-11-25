@@ -19,6 +19,7 @@
 #include "common/settings.h" // AzaharFrame curve
 #include "frame_xr/controls.h"
 #include "frame_xr/kiu_first_person.h" // AzaharFrame kiuvr
+#include "frame_xr/kiu_powers_live.h" // AzaharFrame kiupowers
 #include "frame_xr/kiu_probe.h"     // AzaharFrame kiugyro: Light Gun
 #include "frame_xr/kiu_scan.h"      // AzaharFrame kiuguns: IsKidIcarus
 #include "frame_xr/kiu_weapon.h"    // AzaharFrame kiuguns: the weapon in hand, the shots
@@ -1375,7 +1376,7 @@ void VrUi::AddCursor(const XrPosef& pose, float size_m, std::vector<Quad>& layer
 }
 
 uint32_t VrUi::CurveFor(const Immersive::ScreenLayers& shown) const {
-    if (!cylinder_ok || !shown.top_pointable) {
+    if (!cylinder_ok || !shown.top_pointable || shown.screens_fixed) { // kiu1s: the menu panel
         return 0; // the runtime has no cylinder, or the immersive screen is on view
     }
     return std::min(Settings::values.vr_screen_curve.GetValue(), Rig::kMaxCurveDeg);
@@ -1507,6 +1508,8 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
     if (have_input && pit_arm_hand >= 0) { // AzaharFrame kiu140: the arm's fingers
         hand_joints.Locate(pit_arm_hand, info.local_space, info.display_time,
                            in.joints[static_cast<std::size_t>(pit_arm_hand)]);
+        hand_joints.LogRaw(pit_arm_hand, info.local_space, info.display_time,
+                           in.hand[static_cast<std::size_t>(pit_arm_hand)]);
     }
     // AzaharVR: the controller scheme of the profile in use, looked up when it changes (PC
     // builds; the Frame's build keeps the Frame's scheme whatever the profile).
@@ -1789,6 +1792,11 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                                 at, // AzaharFrame kiu140
                                 Input::Rotate(ToInput(head_view.head).orientation, {0, 1, 0}));
         wrist_on = w.shown;
+        { // AzaharFrame kiupowers: the hands the powers go over and stay clear of
+            const Input::HandInput& aiming =
+                in.hand[static_cast<std::size_t>(Input::HandIndex(Input::OtherHand(hand)))];
+            Kiu::Powers::SetHands({off.active, off.aim, aiming.active, aiming.aim});
+        }
         wrist_wanted = wanted; // AzaharFrame kiupanel
         Immersive::SetWristScreen(w.shown, ToXr(w.pose), {wrist_w, wrist_h}, info.display_time);
         if (w.changed && wrist_logs < 200) {
@@ -1838,6 +1846,7 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     panels.bottom_toggle_enabled = managed;
     // AzaharFrame kiuwrist: the wrist screen is touched, never grabbed (it goes with the hand).
     panels.bottom_fixed = shown.bottom_on_wrist;
+    panels.no_drag = shown.screens_fixed; // AzaharFrame kiu1s
     // AzaharFrame statspos: the beam stops at the stats in front of the screens; the stats are
     // never placed behind the screens as drawn, the immersive one too.
     panels.occluder = visuals.StatsOccluder();
@@ -1989,6 +1998,8 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         gyro_aim_frame.kiu_fire_and_power =
             Settings::values.vr_kiu_trigger_layout.GetValue() == Input::KiuTriggers::kFireAndPower &&
             Kiu::IsKidIcarus(GameTitleId());
+        // AzaharFrame kiupowers: in an air battle the bumpers send nothing.
+        gyro_aim_frame.kiu_air = gyro_aim_frame.kiu_fire_and_power && Kiu::Powers::AirNoBumpers();
         const uint32_t aim_source =
             Input::GyroAimSource(Settings::values.vr_motion_controls.GetValue());
         const bool on = gyro_aim_frame.mode != Input::GyroAimMode::Off;
@@ -2057,7 +2068,9 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                 // by the grip): off the top screen, its nearest edge (input/gyro_aim.h
                 // LockedTargetFor); the bottom screen is not touched by this controller then.
                 const bool lock =
-                    Settings::values.vr_light_gun_lock.GetValue() && !gyro_aim_frame.clutch;
+                    Settings::values.vr_light_gun_lock.GetValue() && !gyro_aim_frame.clutch &&
+                    !Immersive::GameMenu() && // AzaharFrame kiu1s: no aim to hold, it points
+                    !shown.pause_panel;
                 if (hand.active) {
                     // AzaharFrame kiuinteg: along the weapon's own axis as held (the owner's
                     // option A), or the controller's line with AZAHARFRAME_ANGELS_AIM_RAY=hand.
@@ -2381,14 +2394,18 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     // AzaharFrame kiuwrist: each touch of the wrist screen, where it lands in the Secondary
     // Screen's 320 x 240 pixels and whether a trigger reached the game with it (it never should).
     // AzaharFrame kiupanel: also once it is hidden (a touch it ends).
-    if (shown.bottom_on_wrist || wrist_wanted) {
+    // AzaharFrame kiu1s: and of the menu panel.
+    if (shown.bottom_on_wrist || wrist_wanted || shown.screens_fixed || shown.pause_panel) {
         for (int i = 0; i < out.touch_event_count; i++) {
             const Input::TouchEvent& e = out.touch_events[static_cast<std::size_t>(i)];
             if (e.type != Input::TouchEventType::Moved && wrist_logs < 200) {
                 wrist_logs++;
                 LOG_INFO(Frontend,
-                         "xr: Angel's Aim: wrist screen touch {} at {:.1f}, {:.1f} (ZL {}, ZR {}, "
-                         "L {})",
+                         "xr: Angel's Aim: {} touch {} at {:.1f}, {:.1f} (ZL {}, ZR {}, L {})",
+                         shown.bottom_on_wrist  ? "wrist screen"
+                         : shown.screens_fixed ? "menu panel"
+                         : shown.pause_panel   ? "pause panel"
+                                               : "wrist screen",
                          e.type == Input::TouchEventType::Pressed ? "pressed" : "released", e.x,
                          e.y, out.controls.Get(Input::Control::TriggerL) ? 1 : 0,
                          out.controls.Get(Input::Control::TriggerR) ? 1 : 0,
@@ -2410,6 +2427,12 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     bool weapon_shown = false;
     pit_arm_hand = -1; // AzaharFrame kiu140
     Kiu::SetWanted(weapon_on, kiu && (recoil_on || flash_on || projectiles_on), kiu);
+    // AzaharFrame kiu140: no controllers over a cutscene; with the menu open they are to point.
+    visuals.HideControllers(Kiu::FirstPerson::Cutscene() && !menu_open);
+    if (kiu && Kiu::FirstPerson::AngelsAim() &&
+        Settings::values.vr_kiu_hide_off_hand.GetValue()) { // AzaharFrame kiuhands
+        visuals.SetHiddenHand(gyro_aim_hand ^ 1);
+    }
     if (weapon_on) {
         FrameWeapons::Request(); // made the first time they are wanted (once a boot)
         // AZAHARFRAME_KIU_WEAPON=<id> (live): that weapon, for tuning its class's fit.
@@ -2421,8 +2444,9 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                 id = static_cast<int>(v);
             }
         }
-        // AzaharFrame kiu140: no weapon over a cutscene.
-        if (id >= 0 && !Kiu::FirstPerson::Cutscene()) {
+        // AzaharFrame kiu140: no weapon over a cutscene (nor a controller, below).
+        // AzaharFrame kiu1s: nor in the game's menus (the arm and the effects go with it).
+        if (id >= 0 && !Kiu::FirstPerson::Cutscene() && !Kiu::FirstPerson::WeaponHidden()) {
             // AzaharFrame kiuopacity: Weapon Opacity, or AZAHARFRAME_KIU_OPACITY's (live).
             const Vis::OpacityTune see = Vis::ParseOpacityTune(
                 Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_OPACITY"));
@@ -2541,7 +2565,8 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                               weapon_shown, aim_hit);
         if (gyro_aim_frame.checking) {
             beam = {Input::LaserSight(gyro_aim_frame.mode, true, aim_hit), true};
-        } else if (gyro_aim_frame.clutch &&
+        } else if ((gyro_aim_frame.clutch || Immersive::GameMenu() ||
+                    shown.pause_panel) && // AzaharFrame kiu1s
                    gyro_aim_frame.mode == Input::GyroAimMode::LightGun) {
             beam = {}; // AzaharFrame kiuaim3: aim freed: the usual beam, to point anywhere
         }
@@ -2607,11 +2632,18 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     const auto& cmd = out.commands;
     {
         Input::ScreenView::Effect effect;
-        if (cmd.toggle_bottom) {
+        // AzaharFrame kiu1s: in one of Kid Icarus's menus both screens are shown and stay so.
+        const bool shown_by_menu = Immersive::GameMenu() && !screen_view.bottom_focus();
+        if (shown_by_menu && (cmd.toggle_bottom || cmd.toggle_other_screen)) {
+            LOG_INFO(Frontend, "xr: the bottom screen stays shown in the game's menus");
+        } else if (cmd.toggle_bottom) {
             effect = screen_view.ToggleBottom(managed); // Left Bumper + Right Bumper + View
         } else if (Immersive::HoldingScreen()) {
             // A grip holds the immersive screen: no swap or hide meanwhile (a swap would cancel
             // the move). The reset is the 1 s hold, as everywhere (AzaharFrame controls).
+        } else if (cmd.swap_screens && shown.screens_fixed && !screen_view.bottom_focus()) {
+            // AzaharFrame kiu1s: the menu panel's large screen is the one to touch: no swap.
+            LOG_INFO(Frontend, "xr: no swap on the game's menu panel");
         } else if (cmd.swap_screens) {
             effect = screen_view.Swap(managed); // right stick click, tap
             LOG_INFO(Frontend, "xr: {} screen in focus",

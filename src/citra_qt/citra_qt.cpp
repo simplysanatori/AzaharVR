@@ -5829,6 +5829,9 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::KiuSubtitleSize: // AzaharFrame kiu140
         set(v.vr_kiu_subtitle_size, std::clamp<u32>(u, 50, 250));
         break;
+    case S::KiuHideOffHand: // AzaharFrame kiuhands
+        set(v.vr_kiu_hide_off_hand, r.value != 0);
+        break;
     case S::KiuReticleSize:
         set(v.vr_kiu_reticle_size, std::clamp<u32>(u, 30, 150));
         break;

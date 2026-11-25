@@ -57,6 +57,7 @@ struct HandInput {
 struct TrackedJoints {
     static constexpr int kCount = 26;
     bool active = false;
+    bool placed = false; ///< the joints' places too, not their turns alone
     std::array<Posef, kCount> joint;
 };
 
