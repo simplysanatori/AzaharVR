@@ -43,7 +43,13 @@ constexpr std::array<TabInfo, static_cast<int>(Tab::Count)> kTabs{{
     {"Mods", Sym::kExtension}, // AzaharFrame cheatstab
     {"Homebrew", Sym::kDeployedCode}, // AzaharFrame ui3
     {"Settings", Sym::kSettings},
+    {"Games", 0}, // AzaharVR: DrawGamesIcon
 }};
+/// AzaharVR: the rail's order, Games after Main.
+constexpr std::array<Tab, static_cast<int>(Tab::Count)> kRailOrder{
+    Tab::Main, Tab::Games, Tab::Position, Tab::Stats, Tab::Controls, Tab::Mods, Tab::Homebrew,
+    Tab::Settings};
+constexpr float kRailItemSmallH = 64.0f; ///< AzaharVR: with more tabs than fit at kRailItemH
 
 } // namespace
 
@@ -1350,6 +1356,8 @@ std::string LabelFor(Id id) {
         return "Move Down";
     case Id::InstallFromZip: // AzaharFrame zipinstall
         return "Install from Zip";
+    case Id::GamesSearchClear: // AzaharVR: the Games tab
+        return "Clear Search";
     case Id::HomebrewInstall: // AzaharFrame emerald
         return "Install";
     case Id::HomebrewUpdate:
@@ -1644,6 +1652,12 @@ std::string ExplainFor(Id id) {
         return "Automatic picks DS or DSi to suit the game.";
     case Id::SecondScreen:
         return "What the Secondary Screen shows.";
+    case Id::GamesSearch: // AzaharVR: the Games tab
+        return GamesProposed::kSearch;
+    case Id::GamesSort:
+        return GamesProposed::kSort;
+    case Id::GamesAddFolder:
+        return "Add Folder";
     case Id::AllowGameEditing:
         return "Lets PokeDaisy edit your game. Backs up your save first.";
     case Id::DsTouchEnabled:
@@ -1842,6 +1856,9 @@ void TabMenu::Draw(Kit& kit, const MenuModel& model, const MenuView& view) {
     case Tab::Homebrew: // AzaharFrame ui3
         DrawHomebrew(kit, model, view, pane);
         break;
+    case Tab::Games: // AzaharVR
+        DrawGames(kit, model, view, pane);
+        break;
     default:
         DrawRows(kit, model, view, pane);
         break;
@@ -1857,26 +1874,44 @@ void TabMenu::Draw(Kit& kit, const MenuModel& model, const MenuView& view) {
     DrawTooltip(kit, model, view, pane);
 }
 
-void TabMenu::DrawRail(Kit& kit, const MenuModel& model, const MenuView& view) {
-    std::vector<int> shown_tabs; // AzaharVR: the console's own
-    for (int i = 0; i < static_cast<int>(kTabs.size()); i++) {
-        if (TabApplies(static_cast<Tab>(i), model.core)) {
-            shown_tabs.push_back(i);
+bool TabShown(Tab tab, const MenuModel& model) {
+    return tab == Tab::Games ? GamesTabApplies(model.games.list) : TabApplies(tab, model.core);
+}
+
+std::vector<Tab> RailTabs(const MenuModel& model) {
+    std::vector<Tab> tabs;
+    for (const Tab tab : kRailOrder) {
+        if (TabShown(tab, model)) {
+            tabs.push_back(tab);
         }
     }
-    const float total = kRailItemH * static_cast<float>(shown_tabs.size());
-    float y = (kPanelH - total) * 0.5f;
+    return tabs;
+}
+
+void TabMenu::DrawRail(Kit& kit, const MenuModel& model, const MenuView& view) {
+    const std::vector<Tab> shown_tabs = RailTabs(model); // AzaharVR: the console's own, and Games
+    const float count = static_cast<float>(shown_tabs.size());
+    const float item_h = kRailItemH * count > kPanelH ? kRailItemSmallH : kRailItemH;
+    float y = (kPanelH - item_h * count) * 0.5f;
     const Rect all{0, 0, kPanelW, kPanelH};
-    for (const int i : shown_tabs) {
-        const Rect r{0.0f, y, kRailW, y + kRailItemH};
+    for (const Tab tab : shown_tabs) {
+        const int i = static_cast<int>(tab);
+        const Rect r{0.0f, y, kRailW, y + item_h};
         const Target t{Id::TabButton, i};
         const bool active = static_cast<int>(view.tab) == i;
         const char* label = static_cast<Tab>(i) == Tab::Mods && !Is3ds(model.core)
                                 ? "Cheats"
                                 : kTabs[static_cast<std::size_t>(i)].label;
         kit.RailItem(r, kTabs[static_cast<std::size_t>(i)].icon, label, active, StateOf(view, t));
+        if (tab == Tab::Games) {
+            DrawGamesIcon(kit, r.Cx(), r.Cy() - 11.8f, active); // where RailItem has its symbol
+        }
+        if (GamesFocused(model, view) == t) { // the Games tab's focus
+            kit.Stroke({r.x0 + 4.0f, r.y0 + 1.0f, r.x1 - 4.0f, r.y1 - 1.0f}, 16.0f, 3.0f,
+                       Tok::kPrimary);
+        }
         AddHit(r, t, all);
-        y += kRailItemH;
+        y += item_h;
     }
 }
 

@@ -20,6 +20,7 @@
 
 extern "C" {
 #include <mgba-util/vfs.h>
+#include "profiles.h"
 }
 
 namespace FrameCores {
@@ -684,20 +685,84 @@ GameSystem SystemOf(const RomInfo& info) {
     }
 }
 
-bool FilterMatches(SystemFilter filter, GameSystem system) {
-    switch (filter) {
-    case SystemFilter::All:
-        return true;
-    case SystemFilter::N3DS:
-        return system == GameSystem::N3DS;
-    case SystemFilter::DS:
-        return system == GameSystem::DS;
-    case SystemFilter::GBA:
-        return system == GameSystem::GBA;
-    case SystemFilter::GB:
-        return system == GameSystem::GB || system == GameSystem::GBC;
+const char* RegionOf(const RomInfo& info) {
+    const bool has_code = info.kind == Common::AltCore::CoreKind::GBA || Common::AltCore::IsDs(info.kind);
+    if (!has_code || info.game_code.size() < 4) {
+        return "";
     }
-    return true;
+    switch (info.game_code[3]) {
+    case 'J':
+        return "Japan";
+    case 'E':
+        return "North America";
+    case 'P': // English and more
+    case 'D': // German
+    case 'F': // French
+    case 'H': // Dutch
+    case 'I': // Italian
+    case 'S': // Spanish
+    case 'X':
+    case 'Y':
+    case 'Z':
+        return "Europe";
+    case 'U':
+        return "Australia";
+    case 'K':
+        return "Korea";
+    case 'C':
+        return "China";
+    default:
+        return "";
+    }
+}
+
+std::string CleanName(std::string name) {
+    // the tags
+    std::string out;
+    int depth = 0;
+    for (const char c : name) {
+        if (c == '(' || c == '[') {
+            depth++;
+        } else if ((c == ')' || c == ']') && depth > 0) {
+            depth--;
+        } else if (depth == 0) {
+            out.push_back(c == '_' ? ' ' : c);
+        }
+    }
+    // "Name, The - More" as "The Name - More"
+    const std::size_t dash = out.find(" - ");
+    std::string first = out.substr(0, dash);
+    const auto trim = [](std::string& s) {
+        while (!s.empty() && s.back() == ' ') {
+            s.pop_back();
+        }
+        s.erase(0, std::min(s.find_first_not_of(' '), s.size()));
+    };
+    trim(first);
+    for (const std::string_view article : {"The", "A", "An"}) {
+        const std::string tail = ", " + std::string(article);
+        if (first.size() > tail.size() && first.ends_with(tail)) {
+            first = std::string(article) + " " + first.substr(0, first.size() - tail.size());
+            break;
+        }
+    }
+    out = dash == std::string::npos ? first : first + out.substr(dash);
+    trim(out);
+    return out;
+}
+
+std::string DisplayTitle(const RomInfo& info, const std::string& path) {
+    if (info.kind != Common::AltCore::CoreKind::GBA && info.kind != Common::AltCore::CoreKind::GB) {
+        return info.title;
+    }
+    if (info.kind == Common::AltCore::CoreKind::GBA && info.game_code.size() == 4) {
+        char name[256] = {};
+        if (profile_release_name(info.game_code.c_str(), name, sizeof(name))) {
+            return CleanName(name);
+        }
+    }
+    const std::string stem = CleanName(std::filesystem::path(path).stem().string());
+    return stem.empty() ? info.title : stem;
 }
 
 const char* CoreFolder(Common::AltCore::CoreKind kind) {

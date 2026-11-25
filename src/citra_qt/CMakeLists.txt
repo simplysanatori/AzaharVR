@@ -451,6 +451,9 @@ endif()
 if (ENABLE_ALT_CORES)
     target_link_libraries(citra_qt PRIVATE frame_cores)
     target_sources(citra_qt PRIVATE frame_alt_window.cpp)
+    if (ENABLE_FRAME_XR) # the VR menu's Games tab, the Qt side
+        target_sources(citra_qt PRIVATE frame_games.cpp frame_games.h)
+    endif()
 endif()
 
 if (ENABLE_WEB_SERVICE)

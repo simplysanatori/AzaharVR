@@ -30,6 +30,6 @@ constexpr bool Is3ds(const CoreCaps& core) {
 /// Whether the running game's console has this row of the Position, Settings and Controls tabs
 /// (also Swap Screens, Switch to Flat and Load State's Autosave card).
 bool RowApplies(Id id, const CoreCaps& core);
-bool TabApplies(Tab tab, const CoreCaps& core);
+bool TabApplies(Tab tab, const CoreCaps& core); ///< Games: see TabShown (tab_menu.h)
 
 } // namespace FrameXr::Menu

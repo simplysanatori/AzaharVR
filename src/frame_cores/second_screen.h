@@ -9,6 +9,7 @@
 #include <string>
 
 #include "common/alt_core_types.h"
+#include "frame_cores/rom_info.h"
 
 namespace FrameCores {
 
@@ -42,8 +43,27 @@ std::unique_lock<std::mutex> LockProfiles();
 bool MapCaptureDue(bool has_image, bool room_changed, uint64_t frame, uint64_t since,
                    uint64_t interval);
 
-/// Whether the list shows the Two Screens badge for a game: it has a second screen picture.
-/// `game_code` is the header's four letters. Safe on the scan thread.
+/// Whether gba-ds has a second screen picture for a game. `game_code` is the header's four
+/// letters. Safe on the scan thread.
 bool HasTwoScreens(Common::AltCore::CoreKind kind, const std::string& game_code);
+
+/// A game's badges in the game lists.
+struct GameBadges {
+    bool two_screens = false; ///< a second screen picture: PokeDaisy's companion or gba-ds's
+    bool pokedaisy = false;   ///< PokeDaisy supports this exact game
+    bool operator==(const GameBadges&) const = default;
+};
+
+/// The rule: Two Screens with PokeDaisy or gba-ds, on GBA and Game Boy games only (3DS and DS
+/// games always have two).
+GameBadges BadgeRule(Common::AltCore::CoreKind kind, bool pokedaisy, bool gbads);
+
+/// Whether PokeDaisy could know a game, from its header alone: every Game Boy game, and the GBA
+/// games with a Pokemon game's code or title. Others are not read whole to find out.
+bool MayBePokeDaisy(const RomInfo& info);
+
+/// The badges of a probed ROM. Reads a game MayBePokeDaisy takes whole, once per file version.
+/// Any thread; while a PokeDaisy game runs, one not read yet has no PokeDaisy badge.
+GameBadges BadgesOf(const RomInfo& info, const std::string& path);
 
 } // namespace FrameCores

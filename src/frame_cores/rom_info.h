@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "common/alt_core_types.h"
+#include "common/game_system.h"
 
 namespace FrameCores {
 
@@ -28,17 +29,25 @@ struct RomInfo {
     uint32_t icon_h = 0;
 };
 
-/// What the game list calls a game's system (a DSi game is a DS game there).
-enum class GameSystem { N3DS, DS, GBA, GB, GBC };
+// The lists' systems and filters (common/game_system.h)
+using Common::FilterMatches;
+using Common::GameSystem;
+using Common::SystemFilter;
 
 /// The list's system of a probed ROM.
 GameSystem SystemOf(const RomInfo& info);
 
-/// The list's filter choices; Game Boy covers Game Boy Color too.
-enum class SystemFilter { All = 0, N3DS, DS, GBA, GB };
+/// The region a DS, DSi or GBA game's code names, as the list's Region column has it for 3DS games
+/// (the "GameRegion" translations); "" when it names none, and for Game Boy games.
+const char* RegionOf(const RomInfo& info);
 
-/// Whether a game of `system` shows under `filter`.
-bool FilterMatches(SystemFilter filter, GameSystem system);
+/// The name the VR Games tab shows: a DS game's own title; for GBA and Game Boy games, whose
+/// headers hold 12 to 16 capitals, gba-ds's name of the release, else the file's name without its
+/// bracketed tags, else the header's.
+std::string DisplayTitle(const RomInfo& info, const std::string& path);
+/// A No-Intro style name or a file's name without its extension, for showing: no "(USA)" or "[!]"
+/// tags, "Legend of Zelda, The - Minish Cap" as "The Legend of Zelda - Minish Cap".
+std::string CleanName(std::string name);
 
 /// Fast detection of non-3DS ROM type from extension or ZIP directory entries.
 /// Supports .nds, .dsi, .gba, .gb, .gbc (case-insensitive) and .zip archives

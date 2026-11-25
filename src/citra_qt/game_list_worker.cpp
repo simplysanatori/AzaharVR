@@ -24,7 +24,6 @@
 #include "core/loader/loader.h"
 #ifdef ENABLE_ALT_CORES
 #include "frame_cores/rom_info.h"
-#include "frame_cores/second_screen.h"
 #endif
 
 namespace {
@@ -83,15 +82,17 @@ void GameListWorker::AddFstEntriesToGameList(const std::string& dir_path, unsign
                     QString::fromStdString(physical_name), QString::fromStdString(info->title),
                     info->icon_rgba, info->icon_w, info->icon_h, info->title_id, media_type);
                 path_item->setData(static_cast<int>(system), GameListItemPath::SystemRole);
-                if (FrameCores::HasTwoScreens(info->kind, info->game_code)) {
-                    path_item->setData(true, GameListItemPath::TwoScreensRole);
-                    path_item->setData(QObject::tr("Two Screens"), Qt::ToolTipRole);
-                }
+                path_item->SetBadges(FrameCores::BadgesOf(*info, physical_name));
+                path_item->SetTile(
+                    QString::fromStdString(FrameCores::DisplayTitle(*info, physical_name)),
+                    info->icon_rgba, info->icon_w, info->icon_h);
+                const char* region = FrameCores::RegionOf(*info);
                 emit EntryReady(
                     {
                         path_item,
                         new GameListItemCompat(QStringLiteral("99")),
-                        new GameListItem(QString::fromLatin1(type_label)),
+                        new GameListItem(
+                            *region ? QCoreApplication::translate("GameRegion", region) : QString{}),
                         new GameListItem(QString::fromLatin1(type_label)),
                         new GameListItemSize(FileUtil::GetSize(physical_name)),
                         new GameListItemPlayTime(play_time_manager.GetPlayTime(info->title_id)),

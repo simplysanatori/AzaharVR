@@ -34,6 +34,7 @@
 #include "frame_xr/per_game.h" // AzaharFrame useglobal
 #include "frame_xr/render_margin.h" // AzaharFrame fovaxis
 #include "frame_xr/session.h"
+#include "frame_xr/swkbd.h" // AzaharVR: the Games tab's search
 #include "frame_xr/ui_sound.h" // AzaharFrame menuux: Edit Controls' click
 #include "frame_xr/vis/controller_models.h"
 #include "frame_xr/vis/help_content.h"
@@ -480,6 +481,23 @@ void SetInGameMenuHomebrew(const Menu::HomebrewTabModel& homebrew) { // AzaharFr
     g_homebrew = homebrew;
 }
 
+// AzaharVR: the Games tab's list (frame_games.cpp), under g_mods_mutex
+Menu::GamesTabModel g_games;
+
+void SetInGameMenuGames(std::shared_ptr<const Menu::GamesSnapshot> games,
+                        const std::string& running) {
+    std::scoped_lock lock{g_mods_mutex};
+    g_games.list = std::move(games);
+    g_games.running = running;
+}
+
+namespace {
+void SetGamesSearch(const std::string& text) {
+    std::scoped_lock lock{g_mods_mutex};
+    g_games.search = text;
+}
+} // namespace
+
 struct MenuPanel::Shared {
     std::mutex mutex;
     std::condition_variable cv;
@@ -912,6 +930,7 @@ void MenuPanel::BuildModel(const Host& host) {
             m.mods.angels_aim.mapped = true;
         }
         m.homebrew = g_homebrew; // AzaharFrame emerald
+        m.games = g_games;       // AzaharVR: shared, not copied
         m.notice = g_notice;     // AzaharFrame savestate
         m.autosaves = g_autosaves; // AzaharFrame autosave
         m.undo_load = g_undo_load;
@@ -1334,7 +1353,7 @@ void MenuPanel::BuildModel(const Host& host) {
         const DsHeld held = GetDsHeld();
         m.ds_lid_closed = held.lid_closed;
         m.ds_mic_active = held.mic_blow;
-        if (!Menu::TabApplies(view.tab, m.core)) {
+        if (!Menu::TabShown(view.tab, m)) {
             view.tab = Menu::Tab::Main;
         }
         if (!Menu::SectionShown(view.section, m)) {
@@ -1978,6 +1997,10 @@ void MenuPanel::Click(Target t, Host& host) {
                          i < model.autosaves.size() ? model.autosaves[i].id : std::string{},
                          t.index);
                 view.page = Menu::Page::Tabs;
+            } else if (menu == Id::GamesSort) { // AzaharVR: the Games tab
+                view.games.sort = static_cast<Menu::GamesSort>(t.index);
+            } else if (menu == Id::GameOption) {
+                GamesAction(t.index, host);
             } else {
                 SetSetting(menu, t.index, host);
             }
@@ -1987,8 +2010,8 @@ void MenuPanel::Click(Target t, Host& host) {
     if (t.index == Menu::kLabelIndex || t.index == Menu::kMenuAreaIndex) {
         return;
     }
-    static constexpr std::array<const char*, 7> kTabNames{"Main", "Position", "Stats", "Controls",
-                                                          "Mods", "Homebrew", "Settings"}; // ui3
+    static constexpr std::array<const char*, 8> kTabNames{
+        "Main", "Position", "Stats", "Controls", "Mods", "Homebrew", "Settings", "Games"}; // ui3
     static_assert(kTabNames.size() == static_cast<std::size_t>(Menu::Tab::Count));
     static constexpr std::array<const char*, 4> kSegmentNames{"Cheats", "Mods", "Textures",
                                                               "CTGP-7"}; // AzaharFrame ctgp7
@@ -2002,6 +2025,9 @@ void MenuPanel::Click(Target t, Host& host) {
     } else {
         LOG_INFO(Frontend, "xr: in-game menu: {}{}", Menu::LabelFor(t.id),
                  t.index >= 0 ? fmt::format(" ({})", t.index) : std::string{});
+    }
+    if (GamesClick(t, host)) { // AzaharVR: the Games tab
+        return;
     }
     switch (t.id) {
     case Id::TabButton:
@@ -2774,6 +2800,164 @@ void MenuPanel::Click(Target t, Host& host) {
     }
 }
 
+// ---- AzaharVR: the Games tab (menu/games_tab.h) ----
+
+bool MenuPanel::GamesClick(Target t, Host& host) {
+    Menu::GamesView& v = view.games;
+    switch (t.id) {
+    case Id::TabButton:
+        if (t.index == static_cast<int>(Menu::Tab::Games)) {
+            Menu::GamesOpened(model.games, v);
+        }
+        return false;
+    case Id::GameTile:
+    case Id::GameOptions: // of the game as drawn, whatever the list is by now
+        if (layout.games && t.index >= 0 && t.index < static_cast<int>(layout.games->games.size())) {
+            v.menu_game = layout.games->games[static_cast<std::size_t>(t.index)].path;
+            v.menu_item = 0;
+            if (t.id == Id::GameOptions) {
+                view.open_menu = Id::GameOption;
+            } else {
+                GamesAction(static_cast<int>(Menu::GameAction::Play), host);
+            }
+        }
+        return true;
+    case Id::GameChip: {
+        const auto chip = static_cast<Common::SystemFilter>(t.index);
+        // A search has All's place: the chosen chip again is All
+        v.chip = chip == v.chip && !model.games.search.empty() ? Common::SystemFilter::All : chip;
+        return true;
+    }
+    case Id::GamesSearch:
+    case Id::GamesSearchChip: {
+        Swkbd::Spec spec;
+        spec.hint = Menu::GamesProposed::kSearch;
+        spec.max_length = 60;
+        spec.buttons = {{"Cancel", 0, false}, {Menu::GamesProposed::kSearch, 1, true}};
+        spec.initial = model.games.search;
+        spec.over_menu = true;
+        OpenGameKeyboard(std::move(spec), [](const SwkbdOutcome& o) {
+            if (o.shown && o.button == 1) {
+                SetGamesSearch(o.text);
+            }
+        });
+        return true;
+    }
+    case Id::GamesSearchClear:
+        SetGamesSearch({});
+        return true;
+    case Id::GamesAddFolder: {
+        MenuRequest r;
+        r.command = MenuCommand::AddGameFolder;
+        if (host.request) {
+            host.request(r);
+        }
+        return true;
+    }
+    case Id::GamesSort:
+        view.open_menu = Id::GamesSort;
+        v.menu_item = static_cast<int>(v.sort);
+        return true;
+    default:
+        return false;
+    }
+}
+
+void MenuPanel::GamesAction(int item, Host& host) {
+    MenuRequest r;
+    r.text = view.games.menu_game;
+    r.command = item == static_cast<int>(Menu::GameAction::Favourite) ? MenuCommand::FavouriteGame
+                : r.text == model.games.running                       ? MenuCommand::Continue
+                                                                      : MenuCommand::PlayGame;
+    if (host.request) {
+        host.request(r);
+    }
+}
+
+void MenuPanel::GamesTitleScroll(float dt) {
+    Menu::GamesView& v = view.games;
+    Target at{};
+    if (view.tab == Menu::Tab::Games && view.open_menu == Id::None) {
+        at = v.focus.shown ? Menu::GamesFocused(model, view) : view.hover;
+    }
+    if (at.id == Id::GameOptions) {
+        at.id = Id::GameTile;
+    }
+    games_pointed_s = at == games_pointed ? games_pointed_s + dt : 0.0f;
+    games_pointed = at;
+    v.title_scroll = 0.0f;
+    for (const auto& [index, overflow] : layout.cut_titles) {
+        if (at == Target{Id::GameTile, index}) {
+            v.title_scroll = Menu::TitleScroll(games_pointed_s, overflow);
+        }
+    }
+}
+
+bool MenuPanel::GamesInput(const Input::InputFrame& in, bool enabled, bool on_panel, float x,
+                           float y, bool a_edge, Host& host) {
+    namespace Focus = Menu::Focus;
+    Menu::GamesView& v = view.games;
+    // Another list, chip, sort or search: the focus stays on its game
+    if (!(model.games == games_seen) || v.chip != games_view_seen.chip ||
+        v.sort != games_view_seen.sort) {
+        Menu::GamesChanged(model.games, v);
+        if (v.chip != games_view_seen.chip || v.sort != games_view_seen.sort ||
+            model.games.search != games_seen.search) {
+            view.scroll[static_cast<std::size_t>(Menu::Tab::Games)] = 0.0f;
+        }
+        games_seen = model.games;
+        games_view_seen = v;
+    }
+    enabled = enabled && view.tab == Menu::Tab::Games &&
+              model.notice.kind == Menu::ModsDialogKind::None;
+    const bool x_edge = enabled && in.x && !games_x_down;
+    games_x_down = in.x;
+    const Focus::Dir dpad = !enabled        ? Focus::Dir::None
+                            : in.dpad_up    ? Focus::Dir::Up
+                            : in.dpad_down  ? Focus::Dir::Down
+                            : in.dpad_left  ? Focus::Dir::Left
+                            : in.dpad_right ? Focus::Dir::Right
+                                            : Focus::Dir::None;
+    const Focus::Dir dir = games_dir.Update(enabled, dpad, in.hand[0].stick.x, in.hand[0].stick.y,
+                                            in.time_ns);
+    if (!enabled) {
+        return false;
+    }
+    if (dir != Focus::Dir::None) {
+        Menu::GamesMove(dir, model, view, layout);
+        games_x = x;
+        games_y = y;
+        games_shown = on_panel;
+        return false;
+    }
+    if (!v.focus.shown) {
+        return false;
+    }
+    // The beam moved, or came onto the panel: it points again
+    constexpr float kMoved = 16.0f; // dp, over a hand's trembling
+    if (on_panel && (!games_shown || std::hypot(x - games_x, y - games_y) > kMoved)) {
+        v.focus.shown = false;
+        return false;
+    }
+    if (!on_panel) {
+        games_shown = false;
+    }
+    if (x_edge && model.games.list == layout.games && view.open_menu == Id::None) { // Options
+        if (const Target t = Menu::GamesFocused(model, view); t.id == Id::GameTile) {
+            Click({Id::GameOptions, t.index}, host);
+        }
+        return a_edge;
+    }
+    if (!a_edge || model.games.list != layout.games) {
+        return a_edge;
+    }
+    const Target t = Menu::GamesFocused(model, view);
+    if (t.id != Id::None) {
+        Click(t, host);
+    }
+    return true;
+}
+
 void MenuPanel::Frame(const FrameInfo& info, const Input::InputFrame& in, bool have_input,
                       Host& host, std::vector<Quad>& layers, std::optional<XrPosef>& cursor) {
     if (!open) {
@@ -2831,7 +3015,7 @@ void MenuPanel::Frame(const FrameInfo& info, const Input::InputFrame& in, bool h
     // A (right controller) clicks too, for the hand that points.
     const bool a = have_input && in.a;
     const bool listening = remap.Listening() >= 0; // AzaharFrame remap: A is then a button to map
-    const bool a_edge = a && !a_down && !listening;
+    bool a_edge = a && !a_down && !listening;
     a_down = a;
     const bool b = have_input && in.b;
     const bool b_edge = b && !b_down;
@@ -2839,6 +3023,15 @@ void MenuPanel::Frame(const FrameInfo& info, const Input::InputFrame& in, bool h
 
     if (remap.Editing()) {
         EditInput(in, have_input, dt, host); // AzaharFrame remap
+    }
+
+    // ---- The Games tab's focus ---- (AzaharVR)
+    if (GamesInput(in, have_input && press_hand < 0, p >= 0 && hit[p].in_bounds, x, y, a_edge,
+                   host)) {
+        a_edge = false;
+    }
+    if (view.games.focus.shown && view.tab == Menu::Tab::Games) {
+        hover = {}; // one or the other
     }
 
     // ---- Press, drag, release ----
@@ -2983,6 +3176,9 @@ void MenuPanel::Frame(const FrameInfo& info, const Input::InputFrame& in, bool h
             Click({Id::HomebrewDialogCancel}, host); // AzaharFrame emhb: Uninstall's dialog
         } else if (view.page != Menu::Page::Tabs) {
             view.page = Menu::Page::Tabs;
+        } else if (view.tab == Menu::Tab::Games && !model.games.search.empty() &&
+                   model.notice.kind == Menu::ModsDialogKind::None) { // AzaharVR
+            SetGamesSearch({});
         } else {
             LOG_INFO(Frontend, "xr: in-game menu: B continues the game");
             Click({Id::Continue}, host);
@@ -2993,6 +3189,9 @@ void MenuPanel::Frame(const FrameInfo& info, const Input::InputFrame& in, bool h
     float sy = 0.0f;
     if (have_input) {
         for (const auto& hand : in.hand) {
+            if (view.tab == Menu::Tab::Games && &hand == &in.hand[0]) {
+                continue; // AzaharVR: the left one moves its focus
+            }
             if (std::fabs(hand.stick.y) > std::fabs(sy)) {
                 sy = hand.stick.y;
             }
@@ -3019,19 +3218,31 @@ void MenuPanel::Frame(const FrameInfo& info, const Input::InputFrame& in, bool h
             }
         }
         s = std::clamp(s, 0.0f, layout.max_scroll);
+        if (view.tab == Menu::Tab::Games && can && !stick_scroll.Active() &&
+            !list_drag.Flinging() && press_hand < 0) { // AzaharVR: rests on a row's edge
+            const float rest_at = Menu::GamesRestScroll(s, layout.max_scroll);
+            s += (rest_at - s) * std::min(1.0f, dt * 14.0f);
+            if (std::fabs(rest_at - s) < 0.5f) {
+                s = rest_at;
+            }
+        }
         scroll_seen = s;
     }
 
     // ---- The tooltip: a beam resting on a setting ----
-    const Id rest = hover.id;
-    const bool indexed = rest == Id::ModVersion || rest == Id::ModNote || rest == Id::PackNote ||
+    const Target rests = view.tab == Menu::Tab::Games && view.games.focus.shown
+                             ? Menu::GamesFocused(model, view) // AzaharVR: its focus rests too
+                             : hover;
+    const Id rest = rests.id;
+    const bool indexed = rest == Id::GameTile || rest == Id::GameOptions || // AzaharVR
+                         rest == Id::ModVersion || rest == Id::ModNote || rest == Id::PackNote ||
                          rest == Id::ModCompat || rest == Id::PackCompat || // AzaharFrame compat
                          rest == Id::PartUp || rest == Id::PartDown ||      // AzaharFrame texparts
                          rest == Id::LayerUp || rest == Id::LayerDown ||    // AzaharFrame texlayers
                          rest == Id::UseGlobal || // AzaharFrame useglobal: which row's chip
                          rest == Id::Scope ||     // AzaharFrame reticle: Per-Game's count
                          Menu::HasOptionTips(rest); // AzaharFrame xfergpu: a choice's own
-    const int rest_idx = indexed ? hover.index : -1; // AzaharFrame modcat, modcat2
+    const int rest_idx = indexed ? rests.index : -1; // AzaharFrame modcat, modcat2
     if (rest != rest_id || rest_idx != rest_index) {
         rest_id = rest;
         rest_index = rest_idx;
@@ -3046,7 +3257,9 @@ void MenuPanel::Frame(const FrameInfo& info, const Input::InputFrame& in, bool h
             return i >= 0 && i < static_cast<int>(offers.size()) ? &offers[static_cast<std::size_t>(i)] : nullptr;
         };
         bool row_text = false; // AzaharFrame modcat2: the chip's tooltip, a row's notes
-        if (rest == Id::ModVersion) {
+        if (rest == Id::GameTile || rest == Id::GameOptions) { // AzaharVR: GameTooltip, "" shows none
+            row_text = true;
+        } else if (rest == Id::ModVersion) {
             row_text = at_offer(rest_idx) && !at_offer(rest_idx)->version_tip.empty();
         } else if (rest == Id::ModNote) {
             row_text = at_offer(rest_idx) && (!at_offer(rest_idx)->notes.empty() ||
@@ -3084,6 +3297,7 @@ void MenuPanel::Frame(const FrameInfo& info, const Input::InputFrame& in, bool h
     }
 
     view.remap = remap.View();
+    GamesTitleScroll(dt); // AzaharVR
 
     // ---- A redraw when anything changed; the newest drawing to the swapchain ----
     if (chain.Valid() && (!posted_any || !(model == posted_model) || !(view == posted_view) ||

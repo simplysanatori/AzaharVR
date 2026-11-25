@@ -295,6 +295,9 @@ private:
     void FrameOfferSaveRescue(u64 title_id);
     void FrameRefreshSlotsAfterSave(u32 slot);
     void FramePushMenuInfo();
+#ifdef ENABLE_ALT_CORES
+    void FrameMakeGamesTab();
+#endif
 
     // AzaharFrame autosave (citra_qt.cpp): the timer, the menu and quit triggers, Emulation >
     // Load State's autosaves and Undo Load, the Autosave switch, the VR card's list, "Autosaved".
@@ -377,6 +380,7 @@ private slots:
     void OnGameListDumpRomFS(QString game_path, u64 program_id);
     void OnGameListOpenDirectory(const QString& directory);
     void OnGameListAddDirectory();
+    void AddGameDirectory(const QString& dir_path); ///< AzaharVR
     void OnGameListShowList(bool show);
     void OnGameListOpenPerGameProperties(const QString& file);
     void OnConfigurePerGame();

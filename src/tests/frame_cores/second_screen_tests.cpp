@@ -3,6 +3,8 @@
 // Refer to the license.txt file included.
 
 #include <array>
+#include <string>
+#include <utility>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -127,4 +129,93 @@ TEST_CASE("SystemOf and FilterMatches", "[frame_cores]") {
     CHECK(FilterMatches(SystemFilter::GB, GameSystem::GB));
     CHECK(FilterMatches(SystemFilter::GB, GameSystem::GBC));
     CHECK_FALSE(FilterMatches(SystemFilter::GB, GameSystem::GBA));
+}
+
+TEST_CASE("BadgeRule: a companion or gba-ds gives Two Screens, GBA and Game Boy only", "[frame_cores]") {
+    for (const CoreKind kind : {CoreKind::GBA, CoreKind::GB}) {
+        CHECK(BadgeRule(kind, false, false) == GameBadges{false, false});
+        CHECK(BadgeRule(kind, true, false) == GameBadges{true, true});
+        CHECK(BadgeRule(kind, false, true) == GameBadges{true, false});
+        CHECK(BadgeRule(kind, true, true) == GameBadges{true, true});
+    }
+    for (const CoreKind kind : {CoreKind::N3DS, CoreKind::NDS, CoreKind::DSi}) {
+        CHECK(BadgeRule(kind, true, true) == GameBadges{});
+    }
+}
+
+TEST_CASE("MayBePokeDaisy: which games are read whole", "[frame_cores]") {
+    RomInfo info{};
+    info.kind = CoreKind::GBA;
+    for (const char* code : {"BPRE", "BPGJ", "BPED", "AXVE", "AXPS"}) {
+        info.game_code = code;
+        CHECK(MayBePokeDaisy(info));
+    }
+    info.game_code = "AGSE"; // Golden Sun
+    CHECK_FALSE(MayBePokeDaisy(info));
+    info.title = "POKEMON SOME"; // a hack with a code of its own
+    CHECK(MayBePokeDaisy(info));
+    info = {};
+    info.kind = CoreKind::GBA; // homebrew: no code, no title
+    CHECK_FALSE(MayBePokeDaisy(info));
+    info.kind = CoreKind::GB;
+    CHECK(MayBePokeDaisy(info));
+    info.kind = CoreKind::NDS;
+    info.title = "POKEMON D";
+    CHECK_FALSE(MayBePokeDaisy(info));
+}
+
+TEST_CASE("BadgesOf: gba-ds's rule without PokeDaisy", "[frame_cores]") {
+    RomInfo info{};
+    info.kind = CoreKind::GBA;
+    info.game_code = "B8KE";
+    CHECK(BadgesOf(info, "/nonexistent.gba") == GameBadges{true, false});
+    info.game_code = "BPRE"; // asked, but the file is not there
+    CHECK_FALSE(BadgesOf(info, "/nonexistent.gba").pokedaisy);
+    info.kind = CoreKind::NDS;
+    info.game_code = "B8KE";
+    CHECK(BadgesOf(info, "/nonexistent.nds") == GameBadges{});
+}
+
+TEST_CASE("RegionOf: the code's fourth letter", "[frame_cores]") {
+    RomInfo info{};
+    info.kind = CoreKind::GBA;
+    const std::array<std::pair<const char*, const char*>, 8> cases{{{"AGSE", "North America"},
+                                                                    {"AGSP", "Europe"},
+                                                                    {"AGSD", "Europe"},
+                                                                    {"AGSJ", "Japan"},
+                                                                    {"AGSK", "Korea"},
+                                                                    {"AGSU", "Australia"},
+                                                                    {"AGS", ""},
+                                                                    {"", ""}}};
+    for (const auto& [code, region] : cases) {
+        info.game_code = code;
+        CHECK(std::string(RegionOf(info)) == region);
+    }
+    info.game_code = "AGSE";
+    info.kind = CoreKind::DSi;
+    CHECK(std::string(RegionOf(info)) == "North America");
+    info.kind = CoreKind::GB;
+    CHECK(std::string(RegionOf(info)).empty());
+}
+
+TEST_CASE("CleanName and DisplayTitle", "[frame_cores]") {
+    CHECK(CleanName("Golden Sun (USA, Europe)") == "Golden Sun");
+    CHECK(CleanName("Legend of Zelda, The - The Minish Cap (USA) [!]") ==
+          "The Legend of Zelda - The Minish Cap");
+    CHECK(CleanName("[Hack] Some_Game (v1.2)") == "Some Game");
+    CHECK(CleanName("Legend, The") == "The Legend");
+    CHECK(CleanName("(USA)").empty());
+    CHECK(CleanName("Odd ) Name") == "Odd ) Name");
+
+    RomInfo info{};
+    info.kind = CoreKind::GB;
+    info.title = "ZELDA";
+    CHECK(DisplayTitle(info, "/roms/My Game (Japan).gb") == "My Game");
+    CHECK(DisplayTitle(info, "/roms/(USA).gb") == "ZELDA"); // nothing left of the name
+    info.kind = CoreKind::GBA;
+    info.game_code = "ZZZZ"; // no release name known
+    CHECK(DisplayTitle(info, "/roms/Homebrew.gba") == "Homebrew");
+    info.kind = CoreKind::NDS;
+    info.title = "A DS Title";
+    CHECK(DisplayTitle(info, "/roms/file.nds") == "A DS Title");
 }

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <span>
 #include <unordered_map>
 #include <utility>
@@ -16,6 +17,7 @@
 #include <QRunnable>
 #include <QStandardItem>
 #include <QString>
+#include <QStringList>
 #include <QTreeView>
 #include <QWidget>
 #include "citra_qt/uisettings.h"
@@ -27,6 +29,8 @@
 #include "core/loader/smdh.h"
 #ifdef ENABLE_ALT_CORES
 #include "frame_cores/rom_info.h"
+#include "frame_cores/second_screen.h"
+#include "frame_xr/menu/games_snapshot.h"
 #endif
 
 namespace Service::FS {
@@ -184,6 +188,11 @@ public:
     static constexpr int CanInsertRole = SortRole + 7;
     static constexpr int SystemRole = SortRole + 8;     ///< FrameCores::GameSystem; unset is 3DS
     static constexpr int TwoScreensRole = SortRole + 9; ///< bool: the Two Screens badge
+    static constexpr int PokeDaisyRole = SortRole + 10; ///< bool: the PokeDaisy badge
+    // What the VR Games tab shows (SetTile)
+    static constexpr int TileTitleRole = SortRole + 11; ///< QString
+    static constexpr int TileIconRole = SortRole + 12;  ///< shared_ptr<const Menu::GameIcon>
+    static constexpr int RealPathRole = SortRole + 13;  ///< QString: the file, links followed
 
     GameListItemPath() = default;
     GameListItemPath(const QString& game_path, std::span<const u8> smdh_data, u64 program_id,
@@ -232,6 +241,9 @@ public:
         // Get long title from SMDH
         setData(GetQStringLongTitleFromSMDH(smdh, Loader::SMDH::TitleLanguage::English),
                 LongTitleRole);
+#ifdef ENABLE_ALT_CORES
+        SetTile(smdh);
+#endif
     }
 
     /// Overload for DS/DSi/GBA/GB/GBC ROMs with pre-decoded RGBA8 icon and title.
@@ -263,6 +275,50 @@ public:
             setData(GetDefaultIcon(large), Qt::DecorationRole);
         }
     }
+
+#ifdef ENABLE_ALT_CORES
+    using TileIcon = std::shared_ptr<const FrameXr::Menu::GameIcon>;
+
+    /// The badges the delegate draws, named in the tooltip.
+    void SetBadges(const FrameCores::GameBadges& badges) {
+        QStringList names;
+        if (badges.two_screens) {
+            setData(true, TwoScreensRole);
+            names << QObject::tr("Two Screens");
+        }
+        if (badges.pokedaisy) {
+            setData(true, PokeDaisyRole);
+            names << QStringLiteral("PokeDaisy");
+        }
+        if (!names.isEmpty()) {
+            setData(names.join(QLatin1Char('\n')), Qt::ToolTipRole);
+        }
+    }
+
+    /// The VR Games tab's title and picture, whatever the list's own icon size.
+    void SetTile(const QString& title, std::vector<u8> rgba, u32 w, u32 h) {
+        setData(title, TileTitleRole);
+        setData(QFileInfo(data(FullPathRole).toString()).canonicalFilePath(), RealPathRole);
+        if (w > 0 && h > 0 && rgba.size() >= static_cast<std::size_t>(w) * h * 4) {
+            auto icon = std::make_shared<FrameXr::Menu::GameIcon>();
+            icon->w = static_cast<int>(w);
+            icon->h = static_cast<int>(h);
+            icon->rgba = std::move(rgba);
+            setData(QVariant::fromValue(TileIcon(std::move(icon))), TileIconRole);
+        }
+    }
+    void SetTile(const Loader::SMDH& smdh) {
+        constexpr int size = 48;
+        const std::vector<u16> pixels = smdh.GetIcon(true);
+        const QImage image = QImage(reinterpret_cast<const uchar*>(pixels.data()), size, size,
+                                    QImage::Format::Format_RGB16)
+                                 .convertToFormat(QImage::Format_RGBA8888);
+        auto icon = std::make_shared<FrameXr::Menu::GameIcon>();
+        icon->w = icon->h = size;
+        icon->rgba.assign(image.constBits(), image.constBits() + size * size * 4);
+        setData(QVariant::fromValue(TileIcon(std::move(icon))), TileIconRole);
+    }
+#endif
 
     int type() const override {
         return static_cast<int>(GameListItemType::Game);

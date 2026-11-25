@@ -23,6 +23,7 @@
 
 #include "frame_xr/menu/core_rows.h"
 #include "frame_xr/menu/edit_devices.h"
+#include "frame_xr/menu/games_tab.h" // AzaharVR: the Games tab
 #include "frame_xr/menu/homebrew_tab.h" // AzaharFrame emerald
 #include "frame_xr/menu/list_scroll.h"  // AzaharFrame scroll
 #include "frame_xr/menu/mods_tab.h" // AzaharFrame cheatstab
@@ -39,7 +40,8 @@ constexpr float kAutosaveCardH = 72.0f;  ///< AzaharFrame autosave: Load State's
 constexpr float kAutosaveItemH = 56.0f;  ///< and a row of its list
 
 // AzaharFrame cheatstab: Mods; ui3: Homebrew (was a segment of Mods)
-enum class Tab : int { Main, Position, Stats, Controls, Mods, Homebrew, Settings, Count };
+// AzaharVR: Games last here (saved nowhere, but others count on the numbers); second on the rail
+enum class Tab : int { Main, Position, Stats, Controls, Mods, Homebrew, Settings, Games, Count };
 
 /// Everything on the menu a beam can point at.
 enum class Id : int {
@@ -317,6 +319,16 @@ enum class Id : int {
     ImportSave,
     SecondScreen,     ///< GBA and Game Boy games: index of SecondScreenOptions (gba_second_screen)
     AllowGameEditing, ///< GBA and Game Boy games: a switch (gba_allow_editing)
+    // The Games tab (games_tab.h)
+    GameTile, ///< index: the game in MenuModel::games.list
+    GameOptions, ///< a tile's three dots; index as GameTile's
+    GameOption,  ///< an item of its menu; index: GameAction
+    GameChip,    ///< index: Common::SystemFilter
+    GamesSearch,      ///< the menu's keyboard
+    GamesSearchChip,  ///< the same, with the text
+    GamesSearchClear, ///< the chip's close glyph, and No Matches' button
+    GamesSort,        ///< its menu; index: GamesSort
+    GamesAddFolder,
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -536,6 +548,7 @@ struct MenuModel {
     std::string undo_load; ///< "Autosave Loaded: 10:12" until Undo Load or the game stops ("" none)
     ModsTabModel mods; ///< AzaharFrame cheatstab: the Mods tab's segments
     HomebrewTabModel homebrew; ///< AzaharFrame emerald
+    GamesTabModel games; ///< AzaharVR: the Games tab
     /// Items that cannot change now, and why.
     std::array<Lock, kIdCount> locked{};
     /// AzaharFrame useglobal: per-game rows the running game has its own value for (the scope
@@ -557,6 +570,11 @@ struct MenuModel {
 /// the states of Weapon in Hand, Muzzle Flash, Projectiles, Recoil and Laser Sight, and its
 /// buttons Controls (DialogExtra) and OK (DialogConfirm).
 ModsDialog AngelsIntroDialog(const MenuModel& model);
+
+/// The tabs in the rail's order, those that show now.
+std::vector<Tab> RailTabs(const MenuModel& model);
+/// TabApplies, and for the Games tab whether it has a list to show (GamesTabApplies).
+bool TabShown(Tab tab, const MenuModel& model);
 
 enum class Page { Tabs, SaveSlots, LoadSlots };
 
@@ -665,6 +683,7 @@ struct MenuView {
     bool angels_intro = false;
     /// AzaharFrame ctgp7: the open dialog's checkbox (ModsDialog::check) is ticked; off for each new one
     bool dialog_check = false;
+    GamesView games; ///< AzaharVR: the Games tab
     bool operator==(const MenuView&) const = default;
 };
 
@@ -733,6 +752,8 @@ struct MenuLayout {
     /// this layout is the Controls tab's page).
     float aiming_scroll = 0.0f;
     bool controls = false;
+    GamesList games; ///< the Games tab's list as drawn: GameTile's index is in it
+    std::vector<std::pair<int, float>> cut_titles; ///< games whose title is cut, and by how many dp
 
     /// What is at (x, y) dp.
     Target HitTest(float x, float y) const;
@@ -826,6 +847,11 @@ private:
                           const std::vector<int>& rows, const OfferListOptions& opt) const;
     void DrawHomebrew(Kit& kit, const MenuModel& model, const MenuView& view,
                       const Rect& pane); ///< AzaharFrame emerald: homebrew_tab.cpp; ui3: the Homebrew tab
+    void DrawGames(Kit& kit, const MenuModel& model, const MenuView& view,
+                   const Rect& pane); ///< AzaharVR: games_tab.cpp
+    void DrawGameTile(Kit& kit, const GamesTabModel& m, const MenuView& view, int index,
+                      const Target& focused, const Rect& r, const Rect& clip);
+    Rect games_menu_at_{}; ///< the three dots of the tile whose Options is open
     void DrawHomebrewDialog(Kit& kit, const HomebrewDialog& dialog,
                             const MenuView& view); ///< AzaharFrame emhb: homebrew_tab.cpp
     /// AzaharFrame ui2: Install from Zip at a download page's bar end.

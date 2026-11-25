@@ -395,7 +395,7 @@ TEST_CASE("Tab menu: the Mods tab", "[frame_xr][tabmenu]") {
             CHECK(h.r.y1 <= kPanelH);
         }
     }
-    CHECK(rail == static_cast<int>(Tab::Count));
+    CHECK(rail == static_cast<int>(Tab::Count) - 1); // AzaharVR: no Games tab without its list
 
     // The segmented button on every segment; Cheats first. Homebrew is a tab of its own (ui3).
     v.tab = Tab::Mods;
