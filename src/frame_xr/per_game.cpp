@@ -257,6 +257,12 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         f(v.vr_kiu_hide_off_hand);
         return true;
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+        f(v.vr_kiu_talk_portraits);
+        return true;
+    case Id::KiuTalkPortraitsOpacity:
+        f(v.vr_kiu_talk_portraits_opacity);
+        return true;
     case Id::KiuReticleSize:
         f(v.vr_kiu_reticle_size);
         return true;

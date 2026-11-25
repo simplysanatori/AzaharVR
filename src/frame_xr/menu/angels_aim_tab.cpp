@@ -250,7 +250,9 @@ const std::vector<AimPlace>& AimPlaces() {
         {G::BottomScreen, false, Id::KiuWristAngle},
         {G::BottomScreen, false, Id::KiuWristAlong},
         {G::BottomScreen, false, Id::KiuBottomReset},
-        // (Talk Portraits)
+        // Under More: the page has five rows with Wrist already.
+        {G::BottomScreen, true, Id::KiuTalkPortraits},
+        {G::BottomScreen, true, Id::KiuTalkPortraitsOpacity},
         {G::Weapon, false, Id::WeaponInHand},
         {G::Weapon, false, Id::MuzzleFlash},
         {G::Weapon, false, Id::Projectiles},

@@ -204,6 +204,14 @@ inline constexpr const char* kKiuSubtitleSizeTip =
 inline constexpr const char* kKiuHideOffHandRow = "Free Hand"; // AzaharFrame kiuhands (the owner's choice)
 inline constexpr const char* kKiuHideOffHandTip =
     "Your free hand isn't drawn when Hidden. The Bottom Screen on your wrist stays.";
+/// AzaharFrame kiuaim: Talk Portraits (vr_kiu_talk_portraits, vr_kiu_talk_portraits_opacity:
+/// the single screen lane's settings). PROPOSED strings, the tips too.
+inline constexpr const char* kKiuTalkPortraitsRow = "Talk Portraits";
+inline constexpr const char* kKiuTalkPortraitsTip =
+    "Shows who is talking, with their portrait.";
+inline constexpr const char* kKiuTalkPortraitsOpacityRow = "Talk Portraits Opacity";
+inline constexpr const char* kKiuTalkPortraitsOpacityTip =
+    "How solid the talk portraits look. Lower lets you see through them.";
 inline constexpr const char* kOverShoulderRow = "Over the Shoulder";
 inline constexpr const char* kOverShoulderTip =
     "Moves your view behind and above Pit, so you can see him.";

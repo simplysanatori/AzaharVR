@@ -5832,6 +5832,12 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::KiuHideOffHand: // AzaharFrame kiuhands
         set(v.vr_kiu_hide_off_hand, r.value != 0);
         break;
+    case S::KiuTalkPortraits: // AzaharFrame kiuaim
+        set(v.vr_kiu_talk_portraits, r.value != 0);
+        break;
+    case S::KiuTalkPortraitsOpacity:
+        set(v.vr_kiu_talk_portraits_opacity, std::clamp<u32>(u, 20, 100));
+        break;
     case S::KiuReticleSize:
         set(v.vr_kiu_reticle_size, std::clamp<u32>(u, 30, 150));
         break;

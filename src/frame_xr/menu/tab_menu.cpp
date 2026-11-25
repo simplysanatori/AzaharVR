@@ -106,6 +106,7 @@ std::string SliderText(Id id, float value) {
         id == Id::WeaponOpacity || id == Id::ProjectileOpacity ||
         id == Id::MuzzleFlashSize || id == Id::HudSpacingX || id == Id::HudSpacingY ||
         id == Id::KiuBottomSize || id == Id::KiuBottomOpacity || id == Id::KiuReticleSize ||
+        id == Id::KiuTalkPortraitsOpacity || // AzaharFrame kiuaim
         id == Id::KiuPitOpacity) { // AzaharFrame kiugyro: "10%" (kiufix: the strengths, the scale; kiuopacity: the opacities; kiuweap2: the flash's size)
         return Format("%.0f%%", value);
     }
@@ -316,6 +317,12 @@ Row RowFor(Id id, const MenuModel& m) {
         break;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         segmented(std::clamp(m.kiu_hide_off_hand, 0, 1));
+        break;
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+        segmented(std::clamp(m.kiu_talk_portraits, 0, 1));
+        break;
+    case Id::KiuTalkPortraitsOpacity:
+        slider(m.kiu_talk_portraits_opacity);
         break;
     case Id::KiuReticleSize:
         slider(m.kiu_reticle_size);
@@ -598,6 +605,8 @@ SettingsSection SectionOf(Id id) {
     case Id::KiuSubtitleHeight: // AzaharFrame kiu140
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+    case Id::KiuTalkPortraitsOpacity:
     case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
@@ -690,6 +699,8 @@ bool PerGameSetting(Id id) {
     case Id::KiuSubtitleHeight: // AzaharFrame kiu140
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+    case Id::KiuTalkPortraitsOpacity:
     case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
@@ -880,6 +891,10 @@ std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& m) {
         rows.push_back(Id::KiuSubtitleSize);
     }
     rows.push_back(Id::KiuHideOffHand);
+    rows.push_back(Id::KiuTalkPortraits); // AzaharFrame kiuaim
+    if (m.kiu_talk_portraits != 0) {
+        rows.push_back(Id::KiuTalkPortraitsOpacity);
+    }
     rows.push_back(Id::KiuReticleSize);
     return rows;
 }
@@ -922,7 +937,8 @@ std::vector<AngelsAimRowGroup> AngelsAimGroups(const MenuModel& model) {
     }
     AngelsAimRowGroup bottom{AngelsAimGroupKind::BottomScreen, {}};
     for (const Id id : {Id::KiuBottomScreen, Id::KiuBottomSize, Id::KiuBottomOpacity,
-                        Id::KiuWristAngle, Id::KiuWristAlong, Id::KiuBottomReset}) {
+                        Id::KiuWristAngle, Id::KiuWristAlong, Id::KiuBottomReset,
+                        Id::KiuTalkPortraits, Id::KiuTalkPortraitsOpacity}) { // kiuaim
         if (has(fp, id)) {
             bottom.rows.push_back(id);
         }
@@ -1144,6 +1160,10 @@ const std::vector<std::string>& OptionsFor(Id id) {
         static const std::vector<std::string> kChoices{"Shown", "Hidden"};
         return kChoices;
     }
+    case Id::KiuTalkPortraits: { // AzaharFrame kiuaim: the stored order
+        static const std::vector<std::string> kChoices{"Hidden", "Shown"};
+        return kChoices;
+    }
     case Id::WristSide: { // AzaharFrame kiu131: the stored order
         static const std::vector<std::string> kSide{kWristSideBack, kWristSideInside};
         return kSide;
@@ -1338,6 +1358,10 @@ std::string LabelFor(Id id) {
         return kKiuSubtitleSizeRow;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         return kKiuHideOffHandRow;
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+        return kKiuTalkPortraitsRow;
+    case Id::KiuTalkPortraitsOpacity:
+        return kKiuTalkPortraitsOpacityRow;
     case Id::KiuReticleSize:
         return kReticleSizeRow;
     case Id::KiuOverShoulder: // AzaharFrame kiu133
@@ -1753,6 +1777,10 @@ std::string ExplainFor(Id id) {
         return kKiuSubtitleSizeTip;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         return kKiuHideOffHandTip;
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+        return kKiuTalkPortraitsTip;
+    case Id::KiuTalkPortraitsOpacity:
+        return kKiuTalkPortraitsOpacityTip;
     case Id::KiuReticleSize:
         return kReticleSizeTip;
     case Id::KiuOverShoulder: // AzaharFrame kiu133
@@ -1870,7 +1898,7 @@ SliderRange SliderFor(Id id) {
     if (id == Id::KiuBottomSize) { // AzaharFrame kiu131: 50 to 200 %
         return {50.0f, 200.0f, 10.0f};
     }
-    if (id == Id::KiuBottomOpacity) { // 20 to 100 %, as Weapon Opacity
+    if (id == Id::KiuBottomOpacity || id == Id::KiuTalkPortraitsOpacity) { // 20 to 100 %
         return {20.0f, 100.0f, 10.0f};
     }
     if (id == Id::KiuPitOpacity) { // AzaharFrame kiu133: 20 to 100 %, as the other opacities

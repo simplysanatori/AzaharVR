@@ -388,6 +388,10 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::KiuSubtitleSize;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         return MenuSetting::KiuHideOffHand;
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+        return MenuSetting::KiuTalkPortraits;
+    case Id::KiuTalkPortraitsOpacity:
+        return MenuSetting::KiuTalkPortraitsOpacity;
     case Id::WristSide:
         return MenuSetting::WristSide;
     case Id::KiuReticleSize:
@@ -1161,6 +1165,9 @@ void MenuPanel::BuildModel(const Host& host) {
     m.kiu_subtitle_height = static_cast<int>(v.vr_kiu_subtitle_height.GetValue()); // AzaharFrame kiu140
     m.kiu_subtitle_size = static_cast<int>(v.vr_kiu_subtitle_size.GetValue()); // AzaharFrame kiu140
     m.kiu_hide_off_hand = static_cast<int>(v.vr_kiu_hide_off_hand.GetValue()); // AzaharFrame kiuhands
+    m.kiu_talk_portraits = v.vr_kiu_talk_portraits.GetValue() ? 1 : 0; // AzaharFrame kiuaim
+    m.kiu_talk_portraits_opacity = static_cast<int>(
+        std::clamp<u32>(v.vr_kiu_talk_portraits_opacity.GetValue(), 20, 100));
     m.wrist_side = static_cast<int>(std::min<u32>(v.vr_wrist_side.GetValue(), 1));
     m.kiu_reticle_size =
         static_cast<int>(std::clamp<u32>(v.vr_kiu_reticle_size.GetValue(), 30, 150));
@@ -1784,6 +1791,16 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = std::clamp(value, 0, 1);
         Apply(v.vr_kiu_hide_off_hand, r.value != 0, per_game);
         r.setting = MenuSetting::KiuHideOffHand;
+        break;
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+        r.value = std::clamp(value, 0, 1);
+        Apply(v.vr_kiu_talk_portraits, r.value != 0, per_game);
+        r.setting = MenuSetting::KiuTalkPortraits;
+        break;
+    case Id::KiuTalkPortraitsOpacity:
+        r.value = std::clamp(value, 20, 100);
+        Apply(v.vr_kiu_talk_portraits_opacity, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuTalkPortraitsOpacity;
         break;
     case Id::KiuReticleSize:
         r.value = std::clamp(value, 30, 150);
@@ -2782,6 +2799,7 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::KiuArm: // AzaharFrame kiu140
     case Id::KiuHudLinked: // AzaharFrame kiu140
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
     case Id::WristSide:       // Back, Inside
     case Id::WindowScale:
     case Id::MarginX: // AzaharFrame fovaxis
