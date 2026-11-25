@@ -703,16 +703,18 @@ void NdsCore::RunFrame(FrameOutput& out) {
             // Always one, so that the headset's screens are not made again each time a game has no
             // right picture
             out.primary_right = out.primary;
+            int farthest = depth.layers[3];
             if (const melonDS::u32* right = impl->stereo->Right(0)) {
                 out.primary_right.pixels = right;
+                farthest = impl->stereo->RightShift(0);
             }
+            out.layer_shift = NdsDepth::EdgeShift(farthest);
             if (impl->depth_on_secondary) {
                 out.secondary_right = out.secondary;
                 if (const melonDS::u32* right = impl->stereo->Right(1)) {
                     out.secondary_right.pixels = right;
                 }
             }
-            out.layer_shift = static_cast<float>(depth.layers[3]) / NdsDepth::kWidth;
         }
     }
 

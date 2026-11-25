@@ -40,6 +40,9 @@ public:
     /// GetFramebuffers gives the left one's: 256x192, 32-bit BGRA with alpha set, until the next
     /// RunFrame. None: the left eye's is for both.
     const melonDS::u32* Right(int screen) const;
+    /// The farthest layer's shift in it, in pixels: a picture is drawn a frame after SetDepth, or
+    /// kept for one more.
+    int RightShift(int screen) const;
 
     NdsDepth::Lines LastLines() const;
 
@@ -60,6 +63,7 @@ private:
     /// A screen's right picture
     struct Screen {
         std::vector<melonDS::u32> picture;
+        int shift = 0; ///< the farthest layer's
         bool ready = false;
         /// The left picture of the frame `picture` is of, if engine A was on this screen in it
         std::vector<melonDS::u32> scene_left;

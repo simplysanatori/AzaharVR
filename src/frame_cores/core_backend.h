@@ -61,7 +61,8 @@ struct FrameOutput {
     Vulkan::AltScreenImage primary_right{};
     /// The farthest layer's in `primary_right`, a share of the width (layer_depth.h), below 0 while
     /// inverted; every layer's is between 0 and it. The same in a frame that has both eyes see
-    /// `primary`: as much is cut off the pictures.
+    /// `primary`: as much is cut off the pictures. 0: nothing is, also where the layers are ones
+    /// that end in `primary_right` as they do in `primary` (NdsDepth::kCutsEdge).
     float layer_shift = 0.0f;
     /// The same for the Secondary Screen, from a core asked for it (NdsCore::SetDepthOnSecondary).
     /// No host shows it yet: the headset has no right eye's picture of the Secondary Screen.

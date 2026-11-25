@@ -145,6 +145,42 @@ constexpr SceneRoom MakeRoom(const LayerShifts& layers, uint32_t dispcnt,
     return {nearest, inverted ? nearest + farthest - shift : shift, farthest};
 }
 
+/// What is moved left would be squeezed against the picture's left edge (ShiftVertexX) instead of
+/// going past it. So the scene is drawn this much further right, where nothing is left of where
+/// the game has it, and its lines are scrolled back by as much.
+constexpr int SceneOffset(const LayerShifts& layers) {
+    return std::max(0, -layers[3]);
+}
+
+constexpr SceneShift Offset(SceneShift scene, int offset) {
+    scene.nearest += offset;
+    scene.farthest += offset;
+    scene.base += offset;
+    return scene;
+}
+
+/// The scroll of the scene's lines for BG0's: 9 bits, from 256 on to the left.
+constexpr uint16_t ScrollScene(uint16_t scroll, int offset) {
+    return static_cast<uint16_t>((scroll + offset) & 0x1FF);
+}
+
+/// How far left a scroll of 9 bits moves a line; below 0: right.
+constexpr int ScrollOf(uint16_t scroll) {
+    return (scroll & 0x100) != 0 ? (scroll & 0x1FF) - 0x200 : scroll & 0x1FF;
+}
+
+/// The columns of a line scrolled so that what is behind the scene has nothing for: it is moved by
+/// `far_shift`, and begins where the game has it.
+constexpr int SceneEdge(int far_shift, int scroll) {
+    return std::clamp(std::max(far_shift, far_shift - scroll), 0, kWidth);
+}
+
+/// CLEAR_DEPTH and CLRIMAGE_OFFSET with the picture behind the scene moved right; it wraps.
+constexpr uint32_t ShiftClearImage(uint32_t clear_attr2, int shift) {
+    const uint32_t x = (clear_attr2 >> 16) & 0xFF;
+    return (clear_attr2 & ~0x00FF0000u) | ((x - static_cast<uint32_t>(shift)) & 0xFF) << 16;
+}
+
 /// What of the scene is measured, frame by frame.
 struct SceneView {
     int32_t convergence = 0; ///< the w that stands at the room's base
@@ -463,6 +499,64 @@ constexpr bool SamePicture(const uint32_t* a, const uint32_t* b, std::size_t cou
 /// every other frame.
 constexpr bool KeepsRightPicture(bool engine_a, bool has_scene_picture, bool same) {
     return !engine_a && has_scene_picture && same;
+}
+
+/// The right eye's left edge, where what is moved right leaves room. False: nothing is there
+/// (black): every layer ends where it ends in the left eye's picture, which stays whole. The edge
+/// the eyes see is the layer's own, at its depth, and a HUD on the screen is whole in both. True:
+/// the headset cuts both eyes' pictures (Common::LayerDepth::Cut), with what the HUD has there.
+/// Inverted, they are cut either way: the layers stand in front of the screen's edges.
+constexpr bool kCutsEdge = false;
+
+/// FrameOutput::layer_shift of a picture whose farthest layer is `farthest` pixels to the right.
+constexpr float EdgeShift(int farthest) {
+    return kCutsEdge || farthest < 0 ? static_cast<float>(farthest) / kWidth : 0.0f;
+}
+
+/// The shifts to blank the right eye's left edge by.
+constexpr LayerShifts EdgeLayers(const LayerShifts& layers) {
+    return kCutsEdge || layers[3] < 0 ? LayerShifts{} : layers;
+}
+
+/// The columns that are the shift's alone: what the game has in them is beyond its picture.
+constexpr bool IsBeyond(int x, int shift) {
+    return x < shift;
+}
+
+/// The shift of what a pixel of the 2D renderer is from: `flags` is its upper byte, of an engine
+/// with these BGxCNT. The backdrop, which nothing moves, ends with the farthest layer. 0 for what
+/// has nothing beyond the picture: the 3D, and sprites, cut as they are drawn. A pixel is on top
+/// of farther ones only, so where it is beyond, they all are.
+constexpr int PixelShift(uint32_t flags, const uint16_t* bgcnt, const LayerShifts& shifts) {
+    if ((flags & 0xD0) != 0) {
+        return 0;
+    }
+    for (int bg = 0; bg < 4; ++bg) {
+        if ((flags & (1u << bg)) != 0) {
+            return BackgroundShift(bgcnt[bg], shifts);
+        }
+    }
+    return shifts[3];
+}
+
+/// What the 3D renderer has where no polygon is (6 bits a colour, 5 of alpha), without fog:
+/// CLEAR_COLOR as it draws it.
+constexpr uint32_t ClearPixel(uint32_t clear_attr1) {
+    const auto expand = [](uint32_t five) { return five == 0 ? 0 : five * 2 + 1; };
+    return expand(clear_attr1 & 0x1F) | expand((clear_attr1 >> 5) & 0x1F) << 8 |
+           expand((clear_attr1 >> 10) & 0x1F) << 16 | ((clear_attr1 >> 16) & 0x1F) << 24;
+}
+
+/// A pixel of the 3D renderer with fog of this density (0 to 128) over it.
+constexpr uint32_t FogPixel(uint32_t pixel, uint32_t fog_color, uint32_t density, bool alpha_only) {
+    const uint32_t fog = ClearPixel(fog_color);
+    uint32_t out = 0;
+    for (int at = 0; at < 32; at += 8) {
+        const uint32_t from = (pixel >> at) & 0x3F;
+        const uint32_t to = (fog >> at) & 0x3F;
+        out |= (alpha_only && at < 24 ? from : (to * density + from * (128 - density)) >> 7) << at;
+    }
+    return out;
 }
 
 /// Until a game has a scene to take its view from.

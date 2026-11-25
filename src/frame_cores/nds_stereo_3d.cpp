@@ -86,13 +86,15 @@ u32* NdsRight3D::GetLine(int line) {
     if (!HasLine()) {
         return empty.data();
     }
-    scene->RenderXPos = GPU3D.RenderXPos; // BG0's scroll, which changes between lines
+    // BG0's scroll, which changes between lines
+    scene->RenderXPos = NdsDepth::ScrollScene(GPU3D.RenderXPos, offset);
     u32* row = nullptr;
     // Also takes the lines that were not drawn, so that this one is finished
     do {
         row = soft->GetLine(line);
         ++taken;
     } while (taken <= line && taken < kLines);
+    EndAtEdge(row, line);
     return row;
 }
 
@@ -120,10 +122,55 @@ void NdsRight3D::Start(const NdsDepth::Depth& depth, int screen, bool threaded) 
     const NdsDepth::SceneRoom room =
         NdsDepth::MakeRoom(depth.layers, engine.DispCnt,
                            {engine.BGCnt[0], engine.BGCnt[1], engine.BGCnt[2], engine.BGCnt[3]});
-    FillScene(NdsDepth::MakeScene(room, view));
+    offset = NdsDepth::SceneOffset(depth.layers);
+    FillScene(NdsDepth::Offset(NdsDepth::MakeScene(room, view), offset));
+    far_shift = room.farthest;
     soft->RenderFrame();
     running = threaded;
     taken = 0;
+}
+
+/// What is behind the scene has no more to the left than the left eye has either; it would be in
+/// the columns it is moved by.
+void NdsRight3D::EndAtEdge(u32* row, int line) const {
+    const int end = NdsDepth::SceneEdge(far_shift, NdsDepth::ScrollOf(GPU3D.RenderXPos));
+    for (int x = 0; x < end; ++x) {
+        if (row[x] == ClearPixel(x + NdsDepth::ScrollOf(scene->RenderXPos), line)) {
+            row[x] = 0;
+        }
+    }
+}
+
+/// As SoftRenderer3D's ClearBuffers and CalculateFogDensity have it.
+u32 NdsRight3D::ClearPixel(int x, int line) const {
+    u32 attr = scene->RenderClearAttr1;
+    u32 depth = scene->RenderClearAttr2 & 0x7FFF;
+    if ((scene->RenderDispCnt & (1 << 14)) != 0) {
+        const u32 at = ((((scene->RenderClearAttr2 >> 24) + line) & 0xFF) << 9) +
+                       ((((scene->RenderClearAttr2 >> 16) + x) & 0xFF) << 1);
+        const u32 color = GPU.ReadVRAMFlat_Texture<melonDS::u16>(0x40000 + at);
+        depth = GPU.ReadVRAMFlat_Texture<melonDS::u16>(0x60000 + at);
+        attr = (color & 0x7FFF) | (depth & 0x8000) | ((color & 0x8000) != 0 ? 0x1F0000 : 0);
+        depth &= 0x7FFF;
+    }
+    const u32 pixel = NdsDepth::ClearPixel(attr);
+    if ((scene->RenderDispCnt & (1 << 7)) == 0 || (attr & (1 << 15)) == 0) {
+        return pixel;
+    }
+    const u32 z = depth * 0x200 + 0x1FF;
+    u32 id = 0;
+    u32 part = 0;
+    if (z >= scene->RenderFogOffset) {
+        const u32 from = ((z - scene->RenderFogOffset) >> 2) << scene->RenderFogShift;
+        id = std::min<u32>(from >> 17, 32);
+        part = id < 32 ? from & 0x1FFFF : 0;
+    }
+    u32 density = (scene->RenderFogDensityTable[id] * (0x20000 - part) +
+                   scene->RenderFogDensityTable[id + 1] * part) >>
+                  17;
+    density = density >= 127 ? 128 : density;
+    return NdsDepth::FogPixel(pixel, scene->RenderFogColor, density,
+                              (scene->RenderDispCnt & (1 << 6)) != 0);
 }
 
 void NdsRight3D::Cut() {
@@ -192,7 +239,7 @@ void NdsRight3D::FillScene(const NdsDepth::SceneShift& shift) {
     std::memcpy(scene->RenderFogDensityTable, game.RenderFogDensityTable,
                 sizeof(scene->RenderFogDensityTable));
     scene->RenderClearAttr1 = game.RenderClearAttr1;
-    scene->RenderClearAttr2 = game.RenderClearAttr2;
+    scene->RenderClearAttr2 = NdsDepth::ShiftClearImage(game.RenderClearAttr2, shift.farthest);
     // Ours never is: the texture memory may have changed, and only the left eye's renderer knows
     scene->RenderFrameIdentical = false;
 
