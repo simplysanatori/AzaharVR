@@ -209,6 +209,8 @@ if (ENABLE_VULKAN)
         renderer_vulkan/vk_texture_runtime.cpp
         renderer_vulkan/vk_texture_runtime.h
         # AzaharFrame: XR output (no OpenXR here; frame_xr implements the sink)
+        $<$<BOOL:${ENABLE_ALT_CORES}>:renderer_vulkan/alt_picture_filter.cpp>
+        $<$<BOOL:${ENABLE_ALT_CORES}>:renderer_vulkan/alt_picture_filter.h>
         $<$<BOOL:${ENABLE_ALT_CORES}>:renderer_vulkan/alt_pipeline.cpp>
         $<$<BOOL:${ENABLE_ALT_CORES}>:renderer_vulkan/alt_pipeline.h>
         $<$<BOOL:${ENABLE_ALT_CORES}>:renderer_vulkan/alt_present.h>

@@ -17,6 +17,7 @@
 #include "core/frontend/alt_screens.h"
 #include "core/frontend/emu_window.h"
 #include "video_core/host_shaders/vulkan_present_vert.h"
+#include "video_core/renderer_vulkan/alt_picture_filter.h"
 #include "video_core/renderer_vulkan/alt_pipeline.h"
 #include "video_core/renderer_vulkan/alt_present.h"
 #include "video_core/renderer_vulkan/alt_window_target.h"
@@ -74,6 +75,7 @@ struct Image2D {
     vk::Image image{};
     vk::ImageView view{};
     VmaAllocation allocation{};
+    vk::Framebuffer framebuffer{}; ///< made when a texture filter first draws into it
 };
 
 struct ScreenTexture {
@@ -89,6 +91,7 @@ struct ScreenTexture {
 struct PictureScale {
     u32 scale = 0;        ///< of what the headset's image or the window's texture is (0: none yet)
     bool texture = false; ///< the picture's texture is scaled (else the headset's image alone)
+    bool filtered = false; ///< by Texture Filter
 };
 
 } // namespace
@@ -102,6 +105,7 @@ struct AltXrRenderer::Impl {
     std::unique_ptr<StreamBuffer> upload_buffer;
     std::unique_ptr<DescriptorUpdateQueue> update_queue;
     std::unique_ptr<DescriptorHeap> present_heap;
+    std::unique_ptr<AltPictureFilter> picture_filter; ///< made with the first filtered picture
     vk::UniquePipelineLayout present_pipeline_layout;
     vk::ShaderModule present_vertex_shader{};
     std::array<vk::Sampler, 2> samplers{};
@@ -123,6 +127,7 @@ struct AltXrRenderer::Impl {
     bool ready = false;
     bool sharp_pixels = false;
     u32 presented_setting = 0; ///< the last Present's Internal Resolution
+    Settings::TextureFilter presented_filter{}; ///< and Texture Filter
     PictureScale primary_scale{};
     PictureScale secondary_scale{};
 
@@ -203,6 +208,9 @@ struct AltXrRenderer::Impl {
     }
 
     void DestroyImage(Image2D& img) {
+        if (img.framebuffer) {
+            instance->GetDevice().destroyFramebuffer(img.framebuffer);
+        }
         if (img.view) {
             instance->GetDevice().destroyImageView(img.view);
         }
@@ -233,13 +241,14 @@ struct AltXrRenderer::Impl {
         DestroyImage(tex.scaled);
         tex.scale = scale;
         tex.view = tex.picture.view;
-        if (scale > 1 && CreateImage(tex.scaled, width * scale, height * scale)) {
+        if (scale > 1 && CreateImage(tex.scaled, width * scale, height * scale, true)) {
             tex.view = tex.scaled.view;
         }
         return true;
     }
 
-    bool CreateImage(Image2D& img, u32 width, u32 height) {
+    /// `target`: a texture filter may draw into it.
+    bool CreateImage(Image2D& img, u32 width, u32 height, bool target = false) {
         const vk::ImageCreateInfo image_info = {
             .imageType = vk::ImageType::e2D,
             .format = vk::Format::eR8G8B8A8Unorm,
@@ -249,7 +258,9 @@ struct AltXrRenderer::Impl {
             .samples = vk::SampleCountFlagBits::e1,
             .tiling = vk::ImageTiling::eOptimal,
             .usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc |
-                     vk::ImageUsageFlagBits::eSampled,
+                     vk::ImageUsageFlagBits::eSampled |
+                     (target ? vk::ImageUsageFlagBits::eColorAttachment
+                             : vk::ImageUsageFlags{}),
             .initialLayout = vk::ImageLayout::eUndefined,
         };
         const VmaAllocationCreateInfo alloc_info = {
@@ -280,6 +291,31 @@ struct AltXrRenderer::Impl {
             },
         });
         return true;
+    }
+
+    /// The whole picture into its bigger image through Texture Filter. False: not drawn.
+    bool DrawFiltered(ScreenTexture& tex) {
+        const PictureScale& pick = &tex == &secondary_tex ? secondary_scale : primary_scale;
+        if (!pick.filtered) {
+            return false;
+        }
+        try {
+            if (!picture_filter) {
+                picture_filter =
+                    std::make_unique<AltPictureFilter>(*instance, *scheduler, *update_queue);
+            }
+            const u32 width = tex.width * tex.scale;
+            const u32 height = tex.height * tex.scale;
+            if (!tex.scaled.framebuffer) {
+                tex.scaled.framebuffer =
+                    picture_filter->MakeFramebuffer(tex.scaled.view, width, height);
+            }
+            return picture_filter->Draw(presented_filter, tex.picture.view,
+                                        tex.scaled.framebuffer, width, height, tex.scale);
+        } catch (const std::exception& e) {
+            LOG_ERROR(Render_Vulkan, "alt_xr: texture filter not drawn: {}", e.what());
+            return false;
+        }
     }
 
     /// The whole picture into its bigger image, each pixel a block.
@@ -335,6 +371,7 @@ struct AltXrRenderer::Impl {
     void PickScales(const AltScreenImage& primary, const AltScreenImage& secondary,
                     bool has_overlay) {
         presented_setting = Settings::values.resolution_factor.GetValue();
+        presented_filter = Settings::values.texture_filter.GetValue();
         if (!sharp_pixels) {
             return;
         }
@@ -364,8 +401,10 @@ struct AltXrRenderer::Impl {
                      bottom ? "Secondary" : "Primary", width, height, scale, setting, shown);
             pick.scale = scale;
         }
-        // The window's scale is no whole number: it samples the scaled texture smoothly.
-        pick.texture = !presented_vr && scale > 1;
+        // The window's scale is no whole number: it samples the scaled texture smoothly. A filter
+        // draws the scaled texture in the headset too.
+        pick.filtered = AltPictureFiltered(presented_filter, scale);
+        pick.texture = scale > 1 && (!presented_vr || pick.filtered);
     }
 
     /// Window pixels one of the picture's covers, the most of the places it is shown at.
@@ -491,7 +530,7 @@ struct AltXrRenderer::Impl {
             cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
                                    vk::PipelineStageFlagBits::eFragmentShader, {}, {}, {}, to_read);
         });
-        if (tex.scaled.image) {
+        if (tex.scaled.image && !DrawFiltered(tex)) {
             DrawScaled(tex);
         }
         return true;
@@ -628,6 +667,7 @@ struct AltXrRenderer::Impl {
         DestroyTexture(secondary_tex);
         DestroyTexture(overlay_tex);
         DestroyTexture(dummy_tex);
+        picture_filter.reset();
         if (instance) {
             const vk::Device device = instance->GetDevice();
             for (auto& sampler : samplers) {
@@ -792,7 +832,8 @@ bool AltXrRenderer::NeedsPresent() const {
     }
     const bool vr = impl->XrShowsScreens();
     if (impl->sharp_pixels &&
-        impl->presented_setting != Settings::values.resolution_factor.GetValue()) {
+        (impl->presented_setting != Settings::values.resolution_factor.GetValue() ||
+         impl->presented_filter != Settings::values.texture_filter.GetValue())) {
         return true;
     }
     return vr != impl->presented_vr || (!vr && impl->window_target && impl->window_target->Resized());

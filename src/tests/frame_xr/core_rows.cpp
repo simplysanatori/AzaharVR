@@ -37,7 +37,7 @@ std::set<Id> With(std::set<Id> ids, const std::set<Id>& more) {
 const std::set<Id> kTwoScreens{Id::HideBottomScreen, Id::ScreenLayout, Id::MoveScreens,
                                Id::SwapScreens};
 /// GBA and Game Boy games: their pictures are drawn at a chosen scale.
-const std::set<Id> kPicture{Id::InternalResolution};
+const std::set<Id> kPicture{Id::InternalResolution, Id::TextureFilter};
 const std::set<Id> kSaves{Id::SavesHeader, Id::Autosave, Id::AutosaveEvery, Id::AutosaveKeep,
                           Id::AutosaveCard};
 
@@ -141,9 +141,12 @@ TEST_CASE("Core rows: the table for each other console", "[frame_xr][tabmenu]") 
     // A core that draws at a chosen resolution has the row, and Graphics with it.
     for (CoreCaps own : OtherConsoles()) {
         CHECK(RowApplies(Id::InternalResolution, own) == !Common::AltCore::IsDs(own.kind));
+        CHECK(RowApplies(Id::TextureFilter, own) == !Common::AltCore::IsDs(own.kind));
         CHECK(!RowApplies(Id::DynamicResolution, own));
         own.has_internal_resolution = false;
+        own.has_texture_filter = false;
         CHECK(!RowApplies(Id::InternalResolution, own));
+        CHECK(!RowApplies(Id::TextureFilter, own));
         CHECK(!SectionShown(SettingsSection::Graphics, Game(own)));
         own.has_internal_resolution = true;
         CHECK(RowApplies(Id::InternalResolution, own));
@@ -155,6 +158,11 @@ TEST_CASE("Core rows: the table for each other console", "[frame_xr][tabmenu]") 
         CHECK(drawn.contains(Id::InternalResolution));
         CHECK(drawn.contains(Id::DynamicResolution));
         CHECK(!drawn.contains(Id::TextureFilter));
+        own.has_texture_filter = true;
+        CHECK(Drawn(Game(own), SettingsView(SettingsSection::Graphics))
+                  .contains(Id::TextureFilter));
+        own.has_internal_resolution = false; // the filter alone keeps Graphics
+        CHECK(SectionShown(SettingsSection::Graphics, Game(own)));
     }
     // Black Frame Insertion brings its rows and Graphics back.
     map.has_bfi = true;
@@ -178,7 +186,7 @@ TEST_CASE("Core rows: the menu draws what the table says", "[frame_xr][tabmenu]"
         CHECK(general.contains(Id::Autosave) == kAltAutosave);
         CHECK(general.contains(Id::DsConsoleMode) == core.has_dsi_mode);
         // The DS has General alone, no section to pick; a GBA or Game Boy game has Graphics too,
-        // with Internal Resolution alone
+        // with Internal Resolution and Texture Filter alone
         const bool graphics = core.has_internal_resolution;
         CHECK(SectionShown(SettingsSection::General, m));
         CHECK(SectionShown(SettingsSection::Graphics, m) == graphics);
@@ -190,7 +198,8 @@ TEST_CASE("Core rows: the menu draws what the table says", "[frame_xr][tabmenu]"
             for (const Id chrome : {Id::TabButton, Id::Scope, Id::ScopeMore}) {
                 rows.erase(chrome);
             }
-            CHECK(rows == std::set<Id>{Id::SettingsSection, Id::InternalResolution});
+            CHECK(rows == std::set<Id>{Id::SettingsSection, Id::InternalResolution,
+                                       Id::TextureFilter});
         }
         CHECK(!TabApplies(Tab::Homebrew, core));
         CHECK(TabApplies(Tab::Mods, core) == core.has_alt_cheats);

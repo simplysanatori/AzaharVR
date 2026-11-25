@@ -42,6 +42,7 @@ struct Capabilities {
     bool has_flat_mode = true;
     bool has_bfi = true;
     bool has_internal_resolution = true;
+    bool has_texture_filter = true;
     bool has_dynamic_resolution = true;
     bool has_render_margin = true;
     bool has_solar_sensor = false;
@@ -116,6 +117,7 @@ struct Capabilities {
         c.has_alt_cheats = true;
         c.has_bfi = false;
         c.has_internal_resolution = false;
+        c.has_texture_filter = false;
         c.has_dynamic_resolution = false;
         c.has_render_margin = false;
         c.has_mic_blow = true;

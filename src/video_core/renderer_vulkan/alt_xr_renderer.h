@@ -50,7 +50,7 @@ public:
     void Shutdown();
 
     /// The output changed since the last Present (VR or flat, the window's size, Internal
-    /// Resolution): a paused game is to be presented again.
+    /// Resolution, Texture Filter): a paused game is to be presented again.
     bool NeedsPresent() const;
 
     /// Uploads and submits one frame. `secondary` may have pixels == nullptr when no secondary
@@ -62,8 +62,9 @@ public:
 
     bool IsReady() const;
 
-    /// The pictures are scaled whole times by Internal Resolution, with sharp pixels (GBA and Game
-    /// Boy games). Else (the first) they are drawn smooth, 4x in the headset.
+    /// The pictures are scaled whole times by Internal Resolution, with sharp pixels or through
+    /// Texture Filter (GBA and Game Boy games). Else (the first) they are drawn smooth, 4x in the
+    /// headset.
     void SetSharpPixels(bool on);
 
 private:

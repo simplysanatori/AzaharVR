@@ -19,8 +19,7 @@ enum class Tab : int;
 using CoreCaps = Common::AltCore::Capabilities;
 
 // What no DS, GBA or Game Boy core does yet.
-inline constexpr bool kAltAutosave = true;       ///< true shows Autosave for these cores
-inline constexpr bool kAltTextureFilter = false; ///< their renderer does not read it
+inline constexpr bool kAltAutosave = true; ///< true shows Autosave for these cores
 
 constexpr bool Is3ds(const CoreCaps& core) {
     return core.kind == Common::AltCore::CoreKind::N3DS;

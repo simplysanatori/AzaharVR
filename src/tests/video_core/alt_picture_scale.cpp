@@ -4,8 +4,8 @@
 
 // Internal Resolution for GBA and Game Boy pictures (video_core/renderer_vulkan/alt_present.h):
 // whole times, the setting or less, no more than the screen shows, held near the halfway points,
-// never past the size limit; and how big the headset shows a screen (video_core/
-// xr_screen_cover.h).
+// never past the size limit; which Texture Filters are drawn over them; and how big the headset
+// shows a screen (video_core/xr_screen_cover.h).
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -118,4 +118,21 @@ TEST_CASE("Screen cover: display pixels across a screen", "[alt_core]") {
     CHECK(C::Get(VideoCore::XrScreen::Bottom) == 300.0f);
     C::Note(VideoCore::XrScreen::Bottom, 450.0f);
     CHECK(C::Get(VideoCore::XrScreen::Bottom) == 450.0f);
+}
+
+TEST_CASE("Picture filter: every filter but None, over a bigger picture", "[alt_core]") {
+    using Settings::TextureFilter;
+    for (const TextureFilter filter : {TextureFilter::Anime4K, TextureFilter::Bicubic,
+                                       TextureFilter::ScaleForce, TextureFilter::xBRZ,
+                                       TextureFilter::MMPX}) {
+        CHECK(!Vulkan::AltPictureFiltered(filter, 0));
+        CHECK(!Vulkan::AltPictureFiltered(filter, 1)); // once as big: no pixels to make
+        for (u32 scale = 2; scale <= Vulkan::kAltMaxScale; scale++) {
+            CHECK(Vulkan::AltPictureFiltered(filter, scale));
+        }
+    }
+    for (u32 scale = 0; scale <= Vulkan::kAltMaxScale; scale++) {
+        CHECK(!Vulkan::AltPictureFiltered(TextureFilter::NoFilter, scale));
+        CHECK(!Vulkan::AltPictureFiltered(static_cast<TextureFilter>(6), scale)); // none such
+    }
 }

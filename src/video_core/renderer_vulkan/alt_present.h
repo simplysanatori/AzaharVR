@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include "common/common_types.h"
+#include "common/settings.h"
 #include "common/vector_math.h"
 
 // What both of AltXrRenderer's outputs (the XR screens, the window) send the 3DS's present shaders.
@@ -70,6 +71,22 @@ constexpr u32 AltPictureScale(u32 setting, u32 width, u32 height, float shown, u
     const u32 fits = std::min(kAltMaxWidth / std::max(width, 1u),
                               kAltMaxHeight / std::max(height, 1u));
     return std::clamp(scale, 1u, std::max(fits, 1u));
+}
+
+/// Whether Texture Filter `filter` is drawn over a GBA or Game Boy picture scaled `scale` times: a
+/// filter makes the pixels a bigger picture needs, so once as big has none to make.
+constexpr bool AltPictureFiltered(Settings::TextureFilter filter, u32 scale) {
+    switch (filter) {
+    case Settings::TextureFilter::Anime4K:
+    case Settings::TextureFilter::Bicubic:
+    case Settings::TextureFilter::ScaleForce:
+    case Settings::TextureFilter::xBRZ:
+    case Settings::TextureFilter::MMPX:
+        return scale > 1;
+    case Settings::TextureFilter::NoFilter:
+        break;
+    }
+    return false;
 }
 
 /// A screen's quad. Upright (not `landscape`): turned 90 degrees anticlockwise, as the 3DS's
