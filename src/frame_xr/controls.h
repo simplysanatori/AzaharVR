@@ -296,6 +296,8 @@ private:
     /// AzaharFrame kiuwrist: Angel's Aim's Secondary Screen on the off hand's wrist, shown this
     /// game frame (the bottom panel the mapper touches is it then), and how many lines it logged.
     Vis::WristScreen wrist_screen;
+    /// AzaharFrame kiuaim: places it for this display frame (Immersive::SetWristScreen)
+    void PlaceWristScreen(const FrameInfo& info, const Input::InputFrame& in);
     bool wrist_on = false;
     int wrist_logs = 0;
     /// AzaharFrame kiupanel: the switch on in Angel's Aim this frame; the aim held while the

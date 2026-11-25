@@ -932,6 +932,7 @@ std::vector<AngelsAimRowGroup> AngelsAimGroups(const MenuModel& model) {
     }
     bottom.rows.push_back(Id::WristSide); // global: every wrist display (the Stats tab's too)
     for (AngelsAimRowGroup* g : {&aiming, &view, &bottom, &weapons}) {
+        AimPageFilter(model, g->rows); // AzaharFrame kiuaim
         if (!g->rows.empty()) {
             groups.push_back(std::move(*g));
         }
@@ -3528,6 +3529,23 @@ float TabMenu::DrawAngelsAimSettings(Kit& kit, const MenuModel& model, const Men
     for (const Row& r : rows) {
         if (r.kind == RowKind::Slider || r.kind == RowKind::MenuButton) {
             label_w = std::max(label_w, LabelRoom(kit, model, r.id));
+        }
+    }
+    return DrawRowItems(kit, model, view, rows, c, list, y, c.x0 + label_w + kLabelGap,
+                        open_anchor, open_selected);
+}
+
+// AzaharFrame kiuaim: `ids` as rows from `y`, for the Angel's Aim page (angels_aim_tab.cpp; Row
+// and RowFor are this file's own).
+float TabMenu::DrawAimRows(Kit& kit, const MenuModel& model, const MenuView& view,
+                           const std::vector<Id>& ids, const Rect& c, const Rect& list, float y,
+                           Rect& open_anchor, int& open_selected) {
+    std::vector<Row> rows;
+    float label_w = 0.0f;
+    for (const Id id : ids) {
+        rows.push_back(RowFor(id, model));
+        if (rows.back().kind == RowKind::Slider || rows.back().kind == RowKind::MenuButton) {
+            label_w = std::max(label_w, LabelRoom(kit, model, id));
         }
     }
     return DrawRowItems(kit, model, view, rows, c, list, y, c.x0 + label_w + kLabelGap,

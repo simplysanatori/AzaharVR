@@ -91,6 +91,10 @@ struct ScreenLayers {
     /// AzaharFrame kiu1s: both screens are where the game's menu puts them (Angel's Aim's menu
     /// panel): the grips move neither.
     bool screens_fixed = false;
+    /// AzaharFrame kiuaim: the bottom screen is Angel's Aim's Bottom Screen kept on view while
+    /// the menu's Bottom Screen page is open (Layout::PlacePreviewFor): its layer goes after the
+    /// menu's, it takes no beam, and its picture is the last one (the game is paused).
+    bool bottom_preview = false;
     /// AzaharFrame flash: the top screen is the Full modes' screen, engaged: the game draws its
     /// picture for the head pose (modes 2 and 3, not paused by the menu or the bottom screen).
     /// Motion Clarity flashes it (motion_clarity.h).
@@ -138,6 +142,9 @@ bool GameMenu();
 /// The in-game menu (Azahar's window over the paused game) is open: immersive modes 2 and 3
 /// pause, as when the bottom screen is shown. XR thread.
 void SetMenuOpen(bool open);
+/// AzaharFrame kiuaim: the menu's Bottom Screen page is open and its switch on (the controls,
+/// each frame). Screens keeps Angel's Aim's Bottom Screen on view meanwhile. XR thread.
+void SetPlacePreview(bool wanted);
 
 /// Left Bumper + Right Bumper + View: shows the bottom screen, or hides it again. In immersive
 /// modes 2 and 3 showing it pauses immersive mode, as in CitraVR. XR thread.

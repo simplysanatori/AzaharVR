@@ -1358,6 +1358,8 @@ void MenuPanel::BuildModel(const Host& host) {
     }
     m.aim_calibrated = host.aim_calibrated; // AzaharFrame kiufix
     m.aim_calibration_ok = host.aim_calibration_ok;
+    // AzaharFrame kiuaim: the page's open group only while it can show (last: it reads the rows)
+    Menu::AimPageKeep(m, view);
     model = std::move(m);
 }
 
@@ -2690,6 +2692,9 @@ void MenuPanel::Click(Target t, Host& host) {
         controls_page = 0;
         scroll_to_aiming = true;
         break;
+    case Id::AngelsAimGroup: // AzaharFrame kiuaim: a group's row, More, Back
+        Menu::AimPagePress(model, view, t.index);
+        break;
     case Id::AngelsAimSend: // AzaharFrame kiumenus: Azahar's window, Send Report's dialog
         ask(MenuCommand::AngelsAimReport);
         break;
@@ -3011,6 +3016,9 @@ void MenuPanel::Frame(const FrameInfo& info, const Input::InputFrame& in, bool h
                    (model.mods.textures.dialog.kind != Menu::ModsDialogKind::None ||
                     !view.open_link.empty())) {
             Click({Id::DialogCancel}, host);
+        } else if (view.tab == Menu::Tab::Mods && // AzaharFrame kiuaim: a group's page, More
+                   view.mods_segment == Menu::ModsSegment::AngelsAim && Menu::AimPageOn() &&
+                   Menu::AimPageBack(model, view)) {
         } else if (mods_shown && view.mods_page == Menu::ModsPage::Install) {
             Click({Id::ModsBack}, host);
         } else if (textures_shown && view.textures_page == Menu::TexturesPage::Download) {

@@ -1508,6 +1508,30 @@ struct ScreenDecision {
 /// menus (modes 2 and 3) both screens are shown, whatever was chosen for the bottom one.
 ScreenDecision Decide(const ScreenState& s);
 
+/// AzaharFrame kiuaim: the real Bottom Screen kept on view (its real place, size and last
+/// picture, the game paused) while the menu's Bottom Screen page is open, so its sliders show
+/// what they do; gone with the page or the menu. Persistent: with the view. Wrist: where the
+/// controls placed it for this frame (it moves with the hand, and shows as in play: while it
+/// faces the eyes). Live switch AZAHARFRAME_KIU_PLACE_PREVIEW, on unless "0", "off" or "false".
+inline constexpr const char* kKiuPlacePreviewSwitch = "AZAHARFRAME_KIU_PLACE_PREVIEW";
+struct PlacePreviewState {
+    bool wanted = false;       ///< the switch is on and the Bottom Screen's page is open
+    bool menu_open = false;    ///< the in-game menu shows (the tab menu, not Azahar's window)
+    bool first_person = false; ///< Angel's Aim's game on view in its mode
+    bool view_valid = false;   ///< the head pose is known
+    int bottom_mode = 0;       ///< Bottom Screen: 0 Off, 1 Persistent, 2 Wrist
+    bool wrist_placed = false; ///< Wrist: placed for this display frame, and facing the eyes
+};
+enum class PlacePreview : uint8_t { None, Persistent, Wrist };
+constexpr PlacePreview PlacePreviewFor(const PlacePreviewState& s) {
+    if (!s.wanted || !s.menu_open || !s.first_person || !s.view_valid) {
+        return PlacePreview::None;
+    }
+    return s.bottom_mode == 1                     ? PlacePreview::Persistent
+           : s.bottom_mode == 2 && s.wrist_placed ? PlacePreview::Wrist
+                                                  : PlacePreview::None;
+}
+
 // ---- The grip gesture ----
 
 /// One grip at a time. A grip squeezed (not one already down) starts it; that hand's aim moves

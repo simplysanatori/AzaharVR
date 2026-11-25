@@ -526,3 +526,70 @@ TEST_CASE("FrameXr kiu140: the wrist screen's place round the wrist and up the a
     REQUIRE(Vis::UprightTurns(flat, up_at(110), 0, Vis::kUprightShownDeg) == 0);
     REQUIRE(Vis::UprightTurns(flat, up_at(170), 0, Vis::kUprightShownDeg) == 2);
 }
+
+// AzaharFrame kiuaim: Wrist Angle counts from the back of the wrist, whatever Wrist Side is.
+TEST_CASE("FrameXr kiuaim: Wrist Angle from the back of the wrist", "[frame_xr][kiuwrist][kiuaim]") {
+    using Vis::WristSide;
+    REQUIRE(Vis::WristAbsSwitchOn(std::nullopt));
+    REQUIRE(Vis::WristAbsSwitchOn(std::string("1")));
+    REQUIRE_FALSE(Vis::WristAbsSwitchOn(std::string("0")));
+    REQUIRE_FALSE(Vis::WristAbsSwitchOn(std::string("off")));
+    // The carry: Back keeps the angle, Inside is half a turn on; 360 is 0.
+    REQUIRE(Vis::WristAngleCarried(0, false) == 0);
+    REQUIRE(Vis::WristAngleCarried(90, false) == 90);
+    REQUIRE(Vis::WristAngleCarried(0, true) == 180);
+    REQUIRE(Vis::WristAngleCarried(90, true) == 270);
+    REQUIRE(Vis::WristAngleCarried(270, true) == 90);
+    REQUIRE(Vis::WristAngleCarried(360, true) == 180);
+    REQUIRE(Vis::WristAngleCarried(-5, true) == 180);
+    REQUIRE(Vis::WristAngleCarried(Vis::WristAngleCarried(77, true), true) == 77); // and back
+    const auto pose = [](Hand hand, const Vis::WristStart& s) {
+        return Vis::WristScreenLocalPose(hand, false, s.side, Vis::kWristScreenWidth,
+                                         Vis::WristAtFor(s.angle_deg, 0));
+    };
+    const auto degrees = [](const Posef& a, const Posef& b) {
+        float worst = 0.0f;
+        for (const Vec3f v : {Vec3f{1, 0, 0}, Vec3f{0, 1, 0}, Vec3f{0, 0, 1}}) {
+            const float dot = std::clamp(Input::Dot(Axis(a, v), Axis(b, v)), -1.0f, 1.0f);
+            worst = std::max(worst, std::acos(dot) * 57.29578f);
+        }
+        return worst;
+    };
+    for (const Hand hand : {Hand::Left, Hand::Right}) {
+        for (const WristSide stats : {WristSide::Back, WristSide::Inside}) {
+            // 0 is the back of the wrist, whatever Wrist Side is.
+            const Vis::WristStart zero = Vis::WristStartFor(0, stats, true);
+            REQUIRE(zero.side == WristSide::Back);
+            const Posef back = Vis::WristScreenLocalPose(hand, false, WristSide::Back);
+            REQUIRE(Input::Length(pose(hand, zero).position - back.position) < 1e-6f);
+            REQUIRE(degrees(pose(hand, zero), back) < 0.01f);
+        }
+        // 180 is the inside: Wrist Side's Inside place to 1 mm, its facing within 25 degrees (both
+        // lean 10 degrees to the controller's top).
+        const Posef inside = Vis::WristScreenLocalPose(hand, false, WristSide::Inside);
+        const Posef half = pose(hand, Vis::WristStartFor(180, WristSide::Back, true));
+        REQUIRE(Input::Length(half.position - inside.position) < 0.001f);
+        REQUIRE(degrees(half, inside) < 25.0f);
+        // A player on Inside, carried: the same place as before for any angle.
+        for (const int before : {0, 40, 180, 300}) {
+            const Posef was = Vis::WristScreenLocalPose(hand, false, WristSide::Inside,
+                                                        Vis::kWristScreenWidth,
+                                                        Vis::WristAtFor(before, 0));
+            const Posef now = pose(hand, Vis::WristStartFor(Vis::WristAngleCarried(before, true),
+                                                            WristSide::Inside, true));
+            INFO("before " << before);
+            REQUIRE(Input::Length(now.position - was.position) < 0.001f);
+            REQUIRE(degrees(now, was) < 25.0f);
+            // The switch off: the stored angle turned back, exactly the old pose.
+            const Posef old = pose(hand, Vis::WristStartFor(Vis::WristAngleCarried(before, true),
+                                                            WristSide::Inside, false));
+            REQUIRE(Input::Length(old.position - was.position) < 1e-5f);
+            REQUIRE(degrees(old, was) < 0.05f);
+        }
+        // On Back nothing moves, with the switch on or off.
+        const Vis::WristStart on = Vis::WristStartFor(40, WristSide::Back, true);
+        const Vis::WristStart off = Vis::WristStartFor(40, WristSide::Back, false);
+        REQUIRE(on.side == off.side);
+        REQUIRE(on.angle_deg == off.angle_deg);
+    }
+}

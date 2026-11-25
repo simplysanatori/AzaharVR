@@ -676,6 +676,10 @@ struct MenuView {
     /// AzaharFrame kiuweap2: the "Angel's Aim Is On" prompt is open (AngelsIntroDialog): OK
     /// closes it, Controls closes it and shows the Controls tab at Aiming
     bool angels_intro = false;
+    /// AzaharFrame kiuaim: the Angel's Aim page's open group (AimGroup; -1 the front view), and
+    /// its More rows in place of its own (angels_aim_tab.h)
+    int aim_group = -1;
+    bool aim_more = false;
     /// AzaharFrame ctgp7: the open dialog's checkbox (ModsDialog::check) is ticked; off for each new one
     bool dialog_check = false;
     bool operator==(const MenuView&) const = default;
@@ -852,6 +856,10 @@ private:
                                 const Rect& c, const Rect& list, float y, Rect& open_anchor,
                                 int& open_selected);
     static float AngelsAimSettingsHeight(const MenuModel& model);
+    /// AzaharFrame kiuaim: `ids` as rows from `y` (the Angel's Aim page's); returns their end.
+    float DrawAimRows(Kit& kit, const MenuModel& model, const MenuView& view,
+                      const std::vector<Id>& ids, const Rect& c, const Rect& list, float y,
+                      Rect& open_anchor, int& open_selected);
     /// AzaharFrame reticle: the scope control at the top right of `c` (the pane's content);
     /// returns its left edge. DrawScopeMenu draws its ⋮ menu when open (last, over the rest).
     float DrawScope(Kit& kit, const MenuModel& model, const MenuView& view, const Rect& c,

@@ -681,6 +681,19 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.vr_kiu_bottom_x);
     ReadGlobalSetting(Settings::values.vr_kiu_bottom_y);
     ReadGlobalSetting(Settings::values.vr_kiu_wrist_angle); // AzaharFrame kiu140
+    {
+        // AzaharFrame kiuaim: the angle counts from the back of the wrist; a file's own angle is
+        // carried over once (frame_per_game_ini.h). From the file alone, so a second read before
+        // the save gives the same.
+        const FrameConfig::WristAngleCarry carry = FrameConfig::CarriedWristAngle(
+            *qt_config, global, Settings::values.vr_kiu_wrist_angle_from.GetValue());
+        if (carry.angle) {
+            Settings::values.vr_kiu_wrist_angle.SetValue(*carry.angle);
+        }
+        if (global) {
+            Settings::values.vr_kiu_wrist_angle_from.SetValue(carry.mark);
+        }
+    }
     ReadGlobalSetting(Settings::values.vr_kiu_wrist_along); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_cutscenes); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_hud); // AzaharFrame kiu140
@@ -1450,6 +1463,11 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.vr_kiu_bottom_x);
     WriteGlobalSetting(Settings::values.vr_kiu_bottom_y);
     WriteGlobalSetting(Settings::values.vr_kiu_wrist_angle); // AzaharFrame kiu140
+    // AzaharFrame kiuaim: the mark that this file's angle counts from the back of the wrist (the
+    // read before this save carried it over).
+    WriteSetting(QString::fromLatin1(FrameConfig::kWristAngleFromKey),
+                 global ? std::max<u32>(Settings::values.vr_kiu_wrist_angle_from.GetValue(), 1u)
+                        : 1u);
     WriteGlobalSetting(Settings::values.vr_kiu_wrist_along); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_cutscenes); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_hud); // AzaharFrame kiu140

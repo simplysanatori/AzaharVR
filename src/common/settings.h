@@ -1174,9 +1174,15 @@ struct Values {
     SwitchableSetting<bool> vr_kiu_hide_off_hand{false, "vr_kiu_hide_off_hand"};
     // AzaharFrame kiu140: Cutscenes in Angel's Aim: 0 in the view, 1 on the Primary Screen.
     SwitchableSetting<u32, true> vr_kiu_cutscenes{0, 0, 1, "vr_kiu_cutscenes"};
-    // AzaharFrame kiu140: the Wrist's place: degrees round the wrist from Wrist Side's, and
-    // centimetres up the arm from there (toward the hand below 0).
+    // AzaharFrame kiu140: the Wrist's place: degrees round the wrist, and centimetres up the arm
+    // from there (toward the hand below 0). AzaharFrame kiuaim: the degrees count from the back
+    // of the wrist (180 the inside), whatever Wrist Side is; they counted from Wrist Side's.
+    // vr_kiu_wrist_angle_from is the mark that a file's angle was carried over, once: in the
+    // global file 1 (Wrist Side was Back: nothing added) or 2 (Inside: 180 added), which is what
+    // a game's file with its own angle gets when it is carried later (its own mark is the file's
+    // key, never kept here). citra_qt/configuration/frame_per_game_ini.h.
     SwitchableSetting<u32, true> vr_kiu_wrist_angle{0, 0, 360, "vr_kiu_wrist_angle"};
+    Setting<u32> vr_kiu_wrist_angle_from{0, "vr_kiu_wrist_angle_from"};
     SwitchableSetting<s32, true> vr_kiu_wrist_along{0, -12, 25, "vr_kiu_wrist_along"};
     // Persistent's place moved by the grip: degrees right of and below its default place.
     SwitchableSetting<float, true> vr_kiu_bottom_x{0.f, -60.f, 60.f, "vr_kiu_bottom_x"};

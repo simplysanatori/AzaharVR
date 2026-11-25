@@ -32,6 +32,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -124,7 +125,7 @@ inline constexpr const char* kTriggerLayoutFireAndPowerTip =
     "Your aiming hand's trigger only fires. The other trigger uses your power, and the bumpers "
     "pick it.";
 inline constexpr const char* kTriggerLayoutOriginalTip =
-    "Both triggers fire and also press the game's own buttons, as before.";
+    "Both triggers fire and also press the game's own buttons.";
 /// AzaharFrame kiutoggles: Angel's Aim's first-person options, once test switches only (the
 /// Settings tab's Immersive section, under Immersive Mode, while Kid Icarus: Uprising is open and
 /// Immersive Mode is Angel's Aim; vr_kiu_wrist_screen, vr_kiu_talk_panel, vr_kiu_over_shoulder,
@@ -138,8 +139,8 @@ inline constexpr const char* kBottomScreenOff = "Off";
 inline constexpr const char* kBottomScreenPersistent = "Persistent";
 inline constexpr const char* kBottomScreenWrist = "Wrist";
 inline constexpr const char* kBottomScreenTip =
-    "Persistent: always in view, below it; grab it with a grip to move it. Wrist: on your free "
-    "hand's wrist; turn your wrist to see it, and point at it to touch.";
+    "Persistent: always in view, low in front of you; hold a grip on it to move it. Wrist: on "
+    "your free hand's wrist; turn your wrist to see it, and point at it to touch.";
 inline constexpr const char* kBottomScreenSizeRow = "Bottom Screen Size";
 inline constexpr const char* kBottomScreenSizeTip = "How big the Bottom Screen is, in view or on your wrist.";
 inline constexpr const char* kBottomScreenOpacityRow = "Bottom Screen Opacity";
@@ -156,7 +157,8 @@ inline constexpr const char* kWristSideTip =
     "Where wrist displays sit: on the back of your wrist, or on the inside.";
 inline constexpr const char* kKiuWristAngleRow = "Wrist Angle"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuWristAngleTip =
-    "Where round your wrist the Bottom Screen sits. 0\u00B0 is the Wrist Side.";
+    "Where round your wrist the Bottom Screen sits. 0\u00B0 is the back of your wrist, 180\u00B0 "
+    "the inside.";
 inline constexpr const char* kKiuWristAlongRow = "Arm Position"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuWristAlongTip =
     "How far up your arm the Bottom Screen sits. Below 0 is toward your hand.";
@@ -259,5 +261,85 @@ inline constexpr const char* kAngelsAimModIds[] = {"kiu-cstick-gyro",
 inline constexpr const char* kAngelsAimPackIds[] = {"kiu-weapons-hd-4x"};
 /// The catalog rows (indices of `available`) the Required section lists: the C-Stick mods.
 std::vector<int> AngelsAimModRows(const ModsListModel& m);
+
+// ---- AzaharFrame kiuaim: the page with fewer rows on view (handoff/reports/101/aim-page,
+// approved 2026-11-25) ----
+enum class Id : int; // tab_menu.h
+struct MenuModel;
+/// The live switch: on unless "0", "off" or "false" (the page as it was, for an A/B).
+inline constexpr const char* kKiuAimPageSwitch = "AZAHARFRAME_KIU_AIM_PAGE";
+bool AimPageSwitchOn(const std::optional<std::string>& value);
+/// What the menu draws. Off until the app says (controls.cpp, each menu frame, from the switch),
+/// so the page as it was keeps its tests.
+void SetAimPage(bool on);
+bool AimPageOn();
+/// A row's place on the page: Wrist Side (the Stats tab's) and the Aiming Settings link are off
+/// it, Reset Bottom Screen Position shows with Persistent moved, Gyro Sensitivity with Gyro Aim.
+bool AimPageRowShown(const MenuModel& model, Id id);
+/// `rows` without those, while the page is on.
+void AimPageFilter(const MenuModel& model, std::vector<Id>& rows);
+/// The page's own tooltip for a row whose text is ExplainFor's elsewhere (approved), or null.
+const char* AimPageTip(Id id);
+inline constexpr const char* kAimTipAiming =
+    "Direct Aim: the reticle goes where you point. Gyro Aim: it moves as you turn your hand. "
+    "Hold the grip to free it.";
+inline constexpr const char* kAimTipGyroSensitivity =
+    "How far the reticle moves as you turn your hand. Applies to every game.";
+inline constexpr const char* kAimTipRecoil =
+    "Haptic feedback in the aiming controller on each shot.";
+inline constexpr const char* kAimTipRecoilCharged = "How strong it is for a charged shot.";
+inline constexpr const char* kAimTipRecoilRapid = "How strong it is for each rapid-fire shot.";
+
+/// The page: a front view (Immersive Mode, then a row a group) that never scrolls, and a page a
+/// group with at most kAimPageMost rows; the rest of a group is under More.
+struct MenuView;
+enum class AimGroup : int { Aiming, View, Hud, BottomScreen, Weapon, ModsAndPack, About, Count };
+inline constexpr int kAimFrontMost = 8, kAimPageMost = 5;
+inline constexpr const char* kAimPageTitle = "Angel's Aim";
+inline constexpr const char* kAngelsAimGroupHud = "HUD";
+inline constexpr const char* kAimMore = "More";
+/// A group's value on the front view. Weapon's: "In Hand" is approved, kAimWeaponOff PROPOSED.
+inline constexpr const char* kAimWeaponInHand = "In Hand";
+inline constexpr const char* kAimWeaponOff = "Off";
+const char* AimGroupName(AimGroup group); ///< About's is kAngelsAimTitle
+/// A More page's title: "<group> \u00B7 More" (PROPOSED: made of approved words).
+std::string AimMoreTitle(AimGroup group);
+struct AimPage {
+    std::vector<Id> rows; ///< on the group's page
+    std::vector<Id> more; ///< under its More row
+};
+/// A group's rows now: AimingRows' and AngelsAimFirstPersonRows' (so each keeps its own
+/// condition), less AimPageRowShown's. Mods & Pack and About have none (drawn, not rows).
+/// Places kept for rows that come with their own lanes: Power Menu after Subtitle Size (HUD);
+/// HUD Position, HUD Opacity and Power Menu Opacity at the end of HUD's More; Talk Portraits at
+/// the end of Bottom Screen; Single Screen on the front view after Immersive Mode, while the
+/// mode is not Angel's Aim. A row neither list places goes to Aiming's More (from AimingRows) or
+/// View's (from the first-person rows), so nothing is lost: AimPageUnplaced lists them.
+AimPage AimPageRows(const MenuModel& model, AimGroup group);
+std::vector<Id> AimPageUnplaced(const MenuModel& model);
+/// The groups with a row on the front view, in order: those with rows, Mods & Pack, About.
+std::vector<AimGroup> AimFrontGroups(const MenuModel& model);
+/// "Direct Aim", "First Person \u00B7 Smooth", "In View", "Wrist", "In Hand", "Installed"; "" none.
+/// Mods & Pack: Installed with the mod and the pack (and a hand model, once offered), Not
+/// Installed with none, else "1 of 2 Installed" (PROPOSED).
+std::string AimGroupValue(const MenuModel& model, AimGroup group);
+/// Id::AngelsAimGroup's targets: a group's value (its row on the front view), Back, More.
+inline constexpr int kAimBackIndex = 100, kAimMoreIndex = 101;
+/// What shows for the view's fields: the front view (-1) when the group has no row now.
+struct AimShown {
+    int group = -1;
+    bool more = false;
+};
+AimShown AimPageShown(const MenuModel& model, const MenuView& view);
+/// A press on one of those targets; true when the view changed (its scroll starts again).
+bool AimPagePress(const MenuModel& model, MenuView& view, int index);
+/// B, or Back: More to its group's page, a group's page to the front view (where the group's
+/// row is). False on the front view: nothing to go back to.
+bool AimPageBack(const MenuModel& model, MenuView& view);
+/// Each frame: the fields are what shows, and the front view once the segment is left (so the
+/// menu opens on it).
+void AimPageKeep(const MenuModel& model, MenuView& view);
+/// The Bottom Screen's page is on view: the real one stays where it is meanwhile (phase 4).
+bool AimBottomPageOpen(const MenuModel& model, const MenuView& view);
 
 } // namespace FrameXr::Menu
