@@ -319,7 +319,7 @@ them.
 | `AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]` | over the shoulder (unset: the setting Over the Shoulder, `vr_kiu_over_shoulder`, 2.5 m back and 0.5 m up when on; `0` off whatever the setting; AzaharFrame kiutoggles): the eye this many metres behind, above and to the right of the first-person eye along the camera's level view (game units = metres × the leaning scale, 7.7 per metre at life size); `AZAHARFRAME_KIU_EYE_OFFSET` wins |
 | `AZAHARFRAME_KIU_WRIST_SCREEN=0\|1` | Angel's Aim's Secondary Screen on the off hand's wrist (default 0, off; unset: the setting Bottom Screen's Wrist, `vr_kiu_bottom_screen`, AzaharFrame kiu131; before it Secondary Screen on Wrist; `1` wins over Persistent): shown while the wrist is turned up, touched by the aiming hand's beam without a shot ("The Secondary Screen on the wrist" below) |
 | `AZAHARFRAME_KIU_FP_FACTOR=<f>` | the most the game draws past its own frame on either axis in first person (1 to 8, default 6); past it the screen is smaller on that axis ("The screen in first person" below) |
-| `AZAHARFRAME_KIU_PAGE=1`, `AZAHARFRAME_KIU_HUD_EXACT=1`, `AZAHARFRAME_KIU_TALK_TOP=1`, `AZAHARFRAME_KIU_PAUSE_PANEL=1`, `AZAHARFRAME_KIU_UI_TRACE=1` | the single screen's, each off without it, first person only, live ("Single screen" below; AzaharFrame kiu1s) |
+| `AZAHARFRAME_KIU_PAGE=1`, `AZAHARFRAME_KIU_HUD_EXACT=1`, `AZAHARFRAME_KIU_TALK_TOP=1`, `AZAHARFRAME_KIU_PAUSE_PANEL=1`, `AZAHARFRAME_KIU_PORTRAITS=1`, `AZAHARFRAME_KIU_MENU_SCREENS=1`, `AZAHARFRAME_KIU_MENU_PANEL=1`, `AZAHARFRAME_KIU_UI_TRACE=1` | the single screen's, each off without it, first person only, live ("Single screen" below; AzaharFrame kiu1s) |
 | `AZAHARFRAME_KIU_FP_TRACE=1\|2`, `AZAHARFRAME_KIU_FP_PROBE=<hex>` | a line of `key=value` words a second (2: a VBlank): the scene camera, the view register, the rest pose, the head, the hand's ray in the world, the reticle, the mailbox; and an actor's place in the world and in the head's view. AzaharFrame kiupit: `cam_node_44=` the scene camera node's ten words from +0x44, as floats (to find its near plane) |
 
 ### The transform (`kiu_room.h`)
@@ -1134,7 +1134,7 @@ GPL-3.0-or-later), a PC port of the game, from its notes on USA Rev 1. Each addr
 in both builds by its code; no code or layout of it is used.
 
 - **The battle UI (`kiu_ui.h`).** One 2D context, `[0xEE3098 + 0x140]`, for both screens: the top pass
-  (EUR 0x60D538, USA 0x60D3EC), the bottom pass (0x60DA88, 0x60D93C). 21 code words that name the
+  (EUR 0x60D538, USA 0x60D3EC), the bottom pass (0x60DA88, 0x60D93C). 30 code words that name the
   fields are checked first; another word and nothing is read.
 
 | Field | What |
@@ -1144,6 +1144,9 @@ in both builds by its code; no code or layout of it is used.
 | +0x218C bit 0 | a page (a dim band and two columns) instead of the bar; the score is still drawn. I: the battle's results; never seen set |
 | +0x243C & 0x801 | the pause screen is drawn |
 | +0x3124 (+0, +1, +3, +4) | the talk's message: shown, shown, its screen (0 top, 1 bottom), its line |
+| +0xB64 | the bottom screen's own UI, flags first: & 0x800 another picture instead of all below (its pass, +0x31B8 & 0x400, too) |
+| +0xB64 +0xD8 | the portraits' object (EUR 0x9E2D4C draws it): +0 & 0x3000000 hidden, +8 & 0xF its four places in use. V: set as they start to fade in, clear 0.4 s after the words, as they are gone |
+| +0xB64 +0x1FC, +0x200 | an illustration's share of the picture (the portraits have the rest); with flag 0x1000000 only while one of the pieces at +0x200 is up. I: never seen set |
 
 - **`AZAHARFRAME_KIU_PAGE=1`.** The 2D is a page (`PagePlace`) outside a battle as before, and also (45 degrees high, `PagePlaceInBattle`)
   while the game itself draws a page instead of the HUD, two VBlanks in a row, or a menu is up: its number is the byte `[[[0xE6F98C] + 0xC] + 0x72C]`
@@ -1163,3 +1166,19 @@ in both builds by its code; no code or layout of it is used.
   V: START: up in the same frame; the beam's trigger on Resume touched 74,82 and the game went on, the panel away;
   it stays up through Retreat's dialog and No (the same flag). Not run: the Options pages, Yes, whether the trigger that taps
   Resume reaches the game after. The mock does not composite, so the panel over the picture was not seen.
+- **`AZAHARFRAME_KIU_PORTRAITS=1`.** While the game draws the talk's portraits (or an illustration), that part of the Secondary
+  Screen's own picture (rows 42 to 240 of 320 x 240, `kPortraitCut`; a plain card) is a quad with the head, 25 degrees to the off
+  hand's side, 7.5 below, 16 wide, to look at only, at Bottom Screen Opacity. No code patch. All through a battle the quad is there,
+  shrunk to nothing between the lines and while paused, so a line changes neither the number of layers nor how the bottom screen is
+  drawn. Not while the Secondary Screen is on view anyway (Persistent, the wrist, the pause panel). V: an air battle: up with the
+  portraits, the rect 1280 x 792 at 0,168 of 1280 x 960, away while paused and 0.35 s after the words, 6 layers all the time. The
+  card at 13 below (the plan) was over the words' left end at their usual size, so it is above them. A boss's card is not shown.
+- **`AZAHARFRAME_KIU_MENU_SCREENS=1`.** While one of the game's menus is up (`SteadyMenu`, MENUID 0 to 58, two VBlanks), the
+  normal two screens instead of the view (`ScreenState::game_menu`; the bottom one whatever was chosen for it, and its hide
+  button does nothing). V: the title (0), the Cauldron (5), off into the battle (none 0.8 s before its UI is there), the
+  pause and its Options pages (none), Retreat, the hub (3). The game goes from one menu to the next within a frame.
+- **`AZAHARFRAME_KIU_MENU_PANEL=1`.** The same menus, as a panel: the Secondary Screen 40 degrees wide, 9 below, the Primary
+  Screen above it, 30 wide (the Cauldron: 34 and 38), 0.8 m, level, where the head was as the first menu came up; a re-centre moves
+  it; the grips move neither (`PanelGeometry::no_drag`); the wrist screen wins. With either switch Direct Aim holds no aim in a menu:
+  Keep Reticle on Screen made the aiming hand's beam touch nothing while the Primary Screen is a screen. V: the title by the beam and the trigger (160.0, 200.0 asked
+  and touched), the file select, the main menu and the hub stay on the panel. Not run: the beam on the Cauldron, the other rooms, a battle and back.

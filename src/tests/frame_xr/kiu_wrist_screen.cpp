@@ -235,6 +235,15 @@ TEST_CASE("FrameXr kiuwrist: the aiming hand's beam touches the wrist screen, fi
     panels.bottom_fixed = false; // a normal bottom screen still can be grabbed
     mapper.Update(frame(where, 0.0f, 1.0f), panels);
     REQUIRE(mapper.DragActive());
+    // AzaharFrame kiu1s: the menu panel comes up meanwhile: let go, and it grabs nothing.
+    panels.no_drag = true;
+    mapper.Update(frame(where, 0.0f, 1.0f), panels);
+    REQUIRE_FALSE(mapper.DragActive());
+    mapper.Update(frame(where, 0.0f, 0.0f), panels);
+    mapper.Update(frame(where, 0.0f, 1.0f), panels);
+    REQUIRE_FALSE(mapper.DragActive());
+    mapper.Update(frame(where, 0.0f, 0.0f), panels);
+    REQUIRE(mapper.Update(frame(where, 1.0f), panels).touch_event_count == 1); // still touched
 }
 
 // AzaharFrame kiu131: Wrist Side. Back (the default setting): on the back of the wrist like a

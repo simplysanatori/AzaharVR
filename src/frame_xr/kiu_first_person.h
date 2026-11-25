@@ -151,6 +151,7 @@
 #include "frame_xr/input/kiu_room.h"
 #include "frame_xr/input/kiu_turn.h"
 #include "frame_xr/kiu_scan.h"
+#include "frame_xr/kiu_ui.h" // AzaharFrame kiu1s
 #include "frame_xr/menu/angels_aim_tab.h" // AzaharFrame 1.3.0: kGameCameraOffered
 
 namespace FrameXr::Kiu::FirstPerson {
@@ -427,6 +428,70 @@ inline constexpr float kPauseDownDeg = 4.0f, kPauseWidthDeg = 36.0f;
 /// Shown: paused, unless the Secondary Screen is up on the wrist (that one takes the touches).
 constexpr bool PausePanelShown(bool paused, bool wrist_up) {
     return paused && !wrist_up;
+}
+/// AzaharFrame kiu1s: the talk's pictures (the portraits, an illustration) are on the Secondary
+/// Screen (AZAHARFRAME_KIU_PORTRAITS=1): a part of it is shown in the view, on the off hand's
+/// side. Ready all through a battle: its layer is there, shrunk to nothing, so that a line starting
+/// or ending changes neither the number of layers (LayerSlots) nor how the game's bottom screen is
+/// drawn.
+enum class PortraitState : int { Off, Ready, Up };
+constexpr PortraitState PortraitsFor(bool wanted, bool battle, bool pictures, bool paused) {
+    return !wanted || !battle     ? PortraitState::Off
+           : pictures && !paused ? PortraitState::Up
+                                 : PortraitState::Ready;
+}
+void SetPortraits(PortraitState state);
+PortraitState Portraits();
+inline constexpr float kPortraitShrunk = 1e-5f; ///< as LayerSlots::kCollapse
+/// A part of the Secondary Screen's picture, in its 320 x 240 pixels.
+struct Cut {
+    int x = 0, y = 0, width = 320, height = 240;
+    constexpr bool Whole() const {
+        return x == 0 && y == 0 && width == 320 && height == 240;
+    }
+    bool operator==(const Cut&) const = default;
+};
+/// The portraits: below the words, which are up to row 40 (the band behind them goes to 56); the
+/// tallest of them reach over that.
+inline constexpr Cut kPortraitCut{0, 42, 320, 198};
+/// Its middle, degrees to the off hand's side and below straight ahead, and its width. Above the
+/// words on the Primary Screen at their usual place and size (Subtitle Height and Size), which
+/// reach 28 degrees to each side, 15 and more below.
+inline constexpr float kPortraitSideDeg = 25.0f, kPortraitDownDeg = 7.5f,
+                       kPortraitWidthDeg = 16.0f;
+/// Where the cut is in an image of the whole Secondary Screen of this size.
+struct CutRect {
+    int x = 0, y = 0, width = 0, height = 0;
+};
+constexpr CutRect CutIn(const Cut& cut, int image_width, int image_height) {
+    const auto at = [](int v, int of, int size) { return (v * size + of / 2) / of; };
+    CutRect r{at(cut.x, 320, image_width), at(cut.y, 240, image_height), 0, 0};
+    r.width = at(cut.x + cut.width, 320, image_width) - r.x;
+    r.height = at(cut.y + cut.height, 240, image_height) - r.y;
+    return r;
+}
+/// The layer is theirs: the Secondary Screen is nowhere on view (it has them).
+constexpr bool PortraitsHere(PortraitState s, bool persistent, bool pause_panel, bool wrist_up) {
+    return s != PortraitState::Off && !persistent && !pause_panel && !wrist_up;
+}
+/// AzaharFrame kiu1s: the game's menu that is up outside a battle (kiu_ui.h; below 0: none) while
+/// AZAHARFRAME_KIU_MENU_SCREENS=1 or AZAHARFRAME_KIU_MENU_PANEL=1 asks for it: the normal two
+/// screens instead of the view, or (`panel`) the Secondary Screen as a large panel in front with
+/// the Primary Screen above it.
+void SetMenu(int menu, bool panel);
+int MenuUp();
+bool MenuPanel();
+/// The menu's two screens, where the head was as the first menu came up: the Secondary Screen's
+/// middle (degrees below straight ahead) and width, the Primary Screen's (above) and width.
+struct MenuPlace {
+    float down_deg, width_deg;
+    float up_deg, top_width_deg;
+};
+inline constexpr MenuPlace kMenuPlace{9.0f, 40.0f, 16.5f, 30.0f};
+/// The Fiend's Cauldron, where both screens say something: the Primary Screen the larger one.
+inline constexpr MenuPlace kMenuPlaceCauldron{13.0f, 34.0f, 12.0f, 38.0f};
+constexpr MenuPlace MenuPlaceFor(int menu) {
+    return menu == Ui::kMenuCauldron ? kMenuPlaceCauldron : kMenuPlace;
 }
 bool CutscenesOnScreen();
 /// AzaharFrame kiu140: the HUD moved into the view (HUD, vr_kiu_hud, or AZAHARFRAME_KIU_HUD=0|1).

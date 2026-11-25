@@ -1375,7 +1375,7 @@ void VrUi::AddCursor(const XrPosef& pose, float size_m, std::vector<Quad>& layer
 }
 
 uint32_t VrUi::CurveFor(const Immersive::ScreenLayers& shown) const {
-    if (!cylinder_ok || !shown.top_pointable) {
+    if (!cylinder_ok || !shown.top_pointable || shown.screens_fixed) { // kiu1s: the menu panel
         return 0; // the runtime has no cylinder, or the immersive screen is on view
     }
     return std::min(Settings::values.vr_screen_curve.GetValue(), Rig::kMaxCurveDeg);
@@ -1838,6 +1838,7 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     panels.bottom_toggle_enabled = managed;
     // AzaharFrame kiuwrist: the wrist screen is touched, never grabbed (it goes with the hand).
     panels.bottom_fixed = shown.bottom_on_wrist;
+    panels.no_drag = shown.screens_fixed; // AzaharFrame kiu1s
     // AzaharFrame statspos: the beam stops at the stats in front of the screens; the stats are
     // never placed behind the screens as drawn, the immersive one too.
     panels.occluder = visuals.StatsOccluder();
@@ -2057,7 +2058,8 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                 // by the grip): off the top screen, its nearest edge (input/gyro_aim.h
                 // LockedTargetFor); the bottom screen is not touched by this controller then.
                 const bool lock =
-                    Settings::values.vr_light_gun_lock.GetValue() && !gyro_aim_frame.clutch;
+                    Settings::values.vr_light_gun_lock.GetValue() && !gyro_aim_frame.clutch &&
+                    !Immersive::GameMenu(); // AzaharFrame kiu1s: no aim to hold, it points
                 if (hand.active) {
                     // AzaharFrame kiuinteg: along the weapon's own axis as held (the owner's
                     // option A), or the controller's line with AZAHARFRAME_ANGELS_AIM_RAY=hand.
@@ -2381,14 +2383,16 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     // AzaharFrame kiuwrist: each touch of the wrist screen, where it lands in the Secondary
     // Screen's 320 x 240 pixels and whether a trigger reached the game with it (it never should).
     // AzaharFrame kiupanel: also once it is hidden (a touch it ends).
-    if (shown.bottom_on_wrist || wrist_wanted) {
+    // AzaharFrame kiu1s: and of the menu panel.
+    if (shown.bottom_on_wrist || wrist_wanted || shown.screens_fixed) {
         for (int i = 0; i < out.touch_event_count; i++) {
             const Input::TouchEvent& e = out.touch_events[static_cast<std::size_t>(i)];
             if (e.type != Input::TouchEventType::Moved && wrist_logs < 200) {
                 wrist_logs++;
                 LOG_INFO(Frontend,
-                         "xr: Angel's Aim: wrist screen touch {} at {:.1f}, {:.1f} (ZL {}, ZR {}, "
-                         "L {})",
+                         "xr: Angel's Aim: {} touch {} at {:.1f}, {:.1f} (ZL {}, ZR {}, L {})",
+                         shown.screens_fixed && !shown.bottom_on_wrist ? "menu panel"
+                                                                       : "wrist screen",
                          e.type == Input::TouchEventType::Pressed ? "pressed" : "released", e.x,
                          e.y, out.controls.Get(Input::Control::TriggerL) ? 1 : 0,
                          out.controls.Get(Input::Control::TriggerR) ? 1 : 0,
@@ -2541,7 +2545,7 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                               weapon_shown, aim_hit);
         if (gyro_aim_frame.checking) {
             beam = {Input::LaserSight(gyro_aim_frame.mode, true, aim_hit), true};
-        } else if (gyro_aim_frame.clutch &&
+        } else if ((gyro_aim_frame.clutch || Immersive::GameMenu()) && // AzaharFrame kiu1s
                    gyro_aim_frame.mode == Input::GyroAimMode::LightGun) {
             beam = {}; // AzaharFrame kiuaim3: aim freed: the usual beam, to point anywhere
         }
@@ -2607,7 +2611,11 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     const auto& cmd = out.commands;
     {
         Input::ScreenView::Effect effect;
-        if (cmd.toggle_bottom) {
+        // AzaharFrame kiu1s: in one of Kid Icarus's menus both screens are shown and stay so.
+        const bool shown_by_menu = Immersive::GameMenu() && !screen_view.bottom_focus();
+        if (shown_by_menu && (cmd.toggle_bottom || cmd.toggle_other_screen)) {
+            LOG_INFO(Frontend, "xr: the bottom screen stays shown in the game's menus");
+        } else if (cmd.toggle_bottom) {
             effect = screen_view.ToggleBottom(managed); // Left Bumper + Right Bumper + View
         } else if (Immersive::HoldingScreen()) {
             // A grip holds the immersive screen: no swap or hide meanwhile (a swap would cancel

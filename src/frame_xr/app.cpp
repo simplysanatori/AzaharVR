@@ -1385,7 +1385,9 @@ void Runtime::FrameLoop() {
                                       top && top_layers.omit);
                 // AzaharFrame kiuwrist: Angel's Aim's wrist screen is no screen the toast keeps
                 // in front of (it is on the hand, under the view).
-                if (use.toast_input && !(!top && shown.bottom_on_wrist)) {
+                // AzaharFrame kiu1s: nor are the portraits while their layer is shrunk to nothing.
+                const bool shrunk = !top && size.width < 0.001f;
+                if (use.toast_input && !shrunk && !(!top && shown.bottom_on_wrist)) {
                     // AzaharFrame kiu2: where it is in LOCAL space, for the toast (toast_depth.h).
                     Input::PanelQuad tq;
                     tq.pose = {{pose.orientation.x, pose.orientation.y, pose.orientation.z,
@@ -1412,7 +1414,7 @@ void Runtime::FrameLoop() {
                 // other picture. By depth when the choice
                 // includes this screen's slot (Primary: the top screen, or the bottom one swapped
                 // in), else in front of the controllers wherever they are.
-                if (use.toast_input) {
+                if (use.toast_input && !shrunk) {
                     const bool by_depth = Vis::InFrontOfScreen(in_front, top != screens_swapped);
                     if (!by_depth || !top || !top_immersive) {
                         add_occluder(space, pose, size, curve, eye, !by_depth);
@@ -1461,6 +1463,12 @@ void Runtime::FrameLoop() {
                         q.image_rect.offset.y =
                             half + static_cast<int32_t>(VideoCore::kXrPackedGap);
                     }
+                }
+                if (!top && !shown.bottom_cut.Whole()) { // AzaharFrame kiu1s
+                    const Kiu::FirstPerson::CutRect r =
+                        Kiu::FirstPerson::CutIn(shown.bottom_cut, static_cast<int>(chain.width),
+                                                static_cast<int>(chain.height));
+                    q.image_rect = {{r.x, r.y}, {r.width, r.height}};
                 }
                 q.pose = pose;
                 q.size = size;

@@ -393,6 +393,9 @@ std::atomic<bool> g_cutscene{false};
 std::atomic<float> g_cutscene_tan{0.0f};
 std::atomic<bool> g_battle{false};
 std::atomic<bool> g_battle_page{false}, g_pause_panel{false}; // AzaharFrame kiu1s
+std::atomic<bool> g_menu_panel{false};
+std::atomic<PortraitState> g_portraits{PortraitState::Off};
+std::atomic<int> g_menu{-1};
 } // namespace
 
 void SetCutscene(bool on, float tan_half_y) {
@@ -421,6 +424,22 @@ bool BattlePage() {
 }
 bool PausePanel() {
     return g_pause_panel.load(std::memory_order_relaxed);
+}
+void SetPortraits(PortraitState state) {
+    g_portraits.store(state, std::memory_order_relaxed);
+}
+PortraitState Portraits() {
+    return g_portraits.load(std::memory_order_relaxed);
+}
+void SetMenu(int menu, bool panel) {
+    g_menu_panel.store(panel, std::memory_order_relaxed);
+    g_menu.store(menu, std::memory_order_relaxed);
+}
+int MenuUp() {
+    return g_menu.load(std::memory_order_relaxed);
+}
+bool MenuPanel() {
+    return g_menu_panel.load(std::memory_order_relaxed) && MenuUp() >= 0;
 }
 bool Cutscene() {
     return g_cutscene.load(std::memory_order_relaxed);

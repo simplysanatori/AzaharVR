@@ -1608,6 +1608,7 @@ ScreenDecision Decide(const ScreenState& s) {
     const bool hidden_at_start = s.hide_bottom || s.mode != 0;
     d.show_bottom = s.bottom_focused || hidden_at_start == s.bottom_toggled;
     const bool head_locked = s.mode >= 2;
+    d.show_bottom |= head_locked && s.game_menu; // AzaharFrame kiu1s
     d.immersive = s.mode != 0 && s.live && !s.bottom_focused &&
                   (!head_locked || (!d.show_bottom && !s.menu_open && !s.cutscene && s.view_valid));
     return d;
