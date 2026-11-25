@@ -107,6 +107,7 @@ add_executable(tests
     common/file_util.cpp
     common/param_package.cpp
     common/slot_vector.cpp
+    common/layer_depth.cpp
     common/xr_pacer.cpp # AzaharFrame pacing
     core/core_timing.cpp
     core/sharkive.cpp # AzaharFrame cheats

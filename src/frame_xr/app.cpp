@@ -32,6 +32,7 @@
 #include "common/logging/log.h"
 #include "common/frame_flat.h"
 #include "common/frame_vr_depth.h" // AzaharFrame vrsize
+#include "common/layer_depth.h"
 #include "common/settings.h" // AzaharFrame vrqol: Background
 #include "common/stall_telemetry.h"
 #include "common/thread.h"
@@ -1613,6 +1614,30 @@ void Runtime::FrameLoop() {
                 : draw.swapped
                     ? Input::ScreenRig::DepthScale(place.second_free ? place.second_scale : 1.0f)
                     : Input::ScreenRig::DepthScale(place.top_scale);
+            // Layer Depth (the consoles without a stereo screen)
+            float recentre = 0.0f;
+            if (!core_caps.has_stereo_3d) {
+                namespace LayerDepth = Common::LayerDepth;
+                const float width = draw.swapped ? draw.top_size.width : shown.top_size[0].width;
+                auto& depth = LayerDepth::Get();
+                depth.max_shift.store(LayerDepth::MaxShift(Immersive::IpdM(), width),
+                                      std::memory_order_relaxed);
+                if (top_is_stereo) {
+                    recentre = LayerDepth::Recentre(
+                        depth.farthest_shift.load(std::memory_order_relaxed), width);
+                }
+            }
+            const auto recentred = [recentre](XrPosef pose) {
+                if (recentre != 0.0f) {
+                    const Input::Vec3f to = Input::Transform(
+                        Input::Posef{{pose.orientation.x, pose.orientation.y, pose.orientation.z,
+                                      pose.orientation.w},
+                                     {pose.position.x, pose.position.y, pose.position.z}},
+                        Input::Vec3f{recentre, 0.0f, 0.0f});
+                    pose.position = {to.x, to.y, to.z};
+                }
+                return pose;
+            };
             // Quad layers are drawn in the order they are submitted, with no depth test: the
             // farther screen goes first, so the nearer one is never drawn through.
             if (draw.swapped) {
@@ -1621,10 +1646,11 @@ void Runtime::FrameLoop() {
                            draw.bottom_size, XR_EYE_VISIBILITY_BOTH, draw.bottom_curve);
                 if (draw.top_visible) {
                     if (top_is_stereo) {
-                        add_screen(VideoCore::XrScreen::TopLeft, local_space, draw.top_pose,
-                                   draw.top_size, XR_EYE_VISIBILITY_LEFT, draw.top_curve);
-                        add_screen(VideoCore::XrScreen::TopRight, local_space, draw.top_pose,
-                                   draw.top_size, XR_EYE_VISIBILITY_RIGHT, draw.top_curve);
+                        const XrPosef pose = recentred(draw.top_pose);
+                        add_screen(VideoCore::XrScreen::TopLeft, local_space, pose, draw.top_size,
+                                   XR_EYE_VISIBILITY_LEFT, draw.top_curve);
+                        add_screen(VideoCore::XrScreen::TopRight, local_space, pose, draw.top_size,
+                                   XR_EYE_VISIBILITY_RIGHT, draw.top_curve);
                     } else {
                         add_screen(VideoCore::XrScreen::TopLeft, local_space, draw.top_pose,
                                    draw.top_size, XR_EYE_VISIBILITY_BOTH, draw.top_curve);
@@ -1646,11 +1672,12 @@ void Runtime::FrameLoop() {
                     // AzaharFrame heldquad: each eye's pose and size (a held picture is resized
                     // about each eye); the toast takes eye 0's first.
                     if (top_is_stereo) {
-                        add_screen(VideoCore::XrScreen::TopLeft, shown.top_space, shown.top_pose[0],
-                                   shown.top_size[0], XR_EYE_VISIBILITY_LEFT, draw.top_curve);
+                        add_screen(VideoCore::XrScreen::TopLeft, shown.top_space,
+                                   recentred(shown.top_pose[0]), shown.top_size[0],
+                                   XR_EYE_VISIBILITY_LEFT, draw.top_curve);
                         add_screen(VideoCore::XrScreen::TopRight, shown.top_space,
-                                   shown.top_pose[1], shown.top_size[1], XR_EYE_VISIBILITY_RIGHT,
-                                   draw.top_curve);
+                                   recentred(shown.top_pose[1]), shown.top_size[1],
+                                   XR_EYE_VISIBILITY_RIGHT, draw.top_curve);
                     } else {
                         add_screen(VideoCore::XrScreen::TopLeft, shown.top_space, shown.top_pose[0],
                                    shown.top_size[0], XR_EYE_VISIBILITY_BOTH, draw.top_curve);
@@ -2342,9 +2369,7 @@ void UpdateCoreScreenMetrics(const Common::AltCore::ScreenMetrics& metrics) {
         std::scoped_lock lock{g_caps_mutex};
         g_caps.screens = metrics;
     }
-    if (auto* rt = GetRuntime()) {
-        rt->SetTopStereo(metrics.top_stereo);
-    }
+    // SetTopStereo is AltXrRenderer's while a game runs (Layer Depth)
 }
 
 void SetAltInputSink(Common::AltCore::InputSink sink) {
