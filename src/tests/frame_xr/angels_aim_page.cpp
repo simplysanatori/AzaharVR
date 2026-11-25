@@ -633,11 +633,13 @@ const std::vector<Id> kAnyGame{Id::GyroAim,       Id::GyroSensitivity, Id::Recoi
                                Id::KeepOnScreen,  Id::GripFreesAim};
 
 /// The targets of a tab, all the way down.
-std::set<Id> TabIds(Drawn& d, const MenuModel& m, Tab tab, SettingsSection section) {
+std::set<Id> TabIds(Drawn& d, const MenuModel& m, Tab tab, SettingsSection section,
+                    ControlsSection controls = ControlsSection::Buttons) {
     std::set<Id> ids;
     MenuView v;
     v.tab = tab;
     v.section = section;
+    v.controls_section = controls;
     for (float& scroll = v.scroll[static_cast<std::size_t>(tab)];; scroll += 200.0f) {
         d.Draw(m, v);
         for (const auto& h : d.menu.Hits()) {
@@ -786,7 +788,12 @@ TEST_CASE("Angel's Aim page: the general tabs have none of its rows",
     for (const MenuModel& m : models) {
         INFO("mapped " << m.mods.angels_aim.mapped << ", mode " << m.immersive_mode << ", aim "
                        << m.gyro_aim << ", scope " << m.scope);
-        std::set<Id> ids = TabIds(d, m, Tab::Controls, SettingsSection::General);
+        std::set<Id> ids;
+        for (int section = 0; section < static_cast<int>(ControlsSection::Count); section++) {
+            const auto more = TabIds(d, m, Tab::Controls, SettingsSection::General,
+                                     static_cast<ControlsSection>(section));
+            ids.insert(more.begin(), more.end());
+        }
         for (int section = 0; section < static_cast<int>(SettingsSection::Count); section++) {
             if (section != static_cast<int>(SettingsSection::Immersive) && m.gyro_aim != 2) {
                 continue; // General and Graphics have no row that depends on it
