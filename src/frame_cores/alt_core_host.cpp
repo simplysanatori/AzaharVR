@@ -436,10 +436,11 @@ struct AltCoreHost::Impl {
     bool PutLocked(const std::vector<uint8_t>& state) {
         const bool ok = core->LoadStateFromMemory(state.data(), state.size());
         core->AfterStateLoad();
-        // melonDS draws a frame's 3D ahead of it, and a state does not hold it
+        // melonDS draws a frame's 3D ahead of it, and a state does not hold it. One frame, or three
+        // where a game captures its 3D to show it later (Golden Sun: Dark Dawn).
         const bool ds = rom_info.kind == Common::AltCore::CoreKind::NDS ||
                         rom_info.kind == Common::AltCore::CoreKind::DSi;
-        hidden_frames = ds ? 1 : 0;
+        hidden_frames = ds ? 3 : 0;
         return ok;
     }
 

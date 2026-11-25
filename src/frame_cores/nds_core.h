@@ -24,6 +24,16 @@ void SetMelonDSLocalDir(const std::string& dir);
 /// failed.
 std::string PrepareWorkingNand(const std::filesystem::path& bios_dir);
 
+/// Whether Automatic (or the player's choice) starts a game as a DSi. A DSi-enhanced game is a DS
+/// game too: it is one unless the player's DSi files are there, as most do not start without.
+constexpr bool PicksDsi(bool dsi_only, bool dsi_enhanced, bool has_dsi_files,
+                        const CoreBootOptions& opts) {
+    if (opts.force_dsi || opts.force_nds) {
+        return opts.force_dsi;
+    }
+    return dsi_only || (dsi_enhanced && has_dsi_files);
+}
+
 /**
  * Nintendo DS / DSi emulation backend wrapping melonDS master.
  * Supports FreeBIOS direct boot with zero external dumps required, optional

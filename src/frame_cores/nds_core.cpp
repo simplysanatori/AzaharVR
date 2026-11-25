@@ -326,6 +326,20 @@ struct NdsCore::Impl {
     }
 };
 
+/// The player's DSi BIOS, firmware and NAND.
+static bool HasDsiFiles(const std::string& bios_dir) {
+    if (bios_dir.empty()) {
+        return false;
+    }
+    std::error_code ec;
+    for (const char* name : {"dsi_bios9.bin", "dsi_bios7.bin", "dsi_firmware.bin", "dsi_nand.bin"}) {
+        if (!std::filesystem::is_regular_file(std::filesystem::path(bios_dir) / name, ec)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 std::string PrepareWorkingNand(const std::filesystem::path& bios_dir) {
     std::error_code ec;
     const auto original = bios_dir / "dsi_nand.bin";
@@ -438,8 +452,8 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
           (static_cast<uint32_t>(rom_bytes[0x236]) << 16) |
           (static_cast<uint32_t>(rom_bytes[0x237]) << 24)) == 0x00030004u);
 
-    const bool use_dsi =
-        opts.force_dsi || (!opts.force_nds && (rom_is_dsiware || rom_is_dsi_capable));
+    const bool use_dsi = PicksDsi(rom_is_dsiware, rom_is_dsi_capable,
+                                  opts.use_bios && HasDsiFiles(paths.bios_dir), opts);
     impl->is_dsi = use_dsi;
     impl->caps = Common::AltCore::Capabilities::ForNDS(use_dsi);
 
@@ -681,9 +695,7 @@ bool NdsCore::SaveStateToMemory(std::vector<uint8_t>& out) {
         return false;
     }
     melonDS::Savestate state(melonDS::Savestate::DEFAULT_SIZE);
-    impl->nds->GetRenderer().PreSavestate();
-    const bool ok = impl->nds->DoSavestate(&state) && !state.Error;
-    impl->nds->GetRenderer().PostSavestate();
+    const bool ok = impl->nds->DoSavestate(&state) && !state.Error; // the renderer told by it
     if (!ok || state.Length() == 0) {
         out.clear();
         return false;
@@ -700,9 +712,7 @@ bool NdsCore::LoadStateFromMemory(const uint8_t* data, std::size_t size) {
     impl->FlushPendingSaves(true); // what the game saved before the load
     std::vector<uint8_t> copy(data, data + size);
     melonDS::Savestate state(copy.data(), static_cast<melonDS::u32>(copy.size()), false);
-    impl->nds->GetRenderer().PreSavestate();
     const bool ok = impl->nds->DoSavestate(&state) && !state.Error;
-    impl->nds->GetRenderer().PostSavestate();
     {
         // melonDS reports the state's save data as a save. The save file changes only when the
         // game saves, as for the other consoles: a load never replaces a newer save.
