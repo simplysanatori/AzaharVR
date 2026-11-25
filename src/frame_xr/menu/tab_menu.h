@@ -329,6 +329,9 @@ enum class Id : int {
     GamesSearchClear, ///< the chip's close glyph, and No Matches' button
     GamesSort,        ///< its menu; index: GamesSort
     GamesAddFolder,
+    GamesHeader, ///< the Settings tab's Games rows, with a Games tab only
+    DownloadGameCovers, ///< a switch: covers by themselves
+    DownloadThumbnails, ///< for the games the Games tab shows
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);

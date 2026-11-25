@@ -297,6 +297,7 @@ private:
     void FramePushMenuInfo();
 #ifdef ENABLE_ALT_CORES
     void FrameMakeGamesTab();
+    void FrameCoverCommand(const FrameXr::MenuRequest& request);
 #endif
 
     // AzaharFrame autosave (citra_qt.cpp): the timer, the menu and quit triggers, Emulation >

@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 
+#include "common/cover_strings.h"
 #include "frame_xr/immersive_names.h" // AzaharFrame kiu
 #include "frame_xr/menu/ds_drawing.h"
 #include "frame_xr/menu/md3_fonts.h"
@@ -341,6 +342,12 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             const int keep = std::clamp(m.autosave_keep, 1, 10);
             saves(Id::AutosaveEvery, static_cast<float>(every) / 4.0f, 4, every);
             saves(Id::AutosaveKeep, static_cast<float>(keep - 1) / 9.0f, 9, keep);
+            if (TabShown(Tab::Games, m)) { // AzaharVR: covers
+                rows.push_back(row(Id::GamesHeader, RowKind::Header));
+                rows.push_back(
+                    row(Id::DownloadGameCovers, RowKind::Switch, 0, m.games.download_covers));
+                rows.push_back(row(Id::DownloadThumbnails, RowKind::Button));
+            }
             rows.push_back(row(Id::MoreSettings, RowKind::Link));
             rows.push_back(row(Id::SwitchToFlat, RowKind::Button)); // AzaharFrame menuux
             rows.push_back(row(Id::HelpHeader, RowKind::Header)); // AzaharFrame crashreport
@@ -1294,6 +1301,12 @@ std::string LabelFor(Id id) {
         return "More Settings";
     case Id::SavesHeader: // AzaharFrame autosave
         return "Saves";
+    case Id::GamesHeader: // AzaharVR
+        return "Games";
+    case Id::DownloadGameCovers:
+        return Common::CoverText::kSetting;
+    case Id::DownloadThumbnails:
+        return Common::CoverText::kDownload;
     case Id::HelpHeader: // AzaharFrame crashreport
         return "Help";
     case Id::ReportProblem:
@@ -1658,6 +1671,10 @@ std::string ExplainFor(Id id) {
         return GamesProposed::kSort;
     case Id::GamesAddFolder:
         return "Add Folder";
+    case Id::DownloadGameCovers:
+        return Common::CoverText::kSettingTip;
+    case Id::DownloadThumbnails:
+        return Common::CoverText::kDownloadTip;
     case Id::AllowGameEditing:
         return "Lets PokeDaisy edit your game. Backs up your save first.";
     case Id::DsTouchEnabled:
@@ -3264,6 +3281,7 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
             const Rect b{c.x0, cy - 28.0f, c.x1, cy + 28.0f};
             kit.Button(b, ButtonStyle::Tonal,
                        r.id == Id::FillView            ? Sym::kFitScreen
+                       : r.id == Id::DownloadThumbnails ? Sym::kDownload // AzaharVR
                        : r.id == Id::KiuBottomReset    ? Sym::kRecenter // AzaharFrame kiu131
                        : r.id == Id::AngelsAimSettings ? Sym::kTune     // AzaharFrame kiu132
                                                        : Sym::kTv,

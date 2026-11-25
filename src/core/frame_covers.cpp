@@ -5,9 +5,10 @@
 #include "core/frame_covers.h"
 
 #include <array>
+#include <cstdlib>
 #include <fstream>
-#include <sstream>
 #include <utility>
+#include <fmt/format.h>
 
 #include "common/file_util.h"
 #include "common/logging/log.h"
@@ -21,6 +22,8 @@ constexpr std::string_view kHost = "https://raw.githubusercontent.com";
 /// The repository of a system's covers.
 std::string_view RepositoryOf(Common::GameSystem system) {
     switch (system) {
+    case Common::GameSystem::N3DS:
+        return "Nintendo_-_Nintendo_3DS";
     case Common::GameSystem::DS:
         return "Nintendo_-_Nintendo_DS";
     case Common::GameSystem::GBA:
@@ -64,7 +67,7 @@ std::string ThumbnailName(std::string_view name) {
     return out;
 }
 
-std::optional<Source> SourceFor(Common::GameSystem system, std::string_view file_stem) {
+std::optional<Source> SourceFor(Common::GameSystem system, std::string_view file_stem, Art art) {
     const std::string_view repository = RepositoryOf(system);
     const std::string name = ThumbnailName(file_stem);
     // Every No-Intro name ends with a "(USA)" tag: a name without one cannot match, so it is not
@@ -72,12 +75,11 @@ std::optional<Source> SourceFor(Common::GameSystem system, std::string_view file
     if (repository.empty() || !name.ends_with(')') || name.find(" (") == std::string::npos) {
         return std::nullopt;
     }
-    Source s;
-    s.host = std::string(kHost);
-    s.path = "/libretro-thumbnails/" + std::string(repository) + "/master/Named_Boxarts/" +
-             Encoded(name + ".png");
-    s.key = std::string(repository) + "/" + name + ".png";
-    return s;
+    const char* folder = art == Art::Title  ? "Named_Titles"
+                         : art == Art::Snap ? "Named_Snaps"
+                                            : "Named_Boxarts";
+    return Source{std::string(kHost), "/libretro-thumbnails/" + std::string(repository) +
+                                          "/master/" + folder + "/" + Encoded(name + ".png")};
 }
 
 Image ImageOf(std::string_view bytes) {
@@ -119,64 +121,238 @@ Fetched Fetch(const Get& get, const Source& source) {
     return out;
 }
 
-Cache::Cache(std::string dir_) : dir{std::move(dir_)} {
-    LoadMissing();
+// ---- The covers folder ----
+
+namespace {
+
+constexpr const char* kLibretro = "libretro-thumbnails/";
+
+/// A system's folder.
+const char* FolderOf(Common::GameSystem system) {
+    switch (system) {
+    case Common::GameSystem::DS:
+        return "ds/";
+    case Common::GameSystem::GBA:
+        return "gba/";
+    case Common::GameSystem::GB:
+        return "gb/";
+    case Common::GameSystem::GBC:
+        return "gbc/";
+    default:
+        return "3ds/";
+    }
 }
 
-std::string Cache::FileOf(const Source& source) const {
-    const std::string path = dir + source.key;
-    return FileUtil::Exists(path) ? path : std::string{};
+constexpr std::array<std::pair<Choice, const char*>, 4> kChoiceNames{{
+    {Choice::None, "none"},
+    {Choice::Own, "own"},
+    {Choice::Title, "title"},
+    {Choice::Snap, "snap"},
+}};
+
+std::string MissingKey(const Game& game, Art art) {
+    const auto source = SourceFor(game.system, game.stem, art);
+    return source ? source->path : std::string{};
 }
 
-bool Cache::KnownMissing(const Source& source, std::time_t now) const {
-    const auto it = missing.find(source.key);
-    return it != missing.end() && now - it->second < kRetryMissing;
-}
-
-bool Cache::Store(const Source& source, const std::string& bytes) {
-    const std::string path = dir + source.key;
+/// A whole file or none: written beside it, then renamed.
+bool WriteFile(const std::string& path, const std::string& bytes) {
     const std::string part = path + ".part";
     if (!FileUtil::CreateFullPath(path) ||
-        FileUtil::WriteStringToFile(false, part, bytes) != bytes.size() ||
-        !FileUtil::Rename(part, path)) {
+        FileUtil::WriteStringToFile(false, part, bytes) != bytes.size()) {
         FileUtil::Delete(part);
         return false;
     }
-    if (missing.erase(source.key) > 0) {
+#ifdef _WIN32
+    FileUtil::Delete(path); // it renames over nothing
+#endif
+    if (!FileUtil::Rename(part, path)) {
+        FileUtil::Delete(part);
+        return false;
+    }
+    return true;
+}
+
+template <typename Line>
+void EachLine(const std::string& path, Line&& line) {
+    std::ifstream in(path);
+    std::string text;
+    while (std::getline(in, text)) {
+        if (!text.empty()) {
+            line(text);
+        }
+    }
+}
+
+} // namespace
+
+std::string Game::Id() const {
+    std::uint32_t hash = 2166136261u; // FNV-1a
+    for (const char c : stem) {
+        hash = (hash ^ static_cast<unsigned char>(c)) * 16777619u;
+    }
+    return fmt::format("{}{:016x}-{:08x}", FolderOf(system), key, hash);
+}
+
+Library::Library(std::string dir_) : dir{std::move(dir_)} {
+    EachLine(dir + "choices.txt", [this](const std::string& line) {
+        const std::size_t tab = line.find('\t');
+        for (const auto& [choice, name] : kChoiceNames) {
+            if (tab != std::string::npos && line.substr(0, tab) == name) {
+                choices[line.substr(tab + 1)] = choice;
+            }
+        }
+    });
+    EachLine(dir + kLibretro + "missing.txt", [this](const std::string& line) {
+        const std::size_t tab = line.find('\t');
+        if (tab != std::string::npos) {
+            missing[line.substr(tab + 1)] =
+                static_cast<std::time_t>(std::strtoll(line.c_str(), nullptr, 10));
+        }
+    });
+}
+
+std::string Library::FileOf(const Game& game, Art art) const {
+    const char* name = art == Art::Title ? "-title.png" : art == Art::Snap ? "-snap.png" : "-box.png";
+    return dir + kLibretro + game.Id() + name;
+}
+
+std::string Library::OwnOf(const Game& game) const {
+    return dir + "own/" + game.Id() + ".png";
+}
+
+std::string Library::Shown(const Game& game) const {
+    if (game.key == 0) {
+        return {};
+    }
+    std::string file;
+    switch (ChoiceOf(game)) {
+    case Choice::None:
+        return {};
+    case Choice::Own:
+        file = OwnOf(game);
+        break;
+    case Choice::Title:
+        file = FileOf(game, Art::Title);
+        break;
+    case Choice::Snap:
+        file = FileOf(game, Art::Snap);
+        break;
+    default:
+        file = FileOf(game, Art::Box);
+        break;
+    }
+    return FileUtil::Exists(file) ? file : std::string{};
+}
+
+Choice Library::ChoiceOf(const Game& game) const {
+    std::scoped_lock lock{mutex};
+    const auto it = choices.find(game.Id());
+    return it != choices.end() ? it->second : Choice::Automatic;
+}
+
+void Library::Choose(const Game& game, Choice choice) {
+    if (game.key == 0) {
+        return;
+    }
+    std::scoped_lock lock{mutex};
+    if (choice == Choice::Automatic) {
+        choices.erase(game.Id());
+    } else {
+        choices[game.Id()] = choice;
+    }
+    if (choice != Choice::Own) {
+        FileUtil::Delete(OwnOf(game));
+    }
+    SaveChoices();
+}
+
+std::string Library::SetOwn(const Game& game, const std::string& bytes) {
+    if (bytes.size() > kMaxOwnBytes) {
+        return "too large";
+    }
+    if (game.key == 0 || ImageOf(bytes) == Image::None) {
+        return "not an image";
+    }
+    if (!WriteFile(OwnOf(game), bytes)) {
+        return "not written";
+    }
+    Choose(game, Choice::Own);
+    return {};
+}
+
+bool Library::Has(const Game& game, Art art) const {
+    return game.key != 0 && FileUtil::Exists(FileOf(game, art));
+}
+
+bool Library::Wanted(const Game& game, std::time_t now) const {
+    return game.key != 0 && ChoiceOf(game) == Choice::Automatic && !Has(game, Art::Box) &&
+           SourceFor(game.system, game.stem) && !KnownMissing(game, Art::Box, now);
+}
+
+bool Library::KnownMissing(const Game& game, Art art, std::time_t now) const {
+    std::scoped_lock lock{mutex};
+    const auto it = missing.find(MissingKey(game, art));
+    return it != missing.end() && now - it->second < kRetryMissing;
+}
+
+bool Library::Store(const Game& game, Art art, const std::string& bytes) {
+    if (game.key == 0 || !WriteFile(FileOf(game, art), bytes)) {
+        return false;
+    }
+    std::scoped_lock lock{mutex};
+    if (missing.erase(MissingKey(game, art)) > 0) {
         SaveMissing();
     }
     return true;
 }
 
-void Cache::MarkMissing(const Source& source, std::time_t now) {
-    missing[source.key] = now;
+void Library::MarkMissing(const Game& game, Art art, std::time_t now) {
+    std::scoped_lock lock{mutex};
+    missing[MissingKey(game, art)] = now;
     SaveMissing();
 }
 
-void Cache::LoadMissing() {
-    std::ifstream in(dir + "missing.txt");
-    std::string line;
-    while (std::getline(in, line)) {
-        const std::size_t tab = line.find('\t');
-        if (tab == std::string::npos) {
-            continue;
-        }
-        try {
-            missing[line.substr(tab + 1)] = static_cast<std::time_t>(std::stoll(line.substr(0, tab)));
-        } catch (const std::exception&) {
+void Library::SaveChoices() const {
+    std::string text;
+    for (const auto& [id, choice] : choices) {
+        for (const auto& [c, name] : kChoiceNames) {
+            if (c == choice) {
+                text += std::string(name) + '\t' + id + '\n';
+            }
         }
     }
+    WriteFile(dir + "choices.txt", text);
 }
 
-void Cache::SaveMissing() const {
-    if (!FileUtil::CreateFullPath(dir)) {
-        return;
+void Library::SaveMissing() const {
+    std::string text;
+    for (const auto& [path, when] : missing) {
+        text += std::to_string(static_cast<long long>(when)) + '\t' + path + '\n';
     }
-    std::ostringstream text;
-    for (const auto& [key, when] : missing) {
-        text << static_cast<long long>(when) << '\t' << key << '\n';
+    WriteFile(dir + kLibretro + "missing.txt", text);
+}
+
+Outcome Download(const Get& get, Library& library, const Game& game, Art art, std::time_t now,
+                 const std::function<bool(const std::string& bytes)>& is_image) {
+    const auto source = SourceFor(game.system, game.stem, art);
+    if (!source || game.key == 0 || library.KnownMissing(game, art, now)) {
+        return Outcome::NotThere; // not asked for
     }
-    FileUtil::WriteStringToFile(true, dir + "missing.txt", text.str());
+    if (library.Has(game, art)) {
+        return Outcome::Got;
+    }
+    const Fetched fetched = Fetch(get, *source);
+    if (fetched.result == Fetched::Result::Failed) {
+        LOG_INFO(Frontend, "Covers: {}: {}", game.stem, fetched.why);
+        return fetched.stop ? Outcome::Stop : Outcome::Failed;
+    }
+    // A PNG's or JPEG's signature, but no image: as if not there
+    if (fetched.result == Fetched::Result::NotThere || !is_image(fetched.bytes)) {
+        library.MarkMissing(game, art, now);
+        return Outcome::NotThere;
+    }
+    return library.Store(game, art, fetched.bytes) ? Outcome::Got : Outcome::Failed;
 }
 
 } // namespace Core::Covers

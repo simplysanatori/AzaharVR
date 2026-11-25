@@ -525,23 +525,66 @@ TEST_CASE("Games tab: Options of a tile", "[frame_xr][games]") {
     v.open_menu = Id::GameOption;
     v.games.menu_game = "/gba";
     using Items = std::vector<std::string>;
-    CHECK(GamesMenuItems(m.games, v) == Items{"Play", "Favourite"});
-    d.Draw(m, v);
-    const auto items = d.Of(Id::GameOption);
-    REQUIRE(items.size() == 2);
-    for (const auto& h : items) {
-        CHECK(d.menu.Layout().HitTest(h.r.Cx(), h.r.Cy()) == h.t);
-        CHECK(Inside(h.r, {0, 0, kPanelW, kPanelH}));
+    const Items covers{"Choose Another Cover", "No Cover", "Use My Own Image", "Reset Cover"};
+    const auto with_covers = [&covers](Items items) {
+        items.insert(items.end(), covers.begin(), covers.end());
+        return items;
+    };
+    CHECK(GamesMenuItems(m.games, v) == with_covers({"Play", "Favourite"}));
+    for (const auto& g : m.games.list->games) { // the first row's and the second row's
+        v.games.menu_game = g.path;
+        d.Draw(m, v);
+        const auto items = d.Of(Id::GameOption);
+        REQUIRE(items.size() == 6);
+        for (const auto& h : items) {
+            CHECK(d.menu.Layout().HitTest(h.r.Cx(), h.r.Cy()) == h.t);
+            CHECK(Inside(h.r, {kGamesX0, 0, kPanelW, kPanelH}));
+            const std::string text =
+                GamesMenuItems(m.games, v)[static_cast<std::size_t>(h.t.index)];
+            CHECK(d.kit.Fit(Type::Label, text, h.r.W() - 72.0f) == text); // as Kit::Menu fits it
+        }
     }
+    v.games.menu_game = "/gba";
+    v.games.menu_covers = true; // Choose Another Cover's
+    CHECK(GamesMenuItems(m.games, v) == Items{"Box Art", "Title Screen", "Screenshot"});
+    d.Draw(m, v);
+    CHECK(d.Of(Id::GameOption).size() == 3);
+    v.games.menu_covers = false;
     v.games.menu_game = "/gbc"; // the running one
-    CHECK(GamesMenuItems(m.games, v) == Items{"Continue", "Favourite"});
+    CHECK(GamesMenuItems(m.games, v) == with_covers({"Continue", "Favourite"}));
     GamesMove(Focus::Dir::Down, m, v, d.menu.Layout());
     CHECK(GamesFocused(m, v) == Target{Id::GameOption, 1});
-    GamesMove(Focus::Dir::Down, m, v, d.menu.Layout());
-    CHECK(GamesFocused(m, v) == Target{Id::GameOption, 1});
+    for (int i = 0; i < 8; i++) {
+        GamesMove(Focus::Dir::Down, m, v, d.menu.Layout());
+    }
+    CHECK(GamesFocused(m, v) == Target{Id::GameOption, 5});
     v.games.menu_game = "/gone"; // the list changed under it
     d.Draw(m, v);
     CHECK(d.Of(Id::GameOption).empty());
+}
+
+TEST_CASE("Games tab: the covers' rows in Settings", "[frame_xr][games]") {
+    Drawn d;
+    MenuModel m = TabModel();
+    const auto drawn = [&d, &m](Id id) {
+        MenuView v;
+        v.tab = Tab::Settings;
+        for (float scroll = 0.0f; scroll <= 3000.0f; scroll += kRowH) {
+            v.scroll[static_cast<std::size_t>(Tab::Settings)] = scroll;
+            d.Draw(m, v);
+            if (!d.Of(id).empty()) {
+                return true;
+            }
+        }
+        return false;
+    };
+    CHECK(drawn(Id::DownloadGameCovers));
+    CHECK(drawn(Id::DownloadThumbnails));
+    m.games = {}; // no Games tab, as with 3DS games alone
+    CHECK_FALSE(drawn(Id::GamesHeader));
+    CHECK_FALSE(drawn(Id::DownloadGameCovers));
+    CHECK_FALSE(drawn(Id::DownloadThumbnails));
+    CHECK(drawn(Id::MoreSettings));
 }
 
 TEST_CASE("Games tab: a cover in its art area", "[frame_xr][games]") {

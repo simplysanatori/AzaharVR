@@ -42,6 +42,7 @@ struct GamesTabModel {
     GamesList list;
     std::string running; ///< the running game's path in the list ("" none)
     std::string search;  ///< "" none
+    bool download_covers = false; ///< Download Game Covers
     bool operator==(const GamesTabModel&) const = default;
 };
 
@@ -53,6 +54,7 @@ struct GamesView {
     std::string focus_game; ///< the focused tile's path: the focus stays on it in a changed list
     int menu_item = 0;      ///< the focused item of the open menu (Sort's or a tile's Options)
     std::string menu_game;  ///< whose Options is open: its path
+    bool menu_covers = false; ///< it shows Choose Another Cover's items
     float title_scroll = 0.0f; ///< how far the pointed at tile's cut title has moved up (dp)
     bool operator==(const GamesView&) const = default;
 };
@@ -67,7 +69,7 @@ constexpr int kGameTitleLines = 3;
 constexpr float kGameTitlePitch = 18.0f;
 constexpr float kGameTextW = kGameTileW - 24.0f;
 /// Options' items, as indices of {GameOption}.
-enum class GameAction : int { Play, Favourite };
+enum class GameAction : int { Play, Favourite, AnotherCover, NoCover, OwnImage, ResetCover };
 
 /// The games that show now, as indices of the list.
 std::vector<int> GamesShown(const GamesTabModel& m, const GamesView& v);

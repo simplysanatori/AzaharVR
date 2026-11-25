@@ -23,6 +23,7 @@
 #include <QString>
 #include <QTimer>
 
+#include "core/frame_covers.h"
 #include "core/mods/transfer.h"
 #include "frame_xr/menu/games_snapshot.h"
 
@@ -47,8 +48,14 @@ public:
             ask;
         std::function<void()> close_menu;
         std::function<void(const QString& path)> boot; ///< BootGame (stops the running game first)
-        std::function<bool()> covers_on;          ///< Download Cover Art
-        std::string covers_dir;                   ///< the cache (core/frame_covers.h)
+        std::function<bool()> covers_on;          ///< Download Game Covers
+        std::string covers_dir;                   ///< the covers folder (core/frame_covers.h)
+        Core::Covers::Get covers_get;             ///< empty: the network; a test's own
+        /// FrameAsk: the open menu's dialog, else the window's.
+        std::function<void(const QString& title, const QString& body, const QString& confirm,
+                           const QString& cancel, std::function<void(bool)> answer)>
+            confirm;
+        std::function<void(const QString& text)> toast;
     };
 
     FrameGames(Hooks hooks, QObject* parent);
@@ -63,29 +70,59 @@ public:
     void Play(const QString& path);
     void ToggleFavourite(const std::string& path);
 
+    /// Download Thumbnails: asks, then downloads the covers these games have not.
+    void DownloadThumbnails(const std::vector<std::string>& paths);
+    /// Choose Another Cover's pick (asks when Download Game Covers is off and it is not on disk).
+    void ChooseCover(const std::string& path, Core::Covers::Art art);
+    void NoCover(const std::string& path);
+    void ResetCover(const std::string& path);
+    /// Use My Own Image: the picked file.
+    void UseOwnImage(const std::string& path, const QString& file);
+    /// Download Game Covers was turned on or off.
+    void CoverSettingChanged();
+
 private:
     enum class File { Good, Missing, Unreadable };
     static File Check(const QString& path);
     void Start(const QString& path);
     void SaveThenStart(const QString& path);
 
-    /// The covers of the listed games: the cached ones, then the others one by one (a thread).
-    void FindCovers();
-    void CoverThread();
-    void CoverFound(const std::string& path, std::shared_ptr<const FrameXr::Menu::GameIcon> cover);
-
-    Hooks hooks;
-    std::map<std::string, std::shared_ptr<const FrameXr::Menu::GameIcon>> covers; ///< by path
-    QTimer covers_publish; ///< found covers show together, at most once a second
+    // ---- Covers: a thread downloads and decodes them, one at a time ----
+    /// One press's downloads, counted on the GUI thread.
+    struct CoverBatch {
+        int left = 0, found = 0;
+        std::atomic_bool stopped = false; ///< no network or a limit: the rest is left out
+    };
     struct CoverJob {
         std::string path;
-        Common::GameSystem system;
-        std::string stem;
+        Core::Covers::Game game;
+        Core::Covers::Art art = Core::Covers::Art::Box;
+        bool fetch = false;     ///< else only from disk
+        bool automatic = false; ///< by Download Game Covers: not once it is off
+        bool choose = false;    ///< `art` is the game's cover from now on
+        std::shared_ptr<CoverBatch> batch;
     };
+    static Core::Covers::Game GameOf(const FrameXr::Menu::GameEntry& row);
+    const FrameXr::Menu::GameEntry* RowOf(const std::string& path) const;
+    /// The covers on disk of the rows not loaded yet, and with Download Game Covers the others.
+    void FindCovers();
+    void Queue(std::vector<CoverJob> jobs, bool first);
+    /// The cover on disk again, of every row that is this game.
+    void ReloadCover(const Core::Covers::Game& game);
+    void StartDownload(const std::vector<std::string>& paths);
+    void CoverThread();
+    void CoverFound(const std::string& path, std::shared_ptr<const FrameXr::Menu::GameIcon> cover);
+    void BatchStep(const std::shared_ptr<CoverBatch>& batch, bool found);
+
+    Hooks hooks;
+    Core::Covers::Library library;
+    std::map<std::string, std::shared_ptr<const FrameXr::Menu::GameIcon>> covers; ///< by path
+    QTimer covers_publish; ///< found covers show together, at most once a second
+    std::set<std::string> covers_loaded;    ///< games (id and path) looked for on disk this run
+    std::set<std::string> covers_automatic; ///< and asked for by themselves
     std::mutex cover_mutex;
     std::condition_variable cover_cv;
     std::deque<CoverJob> cover_jobs;
-    std::set<std::string> covers_asked; ///< paths queued once this run
     bool cover_stop = false;
     std::atomic_bool covers_enabled = false;
     std::atomic_bool cover_cancel = false;

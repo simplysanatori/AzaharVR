@@ -27,6 +27,7 @@
 
 #include <lodepng.h>
 
+#include "common/cover_strings.h" // AzaharVR
 #include "frame_xr/input/controls.h"
 #include "frame_xr/input/key_names.h" // AzaharFrame keys
 #include "frame_xr/input/mouse.h"   // AzaharFrame mouse: its one-time toast
@@ -3186,6 +3187,28 @@ int main(int argc, char** argv) {
         gv.open_menu = Id::GameOption;
         gv.games.menu_game = gm.games.list->games[0].path;
         ok &= shot("games-5-options", gm, gv);
+        gv.games.menu_game = gm.games.list->games[5].path;
+        ok &= shot("games-6-options-low", gm, gv);
+        gv.games.menu_covers = true;
+        ok &= shot("games-7-another-cover", gm, gv);
+        gv = {};
+        gv.tab = Tab::Settings;
+        gv.scroll[static_cast<std::size_t>(Tab::Settings)] = kRowH * 9.0f;
+        ok &= shot("games-8-settings", gm, gv);
+        {
+            namespace Text = Common::CoverText;
+            MenuModel am = gm;
+            am.notice.kind = ModsDialogKind::Notice;
+            am.notice.mod = Text::kAskTitle;
+            am.notice.other = Text::AskBody(12, false);
+            am.notice.confirm = Text::kAskYes;
+            am.notice.cancel = Text::kAskNo;
+            gv = {};
+            gv.tab = Tab::Games;
+            ok &= shot("games-9-ask", am, gv);
+            am.notice.other = Text::AskBody(12, true);
+            ok &= shot("games-10-ask-found", am, gv);
+        }
         gv = {};
         gv.tab = Tab::Games;
         gv.games.chip = Common::SystemFilter::GBA;

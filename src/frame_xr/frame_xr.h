@@ -297,7 +297,12 @@ enum class MenuCommand {
     PlayGame, ///< the Games tab: `text` the game's path (citra_qt/frame_games.cpp)
     AddGameFolder, ///< the same: Azahar's window with its folder dialog
     FavouriteGame, ///< the same: in Favourites or out of them
+    GameCover,     ///< the same: its cover; `value`: GameCoverAction
+    GameCovers,    ///< Download Game Covers; `value`: 1 on, 0 off
+    DownloadThumbnails, ///< for the games of `text`: their paths, one a line
 };
+/// AzaharVR: the covers' items of a tile's Options.
+enum class GameCoverAction : int { Box, Title, Snap, None, Own, Reset };
 enum class MenuSetting {
     HideBottomScreen,
     ScreenShape,
@@ -591,7 +596,8 @@ void SetInGameMenuHomebrew(const Menu::HomebrewTabModel& homebrew); ///< citra_q
 /// AzaharVR: the Games tab's list (frame_xr/menu/games_snapshot.h) and the running game's path in
 /// it ("" none). Any thread.
 void SetInGameMenuGames(std::shared_ptr<const Menu::GamesSnapshot> games,
-                        const std::string& running); ///< citra_qt/frame_games.cpp
+                        const std::string& running,
+                        bool download_covers = false); ///< citra_qt/frame_games.cpp
 /// AzaharFrame autosave: the running game's autosaves for Load State's card (newest first), and
 /// the Undo Load snackbar's text ("" none). Any thread.
 void SetInGameMenuAutosaves(const std::vector<Menu::AutosaveCard>& autosaves,

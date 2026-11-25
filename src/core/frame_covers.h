@@ -2,24 +2,30 @@
 // Licensed under GPLv2 or any later version
 // Refer to the misc/licenses/gplv2.txt file included.
 
-// Cover art for the VR menu's Games tab, downloaded on demand when the player turns Download
-// Cover Art on (off by default). Nothing is bundled.
+// The covers of the VR menu's Games tab. Nothing is bundled, and nothing is asked for before the
+// player presses Download (in "Download Thumbnails?") or turns Download Game Covers on (off by
+// default). Covers on disk show whatever the setting says.
 //
-// The source: the libretro-thumbnails repositories on GitHub (box art named exactly as No-Intro
-// names the game), for DS, GBA, Game Boy and Game Boy Color games. A game is looked up by its
-// file's name only, so a ROM hack (named otherwise) never gets its base game's cover, and nothing
-// else about the player is sent. 3DS games keep their own icons.
+// The one source: the libretro-thumbnails repositories on GitHub, whose files are named exactly as
+// No-Intro names the game. A game is looked up by its file's name only, so a ROM hack (named
+// otherwise) never gets its base game's cover. Another source would be another SourceFor and
+// another folder beside kLibretro's.
 //
-// Covers are kept in the user folder's cache (covers/), with the names not found there, so each is
-// asked for once; a failed connection is tried again at the next start.
+// The covers folder, one file per game (Game::Id: the per-game key and the file's name):
+//   libretro-thumbnails/<system>/<id>-<art>.png   downloaded
+//   libretro-thumbnails/missing.txt               the names not found there, and when
+//   own/<system>/<id>.png                         the player's own images
+//   choices.txt                                   what the player chose for a game
 
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <ctime>
 #include <functional>
-#include <optional>
 #include <map>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -29,22 +35,41 @@
 namespace Core::Covers {
 
 constexpr std::size_t kMaxBytes = 2 * 1024 * 1024; ///< a bigger reply is no cover
+constexpr std::size_t kMaxOwnBytes = 8 * 1024 * 1024; ///< nor is a bigger image of the player's
 constexpr std::time_t kRetryMissing = 30 * 24 * 3600; ///< a cover not found is asked for again
 
-/// Where a game's cover would be.
+/// The pictures the source has of a game. Box is the cover shown unless the player chose another.
+enum class Art { Box, Title, Snap };
+
+/// What the player chose for a game.
+enum class Choice { Automatic, None, Own, Title, Snap };
+constexpr Choice ChoiceFor(Art art) {
+    return art == Art::Title ? Choice::Title : art == Art::Snap ? Choice::Snap : Choice::Automatic;
+}
+
+struct Game {
+    Common::GameSystem system = Common::GameSystem::N3DS;
+    std::uint64_t key = 0; ///< the title id or the per-game key; 0: it can have no cover
+    std::string stem;      ///< the file's name without extension, tags kept
+    /// "<system>/<id>". The key alone does not tell a hack from its base game (it covers the
+    /// file's start), so the name is part of it.
+    std::string Id() const;
+    bool operator==(const Game&) const = default;
+};
+
+/// Where a picture of a game would be.
 struct Source {
     std::string host; ///< "https://..."
     std::string path; ///< percent-encoded
-    std::string key;  ///< its file in the cache: "<system>/<name>.png"
     bool operator==(const Source&) const = default;
 };
 
 /// The name as libretro-thumbnails spells it: &*/:`<>?\|" become _.
 std::string ThumbnailName(std::string_view name);
-/// The cover of a game of `system` whose file is named `file_stem` (without extension, tags
-/// kept); none for 3DS games and for a name that is no No-Intro name (no "(USA)" tag at its end),
-/// which is then never sent.
-std::optional<Source> SourceFor(Common::GameSystem system, std::string_view file_stem);
+/// A picture of a game of `system` whose file is named `file_stem` (without extension, tags kept);
+/// none for a name that is no No-Intro name (no "(USA)" tag at its end), which is then never sent.
+std::optional<Source> SourceFor(Common::GameSystem system, std::string_view file_stem,
+                                Art art = Art::Box);
 
 enum class Image { None, Png, Jpeg };
 /// What the bytes are, by their signature.
@@ -65,23 +90,44 @@ struct Fetched {
 /// Asks for the cover (an https source only) and checks the reply.
 Fetched Fetch(const Get& get, const Source& source);
 
-/// The cache folder: the covers found and the names not found.
-class Cache {
+/// The covers folder. Any thread; nothing here asks the network.
+class Library {
 public:
-    explicit Cache(std::string dir);
-    /// The cover's file when it is there ("" not).
-    std::string FileOf(const Source& source) const;
-    /// It was not found less than kRetryMissing ago.
-    bool KnownMissing(const Source& source, std::time_t now) const;
-    /// Keeps a cover found; false when it could not be written.
-    bool Store(const Source& source, const std::string& bytes);
-    void MarkMissing(const Source& source, std::time_t now);
+    explicit Library(std::string dir);
+
+    /// The file the game's tile shows, by the player's choice ("" none): an own image, no cover,
+    /// the picture chosen, else the box art.
+    std::string Shown(const Game& game) const;
+    Choice ChoiceOf(const Game& game) const;
+    /// Reset Cover is Choice::Automatic. The files stay; an own image's goes with it.
+    void Choose(const Game& game, Choice choice);
+    /// Use My Own Image: its copy, and the choice. "" when done, else why not.
+    std::string SetOwn(const Game& game, const std::string& bytes);
+
+    bool Has(const Game& game, Art art) const;
+    /// Whether a download could bring the game its cover: none shown, none chosen, a name the
+    /// source can have, and not missing there lately.
+    bool Wanted(const Game& game, std::time_t now) const;
+    bool KnownMissing(const Game& game, Art art, std::time_t now) const;
+    bool Store(const Game& game, Art art, const std::string& bytes);
+    void MarkMissing(const Game& game, Art art, std::time_t now);
 
 private:
-    void LoadMissing();
+    std::string FileOf(const Game& game, Art art) const;
+    std::string OwnOf(const Game& game) const;
+    void SaveChoices() const;
     void SaveMissing() const;
+
     std::string dir;
-    std::map<std::string, std::time_t> missing; ///< key, when
+    mutable std::mutex mutex;
+    std::map<std::string, Choice> choices;      ///< by Game::Id
+    std::map<std::string, std::time_t> missing; ///< by Source::path, when
 };
+
+/// What came of one Download.
+enum class Outcome { Got, NotThere, Failed, Stop }; ///< Stop: ask for no more
+/// Asks the source for one picture of a game and keeps it. `is_image` decodes the reply.
+Outcome Download(const Get& get, Library& library, const Game& game, Art art, std::time_t now,
+                 const std::function<bool(const std::string& bytes)>& is_image);
 
 } // namespace Core::Covers

@@ -5,6 +5,7 @@
 #include <QDirIterator>
 #include "citra_qt/configuration/configure_ui.h"
 #include "citra_qt/uisettings.h"
+#include "common/cover_strings.h"
 #include "ui_configure_ui.h"
 
 ConfigureUi::ConfigureUi(QWidget* parent)
@@ -69,6 +70,8 @@ void ConfigureUi::SetConfiguration() {
     ui->show_advanced_frametime_info->setChecked(
         UISettings::values.show_advanced_frametime_info.GetValue());
 #if defined(ENABLE_ALT_CORES) && defined(ENABLE_FRAME_XR) // AzaharVR: the Games tab's covers
+    ui->toggle_download_covers->setText(QString::fromUtf8(Common::CoverText::kSetting));
+    ui->toggle_download_covers->setToolTip(QString::fromUtf8(Common::CoverText::kSettingTip));
     ui->toggle_download_covers->setChecked(UISettings::values.download_covers.GetValue());
 #else
     ui->toggle_download_covers->hide();

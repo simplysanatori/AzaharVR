@@ -485,9 +485,10 @@ void SetInGameMenuHomebrew(const Menu::HomebrewTabModel& homebrew) { // AzaharFr
 Menu::GamesTabModel g_games;
 
 void SetInGameMenuGames(std::shared_ptr<const Menu::GamesSnapshot> games,
-                        const std::string& running) {
+                        const std::string& running, bool download_covers) {
     std::scoped_lock lock{g_mods_mutex};
     g_games.list = std::move(games);
+    g_games.download_covers = download_covers;
     g_games.running = running;
 }
 
@@ -2115,6 +2116,12 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::AboutApp:
         ask(MenuCommand::About);
         break;
+    case Id::DownloadGameCovers: // AzaharVR
+        ask(MenuCommand::GameCovers, model.games.download_covers ? 0 : 1);
+        break;
+    case Id::DownloadThumbnails:
+        GamesDownload(host);
+        break;
     // AzaharFrame cheatstab: the Mods tab and its Cheats segment
     case Id::ModsSegment:
         // AzaharFrame kiufix: the index is the segment's value (ModsSegmentsShown)
@@ -2815,6 +2822,7 @@ bool MenuPanel::GamesClick(Target t, Host& host) {
         if (layout.games && t.index >= 0 && t.index < static_cast<int>(layout.games->games.size())) {
             v.menu_game = layout.games->games[static_cast<std::size_t>(t.index)].path;
             v.menu_item = 0;
+            v.menu_covers = false;
             if (t.id == Id::GameOptions) {
                 view.open_menu = Id::GameOption;
             } else {
@@ -2864,11 +2872,42 @@ bool MenuPanel::GamesClick(Target t, Host& host) {
 }
 
 void MenuPanel::GamesAction(int item, Host& host) {
+    using Menu::GameAction;
     MenuRequest r;
     r.text = view.games.menu_game;
+    const auto action = static_cast<GameAction>(item);
+    if (view.games.menu_covers || action >= GameAction::AnotherCover) {
+        if (!view.games.menu_covers && action == GameAction::AnotherCover) { // its own items next
+            view.games.menu_covers = true;
+            view.games.menu_item = 0;
+            view.open_menu = Id::GameOption;
+            return;
+        }
+        r.command = MenuCommand::GameCover;
+        r.value = view.games.menu_covers            ? item // Box, Title, Snap
+                  : action == GameAction::NoCover   ? static_cast<int>(GameCoverAction::None)
+                  : action == GameAction::OwnImage  ? static_cast<int>(GameCoverAction::Own)
+                                                    : static_cast<int>(GameCoverAction::Reset);
+        view.games.menu_covers = false;
+        if (host.request) {
+            host.request(r);
+        }
+        return;
+    }
     r.command = item == static_cast<int>(Menu::GameAction::Favourite) ? MenuCommand::FavouriteGame
                 : r.text == model.games.running                       ? MenuCommand::Continue
                                                                       : MenuCommand::PlayGame;
+    if (host.request) {
+        host.request(r);
+    }
+}
+
+void MenuPanel::GamesDownload(Host& host) {
+    MenuRequest r;
+    r.command = MenuCommand::DownloadThumbnails;
+    for (const int i : Menu::GamesShown(model.games, view.games)) {
+        r.text += model.games.list->games[static_cast<std::size_t>(i)].path + '\n';
+    }
     if (host.request) {
         host.request(r);
     }
