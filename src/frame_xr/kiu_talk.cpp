@@ -15,6 +15,10 @@ bool CutoutWanted() {
     return CutoutFor(text ? text->c_str() : nullptr, FirstPerson::PortraitsWanted());
 }
 
+bool CardForced() {
+    return Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_TALK_CUTOUT") == "card";
+}
+
 void Strip(bool game) {
     const bool on = game && CutoutWanted();
     if (VideoCore::KiuTalk::g_live.strip.exchange(on, std::memory_order_relaxed) != on) {

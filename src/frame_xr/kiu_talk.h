@@ -138,6 +138,9 @@ constexpr bool CutoutFor(const char* switch_text, bool portraits) {
     return portraits && !(switch_text && *switch_text == '0');
 }
 bool CutoutWanted();
+/// A test aid: AZAHARFRAME_KIU_TALK_CUTOUT=card, as if the game's code were another (the card, in
+/// the strip).
+bool CardForced();
 
 /// Each VBlank while the game runs: the strip in the bottom screen's image, by the setting alone
 /// (so the image is not remade as battles, cutscenes and menus come and go).
@@ -155,8 +158,8 @@ void Publish(const Reader& m, const Ui::State& ui, int& code, bool usa, bool tra
         code = CodeMatches(m, usa) ? 1 : 0;
     }
     const VideoCore::KiuTalk::Expected e =
-        code != 0 ? ExpectedOf(m, ui.context, ui.pictures, ui.illustration)
-                  : VideoCore::KiuTalk::Expected{};
+        code != 0 && !CardForced() ? ExpectedOf(m, ui.context, ui.pictures, ui.illustration)
+                                   : VideoCore::KiuTalk::Expected{};
     live.SetExpected(e);
     VideoCore::KiuHud::Batch batch;
     if (e.known) {
