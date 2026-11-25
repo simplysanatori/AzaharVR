@@ -1175,7 +1175,7 @@ struct Audit {
 
 } // namespace
 
-TEST_CASE("Tab menu: Switch to Flat on the Main and Settings tabs", "[frame_xr][tabmenu]") {
+TEST_CASE("Tab menu: Switch to Flat on the Main tab", "[frame_xr][tabmenu]") {
     Drawn d;
     MenuModel m = Sample();
     MenuView v;
@@ -1200,21 +1200,11 @@ TEST_CASE("Tab menu: Switch to Flat on the Main and Settings tabs", "[frame_xr][
         }
     }
     CHECK(LabelFor(Id::SwitchToFlat) == "Switch to Flat");
-    const float main_w = main_flat->r.W(); // the hits are drawn again below
-    // Settings: the last row, as wide as the pane's content, both scopes.
-    for (int scope = 0; scope < 2; scope++) {
-        m.scope = scope;
-        v = {};
-        v.tab = Tab::Settings;
-        v.scroll[static_cast<int>(Tab::Settings)] = 10000.0f;
-        d.Draw(m, v);
-        const auto* flat = find(Id::SwitchToFlat);
-        REQUIRE(flat != nullptr);
-        CHECK(flat->r.W() == main_w);
-        const auto* more = find(Id::MoreSettings);
-        REQUIRE(more != nullptr);
-        CHECK(flat->r.y0 >= more->r.y1);
-        CHECK(d.menu.HitTest(flat->r.Cx(), flat->r.Cy()) == Target{Id::SwitchToFlat});
+    // No second one in the sections.
+    for (const SettingsSection section : kSectionOrder) {
+        for (const Id id : RowIds(Tab::Settings, m, section)) {
+            CHECK(id != Id::SwitchToFlat);
+        }
     }
 }
 
@@ -2602,11 +2592,11 @@ TEST_CASE("Tab menu: Settings sections and the scope's menu button", "[frame_xr]
     CHECK(OpeningScope(true) == 1);
     CHECK(OpeningScope(false) == 0);
     CHECK(OptionsFor(Id::SettingsSection) ==
-          std::vector<std::string>{"General", "Graphics", "Immersive"});
+          std::vector<std::string>{"General", "Graphics", "Immersive", "Console"});
     Drawn d;
     MenuModel m = Sample();
     m.scope = 1;
-    for (int sec = 0; sec < static_cast<int>(SettingsSection::Count); sec++) {
+    for (int sec = 0; sec < 3; sec++) { // a 3DS game's; Console: core_rows.cpp
         MenuView v;
         v.tab = Tab::Settings;
         v.section = static_cast<SettingsSection>(sec);
@@ -4422,7 +4412,7 @@ TEST_CASE("Tab menu: Controllers in Front of Screen", "[frame_xr][tabmenu]") {
 }
 
 // AzaharFrame projdef; fixa: Motion Clarity is two independent rows, both "Black Frame Insertion"
-// (the owner's rename) with the Experimental chip, per game, never locked: the Immersive
+// (the owner's rename) under Experimental, per game, never locked: the Immersive
 // section's (the Full modes) and the Graphics section's (the Off and Wide modes). No "In
 // Immersive Modes" row. Their tooltips say where each works and fit two lines; the toast fits
 // one.
@@ -4555,8 +4545,8 @@ TEST_CASE("Tab menu: Match Bottom Screen Brightness under each row", "[frame_xr]
     }
 }
 
-// AzaharFrame projdef: Primary Screen as Panel, a per-game switch with the Experimental chip right
-// before Motion Clarity, never locked (not even outside the Full modes); off by default; while
+// AzaharFrame projdef: Primary Screen as Panel, a per-game switch, first under Experimental (HUD
+// Spacing and Motion Clarity after it), never locked (not even outside the Full modes); off by default; while
 // Motion Clarity in Immersive Modes is on it notes that Motion Clarity uses the panel; its
 // tooltip fits two lines and its toasts one.
 TEST_CASE("Tab menu: Primary Screen as Panel", "[frame_xr][tabmenu][projdef]") {
@@ -4588,20 +4578,18 @@ TEST_CASE("Tab menu: Primary Screen as Panel", "[frame_xr][tabmenu][projdef]") {
             MenuView v;
             v.tab = Tab::Settings;
             v.section = SettingsSection::Immersive;
-            bool seen = false, before_mc = false, note = false;
+            bool seen = false, before_hud = false, note = false;
             std::vector<DrawnText> texts;
             d.kit.RecordText(&texts);
             for (float scroll = 0.0f; scroll <= 3000.0f; scroll += kRowH) {
                 v.scroll[static_cast<int>(Tab::Settings)] = scroll;
                 d.Draw(m, v);
                 const auto* row = FindHit(d, Id::ScreenAsPanel, -1); // a live switch: never locked
-                const auto* mc = FindHit(d, Id::MotionClarity, -1);
-                const auto* mc_label = FindHit(d, Id::MotionClarity, kLabelIndex);
+                const auto* below = FindHit(d, Id::HudSpacingX, kLabelIndex);
                 seen |= row != nullptr;
                 const auto mid = [](const auto* h) { return 0.5f * (h->r.y0 + h->r.y1); };
-                const auto* below = mc ? mc : mc_label;
                 if (row && below) {
-                    before_mc |= std::abs(mid(below) - mid(row) - kRowH) < 1.0f;
+                    before_hud |= std::abs(mid(below) - mid(row) - kRowH) < 1.0f;
                 }
             }
             d.kit.RecordText(nullptr);
@@ -4610,7 +4598,7 @@ TEST_CASE("Tab menu: Primary Screen as Panel", "[frame_xr][tabmenu][projdef]") {
             }
             INFO("mode " << mode << ", In Immersive Modes " << clarity_immersive);
             CHECK(seen);
-            CHECK(before_mc);
+            CHECK(before_hud);
             // why it is a panel now, without a lock; only in a Full mode, where it is so
             CHECK(note == (clarity_immersive && mode >= 2));
         }
@@ -4618,8 +4606,8 @@ TEST_CASE("Tab menu: Primary Screen as Panel", "[frame_xr][tabmenu][projdef]") {
 }
 
 // AzaharFrame fovaxis: Render Margin's two rows show with Stretch only (the owner's rule), right
-// under Scale Mode, so a change of mode moves nothing above it; in Field of View they are gone
-// (no note), their values kept. Fill View is a button under them in a Full mode.
+// under the scales, so a change of mode moves nothing above them; in Field of View they are gone
+// (no note), their values kept. Fill View is a button right under Immersive Mode.
 TEST_CASE("Tab menu: Render Margin with Stretch only, and Fill View",
           "[frame_xr][tabmenu][fovaxis]") {
     CHECK(LabelFor(Id::FillView) == "Fill View");
@@ -4666,15 +4654,16 @@ TEST_CASE("Tab menu: Render Margin with Stretch only, and Fill View",
     const Seen fov = look(1);
     CHECK(!fov.margin); // gone in Field of View
     CHECK(fov.fill);
-    CHECK(index(fov.order, Id::FillView) == index(fov.order, Id::ScaleMode) + 1);
+    CHECK(index(fov.order, Id::FillView) == index(fov.order, Id::ImmersiveMode) + 1);
     const Seen stretch = look(0);
     CHECK(stretch.margin);
     CHECK(stretch.fill);
-    CHECK(index(stretch.order, Id::MarginX) == index(stretch.order, Id::ScaleMode) + 1);
+    CHECK(index(stretch.order, Id::ScaleX) == index(stretch.order, Id::ScaleMode) + 1);
+    CHECK(index(stretch.order, Id::MarginX) == index(stretch.order, Id::ScaleY) + 1);
     CHECK(index(stretch.order, Id::MarginY) == index(stretch.order, Id::MarginX) + 1);
-    CHECK(index(stretch.order, Id::FillView) == index(stretch.order, Id::MarginY) + 1);
-    // Everything above Scale Mode is the same in both modes.
-    const int above = index(fov.order, Id::ScaleMode);
+    CHECK(index(stretch.order, Id::FillView) == index(stretch.order, Id::ImmersiveMode) + 1);
+    // Everything above Render Margin is the same in both modes.
+    const int above = index(fov.order, Id::ScaleY);
     REQUIRE(above < static_cast<int>(fov.order.size()));
     CHECK(std::vector<Id>(fov.order.begin(), fov.order.begin() + above + 1) ==
           std::vector<Id>(stretch.order.begin(), stretch.order.begin() + above + 1));

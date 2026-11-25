@@ -75,7 +75,7 @@ constexpr Rule kRules[] = {
     {Id::AutosaveKeep, Need::Autosave},
     {Id::AutosaveCard, Need::Autosave}, // Load State's
     {Id::MoreSettings, Need::Any},
-    {Id::SwitchToFlat, Need::Flat},
+    {Id::SwitchToFlat, Need::Flat}, // Main's
     {Id::HelpHeader, Need::Any},
     {Id::ReportProblem, Need::Any},
     {Id::AboutApp, Need::Any},
@@ -84,6 +84,7 @@ constexpr Rule kRules[] = {
     {Id::InternalResolution, Need::InternalResolution},
     {Id::DynamicResolution, Need::DynamicResolution},
     {Id::TextureFilter, Need::TextureFilter},
+    {Id::ExperimentalHeader, Need::Any}, // gone while it has no row under it
     {Id::MotionClarityNormal, Need::Bfi},
     {Id::MatchBottomNormal, Need::Bfi},
     // Controls

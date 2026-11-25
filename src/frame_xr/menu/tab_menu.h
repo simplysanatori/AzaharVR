@@ -167,8 +167,8 @@ enum class Id : int {
     /// section's, MatchBottomNormal under the Graphics section's; one key, per game, never locked
     MatchBottom,
     MatchBottomNormal,
-    /// AzaharFrame projdef: Primary Screen as Panel, a switch with the Experimental chip right
-    /// before Motion Clarity (the opposite of vr_screens_in_projection), per game, never locked
+    /// AzaharFrame projdef: Primary Screen as Panel, a switch, first under Experimental
+    /// (the opposite of vr_screens_in_projection), per game, never locked
     ScreenAsPanel,
     MoreSettings,
     HelpHeader,    ///< AzaharFrame crashreport: General's "Help" subheader (no action)
@@ -284,7 +284,7 @@ enum class Id : int {
     // AzaharFrame kiuweap2
     MuzzleFlashSize, ///< a slider, 50 to 300 (percent), with Muzzle Flash on
     // AzaharFrame hudmove: HUD Spacing, sliders of 0 to 150 % (vr_immersive_hud_spacing_x,
-    // _up_down), per game, with the Experimental chip, never locked
+    // _up_down), per game, under Experimental, never locked
     HudSpacingX,
     HudSpacingY,
     // AzaharFrame kiufire
@@ -317,6 +317,7 @@ enum class Id : int {
     ImportSave,
     SecondScreen,     ///< GBA and Game Boy games: index of SecondScreenOptions (gba_second_screen)
     AllowGameEditing, ///< GBA and Game Boy games: a switch (gba_allow_editing)
+    ExperimentalHeader, ///< the Graphics and Immersive sections' "Experimental" subheader (no action)
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -577,6 +578,9 @@ bool SectionShown(SettingsSection section, const MenuModel& model);
 /// The section Settings shows: `section`, or Console when the console changed (`new_console`) to
 /// one that has it, or General when the console does not have `section`.
 SettingsSection OpeningSection(SettingsSection section, const MenuModel& model, bool new_console);
+/// The rows of the Position tab, or of a section of the Settings tab, in order as they show now.
+std::vector<Id> RowIds(Tab tab, const MenuModel& model,
+                       SettingsSection section = SettingsSection::General);
 /// How many of the section's rows come before this one, for the running game's console.
 int RowsBefore(Id id, SettingsSection section, const MenuModel& model);
 /// Per-game settings (Azahar's Properties have most of them too): a change in Per-Game is the

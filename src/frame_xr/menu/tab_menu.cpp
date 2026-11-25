@@ -47,7 +47,7 @@ constexpr std::array<TabInfo, static_cast<int>(Tab::Count)> kTabs{{
 
 } // namespace
 
-// AzaharFrame menuux: Button, a full-width tonal button (Switch to Flat at the end of Settings).
+// AzaharFrame menuux: Button, a full-width tonal button (Fill View).
 // AzaharFrame autosave: Header, a group's subheader ("Saves") as tall as a row (the list scrolls
 // in whole rows). AzaharFrame kiu132: outside the unnamed namespace, so TabMenu's row drawing
 // (DrawRowItems, tab_menu.h) can take them.
@@ -338,7 +338,6 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             saves(Id::AutosaveEvery, static_cast<float>(every) / 4.0f, 4, every);
             saves(Id::AutosaveKeep, static_cast<float>(keep - 1) / 9.0f, 9, keep);
             rows.push_back(row(Id::MoreSettings, RowKind::Link));
-            rows.push_back(row(Id::SwitchToFlat, RowKind::Button)); // AzaharFrame menuux
             rows.push_back(row(Id::HelpHeader, RowKind::Header)); // AzaharFrame crashreport
             rows.push_back(row(Id::ReportProblem, RowKind::Link));
             rows.push_back(row(Id::AboutApp, RowKind::Link));
@@ -369,6 +368,8 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             rows.push_back(row(Id::AsyncShaders, RowKind::Switch, 0, m.async_shaders));
             rows.push_back(row(Id::AccurateImageCopies, RowKind::Segmented, // accxfer, xfergpu
                                m.accurate_image_copies));
+            rows.push_back(row(Id::ExperimentalHeader, RowKind::Header));
+            // AzaharVR: Layer Depth's place (DS, GBA and Game Boy games), first under the header.
             // AzaharFrame fixa: Motion Clarity in the Off and Wide modes (vr_motion_clarity_normal),
             // never locked: in the Full modes it does nothing (Immersive has their own row).
             {
@@ -394,13 +395,19 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
         for (const Id id : AngelsAimFirstPersonRows(m)) {
             rows.push_back(RowFor(id, m));
         }
-        Row fov = full(row(Id::GameFov, RowKind::Slider));
-        const SliderRange fr = SliderFor(Id::GameFov);
-        fov.t = (static_cast<float>(m.game_fov) - fr.min) / (fr.max - fr.min);
-        fov.value = SliderText(Id::GameFov, static_cast<float>(m.game_fov));
-        rows.push_back(fov);
-        // AzaharFrame depth, fovonce: Off | Set Once | Always
-        rows.push_back(full(row(Id::MatchCamera, RowKind::Segmented, m.match_camera)));
+        // AzaharFrame fovaxis: Fill View, once (a button; the values stay ordinary)
+        rows.push_back(full(row(Id::FillView, RowKind::Button)));
+        // AzaharFrame natural: World Scale, a slider over its stops (10% to 400%, the default
+        // 100%), and Follow Screen Size.
+        Row world = full(row(Id::WorldScale, RowKind::Slider));
+        const SliderRange wr = SliderFor(Id::WorldScale);
+        world.t = (static_cast<float>(m.world_scale_stop) - wr.min) / (wr.max - wr.min);
+        // No tick marks: 33 stops would be a row of dots; it still snaps to them.
+        world.value = SliderText(Id::WorldScale, static_cast<float>(m.world_scale_stop));
+        rows.push_back(world);
+        rows.push_back(full(row(Id::FollowScreen, RowKind::Switch, 0, m.follow_screen)));
+        // AzaharFrame fovscale: Stretch | Field of View, over the scales it acts on
+        rows.push_back(full(row(Id::ScaleMode, RowKind::Segmented, m.scale_mode)));
         // AzaharFrame kiu: Horizontal and Vertical Scale, -100 to +100 % around 0 (AzaharFrame
         // fov100; -30 to +30 % before). No tick marks: 40 stops would be a row of dots, as World
         // Scale's; it still snaps to them.
@@ -419,10 +426,8 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
         };
         scale(Id::ScaleX, m.scale_x, m.scale_x_warp);
         scale(Id::ScaleY, m.scale_y, m.scale_y_warp);
-        // AzaharFrame fovscale: Stretch | Field of View, under the scales it acts on
-        rows.push_back(full(row(Id::ScaleMode, RowKind::Segmented, m.scale_mode)));
         // AzaharFrame fovaxis: Render Margin per axis (one row before), with Stretch only: the
-        // two rows show under Scale Mode while it is Stretch and are gone in Field of View (the
+        // two rows show under the scales while it is Stretch and are gone in Field of View (the
         // owner's rule), their values kept. Under the row that shows them, so a change of mode
         // moves nothing above the beam.
         if (m.scale_mode == 0) {
@@ -431,9 +436,25 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
                 rows.push_back(full(row(id, RowKind::Segmented, level)));
             }
         }
-        // AzaharFrame fovaxis: Fill View, once (a button; the values stay ordinary)
-        rows.push_back(full(row(Id::FillView, RowKind::Button)));
-        // AzaharFrame hudmove: HUD Spacing, 0 to 150 %, 100 the game's own (Experimental chip, never
+        Row fov = full(row(Id::GameFov, RowKind::Slider));
+        const SliderRange fr = SliderFor(Id::GameFov);
+        fov.t = (static_cast<float>(m.game_fov) - fr.min) / (fr.max - fr.min);
+        fov.value = SliderText(Id::GameFov, static_cast<float>(m.game_fov));
+        rows.push_back(fov);
+        // AzaharFrame depth, fovonce: Off | Set Once | Always
+        rows.push_back(full(row(Id::MatchCamera, RowKind::Segmented, m.match_camera)));
+        rows.push_back(row(Id::ExperimentalHeader, RowKind::Header));
+        // AzaharFrame projdef: how the Primary screen is drawn in the Full modes, never locked;
+        // while Motion Clarity is on here it takes the panel in the Full modes, and the row says
+        // so there (elsewhere the screen is a panel anyway, Motion Clarity or not).
+        {
+            Row panel = row(Id::ScreenAsPanel, RowKind::Switch, 0, m.screen_as_panel);
+            if (m.motion_clarity_immersive && m.immersive_mode >= 2) {
+                panel.value = Immersive::Names::kScreenAsPanelNote;
+            }
+            rows.push_back(panel);
+        }
+        // AzaharFrame hudmove: HUD Spacing, 0 to 150 %, 100 the game's own (Experimental, never
         // locked: outside the Full modes it does nothing, and its tooltip says so).
         for (const auto& [id, value] :
              {std::pair{Id::HudSpacingX, m.hud_spacing_x},
@@ -444,25 +465,6 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             r.t = (v - hr.min) / (hr.max - hr.min);
             r.value = SliderText(id, v);
             rows.push_back(r);
-        }
-        // AzaharFrame natural: World Scale, a slider over its stops (10% to 400%, the default
-        // 100%), and Follow Screen Size.
-        Row world = full(row(Id::WorldScale, RowKind::Slider));
-        const SliderRange wr = SliderFor(Id::WorldScale);
-        world.t = (static_cast<float>(m.world_scale_stop) - wr.min) / (wr.max - wr.min);
-        // No tick marks: 33 stops would be a row of dots; it still snaps to them.
-        world.value = SliderText(Id::WorldScale, static_cast<float>(m.world_scale_stop));
-        rows.push_back(world);
-        rows.push_back(full(row(Id::FollowScreen, RowKind::Switch, 0, m.follow_screen)));
-        // AzaharFrame projdef: how the Primary screen is drawn in the Full modes, never locked;
-        // while Motion Clarity is on here it takes the panel in the Full modes, and the row says
-        // so there (elsewhere the screen is a panel anyway, Motion Clarity or not).
-        {
-            Row panel = row(Id::ScreenAsPanel, RowKind::Switch, 0, m.screen_as_panel);
-            if (m.motion_clarity_immersive && m.immersive_mode >= 2) {
-                panel.value = Immersive::Names::kScreenAsPanelNote;
-            }
-            rows.push_back(panel);
         }
         // AzaharFrame flash; fixa: Motion Clarity in the Full modes (vr_motion_clarity_immersive,
         // read alone), never locked: elsewhere it does nothing, and its tooltip says where it
@@ -486,6 +488,13 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
                          SettingsSection section = SettingsSection::General) {
     std::vector<Row> rows = AllRowsFor(tab, m, section);
     std::erase_if(rows, [&m](const Row& r) { return !RowApplies(r.id, m.core); });
+    // AzaharVR: a subheader with nothing under it goes (Experimental)
+    for (std::size_t i = rows.size(); i-- > 0;) {
+        if (rows[i].kind == RowKind::Header &&
+            (i + 1 == rows.size() || rows[i + 1].kind == RowKind::Header)) {
+            rows.erase(rows.begin() + static_cast<std::ptrdiff_t>(i));
+        }
+    }
     return rows;
 }
 
@@ -501,6 +510,14 @@ SettingsSection OpeningSection(SettingsSection section, const MenuModel& model, 
         return SettingsSection::Console;
     }
     return SectionShown(section, model) ? section : SettingsSection::General;
+}
+
+std::vector<Id> RowIds(Tab tab, const MenuModel& model, SettingsSection section) {
+    std::vector<Id> ids;
+    for (const Row& r : RowsFor(tab, model, section)) {
+        ids.push_back(r.id);
+    }
+    return ids;
 }
 
 int RowsBefore(Id id, SettingsSection section, const MenuModel& model) {
@@ -1409,6 +1426,8 @@ std::string LabelFor(Id id) {
         return "Uninstall";
     case Id::CoreHeader:
         return "Console";
+    case Id::ExperimentalHeader:
+        return Immersive::Names::kExperimental;
     case Id::GbaSolarLevel:
         return "Solar Sensor Level";
     case Id::DsConsoleMode:
@@ -2693,23 +2712,9 @@ constexpr float kScopeRowsGap = 16.0f;  ///< under the toggle's line, before the
 constexpr float kScopeEditGap = 40.0f;
 
 /// The room a row's label takes.
-// AzaharFrame projdef: an "Experimental" chip right after a row's label (Motion Clarity), in the
-// style of Angel's Aim's Alpha chip and the Mods list's version chips.
-constexpr float kRowChipH = 32.0f, kRowChipPad = 12.0f, kRowChipGap = 12.0f;
-const char* RowChip(Id id) {
-    return id == Id::MotionClarity || id == Id::MotionClarityNormal || id == Id::ScreenAsPanel ||
-                   id == Id::HudSpacingX || id == Id::HudSpacingY // AzaharFrame hudmove
-               ? Immersive::Names::kExperimental
-               : nullptr;
-}
-float RowChipWidth(const Kit& kit, Id id) {
-    const char* chip = RowChip(id);
-    return chip ? kRowChipGap + kit.TextWidth(Type::Label, chip) + kRowChipPad * 2.0f : 0.0f;
-}
-
 float LabelRoom(const Kit& kit, const MenuModel& model, Id id) {
     (void)model;
-    return kit.TextWidth(Type::Body, LabelFor(id)) + RowChipWidth(kit, id); // projdef: its chip
+    return kit.TextWidth(Type::Body, LabelFor(id));
 }
 } // namespace
 
@@ -3247,13 +3252,13 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
             continue;
         }
         if (r.kind == RowKind::Button) {
-            // AzaharFrame menuux: a full-width tonal button (Switch to Flat), no label.
+            // AzaharFrame menuux: a full-width tonal button (Fill View), no label.
             const Rect b{c.x0, cy - 28.0f, c.x1, cy + 28.0f};
             if (r.id == Id::DsMicBlow && row.y1 > list.y0 && row.y0 < list.y1) {
                 anchors.push_back({r.id, c.x0, std::max(row.y0, list.y0) + 6.0f, r.lock, -1, b.Cx()});
             }
             kit.Button(b, ButtonStyle::Tonal,
-                       r.id == Id::DsMicBlow           ? 0
+                       r.id == Id::DsMicBlow           ? char32_t{0}
                        : r.id == Id::FillView          ? Sym::kFitScreen
                        : r.id == Id::KiuBottomReset    ? Sym::kRecenter // AzaharFrame kiu131
                        : r.id == Id::AngelsAimSettings ? Sym::kTune     // AzaharFrame kiu132
@@ -3287,14 +3292,6 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
         const float label_y = r.note.empty() ? cy : cy - 11.0f;
         kit.TextMid(c.x0, label_y, Type::Body, Tok::kOnSurface, LabelFor(r.id), 0,
                     enabled ? 1.0f : kDisabledContent);
-        if (const char* chip = RowChip(r.id)) { // AzaharFrame projdef: "Experimental"
-            const float x = c.x0 + kit.TextWidth(Type::Body, LabelFor(r.id)) + kRowChipGap;
-            const float cw = kit.TextWidth(Type::Label, chip) + kRowChipPad * 2.0f;
-            const Rect chip_r{x, label_y - kRowChipH * 0.5f, x + cw, label_y + kRowChipH * 0.5f};
-            kit.Fill(chip_r, 8.0f, Tok::kSecondaryContainer, enabled ? 1.0f : kDisabledContent);
-            kit.TextMid(chip_r.Cx(), chip_r.Cy(), Type::Label, Tok::kOnSecondaryContainer, chip, 1,
-                        enabled ? 1.0f : kDisabledContent);
-        }
         if (!r.note.empty()) {
             kit.TextSized(c.x0, cy + 20.0f, 14.0f, false,
                           r.note_warn ? Tok::kError : Tok::kOnSurfaceVariant, r.note, 0,

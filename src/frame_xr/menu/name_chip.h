@@ -4,8 +4,7 @@
 
 // AzaharFrame fixd: the "Verified" chip right after an entry's name: texture packs (Download Packs
 // and the installed packs), mods and patches (Install Mods and the loaded list) from the catalogs'
-// "verified", and the developer's own cheats. The style is the Settings rows' Experimental chip
-// (tab_menu.cpp, RowChip): 32 dp high, 12 dp sides, 12 dp after the name, filled with the secondary
+// "verified", and the developer's own cheats. The style: 32 dp high, 12 dp sides, 12 dp after the name, filled with the secondary
 // container colour, Label type. The name is fitted to the width left after the chip, so a long
 // name is cut short and the chip stays on view.
 

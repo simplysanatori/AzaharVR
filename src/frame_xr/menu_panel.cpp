@@ -2054,10 +2054,8 @@ void MenuPanel::Click(Target t, Host& host) {
         view.page = Menu::Page::Tabs;
         view.section = Menu::SettingsSection::General;
         view.scroll[static_cast<std::size_t>(Menu::Tab::Settings)] =
-            (Menu::Is3ds(model.core)
-                 ? 7.0f
-                 : static_cast<float>(Menu::RowsBefore(
-                       Id::SavesHeader, Menu::SettingsSection::General, model))) *
+            static_cast<float>(Menu::RowsBefore(Id::SavesHeader, Menu::SettingsSection::General,
+                                                model)) *
             Menu::kRowH;
         break;
     case Id::UndoLoad:
