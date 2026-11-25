@@ -500,7 +500,7 @@ struct MenuModel {
     int projectile_opacity = 100; ///< percent (20 to 100)
     int flash_size = 100;         ///< AzaharFrame kiuweap2: Muzzle Flash Size, percent (50 to 300)
     int trigger_layout = 0;       ///< AzaharFrame kiufire: 0 Original, 1 Fire and Power
-    int kiu_bottom_screen = 0;      ///< AzaharFrame kiu131: 0 Off, 1 Persistent, 2 Wrist
+    int kiu_bottom_screen = 2;      ///< AzaharFrame kiu131: 0 Off, 1 Persistent, 2 Wrist
     int kiu_bottom_size = 100;      ///< percent (50 to 200)
     int kiu_bottom_opacity = 100;   ///< percent (20 to 100)
     bool kiu_bottom_moved = false;  ///< Persistent is off its default place

@@ -566,7 +566,7 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
     CHECK_FALSE(Settings::values.vr_kiu_talk_panel.GetDefault());
     CHECK_FALSE(Settings::values.vr_kiu_over_shoulder.GetDefault());
     CHECK(Settings::values.vr_kiu_snap_turn.GetDefault() == 0u);
-    CHECK(Settings::values.vr_kiu_bottom_screen.GetDefault() == 0u);
+    CHECK(Settings::values.vr_kiu_bottom_screen.GetDefault() == 2u); // Wrist
     CHECK(Settings::values.vr_kiu_bottom_size.GetDefault() == 100u);
     CHECK(Settings::values.vr_kiu_bottom_opacity.GetDefault() == 100u);
     // AzaharFrame kiu1s: the talk's portraits, off, and their opacity.

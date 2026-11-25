@@ -616,11 +616,11 @@ constexpr bool PortraitsWantedFor(const char* switch_text, bool setting) {
     return switch_text ? std::string_view{switch_text} == "1" : setting;
 }
 /// The words on the Primary Screen too (the "talk on top" group): AZAHARFRAME_KIU_TALK_TOP when set
-/// ("1" on, anything else off), else with the card unless the Secondary Screen is in the view
-/// (Persistent): the card leaves the words out (rows 0 to 41), and on land the game has them on
-/// the Secondary Screen only, so without this there would be faces and no words.
-constexpr bool TalkTopFor(const char* switch_text, bool portraits, bool persistent) {
-    return switch_text ? std::string_view{switch_text} == "1" : portraits && !persistent;
+/// ("1" on, anything else off), else unless the Secondary Screen is in the view (Persistent): on
+/// land the game has them on the Secondary Screen only, which the Wrist's is not looked at for
+/// and Off has nowhere (the owner, 2026-11-25). The portraits' card leaves them out too.
+constexpr bool TalkTopFor(const char* switch_text, bool persistent) {
+    return switch_text ? std::string_view{switch_text} == "1" : !persistent;
 }
 /// The two above from the switches and settings now, and the card's opacity
 /// (vr_kiu_talk_portraits_opacity, 20 to 100 percent; live). Any thread.

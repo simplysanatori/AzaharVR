@@ -1144,7 +1144,7 @@ struct Values {
     // AzaharFrame kiu131: Angel's Aim's Bottom Screen: 0 Off, 1 Persistent (with the view, below
     // it), 2 Wrist. It replaces vr_kiu_wrist_screen and vr_kiu_talk_panel, which are still read
     // while this is 0 and cleared whenever it is chosen (kiu_first_person.h BottomScreenModeFor).
-    SwitchableSetting<u32, true> vr_kiu_bottom_screen{0, 0, 2, "vr_kiu_bottom_screen"};
+    SwitchableSetting<u32, true> vr_kiu_bottom_screen{2, 0, 2, "vr_kiu_bottom_screen"};
     // Its size and opacity in percent (Persistent and Wrist alike).
     SwitchableSetting<u32, true> vr_kiu_bottom_size{100, 50, 200, "vr_kiu_bottom_size"};
     SwitchableSetting<u32, true> vr_kiu_bottom_opacity{100, 20, 100, "vr_kiu_bottom_opacity"};

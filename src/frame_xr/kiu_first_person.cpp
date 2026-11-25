@@ -448,7 +448,7 @@ bool PortraitsWanted() {
 }
 bool TalkTopWanted() {
     const auto text = Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_TALK_TOP");
-    return TalkTopFor(text ? text->c_str() : nullptr, PortraitsWanted(),
+    return TalkTopFor(text ? text->c_str() : nullptr,
                       BottomScreenNow().mode == BottomScreen::Persistent);
 }
 float PortraitAlpha() {

@@ -535,12 +535,11 @@ TEST_CASE("Kid Icarus UI: the portraits' setting, its switch, and the words that
     CHECK(PortraitsWantedFor(nullptr, true));
     CHECK(PortraitsWantedFor("1", false));  // the switch, when set, wins
     CHECK_FALSE(PortraitsWantedFor("0", true));
-    // The words on the Primary Screen come with the card, not beside a Secondary Screen in view.
-    CHECK(TalkTopFor(nullptr, true, false));
-    CHECK_FALSE(TalkTopFor(nullptr, false, false));
-    CHECK_FALSE(TalkTopFor(nullptr, true, true));
-    CHECK(TalkTopFor("1", false, true));
-    CHECK_FALSE(TalkTopFor("0", true, false));
+    // The words go on the Primary Screen, not beside a Secondary Screen in the view.
+    CHECK(TalkTopFor(nullptr, false)); // Off and Wrist, with the portraits or without
+    CHECK_FALSE(TalkTopFor(nullptr, true)); // Persistent: in the view already
+    CHECK(TalkTopFor("1", true));
+    CHECK_FALSE(TalkTopFor("0", false));
     // No card asked for and no panel switch: no layer.
     CHECK(LayerFor(PortraitsFor(false, true, true, false), false) == PortraitState::Off);
     CHECK(BottomAlphaFor(50) == 0.5f);
