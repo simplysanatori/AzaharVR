@@ -317,6 +317,7 @@ enum class Id : int {
     ImportSave,
     SecondScreen,     ///< GBA and Game Boy games: index of SecondScreenOptions (gba_second_screen)
     AllowGameEditing, ///< GBA and Game Boy games: a switch (gba_allow_editing)
+    ControlsSection, ///< the Controls tab's section buttons: Buttons, Pointing, Motion
     ExperimentalHeader, ///< the Graphics and Immersive sections' "Experimental" subheader (no action)
     Count
 };
@@ -576,6 +577,10 @@ constexpr int OpeningScope(bool per_game_ok) {
 }
 /// The section a Settings row is in (General for the rest).
 SettingsSection SectionOf(Id id);
+/// AzaharVR: the Controls tab's sections: Buttons always, Pointing with a touch screen, Motion with
+/// a gyro.
+enum class ControlsSection { Buttons, Pointing, Motion, Count };
+bool ControlsSectionShown(ControlsSection section, const CoreCaps& core);
 /// Whether the section has any row for the running game's console.
 bool SectionShown(SettingsSection section, const MenuModel& model);
 /// The section Settings shows: `section`, or Console when the console changed (`new_console`) to
@@ -648,6 +653,7 @@ struct MenuView {
     Tab tab = Tab::Main;
     Page page = Page::Tabs; ///< the Main tab's slot lists
     SettingsSection section = SettingsSection::General; ///< AzaharFrame autosave
+    ControlsSection controls_section = ControlsSection::Buttons;
     Target hover;
     Target pressed;
     std::array<float, static_cast<int>(Tab::Count)> scroll{}; ///< dp scrolled down
@@ -744,7 +750,7 @@ struct MenuLayout {
     Scrolling::Bar bar;
     bool scroll_locked = false;
     /// AzaharFrame kiufix: the Controls tab's scroll that brings Aiming to the top (`controls`:
-    /// this layout is the Controls tab's page).
+    /// this layout is the Controls tab's Motion section).
     float aiming_scroll = 0.0f;
     bool controls = false;
 

@@ -201,7 +201,8 @@ TEST_CASE("Core rows: the menu draws what the table says", "[frame_xr][tabmenu]"
             }
         }
         const auto general = Drawn(m, SettingsView(SettingsSection::General));
-        CHECK(general.contains(Id::FaceButtons));
+        CHECK(general.contains(Id::Background));
+        CHECK(!general.contains(Id::FaceButtons)); // on the Controls tab
         CHECK(general.contains(Id::Autosave) == kAltAutosave);
         const auto console = Drawn(m, SettingsView(SettingsSection::Console));
         CHECK(console.contains(Id::ImportSave));

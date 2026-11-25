@@ -71,15 +71,47 @@ std::vector<MenuView> AllViews() {
         end.scroll[static_cast<int>(Tab::Settings)] = 10000.0f;
         views.push_back(end);
     }
+    // Each Controls section, the same way.
+    for (int sec = 0; sec < static_cast<int>(ControlsSection::Count); sec++) {
+        MenuView top;
+        top.tab = Tab::Controls;
+        top.controls_section = static_cast<ControlsSection>(sec);
+        views.push_back(top);
+        MenuView end = top;
+        end.scroll[static_cast<int>(Tab::Controls)] = 10000.0f;
+        views.push_back(end);
+    }
     return views;
+}
+
+/// The models whose rows differ: a 3DS game, a DS one, a Game Boy Advance one; Kid Icarus:
+/// Uprising out of Angel's Aim mode and in it, with every row of it on.
+std::vector<std::pair<std::string, MenuModel>> PlayerModels() {
+    const MenuModel n3ds = Sample();
+    MenuModel ds = n3ds, gba = n3ds, kiu = n3ds;
+    ds.core = CoreCaps::ForNDS();
+    gba.core = CoreCaps::ForGBA();
+    for (MenuModel* m : {&ds, &gba}) {
+        m->immersive_mode = 0;
+    }
+    kiu.mods.angels_aim.shown = true;
+    kiu.mods.angels_aim.recommended = true;
+    kiu.gyro_aim = 2;
+    kiu.recoil = kiu.weapon_in_hand = kiu.muzzle_flash = kiu.projectiles = true;
+    kiu.bottom_screen_reticle = 3;
+    MenuModel angels = kiu;
+    angels.immersive_mode = 4;
+    return {{"3DS", n3ds}, {"DS", ds}, {"GBA", gba}, {"Kid Icarus", kiu}, {"Angel's Aim", angels}};
 }
 
 } // namespace
 
 TEST_CASE("Tab menu: every target is at least 48 dp", "[frame_xr][tabmenu]") {
     Drawn d;
+    for (const auto& [name, m] : PlayerModels()) {
     for (const MenuView& v : AllViews()) {
-        d.Draw(Sample(), v);
+        INFO(name);
+        d.Draw(m, v);
         REQUIRE(!d.menu.Hits().empty());
         for (const auto& h : d.menu.Hits()) {
             if (h.t.index == kLabelIndex || h.t.index == kMenuAreaIndex) {
@@ -101,6 +133,7 @@ TEST_CASE("Tab menu: every target is at least 48 dp", "[frame_xr][tabmenu]") {
             CHECK(h.r.H() >= 48.0f);
         }
     }
+    }
 }
 
 TEST_CASE("Tab menu: labels and options are not cut", "[frame_xr][tabmenu]") {
@@ -115,8 +148,9 @@ TEST_CASE("Tab menu: labels and options are not cut", "[frame_xr][tabmenu]") {
     }
     // Each segment is as wide as its label and padding.
     Drawn d;
-    MenuModel m = Sample();
+    for (const auto& [name, m] : PlayerModels()) {
     for (const MenuView& v : AllViews()) {
+        INFO(name);
         d.Draw(m, v);
         for (const auto& h : d.menu.Hits()) {
             const auto& options = OptionsFor(h.t.id);
@@ -128,6 +162,7 @@ TEST_CASE("Tab menu: labels and options are not cut", "[frame_xr][tabmenu]") {
             INFO(LabelFor(h.t.id) << ": " << o);
             CHECK(h.r.W() + 0.5f >= kit.TextWidth(Type::Label, o) + 24.0f);
         }
+    }
     }
 }
 
@@ -277,10 +312,14 @@ TEST_CASE("Tab menu: Move Screens, Touchpad, Edit Controls, Cheats", "[frame_xr]
     CHECK(OptionsFor(Id::MoveScreens) == std::vector<std::string>{"Off", "Secondary", "Both"});
     v.tab = Tab::Controls;
     d.Draw(m, v);
+    CHECK(has(Id::EditControls, -1)); // Buttons, the section it opens on
+    CHECK_FALSE(has(Id::TouchpadTouch, 0));
+    v.controls_section = ControlsSection::Pointing;
+    d.Draw(m, v);
     CHECK(has(Id::TouchpadTouch, 0));
     CHECK(has(Id::TouchpadTouch, 1));
     CHECK_FALSE(has(Id::TouchpadTouch, 2));
-    CHECK(has(Id::EditControls, -1));
+    CHECK_FALSE(has(Id::EditControls, -1));
     // AzaharFrame menuux: the owner's names.
     CHECK(LabelFor(Id::TouchpadTouch) == "Touchpad");
     CHECK(OptionsFor(Id::TouchpadTouch) ==
@@ -295,75 +334,16 @@ TEST_CASE("Tab menu: Move Screens, Touchpad, Edit Controls, Cheats", "[frame_xr]
     // At Edge: only while the reticle is on.
     CHECK_FALSE(has(Id::ReticleAtEdge, 0));
     m.bottom_screen_reticle = 2;
-    // AzaharFrame kiumenus: the Controls page scrolls; At Edge is under the picture and the rows
-    // above it (the picture keeps its height), so one step down brings it into view
-    v.scroll[static_cast<int>(Tab::Controls)] = 1.0e4f;
+    // All of Pointing without scrolling
     d.Draw(m, v);
+    CHECK(d.menu.MaxScroll() == 0.0f);
     CHECK(has(Id::ReticleAtEdge, 0));
     CHECK(has(Id::ReticleAtEdge, 1));
-    v.scroll[static_cast<int>(Tab::Controls)] = 0.0f;
-    d.Draw(m, v);
     CHECK(has(Id::TouchpadTouch, 1));
-    CHECK(has(Id::EditControls, -1));
     CHECK(OptionsFor(Id::ReticleAtEdge) == std::vector<std::string>{"Follow", "Snap to Middle"});
     CHECK(LabelFor(Id::ReticleAtEdge) == "At Edge");
 }
 
-// AzaharFrame ui2: the controller picture at the top, the Touchpad, Bottom Screen Reticle and
-// At Edge rows under it at the bottom of the pane (owner's report 14).
-TEST_CASE("Tab menu: Controls has the picture on top, the rows at the bottom", "[frame_xr][tabmenu]") {
-    for (const int reticle : {0, 2}) {
-        Drawn d;
-        Rect picture{};
-        d.menu.SetDiagram([&picture](Kit&, const Rect& area, int) { picture = area; });
-        MenuModel m = Sample();
-        m.bottom_screen_reticle = reticle;
-        MenuView v;
-        v.tab = Tab::Controls;
-        d.Draw(m, v);
-        // most of the pane; AzaharFrame reticle: two rows fewer of it while the reticle is on;
-        // AzaharFrame fixes7: three (the switches' row); kiugyro: C-Stick at Edge has no row
-        REQUIRE(picture.H() > (reticle != 0 ? 90.0f : 200.0f));
-        Rect edit{}, pages{};
-        float rows_y0 = 1e9f, rows_y1 = 0.0f;
-        for (const auto& h : d.menu.Hits()) {
-            if (h.t.id == Id::EditControls) {
-                edit = h.r;
-            }
-            if (h.t.id == Id::ControlsPage) {
-                pages.y1 = std::max(pages.y1, h.r.y1);
-            }
-            if (h.t.id == Id::TouchpadTouch || h.t.id == Id::BottomScreenReticle ||
-                h.t.id == Id::ReticleSpeed || h.t.id == Id::ReticleAtEdge ||
-                h.t.id == Id::ReticleCenter || h.t.id == Id::ReticleStick) { // fixes7
-                rows_y0 = std::min(rows_y0, h.r.y0);
-                rows_y1 = std::max(rows_y1, h.r.y1);
-            }
-        }
-        // AzaharFrame reticle: under the pages; Edit Controls in a column at its right
-        CHECK(picture.y0 >= pages.y1);
-        CHECK(picture.x1 <= edit.x0);
-        CHECK(edit.y1 <= rows_y0);
-        CHECK(rows_y0 >= picture.y1);   // the rows under the picture
-        CHECK(rows_y1 <= kPanelH);      // and inside the panel
-        CHECK(rows_y1 > kPanelH - 80.0f); // at its bottom
-    }
-}
-
-// AzaharFrame cheatstab: the Mods tab and its Cheats segment.
-namespace {
-CheatsModel SampleCheats() {
-    CheatsModel c;
-    c.cheats = {{"No Bloom (USA)", CheatSource::Developer, true, ""},
-                {"Infinite HP", CheatSource::Sharkive, false, "for v1.0, this game is v1.1"},
-                {"Max Money", CheatSource::User, false, ""}};
-    for (int i = 0; i < 12; i++) {
-        c.cheats.push_back({"Sharkive " + std::to_string(i), CheatSource::Sharkive, false, ""});
-    }
-    c.download = DownloadState::Done;
-    c.status = "15 cheats added, 1 for another version";
-    return c;
-}
 } // namespace
 
 TEST_CASE("Tab menu: the Mods tab", "[frame_xr][tabmenu]") {
@@ -507,18 +487,18 @@ const MenuLayout::Hit* FindHit(const Drawn& d, Id id, int index) {
     return nullptr;
 }
 
-// AzaharFrame kiumenus: the Controls page scrolls; draws it with the reticle's rows (`rows_up` dp
-// above Aiming) or with Aiming itself at the top of the list.
-void DrawControlsAt(Drawn& d, MenuModel m, MenuView& v, float rows_up) {
-    if (rows_up > 0.0f) {
-        m.gyro_aim = 2; // Aiming's rows below, so the page scrolls as far as the reticle's rows
-    }
+// The Controls tab's Pointing section (the reticle's rows), or its Motion section with Aiming at the
+// top of the list.
+void DrawControlsAt(Drawn& d, const MenuModel& m, MenuView& v, ControlsSection section) {
+    v.controls_section = section;
     v.scroll[static_cast<int>(Tab::Controls)] = 0.0f;
     d.Draw(m, v);
-    v.scroll[static_cast<int>(Tab::Controls)] = std::max(0.0f, d.menu.Layout().aiming_scroll - rows_up);
-    d.Draw(m, v);
+    CHECK(d.menu.Layout().controls == (section == ControlsSection::Motion));
+    if (section == ControlsSection::Motion) {
+        v.scroll[static_cast<int>(Tab::Controls)] = d.menu.Layout().aiming_scroll;
+        d.Draw(m, v);
+    }
 }
-constexpr float kReticleRowsUp = 330.0f; ///< Touchpad's row down to At Edge's pair, above Aiming
 
 /// Every target of the segment is at least 48 dp and inside the panel.
 // AzaharFrame useglobal; reticle: the views with per-game rows, and a model where the game has
@@ -1448,6 +1428,7 @@ TEST_CASE("Tab menu: the Touchpad row says what its value does", "[frame_xr][tab
     MenuModel m = Sample();
     MenuView v;
     v.tab = Tab::Controls;
+    v.controls_section = ControlsSection::Pointing;
     for (int value = 0; value < 2; value++) {
         m.touchpad_touch = value;
         a.Draw(m, v);
@@ -1467,10 +1448,13 @@ TEST_CASE("Tab menu: no text overflows, with the longest strings", "[frame_xr][t
         if (v.tab == Tab::Mods) {
             continue; // its segments have their own tests
         }
-        // AzaharFrame autosave: every Settings section
-        const int sections = v.tab == Tab::Settings ? static_cast<int>(SettingsSection::Count) : 1;
+        // AzaharFrame autosave: every Settings section; and every Controls one
+        const int sections = v.tab == Tab::Settings   ? static_cast<int>(SettingsSection::Count)
+                             : v.tab == Tab::Controls ? static_cast<int>(ControlsSection::Count)
+                                                      : 1;
         for (int sec = 0; sec < sections; sec++) {
-            v.section = static_cast<SettingsSection>(sec);
+            v.section = static_cast<SettingsSection>(v.tab == Tab::Settings ? sec : 0);
+            v.controls_section = static_cast<ControlsSection>(v.tab == Tab::Controls ? sec : 0);
             for (float scroll = 0.0f; scroll <= 3000.0f; scroll += kRowH) {
                 v.scroll[static_cast<std::size_t>(t)] = scroll;
                 a.Draw(m, v);
@@ -1518,6 +1502,7 @@ TEST_CASE("Tab menu: no text overflows, with the longest strings", "[frame_xr][t
     // The Touchpad row's longer line.
     per_game.touchpad_touch = 1;
     v.tab = Tab::Controls;
+    v.controls_section = ControlsSection::Pointing;
     a.Draw(per_game, v);
     a.Check("Controls, Click for Input");
     // Edit Controls on a pad with a touchpad: the Touchpad choices beside Reset to Default and
@@ -2862,18 +2847,21 @@ TEST_CASE("Tab menu: the scope control is the same on Settings, Controls and Pos
         CHECK(per_game->r.x1 <= more->r.x0 + 0.01f);
         CHECK(d.menu.HitTest(per_game->r.Cx(), per_game->r.Cy()) == Target{Id::Scope, 1});
         if (t == Tab::Controls) {
-            // Edit Controls under Per-Game's count tooltip (34 dp under the toggle), not under it
-            for (const int reticle : {0, 3}) {
-                MenuModel rm = m;
-                rm.bottom_screen_reticle = reticle;
+            // Per-Game's count tooltip (34 dp, under the toggle) does not cover Edit Controls:
+            // beside it, or over it while Buttons is the only section
+            Kit kit{1.0f};
+            const float half =
+                0.5f * (kit.TextWidth(Type::Tooltip, GameValueCount(88)) + 28.0f);
+            MenuModel gba = m;
+            gba.core = CoreCaps::ForGBA();
+            for (const MenuModel& em : {m, gba}) {
                 Drawn dc;
-                dc.Draw(rm, v);
+                dc.Draw(em, v);
                 const MenuLayout::Hit* edit = FindHit(dc, Id::EditControls, -1);
-                const MenuLayout::Hit* tp = FindHit(dc, Id::TouchpadTouch, kLabelIndex);
                 REQUIRE(edit != nullptr);
-                REQUIRE(tp != nullptr);
-                CHECK(edit->r.y0 >= per_game->r.y1 + 34.0f + 4.0f);
-                CHECK(edit->r.y1 + 8.0f <= tp->r.y0); // above the rows
+                CHECK((edit->r.y0 >= per_game->r.y1 + 34.0f + 4.0f ||
+                       edit->r.x1 <= std::min(per_game->r.Cx() - half,
+                                              kPanelW - 24.0f - 2.0f * half)));
             }
         }
         CheckTargets(d);
@@ -2956,7 +2944,8 @@ TEST_CASE("Tab menu: the Per-Game count and Use Global Values for All, per tab",
     // AzaharFrame kiufix: and Aiming's rows (moved here from Settings, General); kiuflash's
     // Muzzle Flash with them (integ13).
     CHECK(ControlsScopeRows() ==
-          std::vector<Id>{Id::TouchpadTouch, Id::BottomScreenReticle, Id::ReticleSpeed,
+          std::vector<Id>{Id::ShowControllers, Id::ControllersInFront, Id::MotionControls,
+                          Id::TouchpadTouch, Id::BottomScreenReticle, Id::ReticleSpeed,
                           Id::ReticleAtEdge, Id::ReticleCenter, Id::ReticleStick, Id::GyroAim,
                           Id::GyroSensitivity, Id::Recoil, Id::RecoilCharged, Id::RecoilRapid,
                           Id::WeaponInHand, Id::WeaponOpacity, Id::WeaponSize, Id::WeaponScale,
@@ -3067,6 +3056,64 @@ TEST_CASE("Tab menu: the Per-Game count and Use Global Values for All, per tab",
     }
 }
 
+// The Controls tab's Buttons section: the pages and Edit Controls, the picture under them as wide as
+// the pane, then Face Buttons and Show Controllers; one row in view under the picture. With no
+// other section (a game with neither touch nor gyro) the pages are at the top and Edit Controls
+// beside the picture.
+TEST_CASE("Tab menu: Controls, Buttons has the picture on top, the rows under it",
+          "[frame_xr][tabmenu]") {
+    MenuModel gba = Sample();
+    gba.core = CoreCaps::ForGBA();
+    for (const MenuModel& m : {Sample(), gba}) {
+        const bool one_section = !ControlsSectionShown(ControlsSection::Pointing, m.core);
+        INFO("one section " << one_section);
+        Drawn d;
+        Rect picture{};
+        d.menu.SetDiagram([&picture](Kit&, const Rect& area, int) { picture = area; });
+        MenuView v;
+        v.tab = Tab::Controls;
+        d.Draw(m, v);
+        REQUIRE(picture.H() > 300.0f);
+        const auto* edit = FindHit(d, Id::EditControls, -1);
+        const auto* page = FindHit(d, Id::ControlsPage, 1);
+        const auto* face = FindHit(d, Id::FaceButtons, 0);
+        REQUIRE(edit != nullptr);
+        REQUIRE(page != nullptr);
+        REQUIRE(face != nullptr);
+        CHECK(picture.y0 >= page->r.y1);
+        if (one_section) {
+            CHECK(picture.x1 <= edit->r.x0);
+            CHECK(!HasHit(d, Id::ControlsSection, 0));
+        } else {
+            CHECK(picture.y0 >= edit->r.y1);
+            CHECK(edit->r.x0 >= page->r.x1); // beside the pages
+            CHECK(picture.W() > 600.0f);
+            for (int i = 0; i < 3; i++) {
+                CHECK(HasHit(d, Id::ControlsSection, i));
+            }
+        }
+        CHECK(face->r.y0 >= picture.y1);
+        CHECK(face->r.y1 <= d.menu.Layout().bar.list.y1); // in view
+        // Its other rows by scrolling
+        v.scroll[static_cast<int>(Tab::Controls)] = 10000.0f;
+        d.Draw(m, v);
+        CHECK(HasHit(d, Id::ShowControllers, -1));
+        CHECK(HasHit(d, Id::ControllersInFront, 3) == m.show_controllers);
+        // The picture is Buttons' alone
+        picture = {};
+        for (const ControlsSection other : {ControlsSection::Pointing, ControlsSection::Motion}) {
+            if (ControlsSectionShown(other, m.core)) {
+                v.controls_section = other;
+                d.Draw(m, v);
+                CHECK(picture.H() == 0.0f);
+                CHECK(!HasHit(d, Id::EditControls, -1));
+                CHECK(!HasHit(d, Id::ControlsPage, 0));
+                CHECK(!HasHit(d, Id::FaceButtons, 0));
+            }
+        }
+    }
+}
+
 // AzaharFrame reticle: Reticle Speed, a slider under Bottom Screen Reticle while it is on, its
 // value as "2.0x"; greyed in Global while the game has its own value.
 TEST_CASE("Tab menu: Reticle Speed under Bottom Screen Reticle", "[frame_xr][tabmenu][reticle]") {
@@ -3080,12 +3127,13 @@ TEST_CASE("Tab menu: Reticle Speed under Bottom Screen Reticle", "[frame_xr][tab
     MenuModel m = Sample();
     MenuView v;
     v.tab = Tab::Controls;
+    v.controls_section = ControlsSection::Pointing;
     d.Draw(m, v);
     CHECK(!HasHit(d, Id::ReticleSpeed, -1)); // the reticle is off
     for (const int source : {1, 2, 3}) {
         m.bottom_screen_reticle = source;
         m.reticle_speed = 20;
-        DrawControlsAt(d, m, v, kReticleRowsUp);
+        DrawControlsAt(d, m, v, ControlsSection::Pointing);
         const MenuLayout::Hit* speed = FindHit(d, Id::ReticleSpeed, -1);
         REQUIRE(speed != nullptr);
         const MenuLayout::Hit* reticle = FindHit(d, Id::BottomScreenReticle, 0);
@@ -3163,7 +3211,7 @@ TEST_CASE("Tab menu: Aiming's names and order", "[frame_xr][tabmenu][kiugyro]") 
     for (const int stored : {0, 1, 2}) {
         INFO("stored " << stored);
         m.gyro_aim = stored;
-        DrawControlsAt(d, m, v, 0.0f); // Aiming at the top of the list
+        DrawControlsAt(d, m, v, ControlsSection::Motion); // Aiming at the top of the list
         CHECK(shown(Id::GyroAim));
         CHECK(shown(Id::Recoil) == (stored != 0));
         // Gyro Sensitivity is right under Aiming
@@ -3199,6 +3247,7 @@ TEST_CASE("Tab menu: Direct Aim's lock, grip and Turn Zone basis", "[frame_xr][t
     m.mods.angels_aim.shown = true; // AzaharFrame kiurows: Kid Icarus: Uprising's rows
     MenuView v;
     v.tab = Tab::Controls;
+    v.controls_section = ControlsSection::Motion;
     const auto shown = [&d](Id id) {
         for (const auto& h : d.menu.Hits()) {
             if (h.t.id == id) {
@@ -3259,6 +3308,7 @@ TEST_CASE("Tab menu: Trigger Layout, Kid Icarus only", "[frame_xr][tabmenu][kiuf
     MenuModel m = Sample();
     MenuView v;
     v.tab = Tab::Controls;
+    v.controls_section = ControlsSection::Motion;
     const auto any = [&d](Id id) -> const MenuLayout::Hit* {
         for (const auto& h : d.menu.Hits()) {
             if (h.t.id == id) {
@@ -3443,6 +3493,7 @@ TEST_CASE("Tab menu: Muzzle Flash under Weapon in Hand", "[frame_xr][tabmenu][ki
     m.mods.angels_aim.shown = true; // AzaharFrame kiurows: Kid Icarus: Uprising's rows
     MenuView v;
     v.tab = Tab::Controls;
+    v.controls_section = ControlsSection::Motion;
     for (const int aiming : {0, 1, 2}) {
         for (const bool weapon : {false, true}) {
             INFO("aiming " << aiming << ", weapon " << weapon);
@@ -3501,6 +3552,7 @@ TEST_CASE("Tab menu: Projectiles and their size and speed", "[frame_xr][tabmenu]
     m.gyro_aim = 2;
     MenuView v;
     v.tab = Tab::Controls;
+    v.controls_section = ControlsSection::Motion;
     const auto find = [&](Id id, int index) {
         for (float scroll = 0.0f; scroll <= 4000.0f; scroll += kRowH) {
             v.scroll[static_cast<int>(Tab::Controls)] = scroll;
@@ -3576,6 +3628,7 @@ TEST_CASE("Tab menu: Weapon Opacity and Projectile Opacity", "[frame_xr][tabmenu
     m.projectile_opacity = 30;
     MenuView v;
     v.tab = Tab::Controls;
+    v.controls_section = ControlsSection::Motion;
     const auto find = [&](Id id, int index) {
         for (float scroll = 0.0f; scroll <= 4000.0f; scroll += kRowH) {
             v.scroll[static_cast<int>(Tab::Controls)] = scroll;
@@ -3656,6 +3709,7 @@ TEST_CASE("Tab menu: Muzzle Flash Size under Muzzle Flash", "[frame_xr][tabmenu]
     m.flash_size = 150;
     MenuView v;
     v.tab = Tab::Controls;
+    v.controls_section = ControlsSection::Motion;
     const auto find = [&](Id id, int index) {
         for (float scroll = 0.0f; scroll <= 4000.0f; scroll += kRowH) {
             v.scroll[static_cast<int>(Tab::Controls)] = scroll;
@@ -3743,6 +3797,7 @@ TEST_CASE("Tab menu: the Angel's Aim prompt", "[frame_xr][tabmenu][kiuweap2]") {
         Drawn d;
         MenuView v;
         v.tab = t;
+        v.controls_section = ControlsSection::Motion;
         v.angels_intro = true;
         d.Draw(m, v);
         const auto* ok = FindHit(d, Id::DialogConfirm, -1);
@@ -3779,6 +3834,7 @@ TEST_CASE("Tab menu: the reticle's switches", "[frame_xr][tabmenu][reticle]") {
     MenuModel m = Sample();
     MenuView v;
     v.tab = Tab::Controls;
+    v.controls_section = ControlsSection::Pointing;
     d.Draw(m, v);
     CHECK(!HasHit(d, Id::ReticleCenter, -1)); // the reticle is off
     CHECK(!HasHit(d, Id::ReticleStick, -1));
@@ -3787,7 +3843,7 @@ TEST_CASE("Tab menu: the reticle's switches", "[frame_xr][tabmenu][reticle]") {
         m.reticle_center = source == 2;
         m.reticle_stick = source == 3;
         m.reticle_edge_cstick = true; // stored on (the earlier preset's): still no row
-        DrawControlsAt(d, m, v, kReticleRowsUp);
+        DrawControlsAt(d, m, v, ControlsSection::Pointing);
         const MenuLayout::Hit* edge = FindHit(d, Id::ReticleAtEdge, 0);
         const MenuLayout::Hit* center = FindHit(d, Id::ReticleCenter, -1);
         const MenuLayout::Hit* stick = FindHit(d, Id::ReticleStick, -1);
@@ -4334,7 +4390,6 @@ TEST_CASE("Tab menu: Controllers in Front of Screen", "[frame_xr][tabmenu]") {
     // per game since 1.2.0, with Show Controllers
     CHECK(PerGameSetting(Id::ControllersInFront));
     CHECK(PerGameSetting(Id::ShowControllers));
-    CHECK(SectionOf(Id::ControllersInFront) == SettingsSection::General);
     CHECK(LabelFor(Id::ControllersInFront) == "Controllers in Front of Screen");
     CHECK(OptionsFor(Id::ControllersInFront) ==
           std::vector<std::string>{"Off", "Primary", "Secondary", "Both"});
@@ -4361,12 +4416,11 @@ TEST_CASE("Tab menu: Controllers in Front of Screen", "[frame_xr][tabmenu]") {
             m.show_controllers = shown;
             m.controllers_in_front = pick;
             MenuView v;
-            v.tab = Tab::Settings;
-            v.section = SettingsSection::General;
+            v.tab = Tab::Controls;
             bool seen[4] = {};
             bool under_show = false, fits = false;
-            for (float scroll = 0.0f; scroll <= 3000.0f; scroll += kRowH) {
-                v.scroll[static_cast<int>(Tab::Settings)] = scroll;
+            for (float scroll = 0.0f; scroll <= 3000.0f; scroll += 28.0f) {
+                v.scroll[static_cast<int>(Tab::Controls)] = scroll;
                 d.Draw(m, v);
                 for (int i = 0; i < 4; i++) {
                     seen[i] |= FindHit(d, Id::ControllersInFront, i) != nullptr;
@@ -4378,7 +4432,7 @@ TEST_CASE("Tab menu: Controllers in Front of Screen", "[frame_xr][tabmenu]") {
                     // the next row down: one row height below Show Controllers
                     const float dy =
                         0.5f * ((first->r.y0 + first->r.y1) - (sc->r.y0 + sc->r.y1));
-                    under_show |= std::abs(dy - kRowH) < 1.0f;
+                    under_show |= std::abs(dy - 56.0f) < 1.0f;
                 }
                 if (first && label) {
                     // The four choices beside the label, none of them cut short (the row's hit
@@ -4745,6 +4799,7 @@ TEST_CASE("Controls tab: Angel's Aim's rows show in Kid Icarus only",
         for (float scroll = 0.0f; scroll <= 4000.0f; scroll += 150.0f) {
             MenuView v;
             v.tab = Tab::Controls;
+            v.controls_section = ControlsSection::Motion;
             v.scroll[static_cast<std::size_t>(Tab::Controls)] = scroll;
             d.Draw(m, v);
             for (const auto& h : d.menu.Hits()) {

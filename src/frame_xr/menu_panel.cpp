@@ -1338,6 +1338,10 @@ void MenuPanel::BuildModel(const Host& host) {
         if (!Menu::TabApplies(view.tab, m.core)) {
             view.tab = Menu::Tab::Main;
         }
+        if (!Menu::ControlsSectionShown(view.controls_section, m.core)) {
+            view.controls_section = Menu::ControlsSection::Buttons;
+            view.scroll[static_cast<std::size_t>(Menu::Tab::Controls)] = 0.0f;
+        }
         const auto section =
             Menu::OpeningSection(view.section, m, m.core.kind != model.core.kind);
         if (section != view.section) {
@@ -2394,7 +2398,7 @@ void MenuPanel::Click(Target t, Host& host) {
             view.angels_intro = false;
             view.tab = Menu::Tab::Controls;
             view.page = Menu::Page::Tabs;
-            controls_page = 0;
+            view.controls_section = Menu::ControlsSection::Motion;
             scroll_to_aiming = true;
         } else if (view.mods_segment == Menu::ModsSegment::Ctgp7 && // AzaharFrame ctgp7
                    model.mods.ctgp7.dialog.kind != Menu::ModsDialogKind::None) {
@@ -2630,7 +2634,7 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::AngelsAimSettings: // AzaharFrame kiufix: the Controls tab at Aiming
         view.tab = Menu::Tab::Controls;
         view.page = Menu::Page::Tabs;
-        controls_page = 0;
+        view.controls_section = Menu::ControlsSection::Motion;
         scroll_to_aiming = true;
         break;
     case Id::AngelsAimSend: // AzaharFrame kiumenus: Azahar's window, Send Report's dialog
@@ -2681,6 +2685,13 @@ void MenuPanel::Click(Target t, Host& host) {
         break;
     case Id::ControlsPage:
         controls_page = t.index;
+        break;
+    case Id::ControlsSection:
+        if (t.index >= 0 && t.index < static_cast<int>(Menu::ControlsSection::Count) &&
+            static_cast<Menu::ControlsSection>(t.index) != view.controls_section) {
+            view.controls_section = static_cast<Menu::ControlsSection>(t.index);
+            view.scroll[static_cast<std::size_t>(Menu::Tab::Controls)] = 0.0f;
+        }
         break;
     case Id::Scope: // AzaharFrame reticle: the scope toggle (Global, Per-Game), every tab's
         if (t.index >= 0) {

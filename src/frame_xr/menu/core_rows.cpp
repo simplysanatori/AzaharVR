@@ -63,10 +63,6 @@ constexpr Rule kRules[] = {
     // Settings, General
     {Id::Background, Need::Any},
     {Id::WindowScale, Need::Any},
-    {Id::FaceButtons, Need::Any},
-    {Id::MotionControls, Need::Gyro},
-    {Id::ShowControllers, Need::Any},
-    {Id::ControllersInFront, Need::Any},
     {Id::FastForwardSpeed, Need::Any},
     {Id::FastForwardAudio, Need::Any},
     {Id::SavesHeader, Need::Autosave},
@@ -88,6 +84,10 @@ constexpr Rule kRules[] = {
     {Id::MotionClarityNormal, Need::Bfi},
     {Id::MatchBottomNormal, Need::Bfi},
     // Controls
+    {Id::FaceButtons, Need::Any},
+    {Id::ShowControllers, Need::Any},
+    {Id::ControllersInFront, Need::Any},
+    {Id::MotionControls, Need::Gyro},
     {Id::TouchpadTouch, Need::Touch},
     {Id::BottomScreenReticle, Need::Touch},
     {Id::ReticleSpeed, Need::Touch},
