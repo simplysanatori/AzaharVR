@@ -1237,6 +1237,10 @@ void AltCoreHost::SetLayerDepth(uint32_t level) {
     if (impl->core) {
         impl->core->SetLayerDepth(level);
     }
+    if (level == 0) { // a paused game's redraw: the right eye's picture is gone
+        impl->last_frame.primary_right = {};
+        impl->last_frame.layer_shift = 0.0f;
+    }
 }
 
 void AltCoreHost::TurnPage() {
