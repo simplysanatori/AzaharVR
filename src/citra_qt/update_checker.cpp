@@ -40,16 +40,24 @@ const char* CaBundle() {
 } // namespace
 
 namespace {
-std::atomic_bool g_stop_flag{false};
-Mods::Transfer::Stopper g_stopper{g_stop_flag};
+// Never destroyed: the check's thread may still be running while the process shuts down, and must
+// not find the flag or the stopper gone.
+std::atomic_bool& StopFlag() {
+    static auto* flag = new std::atomic_bool{false};
+    return *flag;
+}
+Mods::Transfer::Stopper& GlobalStopper() {
+    static auto* stopper = new Mods::Transfer::Stopper{StopFlag()};
+    return *stopper;
+}
 } // namespace
 
 void UpdateChecker::RequestStop() {
-    g_stopper.Stop();
+    GlobalStopper().Stop();
 }
 
 std::optional<std::string> UpdateChecker::GetLatestRelease() {
-    return GetLatestRelease(g_stopper);
+    return GetLatestRelease(GlobalStopper());
 }
 
 std::optional<std::string> UpdateChecker::GetLatestRelease(Mods::Transfer::Stopper& stopper) {
