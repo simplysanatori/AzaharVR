@@ -7,8 +7,8 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <functional>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <string>
 #include <thread>
@@ -159,14 +159,15 @@ public:
     bool ShowsDepth(int screen) const override {
         return screen == 0 || log.bottom_has_depth;
     }
-    int RightShift() const override {
+    int EyesShift() const override {
         return depth.layers[3];
     }
-    bool GetRight(int screen, AltScreenImage& right) override {
+    bool GetEyes(int screen, AltScreenImage& left, AltScreenImage& right) override {
         const auto& from = pixels[static_cast<std::size_t>(screen)];
         if (!depth.on || from.empty()) {
             return false;
         }
+        left.pixels = from.data();
         right.pixels = from.data();
         return true;
     }
@@ -445,26 +446,29 @@ TEST_CASE("DS resolution: Layer Depth over 1x", "[frame_cores]") {
     log.second_eye = true;
     auto nds = Console();
     NdsResolution resolution{Maker(log)};
-    AltScreenImage top, bottom, right;
-    const auto has_right = [&] {
+    AltScreenImage top, bottom, left, right;
+    const auto has_eyes = [&] {
         REQUIRE(resolution.GetScreens(top, bottom));
+        left = top;
         right = top;
-        return resolution.GetRight(0, right);
+        return resolution.GetEyes(0, left, right);
     };
     SECTION("both change as the game runs") {
         resolution.SetFactor(4, 8);
         resolution.Apply(*nds, true, depth);
         CHECK(resolution.Scale() == 4);
-        CHECK(has_right());
-        CHECK(right.scale == 4);
-        CHECK(right.max_scale == 8);
+        CHECK(has_eyes());
+        for (const AltScreenImage* eye : {&left, &right}) {
+            CHECK(eye->scale == 4);
+            CHECK(eye->max_scale == 8);
+        }
         resolution.Apply(*nds, true, inverted);
         resolution.Apply(*nds, true, inverted);
         resolution.Apply(*nds, true);
-        CHECK_FALSE(has_right());
+        CHECK_FALSE(has_eyes());
         resolution.SetFactor(2, 8);
         resolution.Apply(*nds, true, depth);
-        CHECK(has_right());
+        CHECK(has_eyes());
         CHECK(right.scale == 2);
         CHECK(log.depths == std::vector<int>{6, -6, 0, 6});
         CHECK(log.made == 1);
@@ -473,10 +477,10 @@ TEST_CASE("DS resolution: Layer Depth over 1x", "[frame_cores]") {
         CHECK(resolution.Scale() == 1);
         CHECK(resolution.Ceiling() == 8);
         CHECK(IsSoftware(*nds));
-        CHECK_FALSE(resolution.GetRight(0, right));
+        CHECK_FALSE(resolution.GetEyes(0, left, right));
         resolution.SetFactor(3, 8);
         resolution.Apply(*nds, true, depth);
-        CHECK(has_right());
+        CHECK(has_eyes());
         CHECK_FALSE(resolution.DepthIsFlat());
     }
     SECTION("no second eye, at any time: Layer Depth at 1x, the rest as before") {
@@ -507,7 +511,7 @@ TEST_CASE("DS resolution: Layer Depth over 1x", "[frame_cores]") {
         log.too_big_for_both = 6;
         resolution.SetFactor(4, 8);
         resolution.Apply(*nds, true, depth);
-        CHECK(has_right());
+        CHECK(has_eyes());
         resolution.SetFactor(8, 8);
         resolution.Apply(*nds, true, depth);
         CHECK(resolution.Scale() == 1);
@@ -562,7 +566,7 @@ TEST_CASE("Alternate consoles' XR swapchains", "[frame_cores]") {
 }
 
 // The submodule's: a melonDS whose shaders are written otherwise needs another nds_gl_edge.h
-TEST_CASE("DS resolution: melonDS's shaders are those the right eye's edge is put in",
+TEST_CASE("DS resolution: melonDS's shaders are those the eyes' edges are put in",
           "[frame_cores]") {
     namespace Edge = FrameCores::NdsGlEdge;
     struct Pair {
@@ -570,9 +574,9 @@ TEST_CASE("DS resolution: melonDS's shaders are those the right eye's edge is pu
         const char* fragment;
         int edges; ///< mentions of uEdge
     };
-    const Pair pair = GENERATE(Pair{k2DCompositorVS, k2DCompositorFS, 4},
-                               Pair{k3DClearVS, k3DClearFS, 2},
-                               Pair{k3DClearBitmapVS, k3DClearBitmapFS, 2});
+    const Pair pair =
+        GENERATE(Pair{k2DCompositorVS, k2DCompositorFS, 4}, Pair{k3DClearVS, k3DClearFS, 4},
+                 Pair{k3DClearBitmapVS, k3DClearBitmapFS, 4});
     const auto mentions = [](const std::string& text) {
         int count = 0;
         for (std::size_t at = text.find("uEdge"); at != std::string::npos;
@@ -729,8 +733,10 @@ TEST_CASE("DS resolution: Depth On over 1x", "[frame_cores]") {
     CHECK(log.screens == Screens{true, true});
     log.bottom_has_depth = true;
     CHECK(run() == Screens{true, true});
-    CHECK(out.secondary_right.width == 1024);
-    CHECK(out.secondary_right.scale == 4);
+    for (const AltScreenImage* eye : {&out.secondary_left, &out.secondary_right}) {
+        CHECK(eye->width == 1024);
+        CHECK(eye->scale == 4);
+    }
     // The renderer of 1x, which has not seen any on it yet; over 1x again
     for (const uint32_t factor : {1u, 4u}) {
         log.bottom_has_depth = false;
@@ -757,10 +763,12 @@ TEST_CASE("DS resolution: Depth On over 1x", "[frame_cores]") {
         CHECK(run() == Screens{true, true});
         CHECK(log.screens == screens);
         for (const bool top : {true, false}) {
-            const auto& right = top ? out.primary_right : out.secondary_right;
-            const auto& left = top ? out.primary : out.secondary;
-            CHECK(right.width == left.width);
-            CHECK((screens[top ? 0 : 1] || right.pixels == left.pixels));
+            const auto& own = top ? out.primary : out.secondary;
+            for (const AltScreenImage* eye : {top ? &out.primary_left : &out.secondary_left,
+                                              top ? &out.primary_right : &out.secondary_right}) {
+                CHECK(eye->width == own.width);
+                CHECK((screens[top ? 0 : 1] || eye->pixels == own.pixels));
+            }
         }
     };
     on({false, true});
@@ -777,14 +785,17 @@ TEST_CASE("DS resolution: Depth On over 1x", "[frame_cores]") {
         CHECK(run() == Screens{false, true});
         CHECK(log.screens == Screens{false, true});
         core.SetDepthOn(2, true);
-        // The renderer of 1x: on the top screen, the bottom one's right picture is the left one
+        // The renderer of 1x: on the top screen, the bottom one's pictures are the game's own
         core.SetResolution(1, 8);
         core.RunFrame(out);
         core.RunFrame(out); // the first whole frame
         for (int i = 0; i < 3; i++) {
             core.RunFrame(out);
             CHECK(out.primary.scale == 1);
+            CHECK(out.primary_left.pixels != out.primary.pixels);
             CHECK(out.primary_right.pixels != out.primary.pixels);
+            CHECK(out.primary_left.pixels != out.primary_right.pixels);
+            CHECK(out.secondary_left.pixels == out.secondary.pixels);
             CHECK(out.secondary_right.pixels == out.secondary.pixels);
         }
         core.SetResolution(4, 8);
@@ -793,6 +804,7 @@ TEST_CASE("DS resolution: Depth On over 1x", "[frame_cores]") {
     core.SetResolution(1, 8);
     for (int i = 0; i < 3; i++) {
         core.RunFrame(out);
+        CHECK(out.primary_left.pixels == out.primary.pixels);
         CHECK(out.primary_right.pixels == out.primary.pixels);
     }
     core.SetResolution(4, 8);

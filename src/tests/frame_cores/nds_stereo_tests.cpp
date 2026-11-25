@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <fstream>
 #include <initializer_list>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -1201,24 +1202,30 @@ struct Game {
             core.RunFrame(out);
         }
     }
-    bool HasRight() const {
-        return out.primary_right.HasPicture() && out.primary_right.pixels != out.primary.pixels;
-    }
-    Pixels Left() const {
+    /// The game's own pictures
+    Pixels Own() const {
         return Copy(out.primary);
     }
-    Pixels Right() const {
-        return Copy(out.primary_right);
-    }
-    Pixels Bottom() const {
+    Pixels OwnBottom() const {
         return Copy(out.secondary);
     }
-    bool HasRightBottom() const {
-        return out.secondary_right.HasPicture() &&
-               out.secondary_right.pixels != out.secondary.pixels;
+    /// The top screen has a picture for each eye
+    bool HasEyes() const {
+        return Differ(out.primary_left, out.primary_right, out.primary);
     }
-    Pixels RightBottom() const {
-        return Copy(out.secondary_right);
+    bool HasEyesBottom() const {
+        return Differ(out.secondary_left, out.secondary_right, out.secondary);
+    }
+    Pixels Seen(Eye eye) const {
+        return Copy(eye == Eye::Right ? out.primary_right : out.primary_left);
+    }
+    Pixels SeenBottom(Eye eye) const {
+        return Copy(eye == Eye::Right ? out.secondary_right : out.secondary_left);
+    }
+    static bool Differ(const Vulkan::AltScreenImage& left, const Vulkan::AltScreenImage& right,
+                       const Vulkan::AltScreenImage& own) {
+        return left.HasPicture() && right.HasPicture() && left.pixels != right.pixels &&
+               left.pixels != own.pixels && right.pixels != own.pixels;
     }
 };
 
@@ -1237,45 +1244,112 @@ constexpr int kStart = 20; // frames until the pictures are set up
 
 constexpr int kNone = -1;
 
-/// The right eye's columns that the headset shows, of a picture whose farthest layer is `farthest`
-/// to the right.
-bool IsShown(int x, int farthest) {
-    return farthest < 0 ? x < kWidth + farthest : !kCutsEdge || x >= farthest;
+constexpr std::array kEyes{Eye::Left, Eye::Right};
+
+/// The columns of an eye's picture that the headset shows, with the farthest layer `farthest` to
+/// the right between the two.
+bool IsShown(int x, int farthest, Eye eye) {
+    if (farthest < 0) {
+        return eye == Eye::Right ? x < kWidth + farthest : x >= -farthest;
+    }
+    return !kCutsEdge || (eye == Eye::Right ? x >= farthest : x < kWidth - farthest);
 }
 
-/// The first pixel of the right eye's picture, where it is shown, that is not the left one's
-/// `shift` to the left of it. At the left edge the layers end, over nothing: `dark` is the left
-/// one with nothing behind its layers. `smooth`: but for this column, an edge that has some of what
-/// is behind it. `width`: of the columns there are.
-int FirstMoved(const Pixels& left, const Pixels& dark, const Pixels& right, int shift, int farthest,
-               int smooth = -1, int width = kWidth) {
-    if (left.size() != right.size() || left.size() != dark.size() ||
+/// The columns that only a shift of an eye has: at the left edge or the right one.
+constexpr bool IsPast(int x, int shift) {
+    return shift >= 0 ? x < shift : x >= kWidth + shift;
+}
+
+/// The first pixel of an eye's picture, where it is shown, that is not the game's own moved by the
+/// eye's part of `shift`. At the edge the layers end, over nothing: `dark` is the game's own with
+/// nothing behind its layers. `smooth`: but for this column, an edge that has some of what is
+/// behind it. From `begin` to before `end` of the columns there are.
+int FirstMoved(const Pixels& own, const Pixels& dark, const Pixels& seen, Eye eye, int shift,
+               int farthest, int smooth = -1, int begin = 0, int end = kWidth) {
+    if (own.size() != seen.size() || own.size() != dark.size() ||
         std::abs(shift) > std::abs(farthest)) {
         return 0;
     }
-    for (int at = 0; at < static_cast<int>(left.size()); ++at) {
+    const int by = EyeShift(shift, eye);
+    for (int at = 0; at < static_cast<int>(own.size()); ++at) {
         const int x = at % kWidth;
-        if (!IsShown(x, farthest) || x == smooth || x >= width) {
+        if (!IsShown(x, farthest, eye) || x == smooth || x < begin || x >= end) {
             continue;
         }
-        const uint32_t expected =
-            x < shift ? kBlack : (x < farthest ? dark : left)[static_cast<std::size_t>(at - shift)];
-        if (right[at] != expected) {
+        const uint32_t expected = IsPast(x, by) ? kBlack
+                                                : (IsPast(x, EyeShift(farthest, eye))
+                                                       ? dark
+                                                       : own)[static_cast<std::size_t>(at - by)];
+        if (seen[at] != expected) {
             return at;
         }
     }
     return kNone;
 }
 
-/// The same but for the columns at the edges that only what is moved has.
-bool SameInside(const Pixels& a, const Pixels& b, int farthest) {
+/// Both eyes' of a screen.
+bool IsMoved(const Game& game, const Pixels& own, const Pixels& dark, int shift, int farthest,
+             bool bottom = false) {
+    return std::ranges::all_of(kEyes, [&](Eye eye) {
+        return FirstMoved(own, dark, bottom ? game.SeenBottom(eye) : game.Seen(eye), eye, shift,
+                          farthest) == kNone;
+    });
+}
+
+/// The same but for the columns at the edge that only what is moved (an eye's part) has.
+bool SameInside(const Pixels& a, const Pixels& b, int moved) {
     for (int at = 0; at < static_cast<int>(a.size()); ++at) {
-        const int x = at % kWidth;
-        if (x >= farthest && x < kWidth + std::min(farthest, 0) && a[at] != b[at]) {
+        if (!IsPast(at % kWidth, moved) && a[at] != b[at]) {
             return false;
         }
     }
     return a.size() == b.size();
+}
+
+/// What each eye is to see: the game drawn where the eye's layers are.
+struct Expected {
+    std::vector<std::unique_ptr<Game>> games;
+    int farthest;
+
+    /// `scene`: with the shifts between the eyes.
+    Expected(const Scene& scene, bool threaded) : farthest{scene.moved[3]} {
+        for (const Eye eye : kEyes) {
+            Scene of = scene;
+            of.moved = EyeLayers(scene.moved, eye);
+            of.moved_3d = EyeShift(scene.moved_3d, eye);
+            of.moved_ortho = EyeShift(scene.moved_ortho, eye);
+            games.push_back(std::make_unique<Game>(of, 0, threaded));
+        }
+    }
+    void Run(int frames = 1) {
+        for (const auto& game : games) {
+            game->Run(frames);
+        }
+    }
+    bool Fits(const Game& seen) const {
+        return std::ranges::all_of(kEyes, [&](Eye eye) {
+            return SameInside(seen.Seen(eye), games[static_cast<std::size_t>(eye)]->Own(),
+                              EyeShift(farthest, eye));
+        });
+    }
+    bool FitsBottom(const Game& seen) const {
+        return std::ranges::all_of(kEyes, [&](Eye eye) {
+            return SameInside(seen.SeenBottom(eye),
+                              games[static_cast<std::size_t>(eye)]->OwnBottom(),
+                              EyeShift(farthest, eye));
+        });
+    }
+};
+
+/// Neither eye sees the game's own picture.
+bool BothMoved(const Game& game) {
+    return game.Seen(Eye::Left) != game.Own() && game.Seen(Eye::Right) != game.Own() &&
+           game.Seen(Eye::Left) != game.Seen(Eye::Right);
+}
+
+/// Both see the game's own.
+bool BothOwn(const Game& game) {
+    return game.Seen(Eye::Left) == game.Own() && game.Seen(Eye::Right) == game.Own();
 }
 
 /// The 3D of the tests' scenes: all the backgrounds are on
@@ -1310,15 +1384,15 @@ TEST_CASE("NDS Layer Depth: with nothing moved both eyes see the same", "[frame_
     for (int i = 0; i < 600; ++i) {
         INFO("frame " << i);
         game.Run();
-        const Pixels left = game.Left();
-        REQUIRE((left == game.Right()));
+        const Pixels own = game.Own();
+        REQUIRE(BothOwn(game));
         if (i >= kStart) {
-            REQUIRE(game.HasRight());
+            REQUIRE(game.HasEyes());
             moved += game.core.DepthLines().moved;
             with_3d += game.core.DepthLines().with_3d;
         }
-        changes += left != last;
-        last = left;
+        changes += own != last;
+        last = own;
     }
     CHECK(changes > 500);
     CHECK(moved == (600 - kStart) * 192);
@@ -1331,14 +1405,14 @@ TEST_CASE("NDS Layer Depth: each layer moves by its priority", "[frame_cores]") 
     const bool inverted = GENERATE(false, true);
     const InvertDepth invert{inverted};
     Game game({.a_on_top = a_on_top}, level, true);
-    Game expected({.a_on_top = a_on_top, .moved = Shifts(level, inverted)}, 0, true);
+    Expected expected({.a_on_top = a_on_top, .moved = Shifts(level, inverted)}, true);
     for (int i = 0; i < 120; ++i) {
         INFO("frame " << i);
         game.Run();
         expected.Run();
         if (i >= kStart) {
-            REQUIRE(SameInside(game.Right(), expected.Left(), Shifts(level, inverted)[3]));
-            REQUIRE((game.Right() != game.Left()));
+            REQUIRE(expected.Fits(game));
+            REQUIRE(BothMoved(game));
             REQUIRE(game.out.layer_shift == EdgeShift(Shifts(level, inverted)[3]));
         }
     }
@@ -1355,19 +1429,19 @@ TEST_CASE("NDS Layer Depth: 3D moves by its distance, what is orthographic is in
     REQUIRE(moved_3d > room.base);
     // Without the floor, whose vertices move differently
     Game game({.scene_3d = true, .floor = false}, level, threaded);
-    Game expected({.scene_3d = true,
-                   .floor = false,
-                   .moved = Shifts(level, inverted),
-                   .moved_3d = moved_3d,
-                   .moved_ortho = room.nearest},
-                  0, threaded);
+    Expected expected({.scene_3d = true,
+                       .floor = false,
+                       .moved = Shifts(level, inverted),
+                       .moved_3d = moved_3d,
+                       .moved_ortho = room.nearest},
+                      threaded);
     for (int i = 0; i < 120; ++i) {
         INFO("frame " << i);
         game.Run();
         expected.Run();
         if (i >= kStart) {
             REQUIRE(game.core.DepthLines().with_3d == 192);
-            REQUIRE(SameInside(game.Right(), expected.Left(), Shifts(level, inverted)[3]));
+            REQUIRE(expected.Fits(game));
         }
     }
 }
@@ -1377,12 +1451,12 @@ TEST_CASE("NDS Layer Depth: the convergence is the scene's own", "[frame_cores]"
     const uint32_t level = 3;
     // Everything in the scene is at w 8: that is its convergence, and it stands at the base
     Game game({.scene_3d = true, .floor = false}, level, threaded, true, 0.0f);
-    Game expected({.scene_3d = true,
-                   .floor = false,
-                   .moved = Shifts(level),
-                   .moved_3d = RoomAt(level).base,
-                   .moved_ortho = RoomAt(level).nearest},
-                  0, threaded);
+    Expected expected({.scene_3d = true,
+                       .floor = false,
+                       .moved = Shifts(level),
+                       .moved_3d = RoomAt(level).base,
+                       .moved_ortho = RoomAt(level).nearest},
+                      threaded);
     for (int i = 0; i < 120; ++i) {
         INFO("frame " << i);
         game.Run();
@@ -1390,7 +1464,7 @@ TEST_CASE("NDS Layer Depth: the convergence is the scene's own", "[frame_cores]"
         if (i >= kStart) {
             REQUIRE(game.core.DepthLines().with_3d == 192);
             REQUIRE(game.core.DepthLines().convergence == 8 * kOneW);
-            REQUIRE(SameInside(game.Right(), expected.Left(), Shifts(level)[3]));
+            REQUIRE(expected.Fits(game));
         }
     }
     // With the floor (w 2 to 7) it is nearer, and the same every frame
@@ -1402,7 +1476,7 @@ TEST_CASE("NDS Layer Depth: the convergence is the scene's own", "[frame_cores]"
     for (int i = 0; i < 60; ++i) {
         floor.Run();
         REQUIRE(floor.core.DepthLines().convergence == convergence);
-        REQUIRE(floor.HasRight());
+        REQUIRE(floor.HasEyes());
     }
 }
 
@@ -1462,27 +1536,30 @@ TEST_CASE("NDS Layer Depth: what is drawn over the 3D is never behind it", "[fra
         // The floor's, 2 to 7: what is drawn over it, at w 1024, is not in it
         REQUIRE(game.core.DepthLines().convergence > kOneW);
         REQUIRE(game.core.DepthLines().convergence < 7 * kOneW);
-        const Pixels left = game.Left();
-        const Pixels right = game.Right();
-        int floor_moved = 0;
-        for (std::size_t y = 118; y < 150; ++y) {
-            for (std::size_t x = 0; x < 256; ++x) {
-                const std::size_t at = y * 256 + x;
-                if (x >= 66 && x < 190) { // not its antialiased edges
-                    REQUIRE(left[at] == right[at + over]);
-                } else if (x < 50 || x >= 194) {
-                    floor_moved += left[at] != right[at];
+        const Pixels own = game.Own();
+        for (const Eye eye : kEyes) {
+            const Pixels seen = game.Seen(eye);
+            const auto by = [eye](int shift) { return EyeShift(shift, eye); };
+            int floor_moved = 0;
+            for (int y = 118; y < 150; ++y) {
+                for (int x = 0; x < 256; ++x) {
+                    const int at = y * 256 + x;
+                    if (x >= 66 && x < 190) { // not its antialiased edges
+                        REQUIRE(own[at] == seen[at + by(over)]);
+                    } else if (x < 50 || x >= 200) {
+                        floor_moved += own[at] != seen[at];
+                    }
                 }
             }
-        }
-        REQUIRE(floor_moved > 0);
-        // The strip's halves are at either end of the room; they share their middle's vertices
-        const int behind = inverted ? 0 : 9;
-        for (std::size_t y = 42; y < 72; ++y) {
-            for (std::size_t x = 66; x < 190; ++x) {
-                const std::size_t at = y * 256 + x;
-                if (x < 126 || x >= 130) {
-                    REQUIRE(left[at] == right[at + (x < 128 ? over : behind)]);
+            REQUIRE(floor_moved > 0);
+            // The strip's halves are at either end of the room; they share their middle's vertices
+            const int behind = inverted ? 0 : 9;
+            for (int y = 42; y < 72; ++y) {
+                for (int x = 66; x < 190; ++x) {
+                    const int at = y * 256 + x;
+                    if (x < 124 || x >= 132) {
+                        REQUIRE(own[at] == seen[at + by(x < 128 ? over : behind)]);
+                    }
                 }
             }
         }
@@ -1536,13 +1613,13 @@ TEST_CASE("NDS Layer Depth: a right picture for the bottom screen when asked", "
     const Scene scene{.a_on_top = a_on_top, .scene_3d = true, .floor = false};
     Game game(scene, level, threaded);
     Game without(scene, 0, threaded);
-    Game expected({.a_on_top = a_on_top,
-                   .scene_3d = true,
-                   .floor = false,
-                   .moved = Shifts(level),
-                   .moved_3d = moved_3d,
-                   .moved_ortho = RoomAt(level).nearest},
-                  0, threaded);
+    Expected expected({.a_on_top = a_on_top,
+                       .scene_3d = true,
+                       .floor = false,
+                       .moved = Shifts(level),
+                       .moved_3d = moved_3d,
+                       .moved_ortho = RoomAt(level).nearest},
+                      threaded);
     game.Run(kStart);
     without.Run(kStart);
     expected.Run(kStart);
@@ -1554,19 +1631,20 @@ TEST_CASE("NDS Layer Depth: a right picture for the bottom screen when asked", "
         without.Run();
         expected.Run();
         if (i >= 3) {
-            REQUIRE(game.HasRight());
-            REQUIRE(game.HasRightBottom());
-            REQUIRE(SameInside(game.Right(), expected.Left(), Shifts(level)[3]));
-            REQUIRE(SameInside(game.RightBottom(), expected.Bottom(), Shifts(level)[3]));
-            REQUIRE((game.RightBottom() != game.Bottom()));
+            REQUIRE(game.HasEyes());
+            REQUIRE(game.HasEyesBottom());
+            REQUIRE(expected.Fits(game));
+            REQUIRE(expected.FitsBottom(game));
+            REQUIRE((game.SeenBottom(Eye::Left) != game.OwnBottom()));
+            REQUIRE((game.SeenBottom(Eye::Right) != game.OwnBottom()));
         }
-        REQUIRE((game.Left() == without.Left()));
-        REQUIRE((game.Bottom() == without.Bottom()));
+        REQUIRE((game.Own() == without.Own()));
+        REQUIRE((game.OwnBottom() == without.OwnBottom()));
     }
     game.core.SetDepthOnSecondary(false);
     game.Run(3);
     CHECK(!game.out.secondary_right.HasPicture());
-    CHECK(game.HasRight());
+    CHECK(game.HasEyes());
 }
 
 TEST_CASE("NDS Layer Depth leaves the game's pictures and sound alone", "[frame_cores]") {
@@ -1581,16 +1659,16 @@ TEST_CASE("NDS Layer Depth leaves the game's pictures and sound alone", "[frame_
         INFO("frame " << i);
         with.Run();
         without.Run();
-        REQUIRE((with.Left() == without.Left()));
-        REQUIRE((with.Bottom() == without.Bottom()));
+        REQUIRE((with.Own() == without.Own()));
+        REQUIRE((with.OwnBottom() == without.OwnBottom()));
         REQUIRE((with.out.audio_pcm == without.out.audio_pcm));
         if (i >= kStart) {
-            REQUIRE((with.Right() != with.Left()));
+            REQUIRE(BothMoved(with));
         }
     }
 }
 
-TEST_CASE("NDS Layer Depth: what is captured is the left eye's", "[frame_cores]") {
+TEST_CASE("NDS Layer Depth: what is captured is the game's own", "[frame_cores]") {
     const bool threaded = GENERATE(true, false);
     const bool once = GENERATE(false, true);
     const Scene scene{.scene_3d = true, .capture_often = !once, .capture_once = once};
@@ -1601,17 +1679,17 @@ TEST_CASE("NDS Layer Depth: what is captured is the left eye's", "[frame_cores]"
         with.Run();
         without.Run();
         if (i >= kStart) {
-            REQUIRE(with.HasRight());
+            REQUIRE(with.HasEyes());
             REQUIRE(with.core.DepthLines().with_3d == 192);
-            REQUIRE((with.Right() != with.Left()));
+            REQUIRE(BothMoved(with));
         }
         // The bottom screen shows the memory captured into
-        REQUIRE((with.Left() == without.Left()));
-        REQUIRE((with.Bottom() == without.Bottom()));
+        REQUIRE((with.Own() == without.Own()));
+        REQUIRE((with.OwnBottom() == without.OwnBottom()));
     }
     Game never({.scene_3d = true}, 0, threaded);
     never.Run(200);
-    CHECK((never.Bottom() != without.Bottom()));
+    CHECK((never.OwnBottom() != without.OwnBottom()));
 }
 
 TEST_CASE("NDS Layer Depth: 3D on both screens", "[frame_cores]") {
@@ -1620,37 +1698,38 @@ TEST_CASE("NDS Layer Depth: 3D on both screens", "[frame_cores]") {
     const Scene scene{.scene_3d = true, .both_screens = true};
     Game with(scene, 3, threaded);
     Game without(scene, 0, threaded);
-    Pixels last_left;
-    Pixels last_right;
+    Pixels last_own;
+    std::array<Pixels, 2> last_seen;
     bool last_kept = false;
     int kept_frames = 0;
     for (int i = 0; i < 160; ++i) {
         INFO("frame " << i);
         with.Run();
         without.Run();
-        const Pixels left = with.Left();
-        const Pixels right = with.Right();
-        REQUIRE((left == without.Left()));
-        REQUIRE((with.Bottom() == without.Bottom()));
+        const Pixels own = with.Own();
+        const std::array<Pixels, 2> seen{with.Seen(Eye::Left), with.Seen(Eye::Right)};
+        REQUIRE((own == without.Own()));
+        REQUIRE((with.OwnBottom() == without.OwnBottom()));
         if (i >= kStart) {
-            REQUIRE(with.HasRight());
-            REQUIRE((right != left));
-            // Engine A's frame has a new right picture; engine B's, of that frame as it was
-            // captured, the same one again
-            const bool kept = right == last_right;
+            REQUIRE(with.HasEyes());
+            REQUIRE(BothMoved(with));
+            // Engine A's frame has new pictures; engine B's, of that frame as it was captured, the
+            // same ones again
+            const bool kept = seen == last_seen;
+            REQUIRE(((seen[0] == last_seen[0]) == kept));
             if (i > kStart) {
                 REQUIRE(kept != last_kept);
             }
             if (kept) {
-                REQUIRE((left != last_left)); // 5 bits a colour, not 6
-                REQUIRE(SamePicture(left.data(), last_left.data(), left.size()));
+                REQUIRE((own != last_own)); // 5 bits a colour, not 6
+                REQUIRE(SamePicture(own.data(), last_own.data(), own.size()));
                 ++kept_frames;
             }
             REQUIRE(with.core.DepthLines().with_3d == 192); // engine B's are not drawn again
             last_kept = kept;
         }
-        last_left = left;
-        last_right = right;
+        last_own = own;
+        last_seen = seen;
     }
     CHECK(kept_frames == (160 - kStart) / 2);
 }
@@ -1663,9 +1742,9 @@ TEST_CASE("NDS Layer Depth after a reset, a state and a change", "[frame_cores]"
         for (int i = 0; i < frames; ++i) {
             INFO("frame " << i);
             game.Run();
-            REQUIRE((game.Right() == game.Left()));
+            REQUIRE(BothOwn(game));
         }
-        REQUIRE(game.HasRight());
+        REQUIRE(game.HasEyes());
         REQUIRE(game.core.DepthLines().with_3d == 192);
     };
     same(40);
@@ -1724,10 +1803,10 @@ TEST_CASE("NDS Layer Depth: a state load looks the same with it", "[frame_cores]
             INFO("round " << round << " frame " << i);
             with.Run();
             without.Run();
-            REQUIRE((with.Left() == without.Left()));
-            REQUIRE((with.Bottom() == without.Bottom()));
+            REQUIRE((with.Own() == without.Own()));
+            REQUIRE((with.OwnBottom() == without.OwnBottom()));
         }
-        CHECK(with.HasRight());
+        CHECK(with.HasEyes());
     }
 }
 
@@ -1743,8 +1822,8 @@ TEST_CASE("NDS Layer Depth: turned on in the game", "[frame_cores]") {
         game.Run();
         other.Run();
         if (i >= 2) { // the new renderer's first frames have no 3D or sprites of the one before
-            REQUIRE((game.Left() == other.Left()));
-            REQUIRE((game.Right() != game.Left()));
+            REQUIRE((game.Own() == other.Own()));
+            REQUIRE(BothMoved(game));
         }
     }
 }
@@ -1753,9 +1832,18 @@ TEST_CASE("NDS Layer Depth: a picture is cut or its layers end, never both", "[f
     const LayerShifts layers{0, 3, 6, 9};
     const LayerShifts inverted{0, -3, -6, -9};
     CHECK(EdgeShift(-9) == -9.0f / kWidth);
-    CHECK(EdgeLayers(inverted) == LayerShifts{});
+    CHECK(EdgeLayers(inverted, Eye::Left) == LayerShifts{});
+    CHECK(EdgeLayers(inverted, Eye::Right) == LayerShifts{});
     CHECK(EdgeShift(9) == (kCutsEdge ? 9.0f / kWidth : 0.0f));
-    CHECK(EdgeLayers(layers) == (kCutsEdge ? LayerShifts{} : layers));
+    CHECK(EdgeLayers(layers, Eye::Right) == (kCutsEdge ? LayerShifts{} : LayerShifts{0, 2, 3, 5}));
+    CHECK(EdgeLayers(layers, Eye::Left) ==
+          (kCutsEdge ? LayerShifts{} : LayerShifts{0, -1, -3, -4}));
+    CHECK(MakeEdgeColumns({0, 2, 3, 5}) == EdgeColumns{0, 5});
+    CHECK(MakeEdgeColumns({0, -1, -3, -4}) == EdgeColumns{252, 256});
+    CHECK(MakeEdgeColumns({}) == EdgeColumns{});
+    CHECK((IsBeyond(4, 5) && !IsBeyond(5, 5) && !IsBeyond(255, 5)));
+    CHECK((IsBeyond(252, -4) && !IsBeyond(251, -4) && !IsBeyond(0, -4)));
+    CHECK((!IsBeyond(0, 0) && !IsBeyond(255, 0)));
     CHECK(EdgeShift(0) == 0.0f);
 }
 
@@ -1779,8 +1867,8 @@ TEST_CASE("NDS Layer Depth: a picture without layers has no edge", "[frame_cores
     game.Run(kStart);
     for (int i = 0; i < 10; ++i) {
         game.Run();
-        REQUIRE(game.HasRight());
-        REQUIRE((game.Right() == game.Left()));
+        REQUIRE(game.HasEyes());
+        REQUIRE(BothOwn(game));
         REQUIRE_FALSE(game.out.secondary_right.HasPicture());
     }
 }
@@ -1805,6 +1893,24 @@ TEST_CASE("NDS Layer Depth: which screens", "[frame_cores]") {
     CHECK(MakeDepth(3, Common::LayerDepth::kNoLimit, false, 0, {true, true}).screens ==
           Screens{true, true});
     CHECK_FALSE(MakeDepth(3, Common::LayerDepth::kNoLimit, false, 0, {false, false}).on);
+}
+
+TEST_CASE("NDS Layer Depth: each eye has half of a shift", "[frame_cores]") {
+    for (int shift = -2000; shift <= 2000; ++shift) {
+        const int right = EyeShift(shift, Eye::Right);
+        const int left = EyeShift(shift, Eye::Left);
+        REQUIRE(right - left == shift);
+        REQUIRE(std::abs(right) - std::abs(left) == std::abs(shift) % 2);
+        REQUIRE(EyeShift(-shift, Eye::Right) == -right); // Invert Depth
+        REQUIRE(EyeShift(-shift, Eye::Left) == -left);
+        // What is farther is never in front
+        REQUIRE(EyeShift(shift + 1, Eye::Right) >= right);
+        REQUIRE(EyeShift(shift + 1, Eye::Left) <= left);
+    }
+    CHECK(EyeLayers(Shifts(3), Eye::Right) == LayerShifts{0, 2, 3, 5});
+    CHECK(EyeLayers(Shifts(3), Eye::Left) == LayerShifts{0, -1, -3, -4});
+    CHECK(EyeLayers(Shifts(3, true), Eye::Right) == LayerShifts{0, -2, -3, -5});
+    CHECK(EyeLayers(Shifts(3, true), Eye::Left) == LayerShifts{0, 1, 3, 4});
 }
 
 TEST_CASE("NDS Layer Depth: what there is to see", "[frame_cores]") {
@@ -1897,8 +2003,8 @@ TEST_CASE("NDS Layer Depth: on one screen", "[frame_cores]") {
             both.Run();
             one.Run();
             without.Run();
-            REQUIRE((one.Left() == without.Left()));
-            REQUIRE((one.Bottom() == without.Bottom()));
+            REQUIRE((one.Own() == without.Own()));
+            REQUIRE((one.OwnBottom() == without.OwnBottom()));
             const bool top = on != 2;
             const bool bottom = on != 1;
             REQUIRE(one.out.primary_right.HasPicture() == top);
@@ -1911,10 +2017,12 @@ TEST_CASE("NDS Layer Depth: on one screen", "[frame_cores]") {
             }
             REQUIRE(one.out.secondary_shift == (bottom ? EdgeShift(inverted ? -9 : 9) : 0.0f));
             if (top) {
-                REQUIRE((one.Right() == both.Right()));
+                REQUIRE((one.Seen(Eye::Left) == both.Seen(Eye::Left)));
+                REQUIRE((one.Seen(Eye::Right) == both.Seen(Eye::Right)));
             }
             if (bottom) {
-                REQUIRE((one.RightBottom() == both.RightBottom()));
+                REQUIRE((one.SeenBottom(Eye::Left) == both.SeenBottom(Eye::Left)));
+                REQUIRE((one.SeenBottom(Eye::Right) == both.SeenBottom(Eye::Right)));
             }
             if (!both_screens && (a_on_top ? !top : !bottom)) {
                 REQUIRE(one.core.DepthLines().with_3d == 0); // nor is it drawn (SceneNeeded)
@@ -1938,7 +2046,7 @@ TEST_CASE("NDS Layer Depth: a flat bottom screen stays one picture", "[frame_cor
     Game game({.a_on_top = false}, 3, threaded);
     game.core.SetDepthOnSecondary(true);
     game.Run(kStart);
-    REQUIRE(game.HasRightBottom());
+    REQUIRE(game.HasEyesBottom());
     std::vector<uint8_t> state;
     REQUIRE(game.core.SaveStateToMemory(state));
     for (const uint32_t level : {1u, 3u, 2u}) {
@@ -1957,13 +2065,13 @@ TEST_CASE("NDS Layer Depth: a flat bottom screen stays one picture", "[frame_cor
     REQUIRE_FALSE(game.out.secondary_right.HasPicture());
     game.core.SetLayerDepth(3);
     game.Run(4);
-    REQUIRE(game.HasRightBottom());
+    REQUIRE(game.HasEyesBottom());
     game.core.SetDepthOnSecondary(false);
     game.Run();
     REQUIRE_FALSE(game.out.secondary_right.HasPicture());
     game.core.SetDepthOnSecondary(true);
     game.Run(4);
-    REQUIRE(game.HasRightBottom());
+    REQUIRE(game.HasEyesBottom());
 }
 
 TEST_CASE("NDS Layer Depth: a layer ends where the game's picture does", "[frame_cores]") {
@@ -1985,9 +2093,8 @@ TEST_CASE("NDS Layer Depth: a layer ends where the game's picture does", "[frame
         dark.Run();
         INFO("single " << single << " frame " << i);
         REQUIRE(game.out.layer_shift == EdgeShift(shifts[3]));
-        REQUIRE(FirstMoved(
-                    a_on_top ? game.Left() : game.Bottom(), a_on_top ? dark.Left() : dark.Bottom(),
-                    a_on_top ? game.Right() : game.RightBottom(), shift, shifts[3]) == kNone);
+        REQUIRE(IsMoved(game, a_on_top ? game.Own() : game.OwnBottom(),
+                        a_on_top ? dark.Own() : dark.OwnBottom(), shift, shifts[3], !a_on_top));
     }
 }
 
@@ -2017,19 +2124,38 @@ TEST_CASE("NDS Layer Depth: 3D past the picture's edges is not squeezed at them"
         dark.Run();
         INFO("frame " << i);
         REQUIRE(game.core.DepthLines().with_3d == 192);
-        Pixels right = game.Right();
-        if (scroll == 4 && !inverted && !clear_image) { // beyond the game's edge is the scene's
-            for (std::size_t at = 0; at < right.size(); at += kWidth) {
-                std::fill_n(right.begin() + static_cast<std::ptrdiff_t>(at), shift, kBlack);
+        for (const Eye eye : kEyes) {
+            Pixels seen = game.Seen(eye);
+            const int by = EyeShift(shift, eye);
+            const int farthest = Shifts(level, inverted)[3];
+            const bool far_end = !inverted && !clear_image;
+            int begin = 0;
+            int end = scroll == 4 ? kWidth - 4 + std::min(EyeShift(farthest, eye), 0) : kWidth;
+            if (eye == Eye::Right) {
+                for (int at = 0; far_end && scroll == 4 && at < static_cast<int>(seen.size());
+                     ++at) {
+                    if (IsPast(at % kWidth, by)) { // beyond the game's edge is the scene's
+                        seen[at] = kBlack;
+                    }
+                }
+            } else if (scroll == 0x1FB) {
+                begin = 5 + std::max(EyeShift(farthest, eye), 0);
             }
+            if (eye == Eye::Left && far_end) {
+                // All of it ends where its farthest does
+                end = std::min(end, kWidth + EyeShift(room.farthest, eye));
+                for (int at = 0; scroll == 0 && at < static_cast<int>(seen.size()); ++at) {
+                    REQUIRE((at % kWidth < end || seen[at] == kBlack));
+                }
+            }
+            const int edge = scroll == 0x1FB ? 5 : 0; // the game's own
+            const int at = FirstMoved(game.Own(), dark.Own(), seen, eye, shift, farthest,
+                                      clear_image ? -1 : by + edge, begin, end);
+            INFO("column " << at % kWidth << " line " << at / kWidth << " shift " << shift
+                           << " eye " << static_cast<int>(eye) << " level " << level << " scroll "
+                           << scroll);
+            REQUIRE(at == kNone);
         }
-        const int edge = scroll == 0x1FB ? 5 : 0; // the game's own
-        const int at =
-            FirstMoved(game.Left(), dark.Left(), right, shift, Shifts(level, inverted)[3],
-                       clear_image ? -1 : shift + edge,
-                       scroll == 4 ? kWidth - 4 + std::min(Shifts(level, inverted)[3], 0) : kWidth);
-        INFO("column " << at % kWidth << " line " << at / kWidth << " shift " << shift);
-        REQUIRE(at == kNone);
     }
 }
 
@@ -2044,22 +2170,21 @@ TEST_CASE("NDS Layer Depth: a picture is cut for what it was drawn with", "[fram
     game.Run(kStart);
     dark.Run(kStart);
     auto& inverted = Common::LayerDepth::Get().inverted;
-    Pixels left_before = game.Left();
-    Pixels dark_before = dark.Left();
+    Pixels own_before = game.Own();
+    Pixels dark_before = dark.Own();
     int last = 9;
     const auto run = [&](int wanted) {
         for (int i = 0; i < 10; ++i) {
             game.Run();
             dark.Run();
             INFO("frame " << i << " wanted " << wanted);
-            REQUIRE(game.HasRight());
-            const Pixels left = game.Left();
-            const Pixels dark_left = dark.Left();
+            REQUIRE(game.HasEyes());
+            const Pixels own = game.Own();
+            const Pixels dark_own = dark.Own();
             const auto is = [&](int shift) {
                 // In a game with 3D on both screens every other picture is of the frame before
-                return FirstMoved(left, dark_left, game.Right(), shift, shift) == kNone ||
-                       (both_screens &&
-                        FirstMoved(left_before, dark_before, game.Right(), shift, shift) == kNone);
+                return IsMoved(game, own, dark_own, shift, shift) ||
+                       (both_screens && IsMoved(game, own_before, dark_before, shift, shift));
             };
             const int shift =
                 game.out.layer_shift == EdgeShift(wanted) && is(wanted) ? wanted : last;
@@ -2067,8 +2192,8 @@ TEST_CASE("NDS Layer Depth: a picture is cut for what it was drawn with", "[fram
             REQUIRE(game.out.layer_shift == EdgeShift(shift));
             REQUIRE((shift == wanted || i < 2)); // it comes soon, and stays
             last = shift;
-            left_before = left;
-            dark_before = dark_left;
+            own_before = own;
+            dark_before = dark_own;
         }
     };
     run(9);
@@ -2122,11 +2247,12 @@ TEST_CASE("NDS Layer Depth: inverted while the game runs", "[frame_cores]") {
             game.Run();
             other.Run();
             off.Run();
-            REQUIRE((game.Left() == off.Left()));
+            REQUIRE((game.Own() == off.Own()));
             REQUIRE(!off.out.primary_right.HasPicture()); // no level
             REQUIRE(off.out.layer_shift == 0.0f);
             if (i >= 2) {
-                REQUIRE((game.Right() == other.Right()));
+                REQUIRE((game.Seen(Eye::Left) == other.Seen(Eye::Left)));
+                REQUIRE((game.Seen(Eye::Right) == other.Seen(Eye::Right)));
                 REQUIRE(game.out.layer_shift < 0.0f);
             }
         }

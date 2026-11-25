@@ -191,6 +191,7 @@ void DriverRunner::Stop() {
 void DriverRunner::RunFrame(const Common::AltCore::InputState& input, FrameOutput& out,
                             Common::AltCore::Capabilities& caps) {
     out.primary = {};
+    out.primary_left = {};
     out.primary_right = {};
     out.layer_shift = 0.0f;
     out.secondary = {};
@@ -299,14 +300,17 @@ bool DriverRunner::UpdateOptions(Common::AltCore::Capabilities& caps) {
     return true;
 }
 
-void DriverRunner::SetRightEye(const DriverPicture& right, const DriverPicture& game, float shift,
-                               FrameOutput& out) {
-    if (!right.pixels || !out.primary.HasPicture()) {
+void DriverRunner::SetEyes(const DriverPicture& left, const DriverPicture& right,
+                           const DriverPicture& game, float shift, FrameOutput& out) {
+    if (!left.pixels || !right.pixels || !out.primary.HasPicture()) {
         return;
     }
     const bool same_size = out.primary.width == game.width && out.primary.height == game.height &&
-                           right.width == game.width && right.height == game.height;
-    out.primary_right = same_size && Shows(out.primary, game) ? ToImage(right) : out.primary;
+                           right.width == game.width && right.height == game.height &&
+                           left.width == game.width && left.height == game.height;
+    const bool shows = same_size && Shows(out.primary, game);
+    out.primary_left = shows ? ToImage(left) : out.primary;
+    out.primary_right = shows ? ToImage(right) : out.primary;
     out.layer_shift = same_size ? shift : 0.0f;
 }
 

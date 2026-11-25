@@ -78,7 +78,7 @@ public:
 
     bool SetScale(uint32_t scale) override {
         alive.reset(); // the screens' images are made again
-        right_alive.reset();
+        eyes_alive = {};
         melonDS::RendererSettings settings{};
         settings.ScaleFactor = static_cast<int>(scale);
         SetRenderSettings(settings);
@@ -91,22 +91,28 @@ public:
     }
 
     bool SetDepth(const NdsDepth::Depth& depth) override {
-        if (depth.on != HasRight()) {
-            right_alive.reset();
+        if (depth.on != HasEyes()) {
+            eyes_alive = {};
         }
         return StereoGl::SetDepth(depth) && DsGl::Healthy();
     }
 
-    bool GetRight(int screen, Vulkan::AltScreenImage& right) override {
-        DsGl::Texture texture;
-        const GLuint name = Right(screen);
-        if (name == 0 || !DsGl::GetTexture(name, texture) || texture.layers < 2) {
-            return false;
+    bool GetEyes(int screen, Vulkan::AltScreenImage& left, Vulkan::AltScreenImage& right) override {
+        std::array<DsGl::Texture, 2> textures; // by Eye
+        for (const NdsDepth::Eye eye : {NdsDepth::Eye::Left, NdsDepth::Eye::Right}) {
+            DsGl::Texture& texture = textures[static_cast<std::size_t>(eye)];
+            const GLuint name = Picture(eye, screen);
+            if (name == 0 || !DsGl::GetTexture(name, texture) || texture.layers < 2) {
+                return false;
+            }
         }
-        if (!right_alive) {
-            right_alive = std::make_shared<char>();
+        for (auto& alive_eye : eyes_alive) {
+            if (!alive_eye) {
+                alive_eye = std::make_shared<char>();
+            }
         }
-        Show(right, texture, static_cast<uint32_t>(screen), right_alive);
+        Show(left, textures[0], static_cast<uint32_t>(screen), eyes_alive[0]);
+        Show(right, textures[1], static_cast<uint32_t>(screen), eyes_alive[1]);
         return true;
     }
 
@@ -114,8 +120,8 @@ public:
         return StereoGl::ShowsDepth(screen);
     }
 
-    int RightShift() const override {
-        return StereoGl::RightShift();
+    int EyesShift() const override {
+        return StereoGl::Shift();
     }
 
     bool GetScreens(Vulkan::AltScreenImage& top, Vulkan::AltScreenImage& bottom) override {
@@ -125,7 +131,7 @@ public:
             return false;
         }
         alive = std::make_shared<char>(); // of this image
-        right_alive.reset();
+        eyes_alive = {};
         Show(top, texture, 0, alive);
         Show(bottom, texture, 1, alive);
         return true;
@@ -170,7 +176,7 @@ private:
 
     bool has_captures = false; ///< those of before it was the console's renderer
     std::shared_ptr<char> alive;
-    std::shared_ptr<char> right_alive;
+    std::array<std::shared_ptr<char>, 2> eyes_alive; ///< by Eye
     std::array<std::vector<uint32_t>, 2> pixels;
 };
 

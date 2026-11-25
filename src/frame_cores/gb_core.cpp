@@ -127,14 +127,17 @@ struct GbCore::Impl {
     GbRumbleWrapper rumble{};
     Common::AltCore::InputState input{};
     DriverRunner driver;
-    ShadowEye shadow;
+    std::array<ShadowEye, 2> eyes{ShadowEye{Common::LayerDepth::Eye::Left},
+                                  ShadowEye{Common::LayerDepth::Eye::Right}};
 
     void StartDriver(DriverKind kind, const DriverRunner::Known& known) {
         DriverServices services;
         services.core = core;
         services.step = [this](uint32_t keys) {
             // Bits 0..7 match GB_KEY_A..GB_KEY_DOWN 1:1; the GBA's R and L are none of them.
-            shadow.Run(keys & 0xFFu);
+            for (ShadowEye& eye : eyes) {
+                eye.Run(keys & 0xFFu);
+            }
             core->setKeys(core, keys & 0xFFu);
             core->runFrame(core);
         };
@@ -146,7 +149,7 @@ struct GbCore::Impl {
         services.picture = [this] {
             return DriverPicture{fb.data(), width, height, stride}; // XBGR8888
         };
-        services.layer_shift = [this] { return shadow.EdgeShift(); };
+        services.layer_shift = [this] { return eyes[1].EdgeShift(); };
         services.rom_path = rom_path;
         services.game_dir = paths.game_dir;
 
@@ -159,11 +162,13 @@ struct GbCore::Impl {
     }
 
     void ApplyLayerDepth() {
-        shadow.SetDepth(opts.layer_depth);
-        if (opts.layer_depth == 0 || !caps.layer_depth) {
-            shadow.Stop();
-        } else if (!shadow.Started()) {
-            shadow.Start(core, width, height);
+        for (ShadowEye& eye : eyes) {
+            eye.SetDepth(opts.layer_depth);
+            if (opts.layer_depth == 0 || !caps.layer_depth) {
+                eye.Stop();
+            } else if (!eye.Started()) {
+                eye.Start(core, width, height);
+            }
         }
     }
 
@@ -363,7 +368,9 @@ void GbCore::Unload() {
     if (!impl) {
         return;
     }
-    impl->shadow.Stop();
+    for (ShadowEye& eye : impl->eyes) {
+        eye.Stop();
+    }
     impl->driver.Stop();
     if (impl->core) {
         impl->core->unloadROM(impl->core);
@@ -392,9 +399,9 @@ void GbCore::SetInput(const Common::AltCore::InputState& input) {
 
 void GbCore::RunFrame(FrameOutput& out) {
     impl->driver.RunFrame(impl->input, out, impl->caps);
-    impl->driver.SetRightEye(impl->shadow.Picture(),
-                             {impl->fb.data(), impl->width, impl->height, impl->stride},
-                             impl->shadow.EdgeShift(), out);
+    impl->driver.SetEyes(impl->eyes[0].Picture(), impl->eyes[1].Picture(),
+                         {impl->fb.data(), impl->width, impl->height, impl->stride},
+                         impl->eyes[1].EdgeShift(), out);
 }
 
 uint32_t GbCore::AudioSampleRate() const {
@@ -483,7 +490,9 @@ void GbCore::SetLayerDepth(uint32_t level) {
 }
 
 void GbCore::SetMaxLayerShift(float share) {
-    impl->shadow.SetMaxShift(share);
+    for (ShadowEye& eye : impl->eyes) {
+        eye.SetMaxShift(share);
+    }
 }
 
 void GbCore::TurnPage() {

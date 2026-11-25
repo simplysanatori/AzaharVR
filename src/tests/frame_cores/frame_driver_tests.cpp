@@ -617,6 +617,17 @@ TEST_CASE("Layer Depth: the eyes' pictures without what is beyond the game's", "
         CHECK(AltShowsStereo(eyes.left, eyes.right));
     }
     // One eye's picture only
+    // The left eye's own picture, where both eyes have one
+    AltScreenImage own = left;
+    CHECK(AltLeft(own, {left, right}).pixels == left.pixels);
+    own.pixels = right.pixels;
+    CHECK(AltLeft(own, {left, right}).pixels == left.pixels);
+    CHECK(AltLeft(own, {left, {}}).pixels == own.pixels);
+    CHECK(AltLeft(own, {{}, right}).pixels == own.pixels);
+    AltScreenImage narrow = left;
+    narrow.width--;
+    CHECK(AltLeft(own, {narrow, right}).pixels == own.pixels);
+    CHECK(AltLeft(own, {}).pixels == own.pixels);
     CHECK(AltCutEyes(left, {}, 0.0f).left.width == width);
     CHECK_FALSE(AltCutEyes(left, {}, 0.0f).right.HasPicture());
 }

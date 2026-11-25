@@ -963,9 +963,8 @@ bool AltXrRenderer::NeedsPresent() const {
 }
 
 bool AltXrRenderer::Present(const AltScreenImage& whole, const AltScreenImage& whole_secondary,
-                            const AltScreenImage& overlay, const AltScreenImage& whole_right,
-                            float layer_shift, const AltScreenImage& whole_secondary_right,
-                            float secondary_shift, bool skippable) {
+                            const AltScreenImage& overlay, const AltEyes& primary_eyes,
+                            const AltEyes& secondary_eyes, bool skippable) {
     if (!impl || !impl->ready || !whole.HasPicture()) {
         return false;
     }
@@ -979,6 +978,8 @@ bool AltXrRenderer::Present(const AltScreenImage& whole, const AltScreenImage& w
             impl->scheduler->WaitWorker();
         }
     });
+    const AltScreenImage& whole_right = primary_eyes.right;
+    const AltScreenImage& whole_secondary_right = secondary_eyes.right;
     impl->EnsureUploads({&whole, &whole_secondary, &overlay, &whole_right, &whole_secondary_right});
     impl->presented_vr = impl->XrShowsScreens();
     if (!impl->presented_vr) {
@@ -1000,16 +1001,17 @@ bool AltXrRenderer::Present(const AltScreenImage& whole, const AltScreenImage& w
     }
     VideoCore::XrScreenSink* const sink = impl->sink;
     const bool stereo = AltShowsStereo(whole, whole_right);
-    if (!stereo) {
-        layer_shift = 0.0f;
-    }
-    const auto [primary, primary_right] = AltCutEyes(whole, whole_right, layer_shift);
+    const float layer_shift = stereo ? primary_eyes.shift : 0.0f;
+    const auto [primary, primary_right] =
+        AltCutEyes(AltLeft(whole, primary_eyes), whole_right, layer_shift);
     // The Secondary Screen's eyes are both in its one swapchain (kXrPackedGap). What is in it goes
     // with the picture (XrContentPose), so it is only as big again, with nothing else to change.
     bool secondary_stereo = !impl->secondary_stereo_failed && whole_secondary.HasPicture() &&
                             AltShowsStereo(whole_secondary, whole_secondary_right);
-    const auto [secondary, secondary_right] = AltCutEyes(whole_secondary, whole_secondary_right,
-                                                         secondary_stereo ? secondary_shift : 0.0f);
+    const float secondary_shift = secondary_stereo ? secondary_eyes.shift : 0.0f;
+    const auto [secondary, secondary_right] =
+        AltCutEyes(secondary_stereo ? AltLeft(whole_secondary, secondary_eyes) : whole_secondary,
+                   whole_secondary_right, secondary_shift);
     if (impl->StereoTurnedOff() && stereo) {
         sink->SetTopStereo(true);
     }

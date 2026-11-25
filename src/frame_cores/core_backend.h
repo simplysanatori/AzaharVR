@@ -69,16 +69,19 @@ struct CheatEntry {
 struct FrameOutput {
     Vulkan::AltScreenImage primary{};
     Vulkan::AltScreenImage secondary{};
-    /// The Primary Screen for the right eye (Layer Depth); none: both eyes see `primary`. The same
-    /// size as `primary`.
+    /// The Primary Screen for the left eye and the right one (Layer Depth); no right one: both eyes
+    /// see `primary`. No left one: that is `primary`. The same size as `primary`.
+    Vulkan::AltScreenImage primary_left{};
     Vulkan::AltScreenImage primary_right{};
-    /// The farthest layer's in `primary_right`, a share of the width (layer_depth.h), below 0 while
-    /// inverted; every layer's is between 0 and it. The same in a frame that has both eyes see
-    /// `primary`: as much is cut off the pictures. 0: nothing is, also where the layers are ones
-    /// that end in `primary_right` as they do in `primary` (LayerDepth::kCutsEdge, NdsDepth's).
+    /// The farthest layer's in `primary_right` against `primary_left`, a share of the width
+    /// (layer_depth.h), below 0 while inverted; every layer's is between 0 and it. The same in a
+    /// frame that has both eyes see `primary`: as much is cut off the pictures. 0: nothing is, also
+    /// where the layers are ones that end in them as they do in `primary` (LayerDepth::kCutsEdge,
+    /// NdsDepth's).
     float layer_shift = 0.0f;
     /// The same for the Secondary Screen, from a core that has one and was told that it can be
     /// shown (SetDepthOnSecondary), while there is something to see in it.
+    Vulkan::AltScreenImage secondary_left{};
     Vulkan::AltScreenImage secondary_right{};
     float secondary_shift = 0.0f;
     Vulkan::AltScreenImage overlay{}; ///< over the whole Primary Screen, alpha premultiplied

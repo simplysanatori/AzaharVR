@@ -63,8 +63,8 @@ public:
     /// After RunFrame: `right` (its farthest layer moved by `shift`) for the right eye where the
     /// Primary Screen shows `game`, the game's own picture, and nothing of the driver's on it. Else
     /// the right eye gets what the left has. Without `right`, none.
-    static void SetRightEye(const DriverPicture& right, const DriverPicture& game, float shift,
-                            FrameOutput& out);
+    static void SetEyes(const DriverPicture& left, const DriverPicture& right,
+                        const DriverPicture& game, float shift, FrameOutput& out);
 
     /// Calls of RunFrame that did not step exactly once, or in a held frame did (a step outside
     /// RunFrame is one too).

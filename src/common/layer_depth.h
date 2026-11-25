@@ -45,6 +45,17 @@ constexpr int32_t Directed(uint32_t shift, bool inverted) {
     return inverted ? -pixels : pixels;
 }
 
+/// The two eyes' pictures of a screen. A layer's shift is half the left eye's, to the left, and half
+/// the right eye's, to the right: so nothing is seen further to one side than the game has it.
+enum class Eye : int { Left, Right };
+
+/// The eye's part of a layer's shift in whole pixels, to the right. The right eye takes the odd one.
+/// Never out of the order of the shifts.
+constexpr int32_t EyeShift(int32_t shift, Eye eye) {
+    const int32_t right = shift >= 0 ? (shift + 1) / 2 : -((1 - shift) / 2);
+    return eye == Eye::Right ? right : right - shift;
+}
+
 /// The right eye's left edge, where a layer moved to the right leaves room. False: nothing is there
 /// (kBeyond): every layer ends where it ends in the left eye's picture, which stays whole. The edge
 /// the eyes see is the layer's own, at its depth, and a HUD on the screen is whole in both. True:

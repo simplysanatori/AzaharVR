@@ -17,16 +17,16 @@
 namespace FrameCores {
 
 /**
- * Layer Depth for DS games: melonDS's software renderer, with a second one that draws every line
- * again with the backgrounds and sprites moved by their priority, for the right eye. The game and
- * the left picture never see it. Only an engine whose screen has depth (NdsDepth::Screens,
- * ShownDepth) is drawn again.
+ * Layer Depth for DS games: melonDS's software renderer, with one more for each eye that draws
+ * every line again with the backgrounds and sprites moved by their priority, half for the one eye
+ * and half for the other (NdsDepth::EyeShift). The game and its own picture never see it. Only an
+ * engine whose screen has depth (NdsDepth::Screens, ShownDepth) is drawn again.
  *
- * 3D is drawn again for the right eye from the game's polygons (nds_stereo_3d.h). Lines without
- * it (the frame after Layer Depth is turned on or a state is loaded) are the left eye's. Display
- * capture is the left eye's alone. A game with 3D on both screens (engine A on another screen
- * every frame, the captured picture on the other) keeps the right picture of engine A's frame for
- * the frame after it (nds_depth.h, KeepsRightPicture).
+ * 3D is drawn again for the eyes from the game's polygons (nds_stereo_3d.h). Lines without it (the
+ * frame after Layer Depth is turned on or a state is loaded) are the game's. Display capture is of
+ * the game's own picture alone. A game with 3D on both screens (engine A on another screen every
+ * frame, the captured picture on the other) keeps the pictures of engine A's frame for the frame
+ * after it (nds_depth.h, KeepsRightPicture).
  */
 class StereoSoft final : public melonDS::SoftRenderer {
 public:
@@ -36,16 +36,16 @@ public:
     /// From the next frame. Not while a frame runs.
     void SetDepth(const NdsDepth::Depth& depth);
 
-    /// The right eye's last frame of a screen (0 the top one, 1 the bottom one), as
-    /// GetFramebuffers gives the left one's: 256x192, 32-bit BGRA with alpha set, until the next
-    /// RunFrame. None: the left eye's is for both.
-    const melonDS::u32* Right(int screen) const;
-    /// The screen's picture is one for each eye, also in a frame without a right one: in the
-    /// depth's `screens`, and the bottom one has had something to see.
+    /// The eye's last frame of a screen (0 the top one, 1 the bottom one), as GetFramebuffers gives
+    /// the game's: 256x192, 32-bit BGRA with alpha set, until the next RunFrame. None, of either
+    /// eye: the game's is for both.
+    const melonDS::u32* Picture(NdsDepth::Eye eye, int screen) const;
+    /// The screen's picture is one for each eye, also in a frame without them: in the depth's
+    /// `screens`, and the bottom one has had something to see.
     bool ShowsDepth(int screen) const;
-    /// The farthest layer's shift in Right, in pixels: a picture is drawn a frame after SetDepth,
-    /// or kept for one more.
-    int RightShift(int screen) const;
+    /// The farthest layer's shift between the Pictures, in pixels: they are drawn a frame after
+    /// SetDepth, or kept for one more.
+    int Shift(int screen) const;
 
     NdsDepth::Lines LastLines() const;
 
@@ -61,15 +61,15 @@ public:
     void SwapBuffers() override;
 
 private:
-    class RightEye;
+    class EyeRenderer;
 
-    /// A screen's right picture
+    /// A screen's two pictures
     struct Screen {
-        std::vector<melonDS::u32> picture;
-        int shift = 0; ///< the farthest layer's
+        std::array<std::vector<melonDS::u32>, 2> pictures; ///< by Eye
+        int shift = 0;                                     ///< the farthest layer's
         bool ready = false;
-        /// The left picture of the frame `picture` is of, if engine A was on this screen in it
-        std::vector<melonDS::u32> scene_left;
+        /// The game's picture of the frame `pictures` are of, if engine A was on this screen in it
+        std::vector<melonDS::u32> scene_own;
         /// The last frame with engine B on this screen kept the picture (3D on both screens)
         bool kept = false;
     };
@@ -80,21 +80,28 @@ private:
     void Forget();
     void EndFrame();
     void BeginFrame();
-    void DrawRightSprites(melonDS::u32 line);
+    void DrawEyesSprites(melonDS::u32 line);
+    EyeRenderer& Of(NdsDepth::Eye eye) const {
+        return *eyes[static_cast<std::size_t>(eye)];
+    }
+    /// The eyes' renderers are there
+    bool HasEyes() const {
+        return eyes[0] != nullptr;
+    }
 
-    std::unique_ptr<RightEye> right; ///< none while off
+    std::array<std::unique_ptr<EyeRenderer>, 2> eyes; ///< by Eye; none while off
     NdsDepth::Depth wanted{};
     NdsDepth::Depth depth{};  ///< this frame's
-    bool threaded_3d = false; ///< the left eye's 3D
+    bool threaded_3d = false; ///< the game's 3D
     NdsDepth::TopWatch watch{};
     std::array<Screen, 2> screens{};
     ShownDepth shown_depth{}; ///< this frame's
     NdsDepth::Lines lines{};  ///< this frame's
     NdsDepth::Lines last_lines{};
-    bool drawing = false;        ///< the right eye's lines, this frame
+    bool drawing = false;        ///< the eyes' lines, this frame
     std::array<bool, 2> draws{}; ///< engine A, engine B: drawn again this frame
     bool a_on_top = false;       ///< engine A, this frame
-    bool complete = false;       ///< the frame that ends has all the right eye's lines
+    bool complete = false;       ///< the frame that ends has all the eyes' lines
 };
 
 } // namespace FrameCores

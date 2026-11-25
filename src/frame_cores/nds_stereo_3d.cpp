@@ -33,16 +33,17 @@ bool IsDrawn(const melonDS::Polygon* polygon) {
 
 } // namespace
 
-NdsRight3D::NdsRight3D(melonDS::GPU3D& game, melonDS::SoftRenderer& parent)
-    : melonDS::Renderer3D(game), owner{&parent} {}
+NdsEye3D::NdsEye3D(melonDS::GPU3D& game, melonDS::SoftRenderer& parent, NdsDepth::Eye eye_)
+    : melonDS::Renderer3D(game), owner{&parent}, eye{eye_} {}
 
-NdsRight3D::NdsRight3D(melonDS::GPU3D& game) : melonDS::Renderer3D(game) {}
+NdsEye3D::NdsEye3D(melonDS::GPU3D& game, NdsDepth::Eye eye_)
+    : melonDS::Renderer3D(game), eye{eye_} {}
 
-NdsRight3D::~NdsRight3D() {
+NdsEye3D::~NdsEye3D() {
     Stop();
 }
 
-melonDS::GPU3D& NdsRight3D::Scene() {
+melonDS::GPU3D& NdsEye3D::Scene() {
     if (!scene) {
         scene = std::make_unique<melonDS::GPU3D>(GPU);
         static_assert(sizeof(scene->VertexRAM) / sizeof(melonDS::Vertex) == kVertices);
@@ -50,7 +51,7 @@ melonDS::GPU3D& NdsRight3D::Scene() {
     return *scene;
 }
 
-void NdsRight3D::Create(bool threaded) {
+void NdsEye3D::Create(bool threaded) {
     // Once, with no polygons: the thread draws a frame as soon as it is made
     soft = std::make_unique<melonDS::SoftRenderer3D>(Scene(), *owner);
     soft->Reset(); // not threaded yet; its buffers start undefined
@@ -59,7 +60,7 @@ void NdsRight3D::Create(bool threaded) {
     taken = threaded ? 0 : kLines;
 }
 
-void NdsRight3D::Stop() {
+void NdsEye3D::Stop() {
     soft.reset(); // joins its thread
     scene.reset();
     running = false;
@@ -67,31 +68,31 @@ void NdsRight3D::Stop() {
     convergence = 0;
 }
 
-void NdsRight3D::Reset() {
+void NdsEye3D::Reset() {
     // Not SoftRenderer3D::Reset: it can wait for a frame that was already waited for
     Stop();
 }
 
-void NdsRight3D::Wait() {
+void NdsEye3D::Wait() {
     if (running) {
         soft->FinishRendering();
         running = false;
     }
 }
 
-void NdsRight3D::Drop() {
+void NdsEye3D::Drop() {
     Wait(); // all its lines are there now, so the loop does not block
     for (; taken < kLines; ++taken) {
         soft->GetLine(0);
     }
 }
 
-bool NdsRight3D::HasLine() const {
+bool NdsEye3D::HasLine() const {
     // The game wrote VCOUNT: the left eye's 3D is gone for this frame as well
     return soft && taken < kLines && !GPU3D.AbortFrame;
 }
 
-u32* NdsRight3D::GetLine(int line) {
+u32* NdsEye3D::GetLine(int line) {
     if (!HasLine()) {
         return empty.data();
     }
@@ -107,7 +108,8 @@ u32* NdsRight3D::GetLine(int line) {
     return row;
 }
 
-void NdsRight3D::Start(const NdsDepth::Depth& depth, int screen, bool threaded) {
+void NdsEye3D::Start(const NdsDepth::Depth& depth, int screen, bool threaded,
+                     const NdsEye3D* same) {
     if (soft && soft->IsThreaded() != threaded) {
         Stop();
     }
@@ -115,49 +117,67 @@ void NdsRight3D::Start(const NdsDepth::Depth& depth, int screen, bool threaded) 
         Create(threaded);
     }
     Drop(); // the thread is idle from here on
-    Prepare(depth, screen);
+    Prepare(depth, screen, same);
     soft->RenderFrame();
     running = threaded;
     taken = 0;
 }
 
-NdsDepth::SceneShift NdsRight3D::Prepare(const NdsDepth::Depth& depth, int screen) {
+/// The frame's view.
+NdsDepth::SceneView NdsEye3D::Follow(const NdsDepth::Depth& depth, int screen) {
     const melonDS::GPU2D& engine = GPU.GPU2D_A;
     const NdsDepth::SceneView seen = Measure();
-    NdsDepth::SceneView view{depth.convergence, 0};
-    if (depth.convergence == 0) {
-        const bool blank = NdsDepth::IsBlank(GPU.MasterBrightnessA);
-        view = tracks[screen].Follow(seen, NdsDepth::MakeSetup(engine.DispCnt, engine.BGCnt[0]),
-                                     blank);
-        if (view.convergence == 0) {
-            view.convergence = NdsDepth::kConvergence;
-        }
+    if (depth.convergence != 0) {
+        return {depth.convergence, 0};
+    }
+    const bool blank = NdsDepth::IsBlank(GPU.MasterBrightnessA);
+    NdsDepth::SceneView now =
+        tracks[screen].Follow(seen, NdsDepth::MakeSetup(engine.DispCnt, engine.BGCnt[0]), blank);
+    if (now.convergence == 0) {
+        now.convergence = NdsDepth::kConvergence;
+    }
+    return now;
+}
+
+NdsDepth::SceneShift NdsEye3D::Prepare(const NdsDepth::Depth& depth, int screen,
+                                       const NdsEye3D* same) {
+    const melonDS::GPU2D& engine = GPU.GPU2D_A;
+    if (same) {
+        line = same->line;
+        view = same->view;
+    } else {
+        view = Follow(depth, screen);
     }
     convergence = view.convergence;
     const NdsDepth::SceneRoom room =
         NdsDepth::MakeRoom(depth.layers, engine.DispCnt,
                            {engine.BGCnt[0], engine.BGCnt[1], engine.BGCnt[2], engine.BGCnt[3]});
-    offset = NdsDepth::SceneOffset(depth.layers);
-    far_shift = room.farthest;
+    offset = NdsDepth::SceneOffset(room, eye);
+    far_shift = NdsDepth::EyeShift(room.farthest, eye);
+    left_end = eye == NdsDepth::Eye::Right || depth.layers[3] < 0;
     Scene();
-    const NdsDepth::SceneShift shift = NdsDepth::Offset(NdsDepth::MakeScene(room, view), offset);
+    const NdsDepth::SceneShift shift = NdsDepth::MakeScene(room, view);
     FillScene(shift);
     return shift;
 }
 
-/// What is behind the scene has no more to the left than the left eye has either; it would be in
-/// the columns it is moved by.
-void NdsRight3D::EndAtEdge(u32* row, int line) const {
-    const int end = NdsDepth::SceneEdge(far_shift, NdsDepth::ScrollOf(GPU3D.RenderXPos));
-    for (int x = 0; x < end; ++x) {
-        if (row[x] == ClearPixel(x + NdsDepth::ScrollOf(scene->RenderXPos), line)) {
-            row[x] = 0;
+/// What is behind the scene has no more at the edge than the game has; it would be in the columns
+/// it is moved by.
+void NdsEye3D::EndAtEdge(u32* row, int line) const {
+    const NdsDepth::SceneEnds ends = Ends(NdsDepth::ScrollOf(GPU3D.RenderXPos));
+    const auto clear = [&](int from, int to) {
+        for (int x = from; x < to; ++x) {
+            if (row[x] == ClearPixel(x + NdsDepth::ScrollOf(scene->RenderXPos), line)) {
+                row[x] = 0;
+            }
         }
-    }
+    };
+    clear(0, ends.begin);
+    clear(ends.end, NdsDepth::kWidth);
 }
 
 /// As SoftRenderer3D's ClearBuffers and CalculateFogDensity have it.
-u32 NdsRight3D::ClearPixel(int x, int line) const {
+u32 NdsEye3D::ClearPixel(int x, int line) const {
     u32 attr = scene->RenderClearAttr1;
     u32 depth = scene->RenderClearAttr2 & 0x7FFF;
     if ((scene->RenderDispCnt & (1 << 14)) != 0) {
@@ -188,19 +208,19 @@ u32 NdsRight3D::ClearPixel(int x, int line) const {
                               (scene->RenderDispCnt & (1 << 6)) != 0);
 }
 
-void NdsRight3D::Cut() {
+void NdsEye3D::Cut() {
     Drop();
     tracks = {};
 }
 
-void NdsRight3D::NoScene(int screen) {
+void NdsEye3D::NoScene(int screen) {
     Drop();
     tracks[screen].Nothing();
 }
 
 /// The world's depth line, then the view: the w of every vertex of its polygons, once per polygon
 /// it is in.
-NdsDepth::SceneView NdsRight3D::Measure() {
+NdsDepth::SceneView NdsEye3D::Measure() {
     const u32 count = std::min<u32>(GPU3D.RenderNumPolygons, kPolygons);
     line = {};
     for (u32 i = 0; i < count; ++i) {
@@ -232,7 +252,7 @@ NdsDepth::SceneView NdsRight3D::Measure() {
     return stats.View();
 }
 
-NdsDepth::PolygonPlace NdsRight3D::Place(const melonDS::Polygon& polygon) const {
+NdsDepth::PolygonPlace NdsEye3D::Place(const melonDS::Polygon& polygon) const {
     std::array<s32, kMaxVertices> w{};
     for (u32 v = 0; v < polygon.NumVertices; ++v) {
         w[v] = polygon.Vertices[v]->Position[3];
@@ -241,7 +261,7 @@ NdsDepth::PolygonPlace NdsRight3D::Place(const melonDS::Polygon& polygon) const 
                                   line);
 }
 
-void NdsRight3D::FillScene(const NdsDepth::SceneShift& shift) {
+void NdsEye3D::FillScene(const NdsDepth::SceneShift& shift) {
     const melonDS::GPU3D& game = GPU3D;
 
     scene->RenderDispCnt = game.RenderDispCnt;
@@ -254,7 +274,7 @@ void NdsRight3D::FillScene(const NdsDepth::SceneShift& shift) {
     std::memcpy(scene->RenderFogDensityTable, game.RenderFogDensityTable,
                 sizeof(scene->RenderFogDensityTable));
     scene->RenderClearAttr1 = game.RenderClearAttr1;
-    scene->RenderClearAttr2 = NdsDepth::ShiftClearImage(game.RenderClearAttr2, shift.farthest);
+    scene->RenderClearAttr2 = NdsDepth::ShiftClearImage(game.RenderClearAttr2, far_shift + offset);
     // Ours never is: the texture memory may have changed, and only the left eye's renderer knows
     scene->RenderFrameIdentical = false;
 
@@ -276,11 +296,14 @@ void NdsRight3D::FillScene(const NdsDepth::SceneShift& shift) {
     scene->RenderNumPolygons = count;
 }
 
-bool NdsRight3D::CopyPolygon(const melonDS::Polygon& from, melonDS::Polygon& to,
-                             const NdsDepth::SceneShift& shift) {
+bool NdsEye3D::CopyPolygon(const melonDS::Polygon& from, melonDS::Polygon& to,
+                           const NdsDepth::SceneShift& shift) {
     const std::size_t count = from.NumVertices;
     const NdsDepth::PolygonPlace place = Place(from);
-    const int placed = NdsDepth::VertexShift(shift, place.w);
+    const auto by_w = [&](int32_t w) {
+        return NdsDepth::EyeShift(NdsDepth::VertexShift(shift, w), eye) + offset;
+    };
+    const int placed = by_w(place.w);
 
     to = from;
     for (std::size_t i = 0; i < count; ++i) {
@@ -289,9 +312,10 @@ bool NdsRight3D::CopyPolygon(const melonDS::Polygon& from, melonDS::Polygon& to,
             return false;
         }
         const int32_t w = place.each ? from.Vertices[i]->Position[3] : place.w;
-        const int by = place.each ? NdsDepth::VertexShift(shift, w) : placed;
+        const int by = place.each ? by_w(w) : placed;
         // HiresPosition's, which only a renderer over 1x reads
-        const int fine = NdsDepth::VertexShiftUnits(shift, w, kFine);
+        const int fine =
+            NdsDepth::EyeShift(NdsDepth::VertexShiftUnits(shift, w, kFine), eye) + offset * kFine;
         Slot& slot = slots[game_index][place.each ? 0 : 1];
         if (slot.frame != frame || slot.shift != by || slot.fine != fine) {
             if (vertex_count == kVertices) {

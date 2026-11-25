@@ -45,17 +45,18 @@ public:
     /// any more.
     virtual bool GetScreens(Vulkan::AltScreenImage& top, Vulkan::AltScreenImage& bottom) = 0;
 
-    /// After GetScreens: a screen's picture (0 the top one, 1 the bottom one) for the right eye.
-    /// False: the left one is for both.
-    virtual bool GetRight(int /*screen*/, Vulkan::AltScreenImage& /*right*/) {
+    /// After GetScreens: a screen's pictures (0 the top one, 1 the bottom one) for the two eyes.
+    /// False: there are none, GetScreens' is for both.
+    virtual bool GetEyes(int /*screen*/, Vulkan::AltScreenImage& /*left*/,
+                         Vulkan::AltScreenImage& /*right*/) {
         return false;
     }
-    /// The screen's picture is one for each eye, also when GetRight has none (ShownDepth).
+    /// The screen's picture is one for each eye, also when GetEyes has none (ShownDepth).
     virtual bool ShowsDepth(int screen) const {
         return screen == 0;
     }
-    /// The farthest layer's shift in it, in pixels of the DS.
-    virtual int RightShift() const {
+    /// The farthest layer's shift between them, in pixels of the DS.
+    virtual int EyesShift() const {
         return 0;
     }
 
@@ -125,9 +126,9 @@ public:
     bool GetScreens(Vulkan::AltScreenImage& top, Vulkan::AltScreenImage& bottom);
 
     /// A screen's picture for the right eye. False: as the left one.
-    bool GetRight(int screen, Vulkan::AltScreenImage& right);
+    bool GetEyes(int screen, Vulkan::AltScreenImage& left, Vulkan::AltScreenImage& right);
     bool ShowsDepth(int screen) const;
-    int RightShift() const;
+    int EyesShift() const;
 
     /// Their pixels, for what is not drawn by the GPU.
     void ReadScreens(Vulkan::AltScreenImage& top, Vulkan::AltScreenImage& bottom);

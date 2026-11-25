@@ -43,6 +43,8 @@
 namespace {
 
 namespace fs = std::filesystem;
+using Common::LayerDepth::Eye;
+using Common::LayerDepth::EyeShift;
 
 struct TempDir {
     fs::path path;
@@ -351,11 +353,25 @@ struct DepthGame {
         core->SetInput(in);
         core->RunFrame(out);
     }
-    Pixels Left() const {
+    /// The game's own picture
+    Pixels Own() const {
         return Copy(out.primary);
     }
-    Pixels Right() const {
-        return Copy(out.primary_right);
+    Pixels Seen(Eye eye) const {
+        return Copy(eye == Eye::Right ? out.primary_right : out.primary_left);
+    }
+    /// The two eyes' (empty: none)
+    std::array<Pixels, 2> Seen() const {
+        return {Seen(Eye::Left), Seen(Eye::Right)};
+    }
+    /// Both eyes see the game's own picture.
+    bool BothOwn() const {
+        return Seen() == std::array<Pixels, 2>{Own(), Own()};
+    }
+    /// Neither does.
+    bool BothMoved() const {
+        return Seen(Eye::Left) != Own() && Seen(Eye::Right) != Own() &&
+               Seen(Eye::Left) != Seen(Eye::Right);
     }
 };
 
@@ -446,17 +462,24 @@ std::vector<uint8_t> WithLayers(std::vector<uint8_t> rom, uint32_t layers) {
     return WithDispcnt(std::move(rom), layers << 8);
 }
 
-/// Columns a layer that is moved this far leaves at the right eye's edge.
-int EdgeOf(int shift) {
-    return Common::LayerDepth::EdgeColumns(shift);
+/// The eye's part of a shift, where the layer ends at its edge (0: it does not).
+int EdgeOf(int shift, Eye eye) {
+    return Common::LayerDepth::EdgeColumns(shift) != 0 ? EyeShift(shift, eye) : 0;
 }
 
-/// `all` from column `to` on, `near` from column `from` on; nothing before.
+/// The columns a shift of an eye leaves: at the left edge or the right one.
+bool IsPast(int x, int shift, size_t width) {
+    return shift >= 0 ? x < shift : x >= static_cast<int>(width) + shift;
+}
+
+/// `all` but for the columns of the shift `to`, which are `near`, and those of `from`: nothing.
 Pixels Edged(const Pixels& all, const Pixels& near, size_t width, int from, int to) {
     Pixels out = all;
     for (size_t i = 0; i < out.size(); ++i) {
         const int x = static_cast<int>(i % width);
-        out[i] = x < from ? Common::LayerDepth::kBeyond : x < to ? near[i] : all[i];
+        out[i] = IsPast(x, from, width) ? Common::LayerDepth::kBeyond
+                 : IsPast(x, to, width) ? near[i]
+                                        : all[i];
     }
     return out;
 }
@@ -555,7 +578,8 @@ std::vector<uint8_t> MakeHomebrewNdsRom(bool dsi_flag = false) {
 /// A DS ROM whose ARM7 copies the lid switch to main RAM; the ARM9 fills the picture by it.
 std::vector<uint8_t> MakeLidNdsRom() {
     std::vector<uint8_t> rom = MakeHomebrewNdsRom(false);
-    // The ARM9 code past the secure area (0x4000 to 0x7FFF), which a direct boot would not run as is
+    // The ARM9 code past the secure area (0x4000 to 0x7FFF), which a direct boot would not run as
+    // is
     rom.resize(0x10000, 0);
     std::copy_n(rom.begin() + 0x4000, 5 * 4, rom.begin() + 0x8000);
     PutLE32(rom, 0x20, 0x8000);
@@ -1816,7 +1840,6 @@ std::vector<uint8_t> MakeStoredZip(const std::string& name, const std::vector<ui
 
 } // namespace
 
-
 TEST_CASE("Custom cheats are kept in a file and read back", "[frame_cores]") {
     TempDir tmp("cheatstore");
     const std::string path = (tmp.path / "g" / "x.custom.cheats").string();
@@ -2021,14 +2044,16 @@ TEST_CASE("Layer Depth: with nothing moved both eyes see the same", "[frame_core
     for (int i = 0; i < 600; ++i) {
         INFO("frame " << i);
         game.Run(i % 7 == 0 ? Common::AltCore::BtnA : 0);
-        const Pixels left = game.Left();
-        REQUIRE(game.out.primary_right.width == game.out.primary.width);
-        REQUIRE(game.out.primary_right.height == game.out.primary.height);
-        REQUIRE(!game.out.primary_right.bgra);
+        const Pixels own = game.Own();
+        for (const auto* seen : {&game.out.primary_left, &game.out.primary_right}) {
+            REQUIRE(seen->width == game.out.primary.width);
+            REQUIRE(seen->height == game.out.primary.height);
+            REQUIRE(!seen->bgra);
+        }
         // Byte for byte, the first frame after the copy too
-        REQUIRE((left == game.Right()));
-        changes += left != last;
-        last = left;
+        REQUIRE(game.BothOwn());
+        changes += own != last;
+        last = own;
     }
     CHECK(changes > 500);
 }
@@ -2040,7 +2065,7 @@ TEST_CASE("Layer Depth: no shift on a screen too wide for one", "[frame_cores]")
     for (int i = 0; i < 600; ++i) {
         INFO("frame " << i);
         game.Run(i % 7 == 0 ? Common::AltCore::BtnA : 0);
-        REQUIRE((game.Left() == game.Right()));
+        REQUIRE(game.BothOwn());
         REQUIRE(game.out.layer_shift == 0.0f);
     }
     game.core->SetMaxLayerShift(0.0f); // no headset
@@ -2073,9 +2098,9 @@ TEST_CASE("Layer Depth: lines mGBA left undrawn at the start", "[frame_cores]") 
             INFO("frame " << i);
             game.Run();
             REQUIRE(game.out.primary_right.HasPicture());
-            REQUIRE((game.Right() == game.Left()));
+            REQUIRE(game.BothOwn());
         }
-        const Pixels left = game.Left();
+        const Pixels left = game.Own();
         constexpr size_t kFirst = 126 * 240; // VCOUNT at the start
         CHECK(std::all_of(left.begin(), left.begin() + kFirst,
                           [](uint32_t p) { return p == 0xFF000000u; }));
@@ -2092,16 +2117,17 @@ TEST_CASE("Layer Depth: each layer moves by its priority", "[frame_cores]") {
     const bool gba = GENERATE(true, false);
     const bool inverted = GENERATE(false, true);
     const InvertDepth invert{inverted};
-    // The expected right eye: the same game with its layers drawn there
+    // An eye is to see the same game with its layers drawn there
     const int step = inverted ? -static_cast<int>(level) : static_cast<int>(level);
-    const auto moved =
-        gba ? MakeLayersGbaRom(1, 3, step, step * 3) : MakeLayersGbRom(false, step * 2);
+    const Eye eye = GENERATE(Eye::Left, Eye::Right);
+    const auto moved = gba ? MakeLayersGbaRom(1, 3, EyeShift(step, eye), EyeShift(step * 3, eye))
+                           : MakeLayersGbRom(false, EyeShift(step * 2, eye));
     DepthGame game(gba, gba ? WithBackdrop(MakeDeepRom(gba)) : MakeDeepRom(gba), level);
     DepthGame expected(gba, gba ? WithBackdrop(moved) : moved, 0);
     DepthGame near(gba, gba ? WithLayers(moved, 1) : moved, 0);
     const size_t width = gba ? 240 : 160;
-    const int edge = EdgeOf(gba ? step : step * 2);
-    const int far_edge = EdgeOf(gba ? step * 3 : step * 2);
+    const int edge = EdgeOf(gba ? step : step * 2, eye);
+    const int far_edge = EdgeOf(gba ? step * 3 : step * 2, eye);
     int different = 0;
     for (int i = 0; i < 120; ++i) {
         INFO("frame " << i);
@@ -2111,12 +2137,12 @@ TEST_CASE("Layer Depth: each layer moves by its priority", "[frame_cores]") {
         if (i < 20) {
             continue; // until the game has scrolled
         }
-        REQUIRE((game.Right() == Edged(expected.Left(), near.Left(), width, edge, far_edge)));
+        REQUIRE((game.Seen(eye) == Edged(expected.Own(), near.Own(), width, edge, far_edge)));
         REQUIRE(game.out.layer_shift ==
                 (inverted || Common::LayerDepth::kCutsEdge
                      ? Catch::Approx(gba ? step * 3 / 240.0 : step * 2 / 160.0)
                      : Catch::Approx(0.0)));
-        different += game.Right() != game.Left();
+        different += game.BothMoved();
     }
     CHECK(different >= 98); // the Game Boy's palette is all one colour now and then
 }
@@ -2128,15 +2154,16 @@ TEST_CASE("Layer Depth: the limit moves the layers less", "[frame_cores]") {
     const uint32_t most = GENERATE(1u, 2u, 4u, 5u);
     const float limit = (static_cast<float>(most) + 0.5f) / static_cast<float>(width);
     const uint32_t nearer = Common::LayerDepth::LayerShift(3, 1, 3, 240, limit);
+    const Eye eye = GENERATE(Eye::Left, Eye::Right);
+    const auto by = [eye](uint32_t shift) { return EyeShift(static_cast<int>(shift), eye); };
     const auto moved =
-        gba ? MakeLayersGbaRom(1, 3, static_cast<int>(nearer), static_cast<int>(most))
-            : MakeLayersGbRom(false, static_cast<int>(most));
+        gba ? MakeLayersGbaRom(1, 3, by(nearer), by(most)) : MakeLayersGbRom(false, by(most));
     DepthGame game(gba, MakeDeepRom(gba), 3);
     game.core->SetMaxLayerShift(limit);
     DepthGame expected(gba, moved, 0);
     DepthGame near(gba, gba ? WithLayers(moved, 1) : moved, 0);
-    const int far_edge = EdgeOf(static_cast<int>(most));
-    const int edge = gba ? EdgeOf(static_cast<int>(nearer)) : far_edge;
+    const int far_edge = EdgeOf(static_cast<int>(most), eye);
+    const int edge = gba ? EdgeOf(static_cast<int>(nearer), eye) : far_edge;
     for (int i = 0; i < 60; ++i) {
         INFO("frame " << i);
         game.Run();
@@ -2145,15 +2172,17 @@ TEST_CASE("Layer Depth: the limit moves the layers less", "[frame_cores]") {
         REQUIRE(game.out.layer_shift ==
                 Common::LayerDepth::EdgeShift(static_cast<int32_t>(most), width));
         if (i >= 20) {
-            REQUIRE((game.Right() == Edged(expected.Left(), near.Left(), width, edge, far_edge)));
+            REQUIRE((game.Seen(eye) == Edged(expected.Own(), near.Own(), width, edge, far_edge)));
         }
     }
 }
 
 TEST_CASE("Layer Depth: nothing beyond a GBA picture's edge", "[frame_cores]") {
     // Level 3: priorities 0 to 3 are moved 0, 3, 6, 9 pixels, the sprites 3
-    const auto run = [](const std::vector<uint8_t>& rom, const std::vector<uint8_t>& moved,
-                        const std::vector<uint8_t>& near, int edge, int far_edge) {
+    const Eye eye = GENERATE(Eye::Left, Eye::Right);
+    const auto by = [eye](int shift) { return EyeShift(shift, eye); };
+    const auto run = [eye](const std::vector<uint8_t>& rom, const std::vector<uint8_t>& moved,
+                           const std::vector<uint8_t>& near, int edge, int far_edge) {
         DepthGame game(true, rom, 3);
         DepthGame all(true, moved, 0);
         DepthGame some(true, near, 0);
@@ -2163,66 +2192,68 @@ TEST_CASE("Layer Depth: nothing beyond a GBA picture's edge", "[frame_cores]") {
             all.Run();
             some.Run();
             if (i >= 20) {
-                REQUIRE((game.Right() == Edged(all.Left(), some.Left(), 240, edge, far_edge)));
-                REQUIRE((game.Left() != game.Right()));
+                REQUIRE((game.Seen(eye) == Edged(all.Own(), some.Own(), 240, edge, far_edge)));
+                REQUIRE(game.BothMoved());
                 REQUIRE(game.out.layer_shift == Common::LayerDepth::EdgeShift(9, 240));
             }
         }
     };
     SECTION("a layer on the screen stays whole, over nothing") {
-        const auto moved = MakeLayersGbaRom(0, 2, 0, 6);
+        const auto moved = MakeLayersGbaRom(0, 2, by(0), by(6));
         run(WithBackdrop(MakeLayersGbaRom(0, 2)), WithBackdrop(moved), WithLayers(moved, 1), 0,
-            EdgeOf(6));
+            EdgeOf(6, eye));
     }
     SECTION("a blended one is blended with nothing") {
         // BG0 half over BG1 (then: half over a black backdrop)
         const std::vector<std::pair<uint32_t, uint32_t>> blend{{0x04000050u, 0x08080241u}};
         const std::vector<std::pair<uint32_t, uint32_t>> black{{0x04000050u, 0x08082041u}};
-        const auto moved = MakeLayersGbaRom(0, 3, 0, 9);
+        const auto moved = MakeLayersGbaRom(0, 3, by(0), by(9));
         run(StoreFirst(WithBackdrop(MakeLayersGbaRom(0, 3)), blend),
             StoreFirst(WithBackdrop(moved), blend), StoreFirst(WithLayers(moved, 1), black), 0,
-            EdgeOf(9));
+            EdgeOf(9, eye));
     }
     SECTION("nor one that is blended with other layers only") {
         // BG0 half over the sprites, which it is not over
         const std::vector<std::pair<uint32_t, uint32_t>> blend{{0x04000050u, 0x08081041u}};
-        const auto moved = MakeLayersGbaRom(0, 3, 0, 9);
+        const auto moved = MakeLayersGbaRom(0, 3, by(0), by(9));
         run(StoreFirst(WithBackdrop(MakeLayersGbaRom(0, 3)), blend),
-            StoreFirst(WithBackdrop(moved), blend), WithLayers(moved, 1), 0, EdgeOf(9));
+            StoreFirst(WithBackdrop(moved), blend), WithLayers(moved, 1), 0, EdgeOf(9, eye));
     }
     SECTION("the game's picture ends where its farthest layer does, whatever the sprites are") {
         const std::vector<std::pair<uint32_t, uint32_t>> blend{{0x04000050u, 0x08081041u}};
-        const auto moved = MakeLayersGbaRom(0, 2, 0, 6);
+        const auto moved = MakeLayersGbaRom(0, 2, by(0), by(6));
         run(StoreFirst(WithLayers(WithBackdrop(MakeLayersGbaRom(0, 2)), 0x13), blend),
             StoreFirst(WithLayers(WithBackdrop(moved), 0x13), blend), WithLayers(moved, 1), 0,
-            EdgeOf(6));
+            EdgeOf(6, eye));
     }
     SECTION("a layer on the screen that turns stays whole") {
         // Mode 1: BG0, and BG2, which goes on 1.5 pixels a line
         const std::vector<std::pair<uint32_t, uint32_t>> turned{
             {0x0400000Cu, 0x00002800u}, {0x04000020u, 0x01800100u}, {0x04000024u, 0x01000040u}};
-        const auto moved = MakeLayersGbaRom(3, 3, 9, 9);
+        const auto moved = MakeLayersGbaRom(3, 3, by(9), by(9));
         run(StoreFirst(WithDispcnt(WithBackdrop(MakeLayersGbaRom(3, 3)), 0x0501), turned),
             StoreFirst(WithDispcnt(WithBackdrop(moved), 0x0501), turned),
-            StoreFirst(WithDispcnt(moved, 0x0401), turned), 0, EdgeOf(9));
+            StoreFirst(WithDispcnt(moved, 0x0401), turned), 0, EdgeOf(9, eye));
     }
     SECTION("a backdrop that is faded to white") {
         // The backdrop alone gets brighter
         const std::vector<std::pair<uint32_t, uint32_t>> fade{{0x04000050u, 0x000000A0u},
                                                               {0x04000054u, 0x00000010u}};
-        const auto moved = MakeLayersGbaRom(0, 3, 0, 9);
+        const auto moved = MakeLayersGbaRom(0, 3, by(0), by(9));
         run(StoreFirst(WithBackdrop(MakeLayersGbaRom(0, 3)), fade),
-            StoreFirst(WithBackdrop(moved), fade), WithLayers(moved, 1), 0, EdgeOf(9));
+            StoreFirst(WithBackdrop(moved), fade), WithLayers(moved, 1), 0, EdgeOf(9, eye));
     }
 }
 
-/// A solid white sprite of 8x8 at -4, 40, of this mode.
+/// Solid white sprites of 8x8 at -4, 40 and 236, 40, of this mode.
 std::vector<std::pair<uint32_t, uint32_t>> SpriteWords(uint32_t mode) {
     std::vector<std::pair<uint32_t, uint32_t>> words{{0x05000204u, 0x7FFF7FFFu}};
     for (uint32_t i = 0; i < 8; ++i) {
         words.emplace_back(0x06010000u + i * 4, 0x33333333u);
     }
     words.emplace_back(0x07000000u, 0x01FC0000u | mode << 10 | 40u);
+    words.emplace_back(0x07000004u, 0x00000000u);
+    words.emplace_back(0x07000008u, 0x00EC0000u | mode << 10 | 40u);
     return words;
 }
 
@@ -2242,28 +2273,41 @@ TEST_CASE("Layer Depth: a GBA picture's sprites end at its edge", "[frame_cores]
             continue;
         }
         INFO("frame " << i);
-        REQUIRE((game.Left() == plain.Left()));
-        const Pixels left = game.Left();
-        const Pixels right = game.Right();
-        const auto at = [](const Pixels& p, int x, int y) { return p[y * 240 + x]; };
-        constexpr uint32_t kWhite = 0xFFFFFFFFu; // the sprite's
-        // Its 4 columns in the left eye; in the right, moved by 3, what is of them
-        for (int y = 40; y < 48; ++y) {
-            for (int x = 0; x < 4; ++x) {
-                REQUIRE((at(left, x, y) & 0x00F8F8F8u) == (kWhite & 0x00F8F8F8u));
-                REQUIRE((at(right, x + 3, y) & 0x00F8F8F8u) == (kWhite & 0x00F8F8F8u));
-            }
-            for (int x = 0; x < EdgeOf(3); ++x) {
-                REQUIRE((at(right, x, y) & 0x00F8F8F8u) != (kWhite & 0x00F8F8F8u));
-            }
-            if (behind) { // BG0 is moved by 9
-                for (int x = 7; x < EdgeOf(9); ++x) {
-                    REQUIRE(at(right, x, y) == Common::LayerDepth::kBeyond);
+        REQUIRE((game.Own() == plain.Own()));
+        const auto at = [](const Pixels& p, int x, int y) { return p[y * 240 + x] & 0x00F8F8F8u; };
+        constexpr uint32_t kWhite = 0x00F8F8F8u; // the sprites'
+        constexpr uint32_t kNone = Common::LayerDepth::kBeyond & 0x00F8F8F8u;
+        const Pixels own = game.Own();
+        for (const Eye eye : {Eye::Left, Eye::Right}) {
+            const Pixels seen = game.Seen(eye);
+            // Their 4 columns in the game's picture; in the eye's, moved by 2 or -1, what is of
+            // them
+            const int by = EyeShift(3, eye);
+            const int far = EyeShift(9, eye); // of BG0, if it is behind
+            for (int y = 40; y < 48; ++y) {
+                for (int i = 0; i < 4; ++i) {
+                    for (const int x : {i, 236 + i}) {
+                        REQUIRE(at(own, x, y) == kWhite);
+                        if (x + by >= 0 && x + by < 240) {
+                            REQUIRE(at(seen, x + by, y) == kWhite);
+                        }
+                    }
+                }
+                for (int x = 0; x < 240; ++x) {
+                    if (IsPast(x, EdgeOf(3, eye), 240)) {
+                        REQUIRE(at(seen, x, y) != kWhite);
+                    }
                 }
             }
-        }
-        for (int x = 0; x < (behind ? EdgeOf(9) : 0); ++x) {
-            REQUIRE(at(right, x, 100) == Common::LayerDepth::kBeyond);
+            for (int x = 0; x < 240; ++x) {
+                if (behind && IsPast(x, EdgeOf(9, eye), 240)) { // beyond
+                    REQUIRE(at(seen, x, 100) == kNone);
+                    if (x >= 6 && x < 235) {
+                        REQUIRE(at(seen, x, 44) == kNone);
+                    }
+                }
+            }
+            REQUIRE((far != 0));
         }
     }
 }
@@ -2276,7 +2320,7 @@ TEST_CASE("Layer Depth: a GBA picture with nothing behind the screen has no edge
     for (int i = 0; i < 40; ++i) {
         INFO("frame " << i);
         game.Run();
-        REQUIRE((game.Right() == game.Left()));
+        REQUIRE(game.BothOwn());
     }
 }
 
@@ -2289,10 +2333,17 @@ TEST_CASE("Layer Depth: a see-through GBA sprite over nothing", "[frame_cores]")
     for (int i = 0; i < 30; ++i) {
         game.Run();
     }
-    const Pixels right = game.Right();
+    // The sprites are moved by 2 and -1, BG1 by 5 and -4
+    const Pixels left = game.Seen(Eye::Left);
+    const Pixels right = game.Seen(Eye::Right);
     for (int y = 40; y < 48; ++y) {
-        for (int x = 3; x < EdgeOf(7); ++x) {
-            CHECK((right[y * 240 + x] & 0xF8u) == 0x78u);
+        for (int x = 0; x < 240; ++x) {
+            if (x >= 2 && x < 6 && IsPast(x, EdgeOf(9, Eye::Right), 240)) {
+                CHECK((right[y * 240 + x] & 0xF8u) == 0x78u);
+            }
+            if (x < 239 && IsPast(x, EdgeOf(9, Eye::Left), 240)) {
+                CHECK((left[y * 240 + x] & 0xF8u) == 0x78u);
+            }
         }
     }
 }
@@ -2313,20 +2364,21 @@ TEST_CASE("Layer Depth: a GBA picture whose farthest layer is not drawn has no e
         INFO("frame " << i);
         game.Run();
         if (i >= 20) {
-            REQUIRE((game.Right() == game.Left()));
-            REQUIRE((game.Left().front() & 0x00FFFFFFu) != 0);
+            REQUIRE(game.BothOwn());
+            REQUIRE((game.Own().front() & 0x00FFFFFFu) != 0);
         }
     }
 }
 
 TEST_CASE("Layer Depth: nothing beyond a Game Boy picture's edge", "[frame_cores]") {
-    // The background is moved by 6; a window from column 4 and a line on, sprites of 8x8 at -4, 40
-    // (in front) and 0, 60 (behind the background)
+    // The background is moved by 3 and -3; a window from column 4 and a line on, sprites of 8x8 at
+    // -4, 40 and 156, 40 (in front) and at 0, 60 and 152, 60 (behind the background)
     const bool window = GENERATE(false, true);
     const int window_y = GENERATE(0, 11);
     const bool inverted = GENERATE(false, true);
     const InvertDepth invert{inverted};
-    const int edge = inverted ? 0 : EdgeOf(6);
+    const Eye eye = GENERATE(Eye::Left, Eye::Right);
+    const int edge = inverted ? 0 : EdgeOf(6, eye);
     std::vector<std::pair<uint16_t, uint8_t>> bytes{{0xFF48, 0x40}, {0xFF49, 0x40}};
     for (uint16_t i = 0; i < 16; ++i) {
         bytes.emplace_back(static_cast<uint16_t>(0x8200 + i), uint8_t{0xFF});
@@ -2334,7 +2386,8 @@ TEST_CASE("Layer Depth: nothing beyond a Game Boy picture's edge", "[frame_cores
     for (uint16_t i = 0; i < 160; ++i) {
         bytes.emplace_back(static_cast<uint16_t>(0xFE00 + i), uint8_t{0});
     }
-    const uint8_t sprites[] = {56, 4, 0x20, 0, 76, 8, 0x20, 0x80};
+    const uint8_t sprites[] = {56, 4,   0x20, 0, 76, 8,   0x20, 0x80,
+                               56, 164, 0x20, 0, 76, 160, 0x20, 0x80};
     for (uint16_t i = 0; i < std::size(sprites); ++i) {
         bytes.emplace_back(static_cast<uint16_t>(0xFE00 + i), sprites[i]);
     }
@@ -2351,7 +2404,8 @@ TEST_CASE("Layer Depth: nothing beyond a Game Boy picture's edge", "[frame_cores
         return StoreFirstGb(std::move(rom), bytes);
     };
     DepthGame game(false, with_sprites(MakeLayersGbRom(window)), 3);
-    DepthGame moved(false, with_sprites(MakeLayersGbRom(window, inverted ? -6 : 6)), 0);
+    DepthGame moved(false, with_sprites(MakeLayersGbRom(window, EyeShift(inverted ? -6 : 6, eye))),
+                    0);
     int black = 0;
     for (int i = 0; i < 60; ++i) {
         game.Run();
@@ -2360,21 +2414,24 @@ TEST_CASE("Layer Depth: nothing beyond a Game Boy picture's edge", "[frame_cores
             continue;
         }
         INFO("frame " << i);
-        Pixels expected = moved.Left();
+        Pixels expected = moved.Own();
         for (int y = 0; y < 144; ++y) {
-            for (int x = 0; x < edge; ++x) {
-                const bool first = y >= 40 && y < 48 && x < 4;
+            for (int x = 0; x < 160; ++x) {
+                if (!IsPast(x, edge, 160)) {
+                    continue;
+                }
+                const bool first = y >= 40 && y < 48 && (x < 4 || x >= 156);
                 const bool second = y >= 60 && y < 68;
                 if (first || (window && y >= window_y && x >= 4)) {
-                    continue; // on the screen, as in the left eye
+                    continue; // on the screen, as in the game's picture
                 }
                 expected[y * 160 + x] = second ? expected[42 * 160] : Common::LayerDepth::kBeyond;
                 black += !second;
             }
         }
-        REQUIRE((game.Right() == expected));
+        REQUIRE((game.Seen(eye) == expected));
     }
-    CHECK((black > 0) == (edge > 0));
+    CHECK((black > 0) == (edge != 0 && (!window || eye == Eye::Right || window_y > 0)));
 }
 
 TEST_CASE("Layer Depth: a Game Boy picture without its background has no edge", "[frame_cores]") {
@@ -2385,7 +2442,7 @@ TEST_CASE("Layer Depth: a Game Boy picture without its background has no edge", 
     for (int i = 0; i < 40; ++i) {
         INFO("frame " << i);
         game.Run();
-        REQUIRE((game.Right() == game.Left()));
+        REQUIRE(game.BothOwn());
     }
 }
 
@@ -2408,14 +2465,16 @@ TEST_CASE("Layer Depth: a Game Boy window turned on within a frame", "[frame_cor
         return rom;
     };
     DepthGame game(false, turned_on(MakeLayersGbRom(false)), 3);
-    DepthGame moved(false, turned_on(MakeLayersGbRom(false, 6)), 0);
+    const Eye eye = GENERATE(Eye::Left, Eye::Right);
+    DepthGame moved(false, turned_on(MakeLayersGbRom(false, EyeShift(6, eye))), 0);
     for (int i = 0; i < 40; ++i) {
         INFO("frame " << i);
         game.Run();
         moved.Run();
         if (i >= 20) {
-            const Pixels all = moved.Left();
-            REQUIRE((game.Right() == Edged(all, all, 160, EdgeOf(6), EdgeOf(6))));
+            const Pixels all = moved.Own();
+            const int edge = EdgeOf(6, eye);
+            REQUIRE((game.Seen(eye) == Edged(all, all, 160, edge, edge)));
         }
     }
 }
@@ -2437,10 +2496,10 @@ TEST_CASE("Layer Depth: inverted while the game runs", "[frame_cores]") {
         same.Run();
         invert.Set(true);
         other.Run();
-        REQUIRE((game.Right() == (on ? other : same).Right()));
+        REQUIRE((game.Seen() == (on ? other : same).Seen()));
         REQUIRE(game.out.layer_shift == (on ? other : same).out.layer_shift);
-        REQUIRE((game.Left() == plain.Left())); // the game's own picture is never touched
-        REQUIRE((plain.Right().empty()));       // level 0: none, either way
+        REQUIRE((game.Own() == plain.Own())); // the game's own picture is never touched
+        REQUIRE((plain.Seen() == std::array<Pixels, 2>{})); // level 0: none, either way
         REQUIRE(plain.out.layer_shift == 0.0f);
     }
 }
@@ -2456,7 +2515,7 @@ TEST_CASE("Layer Depth: inverted, with nothing moved both eyes see the same", "[
     for (int i = 0; i < 120; ++i) {
         INFO("frame " << i);
         game.Run();
-        REQUIRE((game.Left() == game.Right()));
+        REQUIRE(game.BothOwn());
     }
 }
 
@@ -2479,9 +2538,9 @@ TEST_CASE("Layer Depth: changed while the game runs", "[frame_cores]") {
             for (auto& other : expected) {
                 other->Run();
             }
-            REQUIRE((game.Left() == plain.Left()));
+            REQUIRE((game.Own() == plain.Own()));
             REQUIRE((game.out.audio_pcm == plain.out.audio_pcm));
-            REQUIRE((game.Right() == expected[level]->Right()));
+            REQUIRE((game.Seen() == expected[level]->Seen()));
             REQUIRE(game.out.layer_shift == expected[level]->out.layer_shift);
         }
     };
@@ -2497,7 +2556,7 @@ TEST_CASE("Layer Depth: changed while the game runs", "[frame_cores]") {
         game.Run();
     }
     CHECK(game.out.primary_right.HasPicture());
-    CHECK((game.Right() != game.Left()));
+    CHECK(game.BothMoved());
 }
 
 TEST_CASE("Layer Depth leaves the game's picture and sound alone", "[frame_cores]") {
@@ -2511,7 +2570,7 @@ TEST_CASE("Layer Depth leaves the game's picture and sound alone", "[frame_cores
         with.Run(buttons);
         without.Run(buttons);
         REQUIRE((with.out.audio_pcm == without.out.audio_pcm));
-        REQUIRE((with.Left() == without.Left()));
+        REQUIRE((with.Own() == without.Own()));
         REQUIRE(with.out.rumble == without.out.rumble);
         const auto& pcm = with.out.audio_pcm;
         heard |= std::any_of(pcm.begin(), pcm.end(), [](int16_t v) { return v != 0; });
@@ -2526,7 +2585,7 @@ TEST_CASE("Layer Depth after a reset, a state and the next game", "[frame_cores]
         for (int i = 0; i < frames; ++i) {
             INFO("frame " << i);
             game.Run();
-            REQUIRE((game.Right() == game.Left()));
+            REQUIRE(game.BothOwn());
             REQUIRE(game.out.primary_right.HasPicture());
         }
     };
@@ -2560,18 +2619,18 @@ TEST_CASE("Layer Depth goes by the driver", "[frame_cores]") {
         for (int i = 0; i < 30; ++i) {
             game.Run();
         }
-        const Pixels right = game.Right();
-        REQUIRE(!right.empty());
-        CHECK((right != game.Left()));
+        const auto seen = game.Seen();
+        REQUIRE(!seen[0].empty());
+        CHECK(game.BothMoved());
         job.held = true;
         for (int i = 0; i < 3; ++i) {
             game.Run();
             CHECK(game.out.held);
-            CHECK((game.Right() == right));
+            CHECK((game.Seen() == seen));
         }
         job.held = false;
         game.Run();
-        CHECK((game.Right() != right));
+        CHECK((game.Seen() != seen));
     }
     for (const auto kind : {DriverKind::PokeDaisy, DriverKind::GbaDs}) {
         for (const bool gba : {true, false}) {
@@ -2587,24 +2646,24 @@ TEST_CASE("Layer Depth goes by the driver", "[frame_cores]") {
             for (int i = 0; i < 30; ++i) {
                 game.Run();
                 plain.Run();
-                REQUIRE((game.Left() == plain.Left()));
-                REQUIRE((game.Right() == plain.Right()));
+                REQUIRE((game.Own() == plain.Own()));
+                REQUIRE((game.Seen() == plain.Seen()));
                 REQUIRE(game.out.layer_shift == plain.out.layer_shift);
             }
-            CHECK((game.Right() != game.Left()));
+            CHECK(game.BothMoved());
             // Something of the driver's on the game's picture: both eyes see the same
             job.paint = 5;
             for (int i = 0; i < 3; ++i) {
                 game.Run();
                 plain.Run();
-                CHECK((game.Left() != plain.Left()));
-                CHECK((game.Right() == game.Left()));
+                CHECK((game.Own() != plain.Own()));
+                CHECK(game.BothOwn());
                 CHECK(game.out.layer_shift == plain.out.layer_shift);
             }
             job.paint = -1;
             game.Run();
             plain.Run();
-            CHECK((game.Right() == plain.Right()));
+            CHECK((game.Seen() == plain.Seen()));
             CHECK(game.out.layer_shift == plain.out.layer_shift);
         }
     }
@@ -2621,32 +2680,40 @@ TEST_CASE("Layer Depth goes by the driver", "[frame_cores]") {
     FrameCores::DriverRunner runner;
     FrameCores::FrameOutput out;
     const Pixels moved(16 * 8, 0xFF332211u);
+    const Pixels moved_left(16 * 8, 0xFF443322u);
+    const FrameCores::DriverPicture left{moved_left.data(), 16, 8, 16};
     const FrameCores::DriverPicture right{moved.data(), 16, 8, 16};
     const FrameCores::DriverPicture game{pixels.data(), 16, 8, 16};
     runner.Start(DriverKind::PokeDaisy, {}, services, {}, WithJob(job), {}, caps);
     const auto frame = [&] {
         runner.RunFrame({}, out, caps);
+        CHECK(!out.primary_left.HasPicture());
         CHECK(!out.primary_right.HasPicture());
         CHECK(out.layer_shift == 0.0f);
     };
+    const auto both_own = [&] {
+        return out.primary_left.pixels == out.primary.pixels &&
+               out.primary_right.pixels == out.primary.pixels;
+    };
     frame();
-    runner.SetRightEye(right, game, 0.5f, out); // its alpha is none of the picture's
+    runner.SetEyes(left, right, game, 0.5f, out); // its alpha is none of the picture's
+    CHECK(out.primary_left.pixels == moved_left.data());
     CHECK(out.primary_right.pixels == moved.data());
     CHECK(out.layer_shift == 0.5f);
     frame();
     pixels.back() ^= 1; // the driver shows another picture
-    runner.SetRightEye(right, game, 0.5f, out);
-    CHECK(out.primary_right.pixels == out.primary.pixels);
+    runner.SetEyes(left, right, game, 0.5f, out);
+    CHECK(both_own());
     CHECK(out.layer_shift == 0.5f); // cut as the frames around it
     frame();
-    runner.SetRightEye({moved.data(), 8, 8, 16}, game, 0.5f, out); // another size
-    CHECK(out.primary_right.pixels == out.primary.pixels);
+    runner.SetEyes(left, {moved.data(), 8, 8, 16}, game, 0.5f, out); // another size
+    CHECK(both_own());
     CHECK(out.layer_shift == 0.0f);
     frame();
-    runner.SetRightEye(right, {}, 0.5f, out);
-    CHECK(out.primary_right.pixels == out.primary.pixels);
+    runner.SetEyes(left, right, {}, 0.5f, out);
+    CHECK(both_own());
     frame();
-    runner.SetRightEye({}, game, 0.5f, out);
+    runner.SetEyes(left, {}, game, 0.5f, out);
     CHECK(!out.primary_right.HasPicture());
     CHECK(steps == 5);
     CHECK(runner.Missteps() == 0);

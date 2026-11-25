@@ -68,30 +68,35 @@ template struct Opened<&melonDS::GLRenderer3D::ClearShaderBitmap, ClearBitmapTag
 template struct Opened<&melonDS::GLRenderer::CaptureOutput256FB, Wide>;
 template struct Opened<&melonDS::GLRenderer::CaptureOutput128FB, Small>;
 
-struct InRightState {
-    InRightState() {
-        DsGl::UseState(1);
+/// Of the layer's states, the game's own renderer has the first.
+struct InState {
+    explicit InState(NdsDepth::Eye eye) {
+        DsGl::UseState(1 + static_cast<int>(eye));
     }
-    ~InRightState() {
+    ~InState() {
         DsGl::UseState(0);
     }
-    InRightState(const InRightState&) = delete;
-    InRightState& operator=(const InRightState&) = delete;
+    InState(const InState&) = delete;
+    InState& operator=(const InState&) = delete;
 };
+static_assert(DsGl::kStates == 3);
+
+/// The right eye's first: its scene's view is the left one's too.
+constexpr std::array kEyes{NdsDepth::Eye::Right, NdsDepth::Eye::Left};
 
 void EndAtEdge(std::string& source) {
     if (!NdsGlEdge::Patch(source)) {
-        LOG_ERROR(Core, "NdsCore: the right eye has what is beyond its edge: another shader");
+        LOG_ERROR(Core, "NdsCore: an eye has what is beyond its edge: another shader");
     }
 }
 
-/// Where nothing is at the left edge, for the next draw with the program.
+/// Where nothing is at the edge, for the next draw with the program.
 void SetEdge(GLuint program, const std::array<GLuint, 4>& edge) {
     glUseProgram(program);
     glUniform4ui(glGetUniformLocation(program, "uEdge"), edge[0], edge[1], edge[2], edge[3]);
 }
 
-/// Drawing a line moves the windows' state on: both eyes start from the same.
+/// Drawing a line moves the windows' state on: all start from the same.
 struct Windows {
     u32 a0, a1, b0, b1;
 };
@@ -110,21 +115,22 @@ void WriteWindows(melonDS::GPU& gpu, const Windows& windows) {
 
 } // namespace
 
-/// An engine's layers for the right eye. What melonDS's renderer has taken down of the game's
+/// An engine's layers for an eye. What melonDS's renderer has taken down of the game's
 /// registers and sprites is moved, not the game's own.
-class StereoGl::RightEye2D final : public melonDS::GLRenderer2D {
+class StereoGl::Eye2D final : public melonDS::GLRenderer2D {
 public:
     using melonDS::GLRenderer2D::GLRenderer2D;
 
     /// Between frames.
-    void Set(bool draw_, const NdsDepth::LayerShifts& shifts_) {
+    void Set(bool draw_, NdsDepth::Eye eye, const NdsDepth::LayerShifts& depth) {
         draw = draw_;
+        const NdsDepth::LayerShifts shifts_ = NdsDepth::EyeLayers(depth, eye);
         if (shifts != shifts_) {
             shifts = shifts_;
-            const NdsDepth::LayerShifts ends = NdsDepth::EdgeLayers(shifts);
+            const NdsDepth::LayerShifts ends = NdsDepth::EdgeLayers(depth, eye);
             std::array<GLuint, 4> edge{};
             for (std::size_t i = 0; i < edge.size(); ++i) {
-                edge[i] = static_cast<GLuint>(std::max(0, ends[i]));
+                edge[i] = static_cast<GLuint>(ends[i]);
             }
             SetEdge(this->*Open(CompositorTag{}), edge);
             this->*Open(OamDirtyTag{}) = true;
@@ -219,25 +225,26 @@ private:
 
 /// The polygons, before the renderer among the bases, which reads them.
 struct StereoGl::HasScene {
-    explicit HasScene(melonDS::GPU3D& game) : scene{std::make_unique<NdsRight3D>(game)} {}
-    std::unique_ptr<NdsRight3D> scene;
+    HasScene(melonDS::GPU3D& game, NdsDepth::Eye eye)
+        : scene{std::make_unique<NdsEye3D>(game, eye)} {}
+    std::unique_ptr<NdsEye3D> scene;
 };
 
-class StereoGl::RightEye final : private HasScene, public melonDS::GLRenderer {
+class StereoGl::EyeRenderer final : private HasScene, public melonDS::GLRenderer {
 public:
-    explicit RightEye(melonDS::NDS& nds)
-        : HasScene{nds.GPU.GPU3D}, melonDS::GLRenderer(nds, false) {
-        Rend2D_A = std::make_unique<RightEye2D>(GPU.GPU2D_A, *this);
-        Rend2D_B = std::make_unique<RightEye2D>(GPU.GPU2D_B, *this);
+    EyeRenderer(melonDS::NDS& nds, NdsDepth::Eye eye_)
+        : HasScene{nds.GPU.GPU3D, eye_}, melonDS::GLRenderer(nds, false), eye{eye_} {
+        Rend2D_A = std::make_unique<Eye2D>(GPU.GPU2D_A, *this);
+        Rend2D_B = std::make_unique<Eye2D>(GPU.GPU2D_B, *this);
         Rend3D = std::make_unique<melonDS::GLRenderer3D>(scene->Scene(), *this);
     }
 
-    NdsRight3D& Scene() {
+    NdsEye3D& Scene() {
         return *scene;
     }
 
-    void Set(int engine, bool draw, const NdsDepth::LayerShifts& shifts) {
-        static_cast<RightEye2D&>(engine == 0 ? *Rend2D_A : *Rend2D_B).Set(draw, shifts);
+    void Set(int engine, bool draw, const NdsDepth::LayerShifts& depth) {
+        static_cast<Eye2D&>(engine == 0 ? *Rend2D_A : *Rend2D_B).Set(draw, eye, depth);
     }
 
     GLuint Output() {
@@ -247,21 +254,24 @@ public:
         return *static_cast<const GLuint*>(top);
     }
 
-    /// The columns, of its own, that the 3D's clear plane has nothing in.
-    void SetClearEdge(int columns) {
+    /// The columns, of its own, that the 3D's clear plane is in (nds_gl_edge.h).
+    void SetClearEdge(int begin, int end) {
         const auto& scene3d = static_cast<melonDS::GLRenderer3D&>(*Rend3D);
-        const auto edge = static_cast<GLuint>(columns);
         for (const GLuint program :
              {scene3d.*Open(ClearPlaneTag{}), scene3d.*Open(ClearBitmapTag{})}) {
             glUseProgram(program);
-            glUniform1ui(glGetUniformLocation(program, "uEdge"), edge);
+            glUniform4ui(glGetUniformLocation(program, "uEdge"), static_cast<GLuint>(begin),
+                         static_cast<GLuint>(end), 0, 0);
         }
     }
 
-    /// Both renderers' pictures are swapped together.
+    /// The renderers' pictures are swapped together.
     void SetBackBuffer(int to) {
         BackBuffer = to;
     }
+
+private:
+    const NdsDepth::Eye eye;
 };
 
 void StereoGl::Unseen::All() {
@@ -319,59 +329,81 @@ void StereoGl::Unseen::Swap(melonDS::GPU& gpu) {
 StereoGl::StereoGl(melonDS::NDS& nds) : melonDS::GLRenderer(nds, false) {}
 
 StereoGl::~StereoGl() {
-    DropRight();
+    DropEyes();
 }
 
-/// What the right eye's renderer does after the left one did it: in its own state of OpenGL, with
-/// what of the game's memory it has not seen. Everything is as before after it.
+NdsEye3D& StereoGl::SceneOf(NdsDepth::Eye eye) {
+    return Of(eye).renderer->Scene();
+}
+
+/// What an eye's renderer does after the game's did it: in its own state of OpenGL, with what of
+/// the game's memory it has not seen. Everything is as before after it.
 template <typename F>
-void StereoGl::WithRight(F&& f) {
-    const InRightState state;
-    unseen.Swap(GPU);
-    f(*right);
-    unseen.Swap(GPU);
+void StereoGl::With(NdsDepth::Eye eye, F&& f) {
+    EyeState& of = Of(eye);
+    const InState state{eye};
+    of.unseen.Swap(GPU);
+    f(*of.renderer);
+    of.unseen.Swap(GPU);
 }
 
-bool StereoGl::MakeRight() {
-    bool ok = false;
-    {
-        const InRightState state;
-        right = std::make_unique<RightEye>(GPU.NDS);
+template <typename F>
+void StereoGl::WithEyes(F&& f) {
+    for (const NdsDepth::Eye eye : kEyes) {
+        With(eye, f);
+    }
+}
+
+void StereoGl::NoteUnseen() {
+    for (EyeState& of : eyes) {
+        of.unseen.Note(GPU);
+    }
+}
+
+bool StereoGl::MakeEyes() {
+    bool ok = true;
+    for (const NdsDepth::Eye eye : kEyes) {
+        EyeState& of = Of(eye);
+        const InState state{eye};
+        of.renderer = std::make_unique<EyeRenderer>(GPU.NDS, eye);
         DsGl::PatchShaders(&EndAtEdge);
-        ok = right->Init();
+        ok = of.renderer->Init();
         DsGl::PatchShaders(nullptr);
-        if (ok) {
-            right->Reset();
-            right->SetRenderSettings(settings);
-            right->SetBackBuffer(BackBuffer);
+        if (!ok) {
+            break;
         }
+        of.renderer->Reset();
+        of.renderer->SetRenderSettings(settings);
+        of.renderer->SetBackBuffer(BackBuffer);
+        of.unseen.All();
+        of.drawn.reset();
     }
     if (!ok) {
-        DropRight();
+        DropEyes();
         return false;
     }
-    unseen.All();
-    drawn.reset();
-    for (u32 bank = 0; bank < 4; ++bank) {
-        CopyCaptures(*this, *right, bank, true);
-        CopyCaptures(*this, *right, bank, false);
+    for (const EyeState& of : eyes) {
+        for (u32 bank = 0; bank < 4; ++bank) {
+            CopyCaptures(*this, *of.renderer, bank, true);
+            CopyCaptures(*this, *of.renderer, bank, false);
+        }
     }
     // The coming frame's 3D and its first line's sprites were drawn ahead
     watch = {};
     begun = false;
     StartScene();
     BeginFrame();
-    WithRight([](RightEye& eye) { eye.DrawSprites(0); });
+    WithEyes([](EyeRenderer& eye) { eye.DrawSprites(0); });
     return true;
 }
 
-void StereoGl::DropRight() {
-    if (!right) {
+void StereoGl::DropEyes() {
+    if (!eyes[0].renderer && !eyes[1].renderer) {
         return;
     }
-    {
-        const InRightState state;
-        right.reset();
+    for (const NdsDepth::Eye eye : kEyes) {
+        const InState state{eye};
+        Of(eye).renderer.reset();
     }
     DsGl::FreeState();
     shown_depth = {};
@@ -382,7 +414,7 @@ void StereoGl::DropRight() {
 /// A bank of the captures of one renderer to another's.
 void StereoGl::CopyCaptures(const melonDS::GLRenderer& from, melonDS::GLRenderer& to, u32 bank,
                             bool wide) {
-    const InRightState state;
+    const InState state{NdsDepth::Eye::Right};
     glDisable(GL_SCISSOR_TEST);
     glColorMaski(0, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     const int size = (wide ? 256 : 128) * settings.ScaleFactor;
@@ -399,32 +431,38 @@ void StereoGl::CopyCaptures(const melonDS::GLRenderer& from, melonDS::GLRenderer
 bool StereoGl::SetDepth(const NdsDepth::Depth& depth) {
     wanted = depth;
     if (!depth.on) {
-        DropRight();
+        DropEyes();
         return true;
     }
-    return right || MakeRight();
+    return HasEyes() || MakeEyes();
 }
 
-GLuint StereoGl::Right(int screen) const {
-    return right && ready[static_cast<std::size_t>(screen)] ? right->Output() : 0;
+GLuint StereoGl::Picture(NdsDepth::Eye eye, int screen) const {
+    const EyeState& of = eyes[static_cast<std::size_t>(eye)];
+    return of.renderer && ready[static_cast<std::size_t>(screen)] ? of.renderer->Output() : 0;
 }
 
 void StereoGl::Reset() {
     GLRenderer::Reset();
-    if (right) {
-        const InRightState state;
-        right->Reset();
+    for (const NdsDepth::Eye eye : kEyes) {
+        EyeState& of = Of(eye);
+        if (of.renderer) {
+            const InState state{eye};
+            of.renderer->Reset();
+        }
+        of.unseen.All();
+        of.drawn.reset();
     }
-    unseen.All();
-    drawn.reset();
     if (!saving) {
         Forget();
     }
 }
 
 void StereoGl::Forget() {
-    if (right) {
-        right->Scene().Cut();
+    for (const EyeState& of : eyes) {
+        if (of.renderer) {
+            of.renderer->Scene().Cut();
+        }
     }
     watch = {};
     shown_depth = {};
@@ -440,20 +478,25 @@ void StereoGl::PostSavestate() {
     // only that, has reset the texture tracking.
     saving = GPU.VRAMDirty_Texture.Mapping[0] != 0x8000;
     GLRenderer::PostSavestate(); // Reset
-    if (right) {
-        const InRightState state;
-        right->PostSavestate();
+    for (const NdsDepth::Eye eye : kEyes) {
+        if (Of(eye).renderer) {
+            const InState state{eye};
+            Of(eye).renderer->PostSavestate();
+        }
     }
     saving = false;
 }
 
 void StereoGl::SetRenderSettings(melonDS::RendererSettings& to) {
     settings = to;
-    drawn.reset();
     GLRenderer::SetRenderSettings(to);
-    if (right) {
-        const InRightState state;
-        right->SetRenderSettings(to);
+    for (const NdsDepth::Eye eye : kEyes) {
+        EyeState& of = Of(eye);
+        of.drawn.reset();
+        if (of.renderer) {
+            const InState state{eye};
+            of.renderer->SetRenderSettings(to);
+        }
     }
 }
 
@@ -462,30 +505,46 @@ void StereoGl::StartScene() {
     const bool needed = watch.SceneNeeded(GPU.ScreenSwap, wanted.screens);
     const int screen = watch.NextOnTop() ? 0 : 1;
     next_scene = false;
-    const auto last = std::exchange(drawn, std::nullopt);
-    if (!NdsDepth::ShowsScene(GPU.GPU2D_A.DispCnt)) {
-        right->Scene().NoScene(screen);
-    } else if (needed) {
-        NdsRight3D& of = right->Scene();
-        const NdsDepth::SceneShift shift = of.Prepare(wanted, screen);
-        // Where the clear plane ends on the screen, in the scene, whose lines are scrolled
-        const int ends = std::max(0, NdsDepth::EdgeLayers(wanted.layers)[3]);
-        const int scroll = NdsDepth::ScrollOf(GPU.GPU3D.RenderXPos);
-        const int edge = ends == 0 ? 0 : NdsDepth::SceneEdge(of.FarShift(), scroll) + scroll;
-        drawn = Drawn{shift, edge};
-        of.Scene().RenderFrameIdentical = last && *last == *drawn && GPU.GPU3D.RenderFrameIdentical;
-        WithRight([&](RightEye& eye) {
-            eye.SetClearEdge(std::max(0, edge) * settings.ScaleFactor);
-            eye.Start3DRendering();
-        });
-        next_scene = true;
+    const bool shows = NdsDepth::ShowsScene(GPU.GPU2D_A.DispCnt);
+    const NdsEye3D* first = nullptr;
+    for (const NdsDepth::Eye eye : kEyes) {
+        EyeState& of = Of(eye);
+        NdsEye3D& eye_scene = of.renderer->Scene();
+        const auto last = std::exchange(of.drawn, std::nullopt);
+        if (!shows) {
+            eye_scene.NoScene(screen);
+        } else if (needed) {
+            const NdsDepth::SceneShift shift = eye_scene.Prepare(wanted, screen, first);
+            first = &eye_scene;
+            // Where the clear plane ends on the screen, in the scene, whose lines are scrolled
+            const bool ends = NdsDepth::EdgeLayers(wanted.layers, eye)[3] != 0;
+            const int scroll = NdsDepth::ScrollOf(GPU.GPU3D.RenderXPos);
+            const NdsDepth::SceneEnds at = eye_scene.Ends(scroll);
+            const int moved = scroll + eye_scene.Offset();
+            Drawn now{shift, eye_scene.Offset()};
+            if (ends && at.begin > 0) {
+                now.begin = std::max(0, at.begin + moved);
+            }
+            if (ends && at.end < NdsDepth::kWidth) {
+                now.end = std::max(1, at.end + moved);
+            }
+            of.drawn = now;
+            eye_scene.Scene().RenderFrameIdentical =
+                last && *last == now && GPU.GPU3D.RenderFrameIdentical;
+            With(eye, [&](EyeRenderer& renderer) {
+                renderer.SetClearEdge(now.begin * settings.ScaleFactor,
+                                      now.end * settings.ScaleFactor);
+                renderer.Start3DRendering();
+            });
+            next_scene = true;
+        }
     }
 }
 
 void StereoGl::Start3DRendering() {
-    unseen.Note(GPU);
+    NoteUnseen();
     GLRenderer::Start3DRendering();
-    if (right) {
+    if (HasEyes()) {
         StartScene();
     }
 }
@@ -497,22 +556,26 @@ void StereoGl::BeginFrame() {
         ended_shift = next_shift;
     }
     begun = true;
-    scene_offset = scene ? right->Scene().Offset() : 0;
+    for (EyeState& of : eyes) {
+        of.scene_offset = scene ? of.renderer->Scene().Offset() : 0;
+    }
     next_shift = wanted.layers[3];
     a_on_top = watch.a_on_top;
     lines = 0;
     no_scene = false;
     draws = shown_depth.Note(wanted, GPU, a_on_top, true);
-    const InRightState state;
-    for (int engine = 0; engine < 2; ++engine) {
-        right->Set(engine, draws[static_cast<std::size_t>(engine)], wanted.layers);
+    for (const NdsDepth::Eye eye : kEyes) {
+        const InState state{eye};
+        for (int engine = 0; engine < 2; ++engine) {
+            Of(eye).renderer->Set(engine, draws[static_cast<std::size_t>(engine)], wanted.layers);
+        }
     }
 }
 
 void StereoGl::DrawSprites(u32 line) {
-    unseen.Note(GPU);
+    NoteUnseen();
     GLRenderer::DrawSprites(line);
-    if (!right) {
+    if (!HasEyes()) {
         return;
     }
     if (line == 0) {
@@ -525,22 +588,24 @@ void StereoGl::DrawSprites(u32 line) {
         }
         BeginFrame();
     }
-    WithRight([line](RightEye& eye) { eye.DrawSprites(line); });
+    WithEyes([line](EyeRenderer& eye) { eye.DrawSprites(line); });
 }
 
 void StereoGl::DrawScanline(u32 line) {
-    unseen.Note(GPU);
+    NoteUnseen();
     const Windows windows = ReadWindows(GPU);
     GLRenderer::DrawScanline(line);
-    if (!right) {
+    if (!HasEyes()) {
         return;
     }
     begun = false;
     const Windows after = ReadWindows(GPU);
-    WriteWindows(GPU, windows);
     const u16 scroll = GPU.GPU3D.RenderXPos;
-    GPU.GPU3D.RenderXPos = NdsDepth::ScrollScene(scroll, scene_offset);
-    WithRight([line](RightEye& eye) { eye.DrawScanline(line); });
+    for (const NdsDepth::Eye eye : kEyes) {
+        WriteWindows(GPU, windows);
+        GPU.GPU3D.RenderXPos = NdsDepth::ScrollScene(scroll, Of(eye).scene_offset);
+        With(eye, [line](EyeRenderer& renderer) { renderer.DrawScanline(line); });
+    }
     GPU.GPU3D.RenderXPos = scroll;
     WriteWindows(GPU, after);
 
@@ -554,37 +619,41 @@ void StereoGl::DrawScanline(u32 line) {
 }
 
 void StereoGl::VBlank() {
-    unseen.Note(GPU);
+    NoteUnseen();
     GLRenderer::VBlank();
-    if (!right) {
+    if (!HasEyes()) {
         return;
     }
-    WithRight([](RightEye& eye) { eye.VBlank(); });
+    WithEyes([](EyeRenderer& eye) { eye.VBlank(); });
     if (GPU.CaptureEnable && (!draws[0] || no_scene || lines < 0)) {
-        // The right eye has no picture of this frame's engine A
+        // The eyes have no picture of this frame's engine A
         const bool wide = ((GPU.CaptureCnt >> 20) & 3) != 0;
-        CopyCaptures(*this, *right, (GPU.CaptureCnt >> 16) & 3, wide);
+        for (const EyeState& of : eyes) {
+            CopyCaptures(*this, *of.renderer, (GPU.CaptureCnt >> 16) & 3, wide);
+        }
     }
 }
 
 void StereoGl::VBlankEnd() {
     GLRenderer::VBlankEnd();
-    if (right) {
-        WithRight([](RightEye& eye) { eye.VBlankEnd(); });
+    if (HasEyes()) {
+        WithEyes([](EyeRenderer& eye) { eye.VBlankEnd(); });
     }
 }
 
 void StereoGl::AllocCapture(u32 bank, u32 start, u32 len) {
     GLRenderer::AllocCapture(bank, start, len);
-    if (right) {
-        WithRight([&](RightEye& eye) { eye.AllocCapture(bank, start, len); });
+    if (HasEyes()) {
+        WithEyes([&](EyeRenderer& eye) { eye.AllocCapture(bank, start, len); });
     }
 }
 
 void StereoGl::SwapBuffers() {
     GLRenderer::SwapBuffers();
-    if (right) {
-        right->SwapBuffers();
+    if (HasEyes()) {
+        for (const EyeState& of : eyes) {
+            of.renderer->SwapBuffers();
+        }
         ready = std::exchange(complete, {});
         shown_shift = ended_shift;
     }
