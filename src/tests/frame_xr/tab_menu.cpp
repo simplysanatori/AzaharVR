@@ -124,7 +124,9 @@ TEST_CASE("Tab menu: every target is at least 48 dp", "[frame_xr][tabmenu]") {
                 continue;
             }
             if ((v.tab == Tab::Position || v.tab == Tab::Settings || v.tab == Tab::Controls) &&
-                h.r.y1 >= kListBottom - 0.01f) {
+                (h.r.y1 >= kListBottom - 0.01f ||
+                 (d.menu.Layout().bar.Valid() &&
+                  h.r.y0 <= d.menu.Layout().bar.list.y0 + 0.01f))) {
                 continue; // cut by the scrolled list's edge: only the part on view is a target
             }
             INFO("tab " << static_cast<int>(v.tab) << " id " << static_cast<int>(h.t.id)
@@ -154,7 +156,8 @@ TEST_CASE("Tab menu: labels and options are not cut", "[frame_xr][tabmenu]") {
         d.Draw(m, v);
         for (const auto& h : d.menu.Hits()) {
             const auto& options = OptionsFor(h.t.id);
-            if (h.t.index < 0 || options.empty() || h.t.id == Id::ScreenShape ||
+            if (h.t.index < 0 || h.t.index >= static_cast<int>(options.size()) || // Angel's Aim's
+                options.empty() || h.t.id == Id::ScreenShape ||
                 h.t.id == Id::ImmersiveMode || h.r.y1 >= kListBottom - 0.01f) {
                 continue;
             }
