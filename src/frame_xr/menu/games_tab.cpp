@@ -19,6 +19,7 @@
 #include <cmath>
 #include <utility>
 
+#include "common/cover_strings.h"
 #include "frame_xr/menu/badge_seal.h"
 #include "frame_xr/menu/games_tab.h"
 #include "frame_xr/menu/md3_fonts.h"
@@ -56,7 +57,7 @@ constexpr float kPillY0 = 90.0f, kPillY1 = 114.0f, kPillEdge = 2.0f;
 constexpr float kPillSymbol = 16.0f;   ///< the symbol's centre from the pill's start
 constexpr float kPillText = 30.0f, kPillEnd = 9.0f, kPillSeal = 18.0f, kPillGlyph = 14.0f;
 constexpr float kTitleBase = 132.0f, kSmallBase = 190.0f, kSmall = 13.0f;
-constexpr float kOptionsMenuW = 160.0f; ///< as the tile
+constexpr float kOptionsMenuW = 264.0f;
 constexpr const char* kTitleCut = " \u2026";
 
 Rect Grown(const Rect& r, float by) {
@@ -386,8 +387,13 @@ std::vector<std::string> GamesMenuItems(const GamesTabModel& m, const MenuView& 
         return out;
     }
     if (view.open_menu == Id::GameOption && GameAt(m.list, view.games.menu_game) >= 0) {
+        namespace Text = Common::CoverText;
+        if (view.games.menu_covers) { // Choose Another Cover
+            return {Text::kBoxArt, Text::kTitleScreen, Text::kScreenshot};
+        }
         const bool running = !m.running.empty() && view.games.menu_game == m.running;
-        return {running ? "Continue" : "Play", "Favourite"}; // GameAction
+        return {running ? "Continue" : "Play", "Favourite", // GameAction
+                Text::kAnother, Text::kNone, Text::kOwn, Text::kReset};
     }
     return {};
 }
@@ -698,9 +704,10 @@ void TabMenu::DrawGames(Kit& kit, const MenuModel& model, const MenuView& view, 
         if (!sort) {
             const Rect& o = games_menu_at_; // under the three dots, above them at the bottom
             const float y = o.y1 + h <= kPanelH - 16.0f ? o.y1 : o.y0 - h;
-            at = {o.x1 - kOptionsMenuW, y, o.x1, y};
+            const float x0 = std::max(o.x1 - kOptionsMenuW, kGamesX0);
+            at = {x0, y, x0 + kOptionsMenuW, y};
             const int i = GameAt(m.list, view.games.menu_game);
-            selected = m.list->games[static_cast<std::size_t>(i)].favorite
+            selected = !view.games.menu_covers && m.list->games[static_cast<std::size_t>(i)].favorite
                            ? static_cast<int>(GameAction::Favourite)
                            : -1;
         }

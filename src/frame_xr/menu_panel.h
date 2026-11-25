@@ -125,6 +125,7 @@ private:
                     bool a_edge, Host& host);
     bool GamesClick(Menu::Target t, Host& host); ///< its part of Click: whether it was its own
     void GamesAction(int item, Host& host);      ///< an item of a tile's Options
+    void GamesDownload(Host& host);              ///< Download Thumbnails, for the games shown
     void GamesTitleScroll(float dt);             ///< the pointed at tile's cut title
     void Worker();
     void BeginEdit();

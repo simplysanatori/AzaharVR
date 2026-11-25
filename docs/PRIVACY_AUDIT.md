@@ -35,7 +35,7 @@ Note on the history: `steam-frame` is pushed to the private repository up to `00
 
 ## The outbound connections
 
-The emulator makes no network connection of its own (web service, telemetry and Discord are compiled out) apart from the update check at start (first row below). The other exceptions are the crash report's Send Report button (below), the Cheats window's "Download Cheats" button, the VR menu's Mods tab (Download on the Cheats list, Install Mods, Download Packs) and its Homebrew tab (below), and Download Cover Art while it is turned on (below), in `src/core/cheats/online.cpp`, `src/core/frame_covers.*`, `src/core/mods/*`, `src/core/custom_tex/download.*` and `src/core/homebrew/*`. Except for the update check, only when the player clicks them (covers: only while Download Cover Art, off by default, is on), the program makes HTTPS requests to these hosts and no others:
+The emulator makes no network connection of its own (web service, telemetry and Discord are compiled out) apart from the update check at start (first row below). The other exceptions are the crash report's Send Report button (below), the Cheats window's "Download Cheats" button, the VR menu's Mods tab (Download on the Cheats list, Install Mods, Download Packs) and its Homebrew tab (below), and the covers of its Games tab (below), in `src/core/cheats/online.cpp`, `src/core/frame_covers.*`, `src/core/mods/*`, `src/core/custom_tex/download.*` and `src/core/homebrew/*`. Except for the update check, only when the player clicks them (covers: also while Download Game Covers, off by default, is on), the program makes HTTPS requests to these hosts and no others:
 
 | Host | Request | Why |
 |---|---|---|
@@ -100,15 +100,17 @@ Only when a newer release's recipe is one the program's own builder cannot follo
 
 What it writes is checked by the program before anything is installed: the pack's header, index and payload checksums, its data ABI and the ROM's SHA-1, and the hash of the game's .3dsx against the release's manifest. It is then installed exactly like a pack the program's builder made, and the log says which builder made it. If bubblewrap or Python 3.11 is not there, the prompt says so and no button is offered.
 
-### Cover art (Games tab, Download Cover Art)
+### Covers (Games tab)
 
-Off by default (Configure > UI, Download Cover Art). While it is on, the program asks for the box art of the DS, GBA and Game Boy games in the player's game list, one at a time, when the list was read and when the VR menu opens (`src/core/frame_covers.*`, `src/citra_qt/frame_games.cpp`). 3DS games are never asked for.
+No cover is asked for until the player presses Download in "Download Thumbnails?" (which the Download Thumbnails button and Choose Another Cover open, and which shows after a scan of the game list found files that were not in it before, once for these files; it says what the source sees), or turns Download Game Covers on (off by default; its tooltip says the same). Download asks once, for the games it names, and does not turn the setting on. With the setting on, the games in the list without a cover are asked for one at a time, when the list was read, and not once it is off again; Choose Another Cover then asks without the question. Covers on disk show whatever the setting says (`src/core/frame_covers.*`, `src/citra_qt/frame_games.cpp`).
 
 | Host | Request | Why |
 | --- | --- | --- |
-| `raw.githubusercontent.com` | `GET /libretro-thumbnails/<system>/master/Named_Boxarts/<file name>.png` | The game's cover |
+| `raw.githubusercontent.com` | `GET /libretro-thumbnails/<system>/master/Named_Boxarts/<file name>.png` (Choose Another Cover: also `Named_Titles`, `Named_Snaps`) | The game's cover |
 
-**The request shows the host the game's file name** (without its extension; `&*/:` and the like become `_`), so GitHub sees, with the player's IP address, which games of these systems are in the list, whether a cover exists or not. Only a name that ends with a tag in round brackets, as every No-Intro name does ("(USA)"), is asked for: other names (most ROM hacks, renamed files) are never sent. Nothing else is sent: no path, title ID, save, account or cookie, only the usual HTTP headers (`User-Agent: cpp-httplib/<version>`). No redirect is followed; HTTPS only, the certificate checked as above; a reply over 2 MB or that is no PNG or JPEG is dropped. Covers are kept in the cache folder (`covers/`), with `missing.txt`, the names not found and when; those are asked for again after 30 days, a failed connection at the next start. Nothing is bundled or re-hosted.
+**The request shows the host the game's file name** (without its extension; `&*/:` and the like become `_`), so GitHub sees, with the player's IP address, which games are in the list, whether a cover exists or not. Only a name that ends with a tag in round brackets, as every No-Intro name does ("(USA)"), is asked for: other names (most ROM hacks, renamed files) are never sent. Nothing else is sent: no path, title ID, save, account or cookie, only the usual HTTP headers (`User-Agent: cpp-httplib/<version>`). No redirect is followed; HTTPS only, the certificate checked as above; a reply over 2 MB or that is no PNG or JPEG is dropped. After no reply or a limit nothing more is asked for in that run or press.
+
+Kept in the user folder's `covers/`: downloads per source and system (`libretro-thumbnails/`, with `missing.txt`, the names not found and when, asked for again after 30 days), the player's own images (`own/`, a copy of a PNG or JPEG of 8 MB at most that Use My Own Image picked; never sent anywhere), `choices.txt` and `known.txt` (the games the list had, by a hash of their name and their key, so each is asked about once). Whether a network is there is read from the computer's own interfaces; nothing is sent to find out. Nothing is bundled or re-hosted.
 
 ### Crash reports (Send Report)
 

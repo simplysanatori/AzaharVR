@@ -110,6 +110,7 @@
 #include "citra_qt/qt_swizzle.h"
 #include "citra_qt/uisettings.h"
 #include "common/play_time_manager.h"
+#include "common/cover_strings.h" // AzaharVR
 #include "common/frame_product.h" // AzaharVR
 // AzaharVR: builds with ENABLE_FRAME_XR off (common/, built either way: WindowLayoutOption, FrameAutosaveGates)
 #include "common/frame_flat.h" // AzaharFrame flat3: flat mode's own screen layout
@@ -3793,6 +3794,11 @@ void GMainWindow::ShutdownAltGame() {
     alt_core_host->Stop();
     game_list->AltGameStopped(alt_title_id);
     emulation_running = false;
+#if defined(ENABLE_FRAME_XR) && defined(ENABLE_ALT_CORES)
+    if (g_frame_games) { // AzaharVR
+        g_frame_games->GameStopped();
+    }
+#endif
     game_path.clear();
     game_title.clear();
 #ifdef ENABLE_FRAME_XR
@@ -4328,6 +4334,11 @@ void GMainWindow::ShutdownGame() {
     UpdateSaveStates();
 
     emulation_running = false;
+#if defined(ENABLE_FRAME_XR) && defined(ENABLE_ALT_CORES)
+    if (g_frame_games) { // AzaharVR
+        g_frame_games->GameStopped();
+    }
+#endif
 #ifdef ENABLE_FRAME_XR // AzaharFrame: back to the picker or home panel (folders may have changed)
     if (FrameXr::IsStarted()) {
         if (g_frame_xr_fast_forward) {
@@ -5727,6 +5738,13 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         });
 #endif
         return;
+    case C::DownloadThumbnails: // AzaharVR: covers
+    case C::GameCovers:
+    case C::GameCover:
+#ifdef ENABLE_ALT_CORES
+        QTimer::singleShot(0, this, [this, r] { FrameCoverCommand(r); });
+#endif
+        return;
     case C::PlayGame: // AzaharVR: the Games tab
     case C::FavouriteGame:
 #ifdef ENABLE_ALT_CORES
@@ -6932,10 +6950,77 @@ void GMainWindow::FrameMakeGamesTab() {
     };
     h.boot = [this](const QString& path) { BootGame(path); };
     h.covers_on = [] { return UISettings::values.download_covers.GetValue(); };
-    h.covers_dir = FileUtil::GetUserPath(FileUtil::UserPath::CacheDir) + "covers/";
+    h.covers_dir = FileUtil::GetUserPath(FileUtil::UserPath::UserDir) + "covers/";
+    h.confirm = [this](const QString& title, const QString& body, const QString& confirm,
+                       const QString& cancel, std::function<void(bool)> answer) {
+        FrameAsk(title, body, confirm, cancel, std::move(answer));
+    };
+    h.online = [] { return Core::Covers::NetworkUp(); };
+    h.toast = [this](const QString& text) {
+        FrameXr::ShowToastText(text.toStdString(), FrameXr::ToastTime::Long);
+        statusBar()->showMessage(text, 5000);
+    };
     g_frame_games = new FrameGames(std::move(h), this);
     connect(game_list, &GameList::PopulatingCompleted, g_frame_games,
             [] { g_frame_games->Listed(); });
+}
+#endif
+
+#if defined(ENABLE_FRAME_XR) && defined(ENABLE_ALT_CORES)
+// AzaharVR: covers, from the in-game menu (GameCoverAction in frame_xr.h)
+void GMainWindow::FrameCoverCommand(const FrameXr::MenuRequest& r) {
+    if (!g_frame_games) {
+        return;
+    }
+    using FrameXr::GameCoverAction;
+    using Core::Covers::Art;
+    switch (r.command) {
+    case FrameXr::MenuCommand::DownloadThumbnails: {
+        std::vector<std::string> paths;
+        const auto lines = QString::fromStdString(r.text).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        for (const QString& path : lines) {
+            paths.push_back(path.toStdString());
+        }
+        g_frame_games->DownloadThumbnails(paths);
+        return;
+    }
+    case FrameXr::MenuCommand::GameCovers:
+        UISettings::values.download_covers = r.value != 0;
+        config->Save();
+        g_frame_games->CoverSettingChanged();
+        g_frame_games->Publish();
+        return;
+    default:
+        break;
+    }
+    switch (static_cast<GameCoverAction>(r.value)) {
+    case GameCoverAction::Box:
+        return g_frame_games->ChooseCover(r.text, Art::Box);
+    case GameCoverAction::Title:
+        return g_frame_games->ChooseCover(r.text, Art::Title);
+    case GameCoverAction::Snap:
+        return g_frame_games->ChooseCover(r.text, Art::Snap);
+    case GameCoverAction::None:
+        return g_frame_games->NoCover(r.text);
+    case GameCoverAction::Reset:
+        return g_frame_games->ResetCover(r.text);
+    case GameCoverAction::Own:
+        break;
+    }
+    // As Add Folder: Qt's own dialog, in Azahar's window, shown in VR
+    g_frame_mirror->SetMenuWindow(true);
+    QTimer::singleShot(0, this, [this, path = r.text] {
+        const QString file = QFileDialog::getOpenFileName(
+            this, QString::fromUtf8(Common::CoverText::kOwnPick), QDir::homePath(),
+            QStringLiteral("PNG, JPEG (*.png *.jpg *.jpeg)"), nullptr,
+            QFileDialog::DontUseNativeDialog);
+        if (g_frame_games) {
+            g_frame_games->UseOwnImage(path, file);
+        }
+        if (g_frame_mirror) {
+            g_frame_mirror->SetMenuWindow(false); // back to the menu
+        }
+    });
 }
 #endif
 
@@ -7365,6 +7450,11 @@ void GMainWindow::OnConfigure() {
         game_list->RefreshGameDirectory();
         config->Save();
         FrameAutosaveKeepChanged(); // AzaharFrame autosave: Keep lowered: the oldest go
+#if defined(ENABLE_FRAME_XR) && defined(ENABLE_ALT_CORES)
+        if (g_frame_games) { // AzaharVR: Download Game Covers
+            g_frame_games->CoverSettingChanged();
+        }
+#endif
 #ifdef ENABLE_FRAME_XR
         FrameXrPushControls(); // AzaharFrame vrvis
 #endif

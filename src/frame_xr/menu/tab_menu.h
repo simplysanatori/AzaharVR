@@ -367,6 +367,9 @@ enum class Id : int {
     GamesAddFolder,
     ControlsSection, ///< the Controls tab's section buttons: Buttons, Pointing, Motion
     ExperimentalHeader, ///< the Graphics and Immersive sections' "Experimental" subheader (no action)
+    GamesHeader, ///< the Settings tab's Games rows, with a Games tab only
+    DownloadGameCovers, ///< a switch: covers by themselves
+    DownloadThumbnails, ///< for the games the Games tab shows
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);

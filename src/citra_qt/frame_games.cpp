@@ -4,6 +4,9 @@
 
 #include "citra_qt/frame_games.h"
 
+#include <algorithm>
+#include <ctime>
+#include <iterator>
 #include <memory>
 #include <utility>
 #include <QBuffer>
@@ -16,6 +19,7 @@
 #include <QTimer>
 
 #include "citra_qt/uisettings.h"
+#include "common/cover_strings.h"
 #include "common/logging/log.h"
 #include "core/frame_covers.h"
 #include "core/loader/loader.h"
@@ -25,8 +29,10 @@
 
 using FrameXr::Menu::GameEntry;
 using FrameXr::Menu::GamesSnapshot;
+namespace Text = Common::CoverText;
 
-FrameGames::FrameGames(Hooks hooks_, QObject* parent) : QObject{parent}, hooks{std::move(hooks_)} {
+FrameGames::FrameGames(Hooks hooks_, QObject* parent)
+    : QObject{parent}, hooks{std::move(hooks_)}, library{hooks.covers_dir} {
     cover_stopper = std::make_unique<Mods::Transfer::Stopper>(cover_cancel);
     covers_publish.setSingleShot(true);
     covers_publish.setInterval(1000);
@@ -51,6 +57,12 @@ void FrameGames::Listed() {
     missing.clear();
     FindCovers();
     Publish();
+    std::vector<Core::Covers::NewGames::Listed> listed;
+    for (const GameEntry& row : rows) {
+        listed.push_back({row.path, GameOf(row)});
+    }
+    new_games.Scanned(listed, library, std::time(nullptr));
+    AskForNewGames();
 }
 
 // ---- Covers (core/frame_covers.h) ----
@@ -98,22 +110,27 @@ std::string StemOf(const std::string& file_name) {
 
 } // namespace
 
-void FrameGames::FindCovers() {
-    covers_enabled = hooks.covers_on && hooks.covers_on();
-    if (!covers_enabled) {
+Core::Covers::Game FrameGames::GameOf(const GameEntry& row) {
+    // completeBaseName: "Game (USA).gba" of "Game (USA).gba.zip"
+    const QString name = QFileInfo(QString::fromStdString(row.path)).completeBaseName();
+    return {row.system, row.key, StemOf(name.toStdString())};
+}
+
+const GameEntry* FrameGames::RowOf(const std::string& path) const {
+    const auto it = std::find_if(rows.begin(), rows.end(),
+                                 [&path](const GameEntry& g) { return g.path == path; });
+    return it != rows.end() ? &*it : nullptr;
+}
+
+void FrameGames::Queue(std::vector<CoverJob> jobs, bool first) {
+    if (jobs.empty()) {
         return;
     }
     {
         std::scoped_lock lock{cover_mutex};
-        for (const GameEntry& g : rows) {
-            if (g.system != Common::GameSystem::N3DS && !covers.contains(g.path) &&
-                covers_asked.insert(g.path).second) {
-                // completeBaseName: "Game (USA).gba" of "Game (USA).gba.zip"
-                cover_jobs.push_back({g.path, g.system, StemOf(QFileInfo(QString::fromStdString(
-                                                                    g.path)).completeBaseName()
-                                                                  .toStdString())});
-            }
-        }
+        cover_jobs.insert(first ? cover_jobs.begin() : cover_jobs.end(),
+                          std::make_move_iterator(jobs.begin()),
+                          std::make_move_iterator(jobs.end()));
     }
     if (!cover_thread.joinable()) {
         cover_thread = std::thread([this] { CoverThread(); });
@@ -121,13 +138,180 @@ void FrameGames::FindCovers() {
     cover_cv.notify_one();
 }
 
-void FrameGames::CoverThread() {
-    Core::Covers::Cache cache(hooks.covers_dir);
-    const Core::Covers::Get get = [this](const std::string& host, const std::string& path,
-                                         std::size_t max_bytes) {
-        return Core::Covers::HttpsGet(host, path, max_bytes, cover_stopper.get());
+void FrameGames::FindCovers() {
+    covers_enabled = hooks.covers_on && hooks.covers_on();
+    std::vector<CoverJob> jobs;
+    for (const GameEntry& row : rows) {
+        const bool load = covers_loaded.insert(GameOf(row).Id() + row.path).second;
+        const bool fetch = covers_enabled && covers_automatic.insert(GameOf(row).Id() + row.path).second;
+        if (load || fetch) {
+            jobs.push_back({.path = row.path, .game = GameOf(row), .fetch = fetch, .automatic = true});
+        }
+    }
+    Queue(std::move(jobs), false);
+}
+
+void FrameGames::CoverSettingChanged() {
+    covers_automatic.clear(); // turned on: every game without one, again
+    FindCovers();
+}
+
+void FrameGames::ReloadCover(const Core::Covers::Game& game) {
+    std::vector<CoverJob> jobs;
+    for (const GameEntry& row : rows) {
+        if (GameOf(row) == game) {
+            jobs.push_back({.path = row.path, .game = game});
+        }
+    }
+    Queue(std::move(jobs), true);
+}
+
+void FrameGames::DownloadThumbnails(const std::vector<std::string>& paths) {
+    std::vector<std::string> wanted;
+    for (const std::string& path : paths) {
+        const GameEntry* row = RowOf(path);
+        if (row != nullptr && library.Wanted(GameOf(*row), std::time(nullptr))) {
+            wanted.push_back(path);
+        }
+    }
+    if (wanted.empty()) {
+        hooks.toast(QString::fromUtf8(Text::kNothingToAsk));
+        return;
+    }
+    const QString body = QString::fromStdString(Text::AskBody(wanted.size(), false));
+    hooks.confirm(QString::fromUtf8(Text::kAskTitle), body, QString::fromUtf8(Text::kAskYes),
+                  QString::fromUtf8(Text::kAskNo), [this, wanted](bool yes) {
+                      if (yes) {
+                          StartDownload(wanted);
+                      }
+                  });
+}
+
+void FrameGames::GameStopped() {
+    // Not when another game starts right away
+    QTimer::singleShot(1000, this, [this] { AskForNewGames(); });
+}
+
+void FrameGames::AskForNewGames() {
+    const auto games = new_games.Take(library, {.automatic = hooks.covers_on(),
+                                                .running = !hooks.running_path().isEmpty(),
+                                                .online = hooks.online(),
+                                                .time = std::time(nullptr)});
+    if (games.empty()) {
+        return;
+    }
+    std::vector<std::string> paths;
+    for (const auto& game : games) {
+        paths.push_back(game.path);
+    }
+    QTimer::singleShot(0, this, [this, paths] { // after the list's own
+        hooks.confirm(QString::fromUtf8(Text::kAskTitle),
+                      QString::fromStdString(Text::AskBody(paths.size(), true)),
+                      QString::fromUtf8(Text::kAskYes), QString::fromUtf8(Text::kAskNo),
+                      [this, paths](bool yes) {
+                          if (yes) {
+                              StartDownload(paths);
+                          }
+                      });
+    });
+}
+
+void FrameGames::StartDownload(const std::vector<std::string>& paths) {
+    auto batch = std::make_shared<CoverBatch>();
+    std::vector<CoverJob> jobs;
+    for (const std::string& path : paths) {
+        if (const GameEntry* row = RowOf(path)) {
+            jobs.push_back({.path = path, .game = GameOf(*row), .fetch = true, .batch = batch});
+        }
+    }
+    batch->left = static_cast<int>(jobs.size());
+    Queue(std::move(jobs), true);
+}
+
+void FrameGames::ChooseCover(const std::string& path, Core::Covers::Art art) {
+    const GameEntry* row = RowOf(path);
+    if (row == nullptr) {
+        return;
+    }
+    const Core::Covers::Game game = GameOf(*row);
+    if (library.Has(game, art)) {
+        library.Choose(game, Core::Covers::ChoiceFor(art));
+        ReloadCover(game);
+        return;
+    }
+    if (game.key == 0 || !Core::Covers::SourceFor(game.system, game.stem, art) ||
+        library.KnownMissing(game, art, std::time(nullptr))) { // it has none: not asked for
+        hooks.toast(QString::fromUtf8(Text::kNoneFound));
+        return;
+    }
+    const auto start = [this, path, game, art](bool yes) {
+        if (yes) {
+            auto batch = std::make_shared<CoverBatch>();
+            batch->left = 1;
+            Queue({{.path = path, .game = game, .art = art, .fetch = true, .choose = true,
+                    .batch = batch}},
+                  true);
+        }
     };
-    bool online = true; // false after no reply or a limit: the cached ones only, this run
+    if (hooks.covers_on()) {
+        start(true);
+    } else {
+        hooks.confirm(QString::fromUtf8(Text::kAskTitle),
+                      QString::fromStdString(Text::AskBody(1, false)),
+                      QString::fromUtf8(Text::kAskYes), QString::fromUtf8(Text::kAskNo), start);
+    }
+}
+
+void FrameGames::NoCover(const std::string& path) {
+    if (const GameEntry* row = RowOf(path)) {
+        library.Choose(GameOf(*row), Core::Covers::Choice::None);
+        ReloadCover(GameOf(*row));
+    }
+}
+
+void FrameGames::ResetCover(const std::string& path) {
+    if (const GameEntry* row = RowOf(path)) {
+        library.Choose(GameOf(*row), Core::Covers::Choice::Automatic);
+        ReloadCover(GameOf(*row));
+    }
+}
+
+void FrameGames::UseOwnImage(const std::string& path, const QString& file) {
+    const GameEntry* row = RowOf(path);
+    QFile f(file);
+    if (row == nullptr || file.isEmpty()) {
+        return;
+    }
+    QString why;
+    if (f.size() > static_cast<qint64>(Core::Covers::kMaxOwnBytes)) {
+        why = QString::fromUtf8(Text::kOwnTooLarge);
+    } else {
+        const QByteArray bytes = f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray{};
+        const Core::Covers::Game game = GameOf(*row);
+        if (Core::Covers::ImageOf(bytes.toStdString()) == Core::Covers::Image::None ||
+            !LoadCover(bytes) || !library.SetOwn(game, bytes.toStdString()).empty()) {
+            why = QString::fromUtf8(Text::kOwnNotImage);
+        } else {
+            ReloadCover(game);
+        }
+    }
+    if (!why.isEmpty()) {
+        hooks.toast(why);
+    }
+}
+
+void FrameGames::CoverThread() {
+    const Core::Covers::Get get =
+        hooks.covers_get ? hooks.covers_get
+                         : [this](const std::string& host, const std::string& path,
+                                  std::size_t max_bytes) {
+                               return Core::Covers::HttpsGet(host, path, max_bytes,
+                                                             cover_stopper.get());
+                           };
+    const auto is_image = [](const std::string& bytes) {
+        return LoadCover(QByteArray::fromStdString(bytes)) != nullptr;
+    };
+    bool online = true; // the automatic ones: false after no reply or a limit, this run
     for (;;) {
         CoverJob job;
         {
@@ -138,48 +322,66 @@ void FrameGames::CoverThread() {
             }
             job = std::move(cover_jobs.front());
             cover_jobs.pop_front();
-            if (!covers_enabled) {
-                covers_asked.erase(job.path); // asked for again once it is on
-                continue;
-            }
         }
-        const auto source = Core::Covers::SourceFor(job.system, job.stem);
-        if (!source || !covers_enabled) { // (turned off since)
-            continue;
-        }
-        std::shared_ptr<const FrameXr::Menu::GameIcon> cover;
-        if (const std::string file = cache.FileOf(*source); !file.empty()) {
-            QFile f(QString::fromStdString(file));
-            if (f.size() <= static_cast<qint64>(Core::Covers::kMaxBytes) &&
-                f.open(QIODevice::ReadOnly)) {
-                cover = LoadCover(f.readAll());
-            }
-        } else if (online && !cache.KnownMissing(*source, std::time(nullptr))) {
-            const auto fetched = Core::Covers::Fetch(get, *source);
-            online = !fetched.stop;
-            if (fetched.result == Core::Covers::Fetched::Result::NotThere) {
-                cache.MarkMissing(*source, std::time(nullptr));
-            } else if (fetched.result == Core::Covers::Fetched::Result::Failed) {
-                LOG_INFO(Frontend, "Games tab: no cover for {}: {}", job.stem, fetched.why);
-            } else {
-                cover = LoadCover(QByteArray::fromStdString(fetched.bytes));
-                if (cover) {
-                    cache.Store(*source, fetched.bytes);
-                } else { // a PNG's or JPEG's signature, but no image: as if not there
-                    cache.MarkMissing(*source, std::time(nullptr));
+        using Core::Covers::Outcome;
+        bool got = false;
+        const std::time_t now = std::time(nullptr);
+        const bool may = job.automatic ? covers_enabled && online && library.Wanted(job.game, now)
+                                       : job.batch && !job.batch->stopped;
+        if (job.fetch && may) {
+            const Outcome outcome =
+                Core::Covers::Download(get, library, job.game, job.art, now, is_image);
+            got = outcome == Outcome::Got;
+            if (outcome == Outcome::Stop) {
+                online = false;
+                if (job.batch) {
+                    job.batch->stopped = true;
+                }
+            } else if (got) {
+                online = true;
+                if (job.choose) {
+                    library.Choose(job.game, Core::Covers::ChoiceFor(job.art));
                 }
             }
         }
-        if (cover) {
-            QMetaObject::invokeMethod(
-                this, [this, path = job.path, cover] { CoverFound(path, cover); },
-                Qt::QueuedConnection);
+        std::shared_ptr<const FrameXr::Menu::GameIcon> cover;
+        if (const std::string shown = library.Shown(job.game); !shown.empty()) {
+            QFile f(QString::fromStdString(shown));
+            if (f.size() <= static_cast<qint64>(Core::Covers::kMaxOwnBytes) &&
+                f.open(QIODevice::ReadOnly)) {
+                cover = LoadCover(f.readAll());
+            }
         }
+        QMetaObject::invokeMethod(
+            this,
+            [this, job, cover, got] {
+                CoverFound(job.path, cover);
+                if (got && job.choose) {
+                    ReloadCover(job.game);
+                }
+                if (job.batch) {
+                    BatchStep(job.batch, got);
+                }
+            },
+            Qt::QueuedConnection);
     }
+}
+
+void FrameGames::BatchStep(const std::shared_ptr<CoverBatch>& batch, bool found) {
+    batch->found += found ? 1 : 0;
+    if (--batch->left > 0) {
+        return;
+    }
+    hooks.toast(batch->found > 0 ? QString::fromStdString(Text::Downloaded(batch->found))
+                : batch->stopped ? QString::fromUtf8(Text::kUnreachable)
+                                 : QString::fromUtf8(Text::kNoneFound));
 }
 
 void FrameGames::CoverFound(const std::string& path,
                             std::shared_ptr<const FrameXr::Menu::GameIcon> cover) {
+    if (const auto it = covers.find(path); it == covers.end() ? !cover : it->second == cover) {
+        return; // as before
+    }
     covers[path] = std::move(cover);
     if (!covers_publish.isActive()) {
         covers_publish.start();
@@ -187,7 +389,7 @@ void FrameGames::CoverFound(const std::string& path,
 }
 
 void FrameGames::Publish() {
-    FindCovers(); // Download Cover Art turned on since
+    FindCovers(); // Download Game Covers turned on or off since
     std::vector<GameEntry> marked = rows;
     for (GameEntry& g : marked) {
         g.favorite = UISettings::values.favorited_ids.contains(g.key);
@@ -218,7 +420,7 @@ void FrameGames::Publish() {
     if (!published || !(*published == list)) { // the same list: nothing to draw again
         published = std::make_shared<const GamesSnapshot>(std::move(list));
     }
-    FrameXr::SetInGameMenuGames(published, row);
+    FrameXr::SetInGameMenuGames(published, row, covers_enabled);
 }
 
 FrameGames::File FrameGames::Check(const QString& path) {

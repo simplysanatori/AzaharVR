@@ -78,6 +78,9 @@ constexpr Rule kRules[] = {
     {Id::AutosaveEvery, Need::Autosave},
     {Id::AutosaveKeep, Need::Autosave},
     {Id::AutosaveCard, Need::Autosave}, // Load State's
+    {Id::GamesHeader, Need::Any}, // the covers' rows, while there is a Games tab
+    {Id::DownloadGameCovers, Need::Any},
+    {Id::DownloadThumbnails, Need::Any},
     {Id::MoreSettings, Need::Any},
     {Id::SwitchToFlat, Need::Flat}, // Main's
     {Id::HelpHeader, Need::Any},
