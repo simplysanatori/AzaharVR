@@ -413,8 +413,38 @@ void RestoreGlobalState(bool is_powered_on) {
     values.gba_allow_editing.SetGlobal(true);
     values.gba_rotate_pages.SetGlobal(true);
     values.gba_map_refresh.SetGlobal(true);
-    values.layer_depth.SetGlobal(true);
-    values.invert_depth.SetGlobal(true);
+    ForEachConsoleSetting([](auto& setting) { setting.SetGlobal(true); });
+}
+
+namespace {
+std::atomic<ConsoleGroup> active_console{ConsoleGroup::N3DS};
+} // namespace
+
+ConsoleGraphics Graphics(ConsoleGroup group) {
+    auto& v = values;
+    switch (group) {
+    case ConsoleGroup::DS:
+        return {v.ds_resolution_factor,  v.ds_texture_filter,      v.ds_layer_depth,
+                v.ds_invert_depth,       v.ds_vr_screen_layout,    v.ds_vr_screen_gap,
+                v.ds_vr_hide_bottom_screen, v.ds_vr_screen_curve};
+    case ConsoleGroup::GBA:
+        return {v.gba_resolution_factor,  v.gba_texture_filter,   v.layer_depth,
+                v.invert_depth,           v.gba_vr_screen_layout, v.gba_vr_screen_gap,
+                v.gba_vr_hide_bottom_screen, v.gba_vr_screen_curve};
+    case ConsoleGroup::N3DS:
+        break;
+    }
+    return {v.resolution_factor,   v.texture_filter,    v.n3ds_layer_depth_unused,
+            v.n3ds_invert_depth_unused, v.vr_screen_layout, v.vr_screen_gap,
+            v.vr_hide_bottom_screen, v.vr_screen_curve};
+}
+
+ConsoleGroup ActiveConsole() {
+    return active_console.load(std::memory_order_relaxed);
+}
+
+void SetActiveConsole(ConsoleGroup group) {
+    active_console.store(group, std::memory_order_relaxed);
 }
 
 /// Gets the graphics API that should be used; not necessarily one set in settings

@@ -812,6 +812,7 @@ bool PerGameSetting(Id id) {
     switch (id) {
     case Id::HideBottomScreen:
     case Id::ScreenLayout:
+    case Id::ScreenCurve: // AzaharVR: per game too
     case Id::ScreenShape:
     case Id::ImmersiveMode:
     case Id::MarginX: // AzaharFrame fovaxis

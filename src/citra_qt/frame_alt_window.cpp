@@ -322,7 +322,7 @@ void GMainWindow::AltNotify(const std::string& text) {
 void GMainWindow::AltCaptureScreenshot() {
     const u32 scale = std::max(1u, UISettings::values.screenshot_resolution_factor.GetValue() != 0
                                        ? UISettings::values.screenshot_resolution_factor.GetValue()
-                                       : Settings::values.resolution_factor.GetValue());
+                                       : Settings::RunningGraphics().resolution_factor.GetValue());
     // The window's layout at that many 3DS pixels, as a 3DS game's screenshot; a game with one
     // screen has the whole picture.
     const auto screens = Layout::GetAltScreens().value_or(Layout::AltScreens{});

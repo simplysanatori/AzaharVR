@@ -529,7 +529,7 @@ TEST_CASE("Sections: the scope's count follows the rows", "[frame_xr][tabmenu][s
     m.scale_mode = 0;
     CHECK(GameValueRows(m, Tab::Position) ==
           std::vector<Id>{Id::ScreenLayout, Id::ScreenGap, Id::HideBottomScreen,
-                          Id::ScreenShape});
+                          Id::ScreenShape, Id::ScreenCurve});
     CHECK(GameValueRows(m, Tab::Settings, SettingsSection::General) ==
           std::vector<Id>{Id::FastForwardAudio, Id::Autosave, Id::AutosaveEvery,
                           Id::AutosaveKeep});
@@ -563,7 +563,7 @@ TEST_CASE("Core rows: Use Global Values counts only the console's rows", "[frame
     }
     CHECK(GameValueRows(m, Tab::Position) ==
           std::vector<Id>{Id::ScreenLayout, Id::DsScreenRotation, Id::ScreenGap,
-                          Id::HideBottomScreen});
+                          Id::HideBottomScreen, Id::ScreenCurve});
 }
 
 TEST_CASE("Core rows: the text", "[frame_xr][tabmenu]") {

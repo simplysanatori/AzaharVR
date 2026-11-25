@@ -3227,7 +3227,7 @@ TEST_CASE("Tab menu: the Per-Game count and Use Global Values for All, per tab",
     // (AzaharFrame kiu: Motion Controls is per game now.)
     for (Id id : {Id::Background, Id::WindowScale, Id::FaceButtons,
                   Id::FastForwardSpeed, Id::DynamicResolution, Id::MoveScreens,
-                  Id::ScreenCurve, Id::CursorSpeed}) {
+                  Id::CursorSpeed}) {
         CHECK(!PerGameSetting(id));
     }
     for (Id id : {Id::Depth3d, Id::InternalResolution, Id::TextureFilter, Id::AsyncShaders,
@@ -3238,7 +3238,7 @@ TEST_CASE("Tab menu: the Per-Game count and Use Global Values for All, per tab",
                   Id::MatchBottom, Id::MatchBottomNormal,
                   Id::Autosave,
                   Id::AutosaveEvery, Id::AutosaveKeep, Id::HideBottomScreen, Id::ScreenShape,
-                  Id::ScreenLayout, Id::TouchpadTouch, Id::BottomScreenReticle, Id::ReticleSpeed,
+                  Id::ScreenLayout, Id::ScreenCurve, Id::TouchpadTouch, Id::BottomScreenReticle, Id::ReticleSpeed,
                   Id::ReticleAtEdge, Id::MotionControls, Id::ReticleEdgeCStick}) {
         CHECK(PerGameSetting(id));
     }

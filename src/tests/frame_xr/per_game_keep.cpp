@@ -138,15 +138,25 @@ struct AllGlobal {
 TEST_CASE("Per-Game: every per-game row's key is kept across the read of the game's file",
           "[frame_xr][fixa]") {
     const std::vector<std::string> labels = Labels();
-    for (int i = 0; i < FrameXr::Menu::kIdCount; i++) {
-        const Id id = static_cast<Id>(i);
-        const std::vector<std::string> keys = FrameXr::PerGame::KeysOf(id);
-        CHECK(keys.empty() == !FrameXr::Menu::PerGameSetting(id));
-        for (const std::string& key : keys) {
-            INFO("row " << i << " key " << key);
-            CHECK(std::find(labels.begin(), labels.end(), key) != labels.end());
+    // each console's games write their own group's keys (settings.h Graphics)
+    for (const Settings::ConsoleGroup group :
+         {Settings::ConsoleGroup::N3DS, Settings::ConsoleGroup::DS, Settings::ConsoleGroup::GBA}) {
+        Settings::SetActiveConsole(group);
+        for (int i = 0; i < FrameXr::Menu::kIdCount; i++) {
+            const Id id = static_cast<Id>(i);
+            if (group == Settings::ConsoleGroup::N3DS &&
+                (id == Id::LayerDepth || id == Id::InvertDepth)) {
+                continue; // a 3DS game has no such row
+            }
+            const std::vector<std::string> keys = FrameXr::PerGame::KeysOf(id);
+            CHECK(keys.empty() == !FrameXr::Menu::PerGameSetting(id));
+            for (const std::string& key : keys) {
+                INFO("group " << static_cast<int>(group) << " row " << i << " key " << key);
+                CHECK(std::find(labels.begin(), labels.end(), key) != labels.end());
+            }
         }
     }
+    Settings::SetActiveConsole(Settings::ConsoleGroup::N3DS);
     // The two that reverted in session 651, by name.
     // AzaharFrame bfidr: and Black Frame Insertion's helpers, written at its scope.
     for (const char* key : {"vr_motion_clarity_immersive", "vr_screens_in_projection",
@@ -424,6 +434,8 @@ TEST_CASE("Per-Game: Trigger Layout's key, Original by default", "[frame_xr][kiu
 TEST_CASE("Per-Game: Screen Layout's key", "[frame_xr][tabmenu]") {
     const AllGlobal restore;
     auto& layout = Settings::values.vr_screen_layout;
+    CHECK(FrameXr::PerGame::KeysOf(Id::ScreenCurve) ==
+          std::vector<std::string>{"vr_screen_curve"}); // AzaharVR: per game too
     CHECK(FrameXr::PerGame::KeysOf(Id::ScreenLayout) ==
           std::vector<std::string>{"vr_screen_layout"});
     CHECK(layout.GetDefault() == 0u);
@@ -492,7 +504,7 @@ TEST_CASE("Per-Game: a moved row keeps its key", "[frame_xr][tabmenu]") {
         CHECK(FrameXr::PerGame::KeysOf(id) == keys);
     }
     // Global ones: no key of a game's file
-    for (const Id id : {Id::FaceButtons, Id::ScreenCurve, Id::MoveScreens, Id::Background}) {
+    for (const Id id : {Id::FaceButtons, Id::MoveScreens, Id::Background}) {
         CHECK(FrameXr::PerGame::KeysOf(id).empty());
         CHECK_FALSE(FrameXr::Menu::PerGameSetting(id));
     }
@@ -820,9 +832,16 @@ TEST_CASE("Per-Game: the DS and GBA rows' values in two games' files", "[frame_x
     CHECK(v.gba_second_screen.GetDefault() == 0u); // PokeDaisy
     CHECK(!v.gba_allow_editing.GetDefault());
     CHECK(v.layer_depth.GetDefault() == 0u);
+    // a GBA or Game Boy game's own key (Settings::Graphics), a DS game's another
+    Settings::SetActiveConsole(Settings::ConsoleGroup::GBA);
     CHECK(FrameXr::PerGame::KeysOf(Id::LayerDepth) == std::vector<std::string>{"layer_depth"});
     CHECK(!v.invert_depth.GetDefault());
     CHECK(FrameXr::PerGame::KeysOf(Id::InvertDepth) == std::vector<std::string>{"invert_depth"});
+    Settings::SetActiveConsole(Settings::ConsoleGroup::DS);
+    CHECK(FrameXr::PerGame::KeysOf(Id::LayerDepth) == std::vector<std::string>{"ds_layer_depth"});
+    CHECK(FrameXr::PerGame::KeysOf(Id::InvertDepth) ==
+          std::vector<std::string>{"ds_invert_depth"});
+    Settings::SetActiveConsole(Settings::ConsoleGroup::N3DS);
     CHECK(FrameXr::PerGame::KeysOf(Id::SecondScreen) ==
           std::vector<std::string>{"gba_second_screen"});
     CHECK(FrameXr::PerGame::KeysOf(Id::AllowGameEditing) ==

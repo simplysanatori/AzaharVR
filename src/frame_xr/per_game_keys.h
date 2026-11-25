@@ -33,6 +33,7 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_top_aspect);
     f(v.vr_screen_gap);
     f(v.vr_screen_layout);
+    f(v.vr_screen_curve); // AzaharVR: per game too
     f(v.vr_immersive_mode);
     f(v.vr_immersive_positional_game_scaler);
     f(v.vr_immersive_world_scale); // AzaharFrame natural
@@ -80,8 +81,7 @@ void ForEachMenuKey(F&& f) {
     f(v.gba_allow_editing);
     f(v.gba_rotate_pages);
     f(v.gba_map_refresh);
-    f(v.layer_depth);
-    f(v.invert_depth);
+    Settings::ForEachConsoleSetting(f); // each console group's own four (settings.h)
     // Controls (AzaharFrame reticle)
     f(v.vr_touchpad_touch);
     f(v.vr_bottom_screen_reticle);
