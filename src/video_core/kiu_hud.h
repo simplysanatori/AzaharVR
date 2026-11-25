@@ -152,6 +152,17 @@ constexpr bool IsSubtitle(const Draw& d) {
            d.format == 0;
 }
 
+/// The same texture drawn as other than one line and its shadow (the results' list): a piece.
+constexpr bool IsText(const Draw& d) {
+    return d.top_viewport && !d.depth_test && d.blended && d.textured && d.vertices >= 6 &&
+           d.vertices <= kMaxVertices && d.vertices % 6 == 0 && d.texture >= kVramStart &&
+           d.texture < kVramEnd && d.width == 512 && d.height == 128 && d.format == 0;
+}
+/// A viewport text is drawn into a texture with: wide, where the screens' (turned) are tall.
+constexpr bool IsTextTarget(float width, float height) {
+    return width > height && height > 0.0f;
+}
+
 struct Vertex {
     float x, y, z, w; ///< clip: x up, y across
 };
