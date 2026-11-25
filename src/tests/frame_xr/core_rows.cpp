@@ -19,7 +19,12 @@ namespace {
 const std::set<Id> kOthersOnly{Id::CoreHeader,     Id::GbaSolarLevel, Id::DsConsoleMode,
                                Id::DsTouchEnabled, Id::DsMicBlow,     Id::DsLidToggle,
                                Id::ImportSave,     Id::DsScreenRotation, Id::SecondScreen,
-                               Id::AllowGameEditing};
+                               Id::AllowGameEditing, Id::GbaDsHeader, Id::PokeDaisyHeader,
+                               Id::RotatePages, Id::TurnPage, Id::MapRefresh, Id::AutoRun,
+                               Id::RunIndoors, Id::WildEncounters, Id::ReusableTms,
+                               Id::InstantText, Id::TradeEvolutions, Id::PokeHud,
+                               Id::PokeDarkMode, Id::BattleInfo, Id::BattleHints,
+                               Id::OneTapMoves, Id::BattleStyle, Id::QuickMenuStyle};
 
 /// Every console's.
 const std::set<Id> kCommon{
@@ -35,7 +40,7 @@ std::set<Id> With(std::set<Id> ids, const std::set<Id>& more) {
 }
 
 const std::set<Id> kTwoScreens{Id::HideBottomScreen, Id::ScreenLayout, Id::MoveScreens,
-                               Id::SwapScreens};
+                               Id::SwapScreens, Id::ScreenGap};
 const std::set<Id> kSaves{Id::SavesHeader, Id::Autosave, Id::AutosaveEvery, Id::AutosaveKeep,
                           Id::AutosaveCard};
 
@@ -88,6 +93,25 @@ std::set<Id> Drawn(const MenuModel& m, MenuView v) {
         }
     }
     return ids;
+}
+
+/// Whether a view has a place to press for the row (a greyed one has only its label's).
+bool Pressable(const MenuModel& m, MenuView v, Id id) {
+    Kit kit{1.0f};
+    frame_xr::ui::Canvas canvas;
+    TabMenu menu;
+    for (float scroll = 0.0f; scroll <= 3000.0f; scroll += kRowH) {
+        v.scroll[static_cast<std::size_t>(v.tab)] = scroll;
+        canvas.Init(static_cast<int>(kPanelW), static_cast<int>(kPanelH));
+        kit.Begin(canvas);
+        menu.Draw(kit, m, v);
+        for (const auto& h : menu.Hits()) {
+            if (h.t.id == id && h.t.index != kLabelIndex) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 MenuView SettingsView(SettingsSection section) {
@@ -219,7 +243,7 @@ TEST_CASE("Core rows: Use Global Values counts only the console's rows", "[frame
         }
     }
     CHECK(GameValueRows(m, Tab::Position) ==
-          std::vector<Id>{Id::HideBottomScreen, Id::DsScreenRotation});
+          std::vector<Id>{Id::HideBottomScreen, Id::ScreenGap, Id::DsScreenRotation});
 }
 
 TEST_CASE("Core rows: the text", "[frame_xr][tabmenu]") {
@@ -324,6 +348,78 @@ TEST_CASE("Core rows: Second Screen and Allow Game Editing", "[frame_xr][tabmenu
     CHECK(LabelFor(Id::AllowGameEditing) == "Allow Game Editing");
     CHECK(PerGameSetting(Id::SecondScreen));
     CHECK(PerGameSetting(Id::AllowGameEditing));
+}
+
+// The options of what draws the Secondary Screen: those of the driver that runs.
+TEST_CASE("Core rows: the Secondary Screen driver's options", "[frame_xr][tabmenu]") {
+    using Common::AltCore::DriverName;
+    using Common::AltCore::DriverOption;
+    CHECK(OptionOf(Id::RotatePages) == DriverOption::RotatePages);
+    CHECK(OptionOf(Id::AutoRun) == DriverOption::AutoRun);
+    CHECK(OptionOf(Id::PokeHud) == DriverOption::Hud);
+    CHECK(OptionOf(Id::BattleStyle) == DriverOption::BattleGen5);
+    CHECK(OptionOf(Id::QuickMenuStyle) == DriverOption::QuickGrid);
+    CHECK(!OptionOf(Id::AllowGameEditing));
+    CHECK(!OptionOf(Id::Count));
+
+    CoreCaps gba = CoreCaps::ForGBA();
+    const std::set<Id> before = Table(gba);
+    gba.driver = DriverName::GbaDs; // one with nothing to set
+    CHECK(Table(gba) == before);
+    gba.driver_options = DriverOptionBit(DriverOption::RotatePages) |
+                         DriverOptionBit(DriverOption::TurnPage) |
+                         DriverOptionBit(DriverOption::MapRefresh);
+    CHECK(Table(gba) ==
+          With(before, {Id::GbaDsHeader, Id::RotatePages, Id::TurnPage, Id::MapRefresh}));
+    auto drawn = Drawn(Game(gba), SettingsView(SettingsSection::General));
+    CHECK(drawn.contains(Id::RotatePages));
+    CHECK(drawn.contains(Id::TurnPage));
+    CHECK(drawn.contains(Id::MapRefresh));
+    CHECK(!drawn.contains(Id::PokeHud));
+
+    CoreCaps poke = CoreCaps::ForGBA();
+    poke.driver = DriverName::PokeDaisy;
+    poke.driver_options =
+        DriverOptionBit(DriverOption::AutoRun) | DriverOptionBit(DriverOption::Hud);
+    CHECK(Table(poke) == With(before, {Id::PokeDaisyHeader, Id::AutoRun, Id::PokeHud}));
+    // What edits the game: greyed until Allow Game Editing is on
+    MenuModel m = Game(poke);
+    drawn = Drawn(m, SettingsView(SettingsSection::General));
+    CHECK(drawn.contains(Id::PokeHud));
+    CHECK(!Pressable(m, SettingsView(SettingsSection::General), Id::AutoRun));
+    CHECK(Pressable(m, SettingsView(SettingsSection::General), Id::PokeHud));
+    m.gba_allow_editing = true;
+    CHECK(Pressable(m, SettingsView(SettingsSection::General), Id::AutoRun));
+    CHECK(!ExplainLock(Lock::EditingOff).empty());
+
+    CoreCaps n3ds = CoreCaps::ForN3DS(); // never a 3DS game's
+    n3ds.driver = DriverName::PokeDaisy;
+    n3ds.driver_options = ~0u;
+    CHECK(Table(n3ds) == Table(CoreCaps::ForN3DS()));
+
+    CHECK(OptionsFor(Id::MapRefresh).size() == std::size(Common::AltCore::kMapRefreshFrames));
+    for (int i = 0; i < static_cast<int>(DriverOption::Count); i++) {
+        const Id id = static_cast<Id>(static_cast<int>(Id::RotatePages) + i);
+        INFO("option " << i);
+        CHECK(!LabelFor(id).empty());
+        CHECK(!ExplainFor(id).empty());
+        CHECK(PerGameSetting(id) == (id == Id::RotatePages || id == Id::MapRefresh));
+    }
+}
+
+TEST_CASE("Core rows: Screen Gap", "[frame_xr][tabmenu]") {
+    MenuView position;
+    position.tab = Tab::Position;
+    for (const CoreCaps& core : {CoreCaps::ForN3DS(), CoreCaps::ForNDS(), CoreCaps::ForGBA()}) {
+        INFO("console " << static_cast<int>(core.kind));
+        MenuModel m = Game(core);
+        CHECK(Drawn(m, position).contains(Id::ScreenGap) == core.screens.has_bottom);
+        m.second_free = true; // moved on its own: it no longer follows the main one
+        CHECK(!Drawn(m, position).contains(Id::ScreenGap));
+    }
+    CHECK(PerGameSetting(Id::ScreenGap));
+    CHECK(LabelFor(Id::ScreenGap) == "Screen Gap");
+    CHECK(SliderFor(Id::ScreenGap).max == 20.0f);
 }
 
 // The notice shown the first time Allow Game Editing is turned on.

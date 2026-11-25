@@ -8,6 +8,7 @@ endif()
 add_library(frame_xr_menu STATIC
     ds_drawing.cpp
     ds_drawing.h
+    gba_drawing.cpp
     edit_devices.cpp
     edit_devices.h
     ctgp7_tab.cpp # AzaharFrame ctgp7

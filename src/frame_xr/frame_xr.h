@@ -294,6 +294,7 @@ enum class MenuCommand {
     DsMicBlow,   ///< toggle/trigger DS microphone blow noise (`value`: 1 on, 0 off)
     DsLidToggle, ///< toggle DS lid closed (`value`: 1 closed, 0 open)
     ImportSave,  ///< open file picker to import a .sav / .dsv save file
+    DriverOption, ///< MenuRequest::option to `value`: the Secondary Screen's, kept by its driver
 };
 enum class MenuSetting {
     HideBottomScreen,
@@ -433,11 +434,15 @@ enum class MenuSetting {
     /// `value`: 0 Off, 1 On (gba_allow_editing), per game too. The menu leaves it off on a 1: the
     /// Qt side asks once (game_editing_warning) and then sets it.
     AllowGameEditing,
+    RotatePages, ///< `value`: 0 Off, 1 On (gba_rotate_pages), per game too, as the next
+    MapRefresh,  ///< `value`: an index of Common::AltCore::kMapRefreshFrames (gba_map_refresh)
+    ScreenGap,   ///< `value`: degrees, 0 to 20 (vr_screen_gap), per game too
 };
 struct MenuRequest {
     MenuCommand command = MenuCommand::Continue;
     MenuSetting setting = MenuSetting::HideBottomScreen;
     int value = 0;
+    Common::AltCore::DriverOption option{}; ///< MenuCommand::DriverOption
     bool per_game = false;
     std::string text; ///< AzaharFrame texui: a pack's or a mod's id
     std::vector<std::string> buttons; ///< AzaharFrame remap: SetButtons, Settings::InputProfile::buttons
@@ -604,8 +609,9 @@ void SetInGameMenuHomebrew(const Menu::HomebrewTabModel& homebrew); ///< citra_q
 void SetInGameMenuAutosaves(const std::vector<Menu::AutosaveCard>& autosaves,
                             const std::string& undo_load);
 
-/// A short message on a small panel in front of you (any thread; VR only): Quick Saved, Quick
-/// Loaded and No Quick Save for five seconds, Fast Forward and Normal Speed for two (ToastTimeOf).
+/// A short message (any thread; VR only): in the Primary Screen's top-right corner for 1.5 s, or
+/// in front of you while there is no such screen in view (immersive modes). Autosaved always in
+/// front of you, for two (ToastTimeOf).
 enum class Toast {
     QuickSaved = 0,
     QuickLoaded = 1,
@@ -621,10 +627,7 @@ void ShowToast(Toast kind);
 void ShowAutosaved();
 /// AzaharFrame ui3: how long each of those stays.
 constexpr ToastTime ToastTimeOf(Toast kind) {
-    return kind == Toast::FastForward || kind == Toast::NormalSpeed ||
-                   kind == Toast::Autosaved // AzaharFrame autosave
-               ? ToastTime::Short
-                                                                    : ToastTime::Long;
+    return kind == Toast::Autosaved ? ToastTime::Short : ToastTime::Brief;
 }
 /// AzaharFrame vrsize: a short message of any text (UTF-8, one line; a degree sign is drawn
 /// too) in the same place as a toast. Any thread. AzaharFrame ui3: `time` (toast_fit.h): Short

@@ -9,6 +9,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include "common/alt_core_types.h"
 
 namespace FrameXr::Menu {
@@ -26,6 +28,9 @@ inline constexpr bool kAltTextureFilter = false;      ///< their renderer does n
 constexpr bool Is3ds(const CoreCaps& core) {
     return core.kind == Common::AltCore::CoreKind::N3DS;
 }
+
+/// The driver option a row is; none for any other row.
+std::optional<Common::AltCore::DriverOption> OptionOf(Id id);
 
 /// Whether the running game's console has this row of the Position, Settings and Controls tabs
 /// (also Swap Screens, Switch to Flat and Load State's Autosave card).

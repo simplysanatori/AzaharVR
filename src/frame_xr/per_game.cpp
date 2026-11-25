@@ -27,6 +27,9 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::ScreenShape:
         f(v.vr_top_aspect);
         return true;
+    case Id::ScreenGap:
+        f(v.vr_screen_gap);
+        return true;
     case Id::ImmersiveMode:
         f(v.vr_immersive_mode);
         return true;
@@ -124,6 +127,12 @@ bool WithSetting(Menu::Id id, F&& f) {
         return true;
     case Id::AllowGameEditing:
         f(v.gba_allow_editing);
+        return true;
+    case Id::RotatePages:
+        f(v.gba_rotate_pages);
+        return true;
+    case Id::MapRefresh:
+        f(v.gba_map_refresh);
         return true;
     case Id::TouchpadTouch: // AzaharFrame reticle: the Controls tab's rows
         f(v.vr_touchpad_touch);

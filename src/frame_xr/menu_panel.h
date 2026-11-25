@@ -64,6 +64,7 @@ public:
         bool aim_calibration_ok = false;
         bool curve_ok = true;       ///< the runtime takes cylinder layers (Screen Curve)
         bool passthrough_ok = true; ///< the runtime offers passthrough (Background)
+        bool second_free = false;   ///< the Secondary Screen has a place of its own (Screen Gap)
     };
 
     /// After a session exists: the swapchain, the drawing thread.

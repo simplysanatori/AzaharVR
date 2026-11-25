@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "common/alt_core_types.h"
 #include "common/settings.h"
 #include "frame_xr/vis/controller_diagram.h"
 
@@ -33,6 +34,7 @@ struct HelpContext {
     bool face_by_position = true; ///< Face Buttons: By Position (Nintendo)
     bool in_menu = false;         ///< the in-game menu is open
     bool game_running = false;
+    Common::AltCore::CoreKind console = Common::AltCore::CoreKind::N3DS; ///< the game's
 };
 
 struct HelpRow {

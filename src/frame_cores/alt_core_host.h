@@ -217,6 +217,8 @@ public:
     void SetEditing(bool on);
     /// The Secondary Screen's next page, from the next frame. BtnTurnPage does it too.
     void TurnPage();
+    /// An option of the driver's: RotatePages and MapRefresh hold for a driver made later too.
+    bool SetDriverOption(Common::AltCore::DriverOption option, uint32_t value);
     void SetMicBlow(bool on);
     void SetLidClosed(bool closed);
     void SetTouchEnabled(bool on);

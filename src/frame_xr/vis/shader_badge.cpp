@@ -28,10 +28,11 @@ float CurveLift(float badge_width, float curve_radius) {
     return badge_width * badge_width / (8.0f * curve_radius) + kCurveClear;
 }
 
-Placed OnScreen(const Posef& screen, float width, float height, float curve_radius, float aspect) {
+Placed OnScreen(const Posef& screen, float width, float height, float curve_radius, float aspect,
+                float share, float below) {
     Placed out;
     const float inset = height * kScreenInset;
-    out.height = height * kScreenHeight;
+    out.height = height * share;
     out.width = out.height * aspect;
     const float room = width - 2.0f * inset;
     if (out.width > room && room > 0.0f) {
@@ -41,7 +42,7 @@ Placed OnScreen(const Posef& screen, float width, float height, float curve_radi
     }
     // In the screen's own axes, from its centre.
     const float x = width * 0.5f - inset - out.width * 0.5f;
-    const float y = height * 0.5f - inset - out.height * 0.5f;
+    const float y = height * (0.5f - below) - inset - out.height * 0.5f;
     Vec3f local{x, y, kLift};
     Quatf turn{};
     if (curve_radius > 0.0f) {

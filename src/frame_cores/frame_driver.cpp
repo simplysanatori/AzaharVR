@@ -5,6 +5,7 @@
 #include "frame_cores/frame_driver.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 
 #include "common/logging/log.h"
@@ -19,6 +20,9 @@ extern "C" {
 
 namespace FrameCores {
 namespace {
+
+using Common::AltCore::DriverOption;
+using Common::AltCore::DriverOptionBit;
 
 constexpr uint32_t kOpaque = 0xFF000000u;
 constexpr uint32_t kPokeDaisyWidth = 240; // PD_GAME_STRIDE
@@ -78,6 +82,7 @@ public:
         last_room_key = 0;
         last_request = 0;
         has_map_image = false;
+        page = 0;
     }
 
     void AfterStateLoad() override {
@@ -96,7 +101,46 @@ public:
         return false;
     }
 
+    Common::AltCore::DriverName Name() const override {
+        return mapcap ? Common::AltCore::DriverName::GbaDs : Common::AltCore::DriverName::None;
+    }
+
+    uint32_t Options() const override {
+        const MapProfile* prof = mapcap ? mapcap_profile(mapcap) : nullptr;
+        return prof && prof->pages ? DriverOptionBit(DriverOption::RotatePages) |
+                                         DriverOptionBit(DriverOption::TurnPage)
+                                   : 0u;
+    }
+
+    uint32_t OptionsOn() const override {
+        return rotate ? DriverOptionBit(DriverOption::RotatePages) : 0u;
+    }
+
+    bool SetOption(DriverOption option, uint32_t value) override {
+        switch (option) {
+        case DriverOption::RotatePages:
+            if (rotate != (value != 0)) { // the page on view stays
+                page += anim_frame / kPageFrames;
+                anim_frame = 0;
+                rotate = value != 0;
+            }
+            return true;
+        case DriverOption::TurnPage:
+            TurnPage();
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    void TurnPage() override {
+        turns.fetch_add(1, std::memory_order_relaxed);
+    }
+
 private:
+    /// A page's time.
+    static constexpr uint64_t kPageFrames = 180;
+
     void StartMap() {
         if (services.emu->gameCode[0] == '\0') {
             return;
@@ -123,7 +167,9 @@ private:
         if (mapcap_poll(mapcap, last_map_serial, &map)) {
             last_map_serial = map.serial;
             has_map_image = map.ok && map.w > 0 && map.h > 0;
-            anim_frame = 0;
+            if (!map.pages) {
+                anim_frame = 0;
+            }
             if (has_map_image) {
                 map_w = static_cast<uint32_t>(map.w);
                 map_h = static_cast<uint32_t>(map.h);
@@ -154,9 +200,15 @@ private:
         int index = 0;
         if (map.nFrames > 1) {
             const uint64_t step =
-                map.pages ? 180u : static_cast<uint64_t>(std::max(1, map.frameStep));
-            index = static_cast<int>((anim_frame / step) % static_cast<uint64_t>(map.nFrames));
-            ++anim_frame;
+                map.pages ? kPageFrames : static_cast<uint64_t>(std::max(1, map.frameStep));
+            if (map.pages) {
+                page += turns.exchange(0, std::memory_order_relaxed);
+            }
+            index = static_cast<int>((anim_frame / step + (map.pages ? page : 0)) %
+                                     static_cast<uint64_t>(map.nFrames));
+            if (rotate || !map.pages) {
+                ++anim_frame;
+            }
         }
         const uint32_t* pixels = map.frames[index];
         if (!pixels) {
@@ -184,6 +236,9 @@ private:
     uint32_t last_room_key = 0;
     uint64_t last_request = 0;
     uint64_t anim_frame = 0;
+    uint64_t page = 0;             ///< pages turned by hand
+    std::atomic<uint32_t> turns{0}; ///< not taken yet
+    bool rotate = false;
     bool has_map_image = false;
 };
 

@@ -458,6 +458,10 @@ void GbCore::TurnPage() {
     impl->driver.TurnPage();
 }
 
+bool GbCore::SetDriverOption(Common::AltCore::DriverOption option, uint32_t value) {
+    return impl->driver.SetOption(option, value, impl->caps);
+}
+
 std::vector<CheatEntry> GbCore::ListCheats() const {
     return impl->custom_cheats;
 }

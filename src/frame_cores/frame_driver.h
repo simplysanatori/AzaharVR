@@ -12,6 +12,8 @@
 #include <utility>
 #include <vector>
 
+#include "common/alt_core_types.h"
+
 struct mCore;
 struct Emu; // gba-ds's emu.h
 
@@ -113,6 +115,21 @@ public:
     /// The Secondary Screen's next page, for a driver that has some. Any thread; from the next
     /// frame.
     virtual void TurnPage() {}
+    /// Its options: which it has for this game now and which are on (DriverOptionBit). Between
+    /// frames.
+    virtual Common::AltCore::DriverName Name() const {
+        return Common::AltCore::DriverName::None;
+    }
+    virtual uint32_t Options() const {
+        return 0;
+    }
+    virtual uint32_t OptionsOn() const {
+        return 0;
+    }
+    /// From the next frame. False: not taken (one the driver does not know or may not change).
+    virtual bool SetOption(Common::AltCore::DriverOption /*option*/, uint32_t /*value*/) {
+        return false;
+    }
     /// The size of the Secondary Screen the driver draws, {0, 0} for none.
     virtual std::pair<uint32_t, uint32_t> SecondarySize() const = 0;
     /// Read when the game is loaded.

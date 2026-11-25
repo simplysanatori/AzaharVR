@@ -312,6 +312,10 @@ void GbaCore::TurnPage() {
     impl->driver.TurnPage();
 }
 
+bool GbaCore::SetDriverOption(Common::AltCore::DriverOption option, uint32_t value) {
+    return impl->driver.SetOption(option, value, impl->caps);
+}
+
 bool GbaCore::ImportBatterySave(const std::string& sav_path) {
     if (!impl->loaded || sav_path.empty() || impl->save_path.empty()) {
         return false;

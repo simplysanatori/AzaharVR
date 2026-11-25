@@ -81,7 +81,7 @@ std::string Format(const char* f, double v) {
 }
 
 std::string SliderText(Id id, float value) {
-    if (id == Id::GameFov) {
+    if (id == Id::GameFov || id == Id::ScreenGap) {
         return Format("%.0f\u00b0", value);
     }
     if (id == Id::Depth3d) {
@@ -331,6 +331,31 @@ Row RowFor(Id id, const MenuModel& m) {
 }
 
 /// Every console's rows; RowsFor keeps the running game's.
+/// AzaharVR: the options of what draws the Secondary Screen (RowsFor leaves out the others').
+template <typename MakeRow>
+void OptionRows(const MenuModel& m, std::vector<Row>& rows, const MakeRow& row) {
+    rows.push_back(row(Id::GbaDsHeader, RowKind::Header));
+    rows.push_back(row(Id::RotatePages, RowKind::Switch, 0, m.gba_rotate_pages));
+    rows.push_back(row(Id::TurnPage, RowKind::Button));
+    rows.push_back(
+        row(Id::MapRefresh, RowKind::Segmented, std::clamp(m.gba_map_refresh, 0, 3)));
+    rows.push_back(row(Id::PokeDaisyHeader, RowKind::Header));
+    for (const Id id : {Id::AutoRun, Id::RunIndoors, Id::WildEncounters, Id::ReusableTms,
+                        Id::InstantText, Id::TradeEvolutions, Id::PokeHud, Id::QuickMenuStyle,
+                        Id::PokeDarkMode, Id::BattleInfo, Id::BattleHints, Id::OneTapMoves,
+                        Id::BattleStyle}) {
+        const auto option = *OptionOf(id);
+        const bool on = (m.core.driver_options_on & DriverOptionBit(option)) != 0;
+        const bool choice = id == Id::QuickMenuStyle || id == Id::BattleStyle;
+        Row r = choice ? row(id, RowKind::Segmented, on ? 1 : 0)
+                       : row(id, RowKind::Switch, 0, on);
+        if (r.lock == Lock::None && OptionEditsGame(option) && !m.gba_allow_editing) {
+            r.lock = Lock::EditingOff;
+        }
+        rows.push_back(r);
+    }
+}
+
 std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section) {
     const auto lock = [&m](Id id) { return m.locked[static_cast<std::size_t>(id)]; };
     const auto row = [&](Id id, RowKind kind, int selected = 0, bool on = false) {
@@ -343,6 +368,14 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
     if (tab == Tab::Position) {
         rows.push_back(row(Id::HideBottomScreen, RowKind::Switch, 0, m.hide_bottom_screen));
         rows.push_back(row(Id::ScreenLayout, RowKind::Segmented, m.screen_layout));
+        if (!m.second_free) { // it follows the main one
+            Row gap = row(Id::ScreenGap, RowKind::Slider);
+            const SliderRange gr = SliderFor(Id::ScreenGap);
+            const float at = std::clamp(static_cast<float>(m.screen_gap), gr.min, gr.max);
+            gap.t = (at - gr.min) / (gr.max - gr.min);
+            gap.value = SliderText(Id::ScreenGap, at);
+            rows.push_back(gap);
+        }
         rows.push_back(row(Id::MoveScreens, RowKind::Segmented, m.move_screens)); // AzaharFrame menu
         rows.push_back(row(Id::ScreenShape, RowKind::MenuButton, m.screen_shape));
         rows.push_back(row(Id::ScreenCurve, RowKind::MenuButton, m.screen_curve));
@@ -377,6 +410,7 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             rows.push_back(row(Id::SecondScreen, RowKind::Segmented,
                                SecondScreenIndex(m.core, m.gba_second_screen)));
             rows.push_back(row(Id::AllowGameEditing, RowKind::Switch, 0, m.gba_allow_editing));
+            OptionRows(m, rows, row);
             rows.push_back(row(Id::DsTouchEnabled, RowKind::Switch, 0, m.ds_touch_enabled));
             rows.push_back(row(Id::DsMicBlow, RowKind::Switch, 0, m.ds_mic_active));
             rows.push_back(row(Id::DsLidToggle, RowKind::Switch, 0, m.ds_lid_closed));
@@ -733,6 +767,9 @@ bool PerGameSetting(Id id) {
     case Id::GbaSolarLevel:
     case Id::SecondScreen:
     case Id::AllowGameEditing:
+    case Id::RotatePages:
+    case Id::MapRefresh:
+    case Id::ScreenGap:
         return true;
     default:
         return false;
@@ -1204,6 +1241,18 @@ const std::vector<std::string>& OptionsFor(Id id) {
         static const std::vector<std::string> kSecondScreen{"PokeDaisy", "GBA DS", "Off"};
         return kSecondScreen;
     }
+    case Id::MapRefresh: { // kMapRefreshFrames
+        static const std::vector<std::string> kMapRefresh{"0.5 s", "1 s", "1.5 s", "3 s"};
+        return kMapRefresh;
+    }
+    case Id::BattleStyle: {
+        static const std::vector<std::string> kBattleStyle{"Gen 4", "Gen 5"};
+        return kBattleStyle;
+    }
+    case Id::QuickMenuStyle: {
+        static const std::vector<std::string> kQuickMenuStyle{"Ring", "Grid"};
+        return kQuickMenuStyle;
+    }
     default:
         return kNone;
     }
@@ -1285,6 +1334,8 @@ std::string LabelFor(Id id) {
         return "Screen Curve";
     case Id::ScreenLayout:
         return "Screen Layout";
+    case Id::ScreenGap:
+        return "Screen Gap";
     case Id::MoveScreens:
         return "Detach Screens";
     case Id::TouchpadTouch: // AzaharFrame menuux
@@ -1601,6 +1652,42 @@ std::string LabelFor(Id id) {
         return "Second Screen";
     case Id::AllowGameEditing:
         return "Allow Game Editing";
+    case Id::GbaDsHeader:
+        return "GBA DS";
+    case Id::PokeDaisyHeader:
+        return "PokeDaisy";
+    case Id::RotatePages:
+        return "Rotate Pages";
+    case Id::TurnPage:
+        return "Turn Page";
+    case Id::MapRefresh:
+        return "Map Update";
+    case Id::AutoRun:
+        return "Auto-Run";
+    case Id::RunIndoors:
+        return "Run Indoors";
+    case Id::WildEncounters:
+        return "Wild Encounters";
+    case Id::ReusableTms:
+        return "Reusable TMs";
+    case Id::InstantText:
+        return "Instant Text";
+    case Id::TradeEvolutions:
+        return "Trade Evolutions";
+    case Id::PokeHud:
+        return "HUD";
+    case Id::PokeDarkMode:
+        return "Dark Mode";
+    case Id::BattleInfo:
+        return "Battle Info";
+    case Id::BattleHints:
+        return "Battle Hints";
+    case Id::OneTapMoves:
+        return "One-Tap Moves";
+    case Id::BattleStyle:
+        return "Battle Style";
+    case Id::QuickMenuStyle:
+        return "Quick Menu";
     case Id::DsTouchEnabled:
         return "Touch Screen Input";
     case Id::DsMicBlow:
@@ -1704,6 +1791,8 @@ std::string ExplainFor(Id id) {
         return "Bends the Primary Screen so its sides come toward you.";
     case Id::ScreenLayout:
         return "The Secondary Screen below the Primary Screen, or to its right.";
+    case Id::ScreenGap:
+        return "Moves the Secondary Screen further from the Primary Screen.";
     case Id::ImmersiveOffset:
         return "Moves the immersive screen to fit your lenses, in every game.";
     case Id::ShowStats:
@@ -1881,6 +1970,38 @@ std::string ExplainFor(Id id) {
         return "What the Secondary Screen shows.";
     case Id::AllowGameEditing:
         return "Lets PokeDaisy edit your game. Backs up your save first.";
+    case Id::RotatePages:
+        return "The Secondary Screen's pages turn on their own.";
+    case Id::TurnPage:
+        return "Show the Secondary Screen's next page.";
+    case Id::MapRefresh:
+        return "How often the map is drawn again.";
+    case Id::AutoRun:
+        return "Walk and you run.";
+    case Id::RunIndoors:
+        return "Run inside buildings too.";
+    case Id::WildEncounters:
+        return "Off, no wild Pokémon appear.";
+    case Id::ReusableTms:
+        return "A TM stays in the bag after it is used.";
+    case Id::InstantText:
+        return "Text appears all at once.";
+    case Id::TradeEvolutions:
+        return "Pokémon that evolve by trading can evolve from their page.";
+    case Id::PokeHud:
+        return "PokeDaisy's HUD over the Primary Screen.";
+    case Id::PokeDarkMode:
+        return "Dark pages on the Secondary Screen.";
+    case Id::BattleInfo:
+        return "Details and suggestions in battles.";
+    case Id::BattleHints:
+        return "How well each move works.";
+    case Id::OneTapMoves:
+        return "Pick a move without opening Fight first.";
+    case Id::BattleStyle:
+        return "The look of the battle buttons.";
+    case Id::QuickMenuStyle:
+        return "The shape of PokeDaisy's quick menu.";
     case Id::DsTouchEnabled:
         return "Point at the Secondary Screen to touch it.";
     case Id::DsMicBlow:
@@ -1910,6 +2031,8 @@ std::string ExplainLock(Lock lock) {
         return "Off while the Background is Passthrough.";
     case Lock::AutosaveOff: // AzaharFrame autosave
         return "Turn on Autosave to change it.";
+    case Lock::EditingOff:
+        return "Turn on Allow Game Editing to change it.";
     case Lock::NoGameValues: // AzaharFrame reticle
         return "Nothing on this tab is set for this game.";
     case Lock::NoGame:
@@ -2038,6 +2161,9 @@ SliderRange SliderFor(Id id) {
     }
     if (id == Id::GbaSolarLevel) {
         return {0.0f, 10.0f, 1.0f};
+    }
+    if (id == Id::ScreenGap) {
+        return {0.0f, 20.0f, 1.0f};
     }
     return {};
 }
@@ -2477,7 +2603,15 @@ constexpr std::array<int, 6> kMouseLeftChips{DsButton::ZL,   DsButton::L,     Ds
                                              DsButton::Left, DsButton::Right, DsButton::Down};
 constexpr std::array<int, 6> kMouseRightChips{DsButton::ZR, DsButton::R, DsButton::X,
                                               DsButton::A,  DsButton::Y, DsButton::B};
-
+// AzaharVR: the GBA's and the Game Boy's own buttons (a Game Boy has no L and R); Auto Fire leads
+// to the button it presses.
+constexpr std::array<int, 5> kGbaLeftChips{DsButton::L, DsButton::Up, DsButton::Left,
+                                           DsButton::Down, DsButton::Right};
+constexpr std::array<int, 5> kGbaRightChips{DsButton::R, DsButton::A, DsButton::X, DsButton::B,
+                                            DsButton::Y};
+constexpr std::array<int, 4> kGbLeftChips{DsButton::Up, DsButton::Left, DsButton::Down,
+                                          DsButton::Right};
+constexpr std::array<int, 4> kGbRightChips{DsButton::A, DsButton::X, DsButton::B, DsButton::Y};
 
 bool IsStick(int target) {
     return Remap::IsStick(target);
@@ -2564,7 +2698,10 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
     // The columns keep room for the widest chip; the drawing takes what is left.
     const float col_w = kChipPadL + kGlyph + kChipGap +
                         kit.TextWidthSized(kChipText, true, kWidestChip) + kChipPadR + 1.0f;
-    const DsDrawing ds = PlaceDs({c.x0 + col_w + kLeader, art.y0, c.x1 - col_w - kLeader, art.y1});
+    const DrawnConsole drawn = DrawnFor(model.core.kind);
+    const bool gba = drawn == DrawnConsole::Gba;
+    const DsDrawing ds =
+        PlaceDs({c.x0 + col_w + kLeader, art.y0, c.x1 - col_w - kLeader, art.y1}, drawn);
     const int lit = listening ? view.remap.listening : -1;
     DrawDs(kit, ds, lit);
 
@@ -2604,6 +2741,11 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
         if (t == DsButton::TurnPage) {
             return "Turn Secondary Screen Page: " + (name.empty() ? std::string("None") : name);
         }
+        if (gba && (t == DsButton::X || t == DsButton::Y)) {
+            return std::string(t == DsButton::X ? Common::AltCore::kAutoFireALabel
+                                                : Common::AltCore::kAutoFireBLabel) +
+                   ": " + (name.empty() ? std::string("None") : name);
+        }
         return name;
     };
     const auto chip_w = [&](int t, float max_w) {
@@ -2629,7 +2771,13 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
             }
         };
         const bool sticks = HasSticks(dev);
-        if (sticks) {
+        if (gba && model.core.kind == Common::AltCore::CoreKind::GBA) {
+            column(kGbaLeftChips, true);
+            column(kGbaRightChips, false);
+        } else if (gba) {
+            column(kGbLeftChips, true);
+            column(kGbRightChips, false);
+        } else if (sticks) {
             column(kLeftChips, true);
             column(kRightChips, false);
         } else {
@@ -2718,7 +2866,7 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
         {
             const float sel_w = chip_w(DsButton::Select, c.W());
             const float start_w = chip_w(DsButton::Start, c.W());
-            const float home_w = chip_w(DsButton::Home, c.W());
+            const float home_w = gba ? 0.0f : chip_w(DsButton::Home, c.W());
             // AzaharVR: the running DS game's Microphone Blow, PokeDaisy's quick menu or a GBA
             // game's Turn Secondary Screen Page: first in the row, in what the three leave.
             const int t = RowApplies(Id::DsMicBlow, model.core) ? int{DsButton::MicBlow}
@@ -2735,7 +2883,9 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
             mid = std::min(mid, c.x1 - start_w - kChipGap * 0.5f);
             Rect start{mid + kChipGap * 0.5f, under.y0, mid + kChipGap * 0.5f + start_w, under.y1};
             Rect sel{start.x0 - kChipGap - sel_w, start.y0, start.x0 - kChipGap, start.y1};
-            float hx = std::min(ds.Anchor(DsButton::Home).x - home_w * 0.5f, sel.x0 - kChipGap - home_w);
+            float hx = gba ? sel.x0
+                           : std::min(ds.Anchor(DsButton::Home).x - home_w * 0.5f,
+                                      sel.x0 - kChipGap - home_w);
             if (hx < row_x) {
                 const float dx = std::min(row_x - hx, c.x1 - start.x1);
                 hx += dx;
@@ -2745,7 +2895,9 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
                 sel.x1 += dx;
             }
             const Rect home{hx, start.y0, hx + home_w, start.y1};
-            chips.push_back({DsButton::Home, home, {home.Cx(), home.y0}});
+            if (!gba) {
+                chips.push_back({DsButton::Home, home, {home.Cx(), home.y0}});
+            }
             chips.push_back({DsButton::Select, sel, {sel.Cx(), sel.y0}});
             chips.push_back({DsButton::Start, start, {start.Cx(), start.y0}});
         }
@@ -2753,8 +2905,8 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
         // Open Menu has no leader.
         const Rect bs = ds.BottomScreen();
         const DsPoint touch_at{bs.x0 + 6.0f, bs.y0 + bs.H() * 0.8f};
-        const auto off_the_drawing = [](int t) {
-            return t == DsButton::OpenMenu || t == DsButton::Modifier || t == DsButton::MicBlow ||
+        const auto off_the_drawing = [gba](int t) {
+            return (gba && t == DsButton::Touch) || t == DsButton::OpenMenu || t == DsButton::Modifier || t == DsButton::MicBlow ||
                    t == DsButton::QuickMenu || t == DsButton::TurnPage;
         };
         for (const Chip& ch : chips) {
@@ -2765,7 +2917,7 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
             kit.Line(ch.from.x, ch.from.y, to.x, to.y, 1.5f, Tok::kOutline);
         }
         for (const Chip& ch : chips) {
-            if (ch.target == DsButton::Touch) {
+            if (ch.target == DsButton::Touch && !gba) {
                 const bool on = ch.target == lit;
                 if (on) {
                     kit.Dot(touch_at.x, touch_at.y, 7.0f, Tok::kPrimary, 0.3f);
@@ -2802,7 +2954,7 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
                        StateOf(view, tg));
         const Rect gb{r.x0 + kChipPadL, r.Cy() - kGlyph * 0.5f, r.x0 + kChipPadL + kGlyph,
                       r.Cy() + kGlyph * 0.5f};
-        DrawDsGlyph(kit, gb, t, glyph_fg, glyph_bg);
+        DrawDsGlyph(kit, gb, t, glyph_fg, glyph_bg, drawn);
         const float tx = gb.x1 + kChipGap;
         kit.TextSized(tx, r.Cy() + kit.CapHeightSized(kChipText, true) * 0.5f, kChipText, true, ink,
                       kit.Fit(Type::Label, text, r.x1 - kChipPadR - tx + 1.0f));
@@ -2812,7 +2964,7 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
 
     // The Pointer Test: where the touchpad or the mouse touches the bottom screen now.
     const PointerTest& pt = model.devices.pointer;
-    if (HasPointer(dev) && pt.shown) {
+    if (HasPointer(dev) && pt.shown && !gba) {
         const Rect bs = ds.BottomScreen();
         const float x = bs.x0 + std::clamp(pt.x, 0.0f, 1.0f) * bs.W();
         const float y = bs.y0 + std::clamp(pt.y, 0.0f, 1.0f) * bs.H();

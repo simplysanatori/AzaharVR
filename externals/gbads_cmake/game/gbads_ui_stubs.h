@@ -36,12 +36,11 @@ SDL_Rect ui_image_rect(int s, int w, int h, const char* m) { (void) m, (void) w,
 
 /* ---------------------------------------------------------------- the loop's hooks */
 bool ui_events(void) {
-    bool turn = false;
-    if (!H.host->events(H.host->ctx, &turn)) return false;
-    if (turn) {
-        cfg->toggle = true; /* (from here on: without it pages only turn by themselves) */
-        toggle_press();
-    }
+    GbadsAsk ask = { false, false, 0 };
+    if (!H.host->events(H.host->ctx, &ask)) return false;
+    gds_settings(&ask);
+    gds_keep_page();
+    if (ask.turn_page) toggle_press();
     return true;
 }
 void ui_read_buttons(void) {

@@ -619,6 +619,29 @@ bool Hud::LabelQuad(const ViewPose& head, bool top_ok, const XrPosef& top_pose,
     return true;
 }
 
+namespace {
+/// All of a quad on a screen's corner well in both eyes' view.
+bool InView(const ViewPose& head, const Vis::Badge::Placed& p) {
+    for (int e = 0; e < 2; e++) {
+        Vis::EyeFov eye;
+        eye.pose = ToInput(head.eye[e]);
+        eye.left = head.fov[e].angleLeft;
+        eye.right = head.fov[e].angleRight;
+        eye.up = head.fov[e].angleUp;
+        eye.down = head.fov[e].angleDown;
+        for (const float sx : {-0.5f, 0.5f}) {
+            for (const float sy : {-0.5f, 0.5f}) {
+                const Input::Vec3f c = Input::Transform(p.pose, {sx * p.width, sy * p.height, 0});
+                if (!Vis::PointInView(eye, c, 5.0f)) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+} // namespace
+
 // AzaharFrame shaderbadge
 void Hud::SetShaderBadge(const std::string& text, float progress) {
     std::scoped_lock lock{text_mutex};
@@ -678,25 +701,8 @@ bool Hud::BadgeQuad(const ViewPose& head, const BadgeAnchor& anchor, XrTime time
         // It appears: on the normal screen's corner when that is well in view, else head-locked.
         bool corner_in_view = false;
         if (anchor.screen && head.valid) {
-            const B::Placed p = on_screen();
-            Vis::EyeFov eyes[2];
-            for (int e = 0; e < 2; e++) {
-                eyes[e].pose = ToInput(head.eye[e]);
-                eyes[e].left = head.fov[e].angleLeft;
-                eyes[e].right = head.fov[e].angleRight;
-                eyes[e].up = head.fov[e].angleUp;
-                eyes[e].down = head.fov[e].angleDown;
-            }
             // The badge is not the label's size: its own corners, at a smaller margin.
-            corner_in_view = true;
-            for (const float sx : {-0.5f, 0.5f}) {
-                for (const float sy : {-0.5f, 0.5f}) {
-                    const Input::Vec3f c =
-                        Input::Transform(p.pose, {sx * p.width, sy * p.height, 0});
-                    corner_in_view = corner_in_view && Vis::PointInView(eyes[0], c, 5.0f) &&
-                                     Vis::PointInView(eyes[1], c, 5.0f);
-                }
-            }
+            corner_in_view = InView(head, on_screen());
         }
         badge_head = !corner_in_view;
         LOG_INFO(Frontend, "xr: shader badge: {} ({})",
@@ -768,7 +774,7 @@ bool Hud::BadgeQuad(const ViewPose& head, const BadgeAnchor& anchor, XrTime time
     return true;
 }
 
-bool Hud::ToastQuad(const ViewPose& head, XrTime time, Quad& quad,
+bool Hud::ToastQuad(const ViewPose& head, XrTime time, Quad& quad, const BadgeAnchor& anchor,
                     const std::vector<Input::PanelQuad>* screens) {
     toast_chain.Poll();
     backing_chain.Poll(); // AzaharFrame flash: its one copy released
@@ -790,8 +796,21 @@ bool Hud::ToastQuad(const ViewPose& head, XrTime time, Quad& quad,
                          head.head.position.z + fz / len * kToastDistance};
         return pose;
     };
+    // The place in the Primary Screen's corner of the toast in an atlas row.
+    const auto corner = [&](int row, bool lower) {
+        const ToastFit::Box& box = row_boxes[static_cast<std::size_t>(row)];
+        return Vis::Badge::OnScreen(ToInput(anchor.screen_pose), anchor.screen_size.width,
+                                    anchor.screen_size.height, anchor.curve,
+                                    static_cast<float>(box.box_px) / kToastHeight,
+                                    Vis::Badge::kToastHeight,
+                                    lower ? Vis::Badge::kToastBelow : 0.0f);
+    };
+    const bool badge_there = badge_opacity > 0.0f && !badge_head;
     const int requested = toast_kind.exchange(-1);
     if (requested >= 0 && requested < kToastKinds && head.valid) {
+        shown_lower = badge_there;
+        shown_corner = requested != static_cast<int>(Toast::Autosaved) && anchor.screen &&
+                       anchor.pictures && InView(head, corner(requested, shown_lower));
         shown_pose = ahead();
         toast_ease.Reset(); // AzaharFrame integ9: a new place, a new depth
         shown_kind = requested;
@@ -837,6 +856,7 @@ bool Hud::ToastQuad(const ViewPose& head, XrTime time, Quad& quad,
     if (text_row_waiting >= 0 && !toast_chain.Busy()) {
         // Nudged again while the last one shows: it stays where it is, with the new text.
         const bool showing_text = shown_kind >= kToastKinds && time - shown_since <= shown_ns;
+        shown_corner = false;
         if (!showing_text) {
             shown_pose = ahead();
             toast_ease.Reset(); // AzaharFrame integ9
@@ -863,6 +883,16 @@ bool Hud::ToastQuad(const ViewPose& head, XrTime time, Quad& quad,
                        {static_cast<int32_t>(box.box_px), static_cast<int32_t>(kToastHeight)}};
     quad.pose = shown_pose;
     quad.size = {box.width_m, box.height_m};
+    quad.eye = XR_EYE_VISIBILITY_BOTH;
+    quad.flags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+    shown_lower = shown_lower || badge_there; // not back up while it shows
+    if (shown_corner && anchor.screen) {
+        const Vis::Badge::Placed p = corner(row, shown_lower);
+        quad.pose = ToXrPose(p.pose);
+        quad.size = {p.width, p.height};
+        return true;
+    }
+    shown_corner = false; // no such screen now: ahead, as it was when it appeared
     // AzaharFrame kiu2: in front of every screen it is over (BringInFront).
     if (screens && head.valid) {
         const float k = BringInFront(head, screens, quad, toast_ease, time);
@@ -876,8 +906,6 @@ bool Hud::ToastQuad(const ViewPose& head, XrTime time, Quad& quad,
             }
         }
     }
-    quad.eye = XR_EYE_VISIBILITY_BOTH;
-    quad.flags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
     return true;
 }
 

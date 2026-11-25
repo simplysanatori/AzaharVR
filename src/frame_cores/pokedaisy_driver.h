@@ -15,6 +15,8 @@
 #include <utility>
 #include <vector>
 
+#include "common/alt_core_types.h"
+
 namespace FrameCores {
 class FrameDriver;
 }
@@ -91,6 +93,9 @@ struct Toggles {
         return wild_off || run_indoors || reusable_tms || instant_text || trade_evos;
     }
 };
+
+/// Which Toggles field a driver option is; null for one that is none of them.
+bool Toggles::*FieldOf(Common::AltCore::DriverOption option);
 
 /// What the session sees of the player's toggles: neutral values wherever they may not act.
 Toggles ShownToggles(const Toggles& wanted, bool editing, bool open);

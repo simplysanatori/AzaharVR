@@ -52,11 +52,17 @@ public:
     }
 
     /// The Secondary Screen's next page, or its other view (BtnTurnPage). Any thread; from
-    /// the next frame. With a profile's `views` or `onPress` it is the only way there; other pages
-    /// turn by themselves, and go on doing so.
+    /// the next frame. Without RotatePages it is the only way there.
     void TurnPage() override {
         page_asked.store(true, std::memory_order_relaxed);
     }
+
+    Common::AltCore::DriverName Name() const override {
+        return Common::AltCore::DriverName::GbaDs;
+    }
+    uint32_t Options() const override;
+    uint32_t OptionsOn() const override;
+    bool SetOption(Common::AltCore::DriverOption option, uint32_t value) override;
 
 private:
     enum class Turn { Host, Loop };
@@ -76,7 +82,7 @@ private:
     // On the loop's thread
     void Body();
     bool Park();
-    bool OnEvents(bool* turn_page);
+    bool OnEvents(GbadsAsk* ask);
     bool OnStep(uint32_t step_keys);
     bool OnPresent();
 
@@ -98,6 +104,8 @@ private:
     std::atomic<bool> aborting{false};
     std::atomic<bool> in_step{false}; // the core's own frame, not the loop's doing
     std::atomic<bool> page_asked{false};
+    std::atomic<bool> rotate{false};
+    std::atomic<int> map_interval{Common::AltCore::kMapRefreshFrames[1]};
     bool ready = false; // the loop's thread only
 
     // Handed over with the turn

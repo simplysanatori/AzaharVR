@@ -13,6 +13,8 @@
 namespace FrameCores {
 namespace {
 
+using Option = Common::AltCore::DriverOption;
+
 constexpr int kSaveCopies = 3;
 
 Vulkan::AltScreenImage ToImage(const DriverPicture& picture) {
@@ -135,12 +137,21 @@ void DriverRunner::Start(DriverKind kind, const Known& known, DriverServices ser
         return backed_up;
     };
     driver = MakeDriver(kind, services, info, opts);
+    auto_fire = {};
     driver->SetEditing(editing);
+    if (rotate_pages) {
+        driver->SetOption(Option::RotatePages, *rotate_pages);
+    }
+    if (map_refresh) {
+        driver->SetOption(Option::MapRefresh, *map_refresh);
+    }
     caps.has_touch = driver->HasTouch();
     caps.second_screen_choices = known.Choices();
     caps.can_edit_game = driver->CanEdit();
     caps.has_quick_menu = driver->HasQuickMenu();
     caps.has_pages = known.gbads;
+    caps.driver = driver->Name();
+    UpdateOptions(caps);
     UpdateSecondary(caps);
 }
 
@@ -165,6 +176,7 @@ void DriverRunner::RunFrame(const Common::AltCore::InputState& input, FrameOutpu
     out.audio_pcm.clear();
     out.rumble = 0.0f;
     out.metrics_changed = false;
+    out.options_changed = false;
     if (!driver) {
         return;
     }
@@ -174,7 +186,7 @@ void DriverRunner::RunFrame(const Common::AltCore::InputState& input, FrameOutpu
     }
 
     DriverInput in;
-    in.keys = input.buttons & 0x3FFu; // ButtonBit 0..9 are the GBA's keys
+    in.keys = auto_fire.Frame(input.buttons) & 0x3FFu; // ButtonBit 0..9 are the GBA's keys
     if (caps.has_touch && input.touching) {
         in.touching = true;
         in.touch_x = input.touch_x;
@@ -202,6 +214,11 @@ void DriverRunner::RunFrame(const Common::AltCore::InputState& input, FrameOutpu
     if (UpdateSecondary(caps)) {
         out.metrics_changed = true;
         out.updated_metrics = caps.screens;
+    }
+    if (UpdateOptions(caps)) {
+        out.options_changed = true;
+        out.updated_options = caps.driver_options;
+        out.updated_options_on = caps.driver_options_on;
     }
 }
 
@@ -232,6 +249,31 @@ void DriverRunner::TurnPage() {
     if (driver) {
         driver->TurnPage();
     }
+}
+
+bool DriverRunner::SetOption(Option option, uint32_t value,
+                             Common::AltCore::Capabilities& caps) {
+    if (option == Option::RotatePages) {
+        rotate_pages = value;
+    } else if (option == Option::MapRefresh) {
+        map_refresh = value;
+    }
+    const bool taken = driver && driver->SetOption(option, value);
+    if (driver) {
+        UpdateOptions(caps);
+    }
+    return taken;
+}
+
+bool DriverRunner::UpdateOptions(Common::AltCore::Capabilities& caps) {
+    const uint32_t has = driver->Options();
+    const uint32_t on = driver->OptionsOn() & has;
+    if (has == caps.driver_options && on == caps.driver_options_on) {
+        return false;
+    }
+    caps.driver_options = has;
+    caps.driver_options_on = on;
+    return true;
 }
 
 bool DriverRunner::UpdateSecondary(Common::AltCore::Capabilities& caps) {

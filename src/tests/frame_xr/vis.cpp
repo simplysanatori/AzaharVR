@@ -42,6 +42,47 @@ std::string ActionFor(const std::vector<HelpRow>& rows, const std::string& contr
 
 } // namespace
 
+TEST_CASE("FrameXr vis: the help of GBA and Game Boy games", "[frame_xr]") {
+    using Common::AltCore::CoreKind;
+    HelpContext ctx;
+    ctx.console = CoreKind::GBA;
+    HelpPage page = BuildHelp(DefaultHelpBindings(), ctx);
+    CHECK(ActionFor(page.game, "A") == "GBA B");
+    CHECK(ActionFor(page.game, "B") == "GBA A");
+    CHECK(ActionFor(page.game, "Y") == "Auto Fire A"); // the top button, by position
+    CHECK(ActionFor(page.game, "X") == "Auto Fire B");
+    CHECK(ActionFor(page.game, "D-Pad") == "GBA D-Pad");
+    CHECK(ActionFor(page.game, "Left Stick") == "GBA D-Pad");
+    CHECK(ActionFor(page.game, "Right Stick") == "Nothing");
+    CHECK(ActionFor(page.game, "Left Bumper") == "GBA L");
+    CHECK(ActionFor(page.game, "Left Trigger") == "Touch on Secondary Screen");
+    CHECK(ActionFor(page.game, "Menu") == "GBA Start");
+    CHECK(ActionFor(page.game, "View") == "GBA Select");
+
+    ctx.face_by_position = false;
+    page = BuildHelp(DefaultHelpBindings(), ctx);
+    CHECK(ActionFor(page.game, "X") == "Auto Fire A");
+    CHECK(ActionFor(page.game, "Y") == "Auto Fire B");
+
+    ctx.console = CoreKind::GB;
+    page = BuildHelp(DefaultHelpBindings(), ctx);
+    CHECK(ActionFor(page.game, "A") == "Game Boy A");
+    CHECK(ActionFor(page.game, "Left Bumper") == "Nothing");
+    CHECK(ActionFor(page.game, "Right Bumper") == "Nothing");
+    const HelpDiagram d = BuildHelpDiagram(DefaultHelpBindings(), ctx);
+    bool found = false;
+    for (const DiagramLabel& l : d.pages[0].labels) {
+        for (const DiagramLine& line : l.lines) {
+            found = found || (line.key == "X" && line.action == "Auto Fire A");
+        }
+    }
+    CHECK(found);
+
+    ctx.console = CoreKind::NDS; // a DS game has X and Y
+    page = BuildHelp(DefaultHelpBindings(), ctx);
+    CHECK(ActionFor(page.game, "X") == "3DS X");
+}
+
 TEST_CASE("FrameXr vis: the help follows the profile and Face Buttons", "[frame_xr]") {
     HelpContext ctx;
     SECTION("default profile, by position: the Frame's A is the 3DS's B") {
@@ -489,9 +530,16 @@ TEST_CASE("FrameXr vis: the diagram's labels fit and their lines are clear", "[f
     all.buttons[Settings::NativeButton::Down] = "";
     all.buttons[Settings::NativeButton::Left] = "engine:frame_xr,button:1";
     all.buttons[Settings::NativeButton::Right] = "engine:frame_xr,button:0";
-    for (const HelpBindings& b : {DefaultHelpBindings(), one, all}) {
+    using Common::AltCore::CoreKind;
+    const std::pair<HelpBindings, CoreKind> shown[] = {{DefaultHelpBindings(), CoreKind::N3DS},
+                                                       {one, CoreKind::N3DS},
+                                                       {all, CoreKind::N3DS},
+                                                       {DefaultHelpBindings(), CoreKind::GBA},
+                                                       {DefaultHelpBindings(), CoreKind::GB}};
+    for (const auto& [b, console] : shown) {
         HelpContext ctx;
         ctx.game_running = true;
+        ctx.console = console;
         const HelpDiagram d = BuildHelpDiagram(b, ctx);
         for (const DiagramPage& page : d.pages) {
             const auto placed = LayoutHelpDiagram(page, an, measure);

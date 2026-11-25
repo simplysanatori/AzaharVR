@@ -606,6 +606,15 @@ struct AltCoreHost::Impl {
         }
     }
 
+    /// core_mutex held.
+    void NoteOptions(uint32_t has, uint32_t on) {
+        caps.driver_options = has;
+        caps.driver_options_on = on;
+        if (callbacks.on_capabilities) {
+            callbacks.on_capabilities(caps);
+        }
+    }
+
     void Present(bool skippable) {
         if (renderer && renderer->IsReady() && last_frame.primary.pixels) {
             renderer->Present(last_frame.primary, last_frame.secondary, last_frame.overlay,
@@ -635,6 +644,10 @@ struct AltCoreHost::Impl {
             } else if (callbacks.on_capabilities) {
                 callbacks.on_capabilities(caps);
             }
+        }
+
+        if (last_frame.options_changed) {
+            NoteOptions(last_frame.updated_options, last_frame.updated_options_on);
         }
 
         audio.SetCoreSampleRate(core->AudioSampleRate());
@@ -1221,6 +1234,20 @@ void AltCoreHost::TurnPage() {
     if (impl->core) {
         impl->core->TurnPage();
     }
+}
+
+bool AltCoreHost::SetDriverOption(Common::AltCore::DriverOption option, uint32_t value) {
+    std::lock_guard lock(impl->core_mutex);
+    if (!impl->core) {
+        return false;
+    }
+    const bool taken = impl->core->SetDriverOption(option, value);
+    const auto now = impl->core->GetCapabilities();
+    if (now.driver_options != impl->caps.driver_options ||
+        now.driver_options_on != impl->caps.driver_options_on) {
+        impl->NoteOptions(now.driver_options, now.driver_options_on);
+    }
+    return taken;
 }
 
 void AltCoreHost::SetMicBlow(bool on) {

@@ -125,11 +125,14 @@ DsPoint UnitAnchor(int target) {
 } // namespace
 
 DsPoint DsDrawing::Anchor(int target) const {
-    const DsPoint u = UnitAnchor(target);
+    const DsPoint u = console == DrawnConsole::Gba ? GbaUnitAnchor(target) : UnitAnchor(target);
     return {box.x0 + u.x * s, box.y0 + u.y * s};
 }
 
 float DsDrawing::Radius(int target) const {
+    if (console == DrawnConsole::Gba) {
+        return GbaUnitRadius(target) * s;
+    }
     switch (target) {
     case DsButton::A:
     case DsButton::B:
@@ -154,15 +157,20 @@ Rect DsDrawing::BottomScreen() const {
             box.x0 + kBottomScreen.x1 * s, box.y0 + kBottomScreen.y1 * s};
 }
 
-DsDrawing PlaceDs(const Rect& area) {
+DsDrawing PlaceDs(const Rect& area, DrawnConsole console) {
+    const bool gba = console == DrawnConsole::Gba;
+    const float units_w = gba ? kGbaUnitsW : kDsUnitsW;
+    const float units_h = gba ? kGbaUnitsH : kDsUnitsH;
     DsDrawing d;
-    d.s = std::min(area.W() / kDsUnitsW, area.H() / kDsUnitsH);
-    const float w = kDsUnitsW * d.s, h = kDsUnitsH * d.s;
+    d.console = console;
+    d.s = std::min(area.W() / units_w, area.H() / units_h);
+    const float w = units_w * d.s, h = units_h * d.s;
     d.box = {area.Cx() - w * 0.5f, area.Cy() - h * 0.5f, area.Cx() + w * 0.5f, area.Cy() + h * 0.5f};
     return d;
 }
 
-void DrawDs(Kit& kit, const DsDrawing& d, int lit) {
+namespace {
+void Draw3ds(Kit& kit, const DsDrawing& d) {
     const float s = d.s;
     const auto X = [&](float x) { return d.box.x0 + x * s; };
     const auto Y = [&](float y) { return d.box.y0 + y * s; };
@@ -290,6 +298,15 @@ void DrawDs(Kit& kit, const DsDrawing& d, int lit) {
     ring(kCStick, 1.2f, 0.4f);
     circle(kStart, kSmallR, kPart);
     circle(kSelect, kSmallR, kPart);
+}
+} // namespace
+
+void DrawDs(Kit& kit, const DsDrawing& d, int lit) {
+    if (d.console == DrawnConsole::Gba) {
+        DrawGba(kit, d);
+    } else {
+        Draw3ds(kit, d);
+    }
 
     // The chosen input: a ring in the primary colour.
     // padsui: the mouse's own targets are not on the 3DS (keys: nor the keyboard's modifier)
@@ -309,7 +326,8 @@ void DrawDsDot(Kit& kit, const DsDrawing& d, int target, bool lit) {
     kit.Dot(c.x, c.y, lit ? r + 1.0f : r, Tok::kPrimary);
 }
 
-void DrawDsGlyph(Kit& kit, const Rect& b, int target, uint32_t fg, uint32_t bg) {
+void DrawDsGlyph(Kit& kit, const Rect& b, int target, uint32_t fg, uint32_t bg,
+                 DrawnConsole console) {
     const float cx = b.Cx(), cy = b.Cy(), r = std::min(b.W(), b.H()) * 0.5f;
     const auto letter = [&](const char* t, float size) {
         kit.TextSized(cx, cy + kit.CapHeightSized(size, true) * 0.5f, size, true, fg, t, 1);
@@ -320,6 +338,15 @@ void DrawDsGlyph(Kit& kit, const Rect& b, int target, uint32_t fg, uint32_t bg) 
         kit.Stroke(p, r * 0.3f, 1.2f, fg, 0.7f);
         letter(t, r * 0.95f);
     };
+    if (console == DrawnConsole::Gba && (target == DsButton::X || target == DsButton::Y)) {
+        // AzaharVR: Auto Fire: the button it presses, in a second ring.
+        kit.Stroke({cx - r, cy - r, cx + r, cy + r}, r, 1.2f, fg, 0.45f);
+        kit.Dot(cx, cy, r * 0.74f, bg);
+        kit.Stroke({cx - r * 0.74f, cy - r * 0.74f, cx + r * 0.74f, cy + r * 0.74f}, r * 0.74f, 1.2f,
+                   fg, 0.7f);
+        letter(target == DsButton::X ? "A" : "B", r * 0.9f);
+        return;
+    }
     switch (target) {
     case DsButton::A:
     case DsButton::B:

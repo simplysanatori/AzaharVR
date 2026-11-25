@@ -181,6 +181,8 @@ static __attribute__((unused)) void gds_names_hold(void) {
     (void) snapshot_hiding_sprites_poke;
 }
 
+static void gds_settings(const GbadsAsk* ask);
+static void gds_keep_page(void);
 #include "gbads_ui_stubs.h"
 
 /* ---------------------------------------------------------------- the session */
@@ -192,11 +194,33 @@ static void gds_config(Config* c) {
     c->autoSave = c->autoLoad = c->barHint = false;
     c->customLogos = CL_OFF, c->logoFolder[0] = 0;
     c->stateDir[0] = c->assetDir[0] = c->cheatDir[0] = c->romDir[0] = c->screenshotDir[0] = c->patchDir[0] = 0;
+    c->toggle = true;                 /* (its button and hotkey are not here: GbadsAsk) */
+    c->autoRotate = false;
     strcpy(c->toggleButton, "off");   /* (it would be drawn on the second screen) */
     c->solarLevel = emu_solar_level;  /* (sun_load gives it back) */
     /* the table over both screens takes the top of the game's screen: only where it is all there is */
     const MapProfile* p = profile_find(gds_emu->gameCode);
     c->tallLive = p && p->logoOnly && p->tall.on[0].addr && !p->hud.on[0].addr && !p->snap.showMin;
+}
+
+/* The player's, at the top of a pass, as game.c's own menu changes them (setting_applied has nothing
+ * for these). */
+static void gds_settings(const GbadsAsk* ask) {
+    cfg->mapInterval = ask->map_interval > 0 ? ask->map_interval : 60;
+    if (ask->rotate == cfg->autoRotate) return;
+    /* the page on view stays: until it is turned, or for a page's time from now */
+    if (mapRes.pages) pageOffset = second_page(), mapAnimStart = frameCount;
+    cfg->autoRotate = ask->rotate;
+}
+
+/* With Rotate Pages off Pokémon's page (the party, the map) stays until it is turned. game.c shows
+ * the first page for a new subject (another game's room or unit); Pokémon's is the party, and a hack
+ * can have more of its records in memory than the party's (copies in the heap that move), so it comes
+ * up with nothing happening. Called at the top of a pass, before a capture that was asked for comes
+ * in. A loaded state still starts at the first page. (holdPage: only Pokémon's profiles have one.) */
+static void gds_keep_page(void) {
+    const MapProfile* p = mc && !cfg->autoRotate && cfg->toggle && mapRes.pages ? mapcap_profile(mc) : NULL;
+    if (p && p->pages && p->holdPage && !p->views && !p->onPress) capSubject = false;
 }
 
 /* What game.c keeps between games and does not set at a game's start. Statics inside its functions
@@ -332,4 +356,11 @@ static void gds_state_loaded(void) {
     }
 }
 
-const GbadsLoop gbads_game_loop = { gds_run_host, gds_output, gds_pictures, gds_restart, gds_state_loaded };
+static unsigned gds_features(void) {
+    if (!mc) return 0;
+    const MapProfile* p = mapcap_profile(mc);
+    if (!p) return 0;
+    return (p->logoOnly ? 0 : GBADS_HAS_MAP) | (p->pages ? GBADS_HAS_PAGES : 0) | (p->views || p->onPress ? GBADS_HAS_VIEWS : 0);
+}
+
+const GbadsLoop gbads_game_loop = { gds_run_host, gds_output, gds_pictures, gds_restart, gds_state_loaded, gds_features };

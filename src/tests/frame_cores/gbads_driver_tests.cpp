@@ -79,6 +79,8 @@ struct FakeLoop {
     int runs = 0;
     int events = 0;
     int turns = 0;
+    GbadsAsk ask{};
+    unsigned features = 0;
     int restarts = 0;
     int loads = 0;
     std::string rom;
@@ -87,12 +89,11 @@ struct FakeLoop {
 FakeLoop g_fake;
 
 bool Top(const GbadsHost& h) {
-    bool turn = false;
-    if (!h.events(h.ctx, &turn)) {
+    if (!h.events(h.ctx, &g_fake.ask)) {
         return false;
     }
     ++g_fake.events;
-    g_fake.turns += turn ? 1 : 0;
+    g_fake.turns += g_fake.ask.turn_page ? 1 : 0;
     return true;
 }
 
@@ -125,6 +126,7 @@ const GbadsLoop kFakeLoop{
     },
     [] { ++g_fake.restarts; },
     [] { ++g_fake.loads; },
+    [] { return g_fake.features; },
 };
 
 GbaDsLimits QuickLimits() {
@@ -1075,4 +1077,51 @@ TEST_CASE("gba-ds's logo.c: a game closed meanwhile", "[frame_cores]") {
     REQUIRE(driver);
     REQUIRE(LogoDone("AMKE"));
     CHECK(game.Files() == std::vector<std::string>{"game.gba", "games/logo/AMKE.png"});
+}
+
+TEST_CASE("GbaDsDriver: its options, from the next pass", "[frame_cores]") {
+    using Option = Common::AltCore::DriverOption;
+    using Common::AltCore::DriverOptionBit;
+    FakeGame game;
+    auto driver = MakeFake(game);
+    REQUIRE(driver);
+    CHECK(driver->Name() == Common::AltCore::DriverName::GbaDs);
+    CHECK(driver->Options() == 0u); // a game without a map
+    g_fake.features = GBADS_HAS_MAP;
+    CHECK(driver->Options() == DriverOptionBit(Option::MapRefresh));
+    g_fake.features = GBADS_HAS_MAP | GBADS_HAS_VIEWS;
+    CHECK(driver->Options() ==
+          (DriverOptionBit(Option::MapRefresh) | DriverOptionBit(Option::TurnPage)));
+    g_fake.features = GBADS_HAS_MAP | GBADS_HAS_PAGES;
+    CHECK(driver->Options() ==
+          (DriverOptionBit(Option::MapRefresh) | DriverOptionBit(Option::TurnPage) |
+           DriverOptionBit(Option::RotatePages)));
+
+    Run(*driver);
+    Run(*driver);
+    CHECK_FALSE(g_fake.ask.rotate); // pages stay until they are turned
+    CHECK(g_fake.ask.map_interval == 60);
+    CHECK(driver->OptionsOn() == 0u);
+
+    CHECK(driver->SetOption(Option::RotatePages, 1));
+    CHECK(driver->SetOption(Option::MapRefresh, 3));
+    CHECK_FALSE(g_fake.ask.rotate); // not between the frames
+    Run(*driver);
+    Run(*driver);
+    CHECK(g_fake.ask.rotate);
+    CHECK(g_fake.ask.map_interval == 180);
+    CHECK(driver->OptionsOn() == DriverOptionBit(Option::RotatePages));
+
+    CHECK(driver->SetOption(Option::MapRefresh, 99));
+    CHECK(driver->SetOption(Option::MapRefresh, 0));
+    CHECK(driver->SetOption(Option::RotatePages, 0));
+    const int turns = g_fake.turns;
+    CHECK(driver->SetOption(Option::TurnPage, 1));
+    Run(*driver);
+    Run(*driver);
+    CHECK_FALSE(g_fake.ask.rotate);
+    CHECK(g_fake.ask.map_interval == 30);
+    CHECK(g_fake.turns == turns + 1); // once
+
+    CHECK_FALSE(driver->SetOption(Option::AutoRun, 1)); // PokeDaisy's
 }

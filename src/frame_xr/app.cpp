@@ -232,13 +232,24 @@ ScreenPlacement WithSecondSlot(ScreenPlacement place) {
         place.bottom_size = NormalBottomSize(place.second_scale);
         return place;
     }
-    place.bottom_size = NormalBottomSize();
+    const uint32_t layout = Settings::values.vr_screen_layout.GetValue();
+    const Common::AltCore::ScreenMetrics screens = GetCoreCapabilities().screens;
+    place.bottom_size =
+        NormalBottomSize(Input::ScreenRig::LinkedScale(screens.equal_screens, layout));
+    // As they stand: a DS game's screens may be turned on their sides (Screen Rotation).
+    XrExtent2Df main = place.top_size;
+    XrExtent2Df second = place.bottom_size;
+    if (screens.rotation_deg % 180 != 0) {
+        std::swap(main.width, main.height);
+        std::swap(second.width, second.height);
+    }
     const XrPosef& t = place.top_pose;
     const Input::Posef top{{t.orientation.x, t.orientation.y, t.orientation.z, t.orientation.w},
                            {t.position.x, t.position.y, t.position.z}};
     const Input::Posef b = Input::ScreenRig::SecondFromMain(
-        top, place.top_scale, place.top_size.width, place.bottom_size.width,
-        Settings::values.vr_screen_layout.GetValue());
+        top, place.top_scale, main.width, second.width, layout,
+        main.height / Input::ScreenRig::ClampScale(place.top_scale), second.height,
+        static_cast<float>(Settings::values.vr_screen_gap.GetValue()));
     place.bottom_pose = {{b.orientation.x, b.orientation.y, b.orientation.z, b.orientation.w},
                          {b.position.x, b.position.y, b.position.z}};
     return place;
@@ -1765,7 +1776,8 @@ void Runtime::FrameLoop() {
             }
             // AzaharFrame vrqol: a toast (Quick Saved ...) in front of everything.
             Quad toast;
-            if (hud.ToastQuad(LatestViewPose(), fs.predictedDisplayTime, toast, &toast_screens)) {
+            if (hud.ToastQuad(LatestViewPose(), fs.predictedDisplayTime, toast, badge_anchor,
+                              &toast_screens)) {
                 slot_add(LayerSlots::Group::Toast, local_space, toast);
             }
             // AzaharFrame controls: the grip hint chip under the held screen.

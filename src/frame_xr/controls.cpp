@@ -1156,6 +1156,9 @@ void VrUi::TabMenuFrame(Runtime& rt, const FrameInfo& info, const Input::InputFr
     MenuPanel::Host host;
     host.curve_ok = cylinder_ok;
     host.passthrough_ok = PassthroughSupported();
+    host.second_free =
+        GetScreenPlacement().second_free &&
+        Rig::ClampDetach(Settings::values.vr_move_screens.GetValue()) != Rig::kDetachOff;
     host.request = [this](const MenuRequest& r) {
         std::scoped_lock lock{hooks_mutex};
         if (hooks.menu_request) {
@@ -2671,7 +2674,10 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         // Detached: from the first grab the second slot stays where it is drawn now and no
         // longer follows the main one.
         Rig::Slots slots = SlotsOf(place);
-        if (Rig::Detach(slots, detach, ToInput(place.bottom_pose))) {
+        const float linked_scale =
+            Rig::LinkedScale(GetCoreCapabilities().screens.equal_screens,
+                             Settings::values.vr_screen_layout.GetValue());
+        if (Rig::Detach(slots, detach, ToInput(place.bottom_pose), linked_scale)) {
             PutSlots(place, slots);
             SetScreenPlacement(place);
             place = GetScreenPlacement();
