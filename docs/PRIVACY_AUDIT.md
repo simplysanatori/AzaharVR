@@ -99,7 +99,7 @@ What it writes is checked by the program before anything is installed: the pack'
 
 ### Covers (Games tab)
 
-No cover is asked for until the player presses Download in "Download Thumbnails?" (which the Download Thumbnails button and Choose Another Cover open; it says what the source sees), or turns Download Game Covers on (off by default; its tooltip says the same). Download asks once, for the games it names, and does not turn the setting on. With the setting on, the games in the list without a cover are asked for one at a time, when the list was read, and not once it is off again; Choose Another Cover then asks without the question. Covers on disk show whatever the setting says (`src/core/frame_covers.*`, `src/citra_qt/frame_games.cpp`).
+No cover is asked for until the player presses Download in "Download Thumbnails?" (which the Download Thumbnails button and Choose Another Cover open, and which shows after a scan of the game list found files that were not in it before, once for these files; it says what the source sees), or turns Download Game Covers on (off by default; its tooltip says the same). Download asks once, for the games it names, and does not turn the setting on. With the setting on, the games in the list without a cover are asked for one at a time, when the list was read, and not once it is off again; Choose Another Cover then asks without the question. Covers on disk show whatever the setting says (`src/core/frame_covers.*`, `src/citra_qt/frame_games.cpp`).
 
 | Host | Request | Why |
 | --- | --- | --- |
@@ -107,7 +107,7 @@ No cover is asked for until the player presses Download in "Download Thumbnails?
 
 **The request shows the host the game's file name** (without its extension; `&*/:` and the like become `_`), so GitHub sees, with the player's IP address, which games are in the list, whether a cover exists or not. Only a name that ends with a tag in round brackets, as every No-Intro name does ("(USA)"), is asked for: other names (most ROM hacks, renamed files) are never sent. Nothing else is sent: no path, title ID, save, account or cookie, only the usual HTTP headers (`User-Agent: cpp-httplib/<version>`). No redirect is followed; HTTPS only, the certificate checked as above; a reply over 2 MB or that is no PNG or JPEG is dropped. After no reply or a limit nothing more is asked for in that run or press.
 
-Kept in the user folder's `covers/`: downloads per source and system (`libretro-thumbnails/`, with `missing.txt`, the names not found and when, asked for again after 30 days), the player's own images (`own/`, a copy of a PNG or JPEG of 8 MB at most that Use My Own Image picked; never sent anywhere) and `choices.txt`. Nothing is bundled or re-hosted.
+Kept in the user folder's `covers/`: downloads per source and system (`libretro-thumbnails/`, with `missing.txt`, the names not found and when, asked for again after 30 days), the player's own images (`own/`, a copy of a PNG or JPEG of 8 MB at most that Use My Own Image picked; never sent anywhere), `choices.txt` and `known.txt` (the games the list had, by a hash of their name and their key, so each is asked about once). Whether a network is there is read from the computer's own interfaces; nothing is sent to find out. Nothing is bundled or re-hosted.
 
 ### Crash reports (Send Report)
 

@@ -56,6 +56,7 @@ public:
                            const QString& cancel, std::function<void(bool)> answer)>
             confirm;
         std::function<void(const QString& text)> toast;
+        std::function<bool()> online; ///< a network is there
     };
 
     FrameGames(Hooks hooks, QObject* parent);
@@ -70,6 +71,8 @@ public:
     void Play(const QString& path);
     void ToggleFavourite(const std::string& path);
 
+    /// A game stopped: what waited for it (AskForNewGames).
+    void GameStopped();
     /// Download Thumbnails: asks, then downloads the covers these games have not.
     void DownloadThumbnails(const std::vector<std::string>& paths);
     /// Choose Another Cover's pick (asks when Download Game Covers is off and it is not on disk).
@@ -109,6 +112,8 @@ private:
     void Queue(std::vector<CoverJob> jobs, bool first);
     /// The cover on disk again, of every row that is this game.
     void ReloadCover(const Core::Covers::Game& game);
+    /// "Download Thumbnails?" for the files the list did not have before.
+    void AskForNewGames();
     void StartDownload(const std::vector<std::string>& paths);
     void CoverThread();
     void CoverFound(const std::string& path, std::shared_ptr<const FrameXr::Menu::GameIcon> cover);
@@ -116,6 +121,7 @@ private:
 
     Hooks hooks;
     Core::Covers::Library library;
+    Core::Covers::NewGames new_games;
     std::map<std::string, std::shared_ptr<const FrameXr::Menu::GameIcon>> covers; ///< by path
     QTimer covers_publish; ///< found covers show together, at most once a second
     std::set<std::string> covers_loaded;    ///< games (id and path) looked for on disk this run

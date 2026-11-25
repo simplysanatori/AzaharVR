@@ -57,6 +57,12 @@ void FrameGames::Listed() {
     missing.clear();
     FindCovers();
     Publish();
+    std::vector<Core::Covers::NewGames::Listed> listed;
+    for (const GameEntry& row : rows) {
+        listed.push_back({row.path, GameOf(row)});
+    }
+    new_games.Scanned(listed, library, std::time(nullptr));
+    AskForNewGames();
 }
 
 // ---- Covers (core/frame_covers.h) ----
@@ -179,6 +185,35 @@ void FrameGames::DownloadThumbnails(const std::vector<std::string>& paths) {
                           StartDownload(wanted);
                       }
                   });
+}
+
+void FrameGames::GameStopped() {
+    // Not when another game starts right away
+    QTimer::singleShot(1000, this, [this] { AskForNewGames(); });
+}
+
+void FrameGames::AskForNewGames() {
+    const auto games = new_games.Take(library, {.automatic = hooks.covers_on(),
+                                                .running = !hooks.running_path().isEmpty(),
+                                                .online = hooks.online(),
+                                                .time = std::time(nullptr)});
+    if (games.empty()) {
+        return;
+    }
+    std::vector<std::string> paths;
+    for (const auto& game : games) {
+        paths.push_back(game.path);
+    }
+    QTimer::singleShot(0, this, [this, paths] { // after the list's own
+        hooks.confirm(QString::fromUtf8(Text::kAskTitle),
+                      QString::fromStdString(Text::AskBody(paths.size(), true)),
+                      QString::fromUtf8(Text::kAskYes), QString::fromUtf8(Text::kAskNo),
+                      [this, paths](bool yes) {
+                          if (yes) {
+                              StartDownload(paths);
+                          }
+                      });
+    });
 }
 
 void FrameGames::StartDownload(const std::vector<std::string>& paths) {

@@ -3811,6 +3811,11 @@ void GMainWindow::ShutdownAltGame() {
     alt_core_host->Stop();
     game_list->AltGameStopped(alt_title_id);
     emulation_running = false;
+#if defined(ENABLE_FRAME_XR) && defined(ENABLE_ALT_CORES)
+    if (g_frame_games) { // AzaharVR
+        g_frame_games->GameStopped();
+    }
+#endif
     game_path.clear();
     game_title.clear();
 #ifdef ENABLE_FRAME_XR
@@ -4342,6 +4347,11 @@ void GMainWindow::ShutdownGame() {
     UpdateSaveStates();
 
     emulation_running = false;
+#if defined(ENABLE_FRAME_XR) && defined(ENABLE_ALT_CORES)
+    if (g_frame_games) { // AzaharVR
+        g_frame_games->GameStopped();
+    }
+#endif
 #ifdef ENABLE_FRAME_XR // AzaharFrame: back to the picker or home panel (folders may have changed)
     if (FrameXr::IsStarted()) {
         if (g_frame_xr_fast_forward) {
@@ -6882,6 +6892,7 @@ void GMainWindow::FrameMakeGamesTab() {
                        const QString& cancel, std::function<void(bool)> answer) {
         FrameAsk(title, body, confirm, cancel, std::move(answer));
     };
+    h.online = [] { return Core::Covers::NetworkUp(); };
     h.toast = [this](const QString& text) {
         FrameXr::ShowToastText(text.toStdString(), FrameXr::ToastTime::Long);
         statusBar()->showMessage(text, 5000);

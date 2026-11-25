@@ -240,6 +240,71 @@ TEST_CASE("Covers: two games with one name, and two names of one key", "[covers]
     CHECK(gb.Id() != kA.Id());
 }
 
+TEST_CASE("Covers: Download Thumbnails? once for a scan's new files", "[covers]") {
+    Folder folder;
+    using Listed = NewGames::Listed;
+    using Now = NewGames::Now;
+    const Now now{.time = 1000};
+    const Listed old{"/a/Game B (Japan).gb", {GameSystem::GB, 0x2222, "Game B (Japan)"}};
+    const Listed fresh{"/a/Game A (USA).gba", kA};
+    const Listed more{"/b/Game C (USA).gba", {GameSystem::GBA, 0x5555, "Game C (USA)"}};
+    const Listed hack{"/b/Hack.gba", {GameSystem::GBA, 0x4444, "Hack"}}; // can have no cover
+    std::vector<Listed> list{old};
+    {
+        Library library(folder.Path());
+        NewGames games;
+        const auto scan = [&](const Now& n) {
+            games.Scanned(list, library, 1000);
+            return games.Take(library, n).size();
+        };
+        CHECK(scan(now) == 0); // the first start: what is listed already
+        CHECK(scan(now) == 0); // a rescan with nothing new
+        list = {old, fresh, more, hack};
+        games.Scanned(list, library, 1000); // two folders' new files: one offer
+        const auto offer = games.Take(library, now);
+        REQUIRE(offer.size() == 2);
+        CHECK(offer[0].path == fresh.path);
+        CHECK(offer[1].path == more.path);
+        CHECK(games.Take(library, now).empty());
+        CHECK(scan(now) == 0); // Not Now: nothing was downloaded, and it is not asked again
+        CHECK(library.Wanted(kA, 1000));
+    }
+    Library library(folder.Path()); // the next start
+    NewGames games;
+    const auto scan = [&](const Now& n) {
+        games.Scanned(list, library, 1000);
+        return games.Take(library, n).size();
+    };
+    CHECK(scan(now) == 0);
+    list = {old, {"/moved/Game A (USA).gba", kA}, more}; // moved, and one gone
+    CHECK(scan(now) == 0);
+    list = {old, fresh, more, hack}; // and back
+    CHECK(scan(now) == 0);
+
+    // A renamed file, and another game in a file of the old name, are new
+    Listed renamed = fresh;
+    renamed.game.stem = "Game A (Europe)";
+    Listed replaced = fresh;
+    replaced.game.key = 0x9999;
+    list = {old, renamed, replaced, replaced};
+    // While a game runs or without a network they wait
+    CHECK(scan({.running = true, .time = 1000}) == 0);
+    CHECK(games.Take(library, {.online = false, .time = 1000}).empty());
+    CHECK(games.Take(library, now).size() == 2); // back in the list
+    CHECK(scan(now) == 0);
+
+    // With Download Game Covers on they come by themselves: no question, then or later
+    list.push_back({"/c/Game D (USA).gba", {GameSystem::GBA, 0x6666, "Game D (USA)"}});
+    CHECK(scan({.automatic = true, .time = 1000}) == 0);
+    CHECK(scan(now) == 0);
+
+    // It has its cover already
+    const Listed covered{"/c/Game E (USA).gba", {GameSystem::GBA, 0x7777, "Game E (USA)"}};
+    library.Store(covered.game, Art::Box, kPng);
+    list.push_back(covered);
+    CHECK(scan(now) == 0);
+}
+
 TEST_CASE("Covers: image types", "[covers]") {
     CHECK(ImageOf(kPng) == Image::Png);
     CHECK(ImageOf(kJpeg) == Image::Jpeg);

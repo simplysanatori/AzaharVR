@@ -10,6 +10,14 @@
 #include <utility>
 #include <fmt/format.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#endif
+
 #include "common/file_util.h"
 #include "common/logging/log.h"
 
@@ -121,6 +129,43 @@ Fetched Fetch(const Get& get, const Source& source) {
     return out;
 }
 
+bool NetworkUp() {
+#ifdef _WIN32
+    // wininet's own answer, without linking it
+    const HMODULE wininet = LoadLibraryW(L"wininet.dll");
+    if (wininet == nullptr) {
+        return true;
+    }
+    using Connected = BOOL(WINAPI*)(LPDWORD, DWORD);
+    const auto connected = reinterpret_cast<Connected>(
+        reinterpret_cast<void*>(GetProcAddress(wininet, "InternetGetConnectedState")));
+    DWORD flags = 0;
+    const bool up = connected == nullptr || connected(&flags, 0) != FALSE;
+    FreeLibrary(wininet);
+    return up;
+#else
+    ifaddrs* list = nullptr;
+    if (getifaddrs(&list) != 0) {
+        return true;
+    }
+    bool up = false;
+    for (const ifaddrs* i = list; i != nullptr && !up; i = i->ifa_next) {
+        if (i->ifa_addr == nullptr || (i->ifa_flags & IFF_LOOPBACK) != 0 ||
+            (i->ifa_flags & IFF_RUNNING) == 0) {
+            continue;
+        }
+        if (i->ifa_addr->sa_family == AF_INET) {
+            up = true;
+        } else if (i->ifa_addr->sa_family == AF_INET6) {
+            up = !IN6_IS_ADDR_LINKLOCAL(
+                &reinterpret_cast<const sockaddr_in6*>(i->ifa_addr)->sin6_addr);
+        }
+    }
+    freeifaddrs(list);
+    return up;
+#endif
+}
+
 // ---- The covers folder ----
 
 namespace {
@@ -210,6 +255,8 @@ Library::Library(std::string dir_) : dir{std::move(dir_)} {
                 static_cast<std::time_t>(std::strtoll(line.c_str(), nullptr, 10));
         }
     });
+    has_known = FileUtil::Exists(dir + "known.txt");
+    EachLine(dir + "known.txt", [this](const std::string& line) { known.insert(line); });
 }
 
 std::string Library::FileOf(const Game& game, Art art) const {
@@ -313,6 +360,33 @@ void Library::MarkMissing(const Game& game, Art art, std::time_t now) {
     SaveMissing();
 }
 
+bool Library::HasKnown() const {
+    std::scoped_lock lock{mutex};
+    return has_known;
+}
+
+bool Library::Known(const Game& game) const {
+    std::scoped_lock lock{mutex};
+    return known.contains(game.Id());
+}
+
+void Library::AddKnown(const std::vector<Game>& games) {
+    std::scoped_lock lock{mutex};
+    bool changed = !has_known;
+    for (const Game& game : games) {
+        changed |= known.insert(game.Id()).second;
+    }
+    has_known = true;
+    if (!changed) {
+        return;
+    }
+    std::string text;
+    for (const std::string& id : known) {
+        text += id + '\n';
+    }
+    WriteFile(dir + "known.txt", text);
+}
+
 void Library::SaveChoices() const {
     std::string text;
     for (const auto& [id, choice] : choices) {
@@ -353,6 +427,39 @@ Outcome Download(const Get& get, Library& library, const Game& game, Art art, st
         return Outcome::NotThere;
     }
     return library.Store(game, art, fetched.bytes) ? Outcome::Got : Outcome::Failed;
+}
+
+// ---- "Download Thumbnails?" ----
+
+void NewGames::Scanned(const std::vector<Listed>& games, Library& library, std::time_t now) {
+    const bool first = !library.HasKnown();
+    std::vector<Game> seen;
+    std::set<std::string> ids;
+    waiting.clear(); // the ones still listed are found again
+    for (const Listed& g : games) {
+        if (library.Known(g.game) || !ids.insert(g.game.Id()).second) {
+            continue;
+        }
+        if (first || !library.Wanted(g.game, now)) {
+            seen.push_back(g.game);
+        } else {
+            waiting.push_back(g);
+        }
+    }
+    library.AddKnown(seen);
+}
+
+std::vector<NewGames::Listed> NewGames::Take(Library& library, const Now& now) {
+    if (waiting.empty() || now.running || (!now.automatic && !now.online)) {
+        return {};
+    }
+    const std::vector<Listed> out = std::exchange(waiting, {});
+    std::vector<Game> games;
+    for (const Listed& g : out) {
+        games.push_back(g.game);
+    }
+    library.AddKnown(games);
+    return now.automatic ? std::vector<Listed>{} : out;
 }
 
 } // namespace Core::Covers
