@@ -415,6 +415,9 @@ TEST_CASE("Kid Icarus UI: the portraits' part of the Secondary Screen's image", 
         CHECK(-words - PortraitDown(words) == -kPortraitWordsDeg - kPortraitDownDeg);
     }
     CHECK(PortraitPlace(false, 40.0f).y > 0.0f);
+    // Separate: from its usual place, to the right and up.
+    CHECK(PortraitPlace(false, kPortraitWordsDeg, 10.0f, 0.0f).x > PortraitPlace(false).x);
+    CHECK(PortraitPlace(false, kPortraitWordsDeg, 0.0f, 10.0f).y > PortraitPlace(false).y);
     CHECK(PortraitPlace(false, -40.0f).y < PortraitPlace(false).y);
 }
 

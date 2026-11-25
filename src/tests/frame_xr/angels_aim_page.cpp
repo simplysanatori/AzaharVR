@@ -232,6 +232,8 @@ std::vector<MenuModel> Sweep(Case c) {
                 m.muzzle_flash = bits & 4;
                 m.projectiles = bits & 1;
                 m.kiu_power_menu = bits % 5;
+                m.kiu_talk_portraits = bits & 1;
+                m.kiu_portraits_linked = (bits >> 1) & 1;
                 out.push_back(m);
             }
         }
@@ -353,6 +355,17 @@ TEST_CASE("Angel's Aim page: counts, and every row reachable", "[frame_xr][kiuai
         p.kiu_talk_portraits = shown;
         CHECK(Has(AimPageRows(p, AimGroup::BottomScreen).more, Id::KiuTalkPortraitsOpacity) ==
               (shown != 0));
+        for (const int hud : {0, 1}) { // Linked is with Subtitle Height: HUD: In View
+            for (const int linked : {0, 1}) {
+                p.kiu_hud = hud;
+                p.kiu_portraits_linked = linked;
+                const std::vector<Id> more = AimPageRows(p, AimGroup::BottomScreen).more;
+                const bool own = shown != 0 && (hud == 0 || linked == 0);
+                CHECK(Has(more, Id::KiuPortraitsLinked) == (shown != 0 && hud != 0));
+                CHECK(Has(more, Id::KiuPortraitsAcross) == own);
+                CHECK(Has(more, Id::KiuPortraitsHeight) == own);
+            }
+        }
     }
     CHECK(AimPageRows(m, AimGroup::Weapon).rows ==
           std::vector<Id>{Id::WeaponInHand, Id::MuzzleFlash, Id::Projectiles, Id::Recoil,

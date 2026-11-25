@@ -402,6 +402,12 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::KiuTalkPortraits;
     case Id::KiuTalkPortraitsOpacity:
         return MenuSetting::KiuTalkPortraitsOpacity;
+    case Id::KiuPortraitsLinked:
+        return MenuSetting::KiuPortraitsLinked;
+    case Id::KiuPortraitsAcross:
+        return MenuSetting::KiuPortraitsAcross;
+    case Id::KiuPortraitsHeight:
+        return MenuSetting::KiuPortraitsHeight;
     case Id::WristSide:
         return MenuSetting::WristSide;
     case Id::KiuReticleSize:
@@ -1184,6 +1190,9 @@ void MenuPanel::BuildModel(const Host& host) {
     m.kiu_talk_portraits = v.vr_kiu_talk_portraits.GetValue() ? 1 : 0; // AzaharFrame kiuaim
     m.kiu_talk_portraits_opacity = static_cast<int>(
         std::clamp<u32>(v.vr_kiu_talk_portraits_opacity.GetValue(), 20, 100));
+    m.kiu_portraits_linked = v.vr_kiu_portraits_linked.GetValue() ? 1 : 0;
+    m.kiu_portraits_across = static_cast<int>(v.vr_kiu_portraits_across.GetValue());
+    m.kiu_portraits_height = static_cast<int>(v.vr_kiu_portraits_height.GetValue());
     m.wrist_side = static_cast<int>(std::min<u32>(v.vr_wrist_side.GetValue(), 1));
     m.kiu_reticle_size =
         static_cast<int>(std::clamp<u32>(v.vr_kiu_reticle_size.GetValue(), 30, 150));
@@ -1842,6 +1851,21 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = std::clamp(value, 20, 100);
         Apply(v.vr_kiu_talk_portraits_opacity, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::KiuTalkPortraitsOpacity;
+        break;
+    case Id::KiuPortraitsLinked:
+        r.value = std::clamp(value, 0, 1);
+        Apply(v.vr_kiu_portraits_linked, r.value != 0, per_game);
+        r.setting = MenuSetting::KiuPortraitsLinked;
+        break;
+    case Id::KiuPortraitsAcross:
+        r.value = std::clamp(value, -40, 40);
+        Apply(v.vr_kiu_portraits_across, r.value, per_game);
+        r.setting = MenuSetting::KiuPortraitsAcross;
+        break;
+    case Id::KiuPortraitsHeight:
+        r.value = std::clamp(value, -40, 40);
+        Apply(v.vr_kiu_portraits_height, r.value, per_game);
+        r.setting = MenuSetting::KiuPortraitsHeight;
         break;
     case Id::KiuReticleSize:
         r.value = std::clamp(value, 30, 150);
@@ -2843,6 +2867,7 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::KiuStickClick: // AzaharFrame kiucam
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+    case Id::KiuPortraitsLinked:
     case Id::WristSide:       // Back, Inside
     case Id::WindowScale:
     case Id::MarginX: // AzaharFrame fovaxis

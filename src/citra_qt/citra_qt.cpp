@@ -5854,6 +5854,15 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::KiuTalkPortraitsOpacity:
         set(v.vr_kiu_talk_portraits_opacity, std::clamp<u32>(u, 20, 100));
         break;
+    case S::KiuPortraitsLinked:
+        set(v.vr_kiu_portraits_linked, r.value != 0);
+        break;
+    case S::KiuPortraitsAcross:
+        set(v.vr_kiu_portraits_across, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuPortraitsHeight:
+        set(v.vr_kiu_portraits_height, std::clamp(r.value, -40, 40));
+        break;
     case S::KiuReticleSize:
         set(v.vr_kiu_reticle_size, std::clamp<u32>(u, 30, 150));
         break;

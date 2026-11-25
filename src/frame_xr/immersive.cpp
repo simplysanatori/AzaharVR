@@ -2438,11 +2438,17 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
             const Kiu::FirstPerson::Cut& cut = Kiu::FirstPerson::kPortraitCut;
             const bool right = Vis::WristScreenHand(Settings::values.vr_motion_controls.GetValue()) ==
                                Input::Hand::Right;
-            // With the subtitles (HUD: In View; the game's own place has no height).
-            const Kiu::FirstPerson::PanelInView p = Kiu::FirstPerson::PortraitPlace(
-                right, Kiu::FirstPerson::HudInView()
-                           ? static_cast<float>(Settings::values.vr_kiu_subtitle_height.GetValue())
-                           : Kiu::FirstPerson::kPortraitWordsDeg);
+            // Linked: with the subtitles (HUD: In View; the game's own place has no height).
+            const auto& v = Settings::values;
+            const bool linked =
+                v.vr_kiu_portraits_linked.GetValue() && Kiu::FirstPerson::HudInView();
+            const Kiu::FirstPerson::PanelInView p =
+                linked ? Kiu::FirstPerson::PortraitPlace(
+                             right, static_cast<float>(v.vr_kiu_subtitle_height.GetValue()))
+                       : Kiu::FirstPerson::PortraitPlace(
+                             right, Kiu::FirstPerson::kPortraitWordsDeg,
+                             static_cast<float>(v.vr_kiu_portraits_across.GetValue()),
+                             static_cast<float>(v.vr_kiu_portraits_height.GetValue()));
             out.bottom_pose =
                 Compose(g.view.head, XrPosef{{p.qx, p.qy, p.qz, p.qw}, {p.x, p.y, p.z}});
             const float size = portraits_up ? 1.0f : Kiu::FirstPerson::kPortraitShrunk;

@@ -629,10 +629,12 @@ bool TalkTopWanted();
 float PortraitAlpha();
 /// AzaharFrame kiu1s: where the portraits' card is, in the head's frame: the one place to change
 /// (the owner would later have it by the off hand itself). `right`: the off hand is the right one.
-/// `words_deg`: Subtitle Height, degrees up; the two move as one (the owner, 2026-11-25).
-inline PanelInView PortraitPlace(bool right, float words_deg = kPortraitWordsDeg) {
-    return PersistentInView(kPortraitSideDeg * (right ? 1.0f : -1.0f), PortraitDown(words_deg),
-                            kPortraitWidthDeg,
+/// `words_deg`: Subtitle Height, degrees up, while the two move as one (the owner, 2026-11-25:
+/// Linked), else the usual one; `across` and `up`: degrees to the right and up from there.
+inline PanelInView PortraitPlace(bool right, float words_deg = kPortraitWordsDeg,
+                                 float across = 0.0f, float up = 0.0f) {
+    return PersistentInView(kPortraitSideDeg * (right ? 1.0f : -1.0f) + across,
+                            PortraitDown(words_deg) - up, kPortraitWidthDeg,
                             static_cast<float>(kPortraitCut.width) /
                                 static_cast<float>(kPortraitCut.height));
 }

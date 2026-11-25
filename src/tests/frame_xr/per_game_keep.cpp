@@ -572,12 +572,17 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
     // AzaharFrame kiu1s: the talk's portraits, off, and their opacity.
     CHECK_FALSE(Settings::values.vr_kiu_talk_portraits.GetDefault());
     CHECK(Settings::values.vr_kiu_talk_portraits_opacity.GetDefault() == 100u);
+    CHECK(Settings::values.vr_kiu_portraits_linked.GetDefault());
+    CHECK(Settings::values.vr_kiu_portraits_across.GetDefault() == 0);
+    CHECK(Settings::values.vr_kiu_portraits_height.GetDefault() == 0);
     // AzaharFrame kiupowers: the power menu, off, and its opacity.
     CHECK(Settings::values.vr_kiu_power_menu.GetDefault() == 0u);
     CHECK(Settings::values.vr_kiu_power_menu_opacity.GetDefault() == 100u);
     CHECK(Settings::values.vr_kiu_power_menu_across.GetDefault() == 0);
     CHECK(Settings::values.vr_kiu_power_menu_height.GetDefault() == 0);
     for (const char* key : {"vr_kiu_talk_portraits", "vr_kiu_talk_portraits_opacity",
+                            "vr_kiu_portraits_linked", "vr_kiu_portraits_across",
+                            "vr_kiu_portraits_height",
                             "vr_kiu_power_menu", "vr_kiu_power_menu_opacity",
                             "vr_kiu_power_menu_across", "vr_kiu_power_menu_height"}) {
         INFO(key);

@@ -278,6 +278,15 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::KiuTalkPortraitsOpacity:
         f(v.vr_kiu_talk_portraits_opacity);
         return true;
+    case Id::KiuPortraitsLinked:
+        f(v.vr_kiu_portraits_linked);
+        return true;
+    case Id::KiuPortraitsAcross:
+        f(v.vr_kiu_portraits_across);
+        return true;
+    case Id::KiuPortraitsHeight:
+        f(v.vr_kiu_portraits_height);
+        return true;
     case Id::KiuReticleSize:
         f(v.vr_kiu_reticle_size);
         return true;

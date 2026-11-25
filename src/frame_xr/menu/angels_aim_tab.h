@@ -211,6 +211,16 @@ inline constexpr const char* kKiuTalkPortraitsTip =
 inline constexpr const char* kKiuTalkPortraitsOpacityRow = "Character Portraits Opacity";
 inline constexpr const char* kKiuTalkPortraitsOpacityTip =
     "How solid the characters look. Lower lets you see through them.";
+/// Asked for by the owner (2026-11-25); the strings PROPOSED.
+inline constexpr const char* kKiuPortraitsLinkedRow = "Portraits and Subtitles";
+inline constexpr const char* kKiuPortraitsLinkedTip =
+    "Linked: moved as one. Separate: each has its own place.";
+inline constexpr const char* kKiuPortraitsAcrossRow = "Character Portraits Left/Right";
+inline constexpr const char* kKiuPortraitsAcrossTip =
+    "How far left or right the characters are. 0\u00B0 is their usual place.";
+inline constexpr const char* kKiuPortraitsHeightRow = "Character Portraits Height";
+inline constexpr const char* kKiuPortraitsHeightTip =
+    "How high the characters are. 0\u00B0 is their usual place.";
 /// AzaharFrame kiuaim: Power Menu (vr_kiu_power_menu, _across, _height, _opacity: the power lane's
 /// settings). The row's tip is approved; the other tips PROPOSED.
 inline constexpr const char* kKiuPowerMenuRow = "Power Menu";
@@ -223,10 +233,10 @@ inline constexpr const char* kKiuPowerMenuTip =
     "Off Hand: when you pick one. Elsewhere: always in battles.";
 inline constexpr const char* kKiuPowerMenuAcrossRow = "Power Menu Left/Right";
 inline constexpr const char* kKiuPowerMenuAcrossTip =
-    "How far left or right the power menu is. 0\u00B0 is straight ahead.";
+    "How far left or right the power menu is. 0\u00B0 is its usual place.";
 inline constexpr const char* kKiuPowerMenuHeightRow = "Power Menu Height";
 inline constexpr const char* kKiuPowerMenuHeightTip =
-    "How high the power menu is. 0\u00B0 is straight ahead.";
+    "How high the power menu is. 0\u00B0 is its usual place.";
 inline constexpr const char* kKiuPowerMenuOpacityRow = "Power Menu Opacity";
 inline constexpr const char* kKiuPowerMenuOpacityTip =
     "How solid the power menu looks. Lower lets you see through it.";
