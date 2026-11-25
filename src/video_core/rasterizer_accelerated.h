@@ -155,6 +155,8 @@ public:
     void TurnSoftwareVertices();
     /// AzaharFrame kiuhud: the hub's veil or heart bag (hud_flat holds it) to the page's frame.
     void MoveCard(const VideoCore::KiuHud::Place& place);
+    /// AzaharFrame kiuhs3: the direction marks' draw at the edges of its frame; false: another draw.
+    bool MoveMarks(const VideoCore::KiuHud::Place& place);
     /// AzaharFrame kiu131: whether this draw is the reticle Reticle Size scales (kiu_view_tap.h):
     /// such a draw is not accelerated, so its vertices can be scaled on the CPU.
     bool ReticleDraw() const;

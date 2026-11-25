@@ -1199,6 +1199,12 @@ in both builds by its code; no code or layout of it is used.
   The flush (EUR 0x92F5A0) only adds to a list that is replayed later for both eyes, so a draw's caller
   is not known. Batch not known: the guess (`MayBeHud`), as without the switch. V (air, land): every HUD draw logged as exact; on land the bar and score are on the same pixels as by the guess (best match at no shift).
   Clip y is across to the LEFT: until kiuhud the guess had the bar's and the score's groups swapped, so the bar's right end (0.3 to 0.45) went with the middle.
+  AzaharFrame kiuhs3: the direction marks (the orange strips and corners): EUR 0x92F05C (context, mask), called by the score's draw (0x9F31F8) with
+  `[context + 0x8EC]`: one bit for each of eight directions round the game's camera, top, then clockwise; a table of their corners at 0xD49A48, some 8 pixels
+  past the frame; one draw of 1 to 8 quads, 0xFF2384F2, the 256 x 256 IA4 atlas, whose shapes there are in its colour where its alpha is 0 (an HD texture that does not
+  keep that colour draws triangles and solid blocks, Immersive Mode on or off). Moved as one piece the strip sat on the bar, a corner behind the score, a side in
+  mid view. Now (`MoveMarks`) each is cut at the frame and put at the same edge of a frame as large as the game camera's (45 degrees high, straight ahead), its top
+  above the bar and score where they are across it. The mask has no more than eight steps: no ray to the enemy.
 - **`AZAHARFRAME_KIU_TALK_TOP=1`.** One word (EUR 0x60D804, USA 0x60D6B8: `bne`, the message is the bottom
   screen's, to `mov r0, r0`), group "talk on top": the top pass draws the line with the game's own function for
   the top screen (EUR 0x9E9D2C), as Subtitles: Upper does. The bottom keeps its line, the setting is not touched.

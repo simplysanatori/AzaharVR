@@ -656,6 +656,37 @@ void RasterizerAccelerated::MoveCard(const VideoCore::KiuHud::Place& place) {
     }
 }
 
+bool RasterizerAccelerated::MoveMarks(const VideoCore::KiuHud::Place& place) {
+    namespace H = VideoCore::KiuHud;
+    H::Draw d;
+    d.vertices = static_cast<u32>(vertex_batch.size());
+    d.width = regs.texturing.texture0.width;
+    d.height = regs.texturing.texture0.height;
+    d.format = static_cast<u32>(regs.texturing.texture0_format.Value());
+    if (!H::MayBeMarks(d) ||
+        !std::all_of(vertex_batch.begin(), vertex_batch.end(), [](const HardwareVertex& v) {
+            return H::IsMarkColor(v.color.x, v.color.y, v.color.z);
+        })) {
+        return false;
+    }
+    std::array<H::MarkVertex, 8 * 6> marks;
+    for (std::size_t i = 0; i < vertex_batch.size(); ++i) {
+        const HardwareVertex& v = vertex_batch[i];
+        marks[i] = {{v.position.x, v.position.y, v.position.z, v.position.w},
+                    v.tex_coord0.x,
+                    v.tex_coord0.y};
+    }
+    if (!H::MoveMarks(marks.data(), vertex_batch.size(), place, vr_factor, vr_factor_y)) {
+        return false;
+    }
+    for (std::size_t i = 0; i < vertex_batch.size(); ++i) {
+        HardwareVertex& v = vertex_batch[i];
+        v.position = {marks[i].v.x, marks[i].v.y, marks[i].v.z, marks[i].v.w};
+        v.tex_coord0 = {marks[i].s, marks[i].t};
+    }
+    return true;
+}
+
 void RasterizerAccelerated::TurnSoftwareVertices() {
     // AzaharFrame kiu140: a cloud sheet's soft rim; the turn below takes it with the sheet.
     if (!vertex_batch.empty() &&
@@ -697,9 +728,11 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
             }
         };
         const char* done = nullptr;
+        bool placed = false; // vertex_batch itself is as it is to be
         if (as == As::Card) {
             if (H::IsCard(flat.data(), flat.size())) {
                 MoveCard(place);
+                placed = true;
                 done = "card";
             }
         } else if (as == As::Page || place.page) {
@@ -710,6 +743,9 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
         } else if (as == As::Subtitle &&
                    H::MoveSubtitle(flat.data(), flat.size(), place, vr_factor, vr_factor_y)) {
             done = "subtitle";
+        } else if ((as == As::Piece || as == As::Guess) && MoveMarks(place)) { // AzaharFrame kiuhs3
+            placed = true;
+            done = "marks";
         } else if (H::Movable(flat.data(), flat.size())) {
             if (as == As::Piece) { // AzaharFrame kiu1s: the whole draw is one piece
                 H::MovePiece(flat.data(), flat.size(), place, vr_factor, vr_factor_y);
@@ -729,7 +765,7 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
             HudCensus(done ? done : "the 2D's, left (the whole frame, or not flat)");
         }
         if (done) {
-            if (as != As::Card) {
+            if (!placed) {
                 put();
             }
             return;

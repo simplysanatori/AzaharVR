@@ -412,3 +412,99 @@ TEST_CASE("Kid Icarus HUD: the hub's cards go with its words; the veil has no bo
     CHECK(dark_high == Approx(-0.7f));
     CHECK(inside == 6.0f + 4 * 3.0f + 4 * 2.0f); // the middle, the sides, two a corner
 }
+
+TEST_CASE("Kid Icarus HUD: the direction marks stay whole, at the edges of the game's own frame",
+          "[frame_xr][kiuhs3]") {
+    // The game's table (EUR 0x92F374): two corners of each place, pixels from the top left, and the
+    // atlas there. The corners' and the sides' go 8 pixels past the frame.
+    struct Mark {
+        float x0, y0, x1, y1, s0, t0, s1, t1;
+    };
+    constexpr Mark kMarks[8] = {
+        {112, 0, 288, 7, 0.0f, 0.96484375f, 0.6875f, 0.9375f},             // top
+        {283, 0, 408, 59, 0.45703125f, 0.54296875f, -0.03125f, 0.7734375f}, // top right
+        {392, 63, 408, 177, 0.0f, 0.96875f, 0.4453125f, 1.03125f},         // right
+        {283, 181, 408, 240, 0.45703125f, 0.54296875f, -0.03125f, 0.7734375f},
+        {112, 233, 288, 240, 0.0f, 0.9375f, 0.6875f, 0.96484375f}, // bottom
+        {-8, 181, 117, 240, -0.03125f, 0.7734375f, 0.45703125f, 0.54296875f},
+        {-8, 63, 8, 177, 0.0f, 1.03125f, 0.4453125f, 0.96875f}, // left
+        {-8, 0, 117, 59, -0.03125f, 0.7734375f, 0.45703125f, 0.54296875f}};
+    Wanted low;
+    low.height = 0.0f; // the health bar and the score clear of the frame's top
+    const Place p = At(low);
+    const auto quad = [](const Mark& m, MarkVertex* out) {
+        const auto at = [&](bool right, bool low) {
+            const float x = right ? m.x1 : m.x0, y = low ? m.y1 : m.y0;
+            return MarkVertex{{1.0f - y / 120.0f, 1.0f - x / 200.0f, 0.1f, 1.0f},
+                              right ? m.s1 : m.s0,
+                              low ? m.t1 : m.t0};
+        };
+        const MarkVertex c[4] = {at(false, false), at(true, false), at(false, true), at(true, true)};
+        const int order[6] = {0, 1, 2, 1, 3, 2};
+        for (int k = 0; k < 6; ++k) {
+            out[k] = c[order[k]];
+        }
+    };
+    MarkVertex all[48];
+    for (int i = 0; i < 8; ++i) {
+        quad(kMarks[i], all + 6 * i);
+    }
+    REQUIRE(MoveMarks(all, 48, p, 1.3f, 1.2f));
+    for (int i = 0; i < 8; ++i) {
+        MarkVertex one[6];
+        quad(kMarks[i], one);
+        REQUIRE(MoveMarks(one, 6, p, 1.3f, 1.2f)); // alone or with the others: the same place
+        for (int k = 0; k < 6; ++k) {
+            const auto& m = one[k];
+            REQUIRE(m.v.x == all[6 * i + k].v.x);
+            REQUIRE(m.v.y == all[6 * i + k].v.y);
+            REQUIRE(m.s == all[6 * i + k].s);
+            REQUIRE(m.v.w == 2.0f);
+            const Mark& g = kMarks[i];
+            const float x = std::clamp(k == 1 || k == 3 || k == 4 ? g.x1 : g.x0, 0.0f, 400.0f);
+            const float y = k == 2 || k == 4 || k == 5 ? g.y1 : g.y0;
+            // Its degrees are those of the game's own frame: 45 high, 5:3, straight ahead.
+            const float up = std::tan(22.5f * kRad) * (1.0f - y / 120.0f);
+            const float aside = std::tan(22.5f * kRad) * (400.0f / 240.0f) * (x / 200.0f - 1.0f);
+            REQUIRE(-m.v.y / 2.0f / 1.3f * kTanX == Approx(aside).margin(1e-4));
+            REQUIRE(m.v.x / 2.0f / 1.2f * kTanY - std::tan(5.0f * kRad) == Approx(up).margin(1e-4));
+            // The picture is cut with the place, nothing squeezed.
+            const float along = (x - g.x0) / (g.x1 - g.x0);
+            REQUIRE(m.s == Approx(g.s0 + (g.s1 - g.s0) * along).margin(1e-4));
+            REQUIRE(m.v.z == 0.2f);
+        }
+    }
+    REQUIRE(MayBeMarks({true, false, true, true, 0x218E1300, 12, 256, 256, 9}));
+    REQUIRE_FALSE(MayBeMarks({true, false, true, true, 0x218B1300, 12, 256, 256, 13}));
+    REQUIRE_FALSE(MayBeMarks({true, false, true, true, 0x218E1300, 54, 256, 256, 9}));
+    REQUIRE(IsMarkColor(242 / 255.0f, 132 / 255.0f, 35 / 255.0f));
+    REQUIRE_FALSE(IsMarkColor(1.0f, 1.0f, 1.0f));
+    MarkVertex deep[6];
+    quad(kMarks[0], deep);
+    deep[3].v.w = deep[1].v.w = 2.0f;
+    REQUIRE_FALSE(MoveMarks(deep, 6, p, 1.0f, 1.0f));
+    quad(kMarks[0], deep);
+    deep[3].v.x += 0.1f; // not two triangles of one quad
+    REQUIRE_FALSE(MoveMarks(deep, 6, p, 1.0f, 1.0f));
+    // The HUD at the frame's top (its default height): the top mark clear of it, the rest as before.
+    for (const float height : {16.0f, 20.0f, 22.0f, 24.0f}) {
+        Wanted w;
+        w.height = height;
+        const Place up = At(w);
+        MarkVertex top[6];
+        quad(kMarks[0], top);
+        REQUIRE(MoveMarks(top, 6, up, 1.0f, 1.0f));
+        CHECK((top[2].v.x / 2.0f > up.bar_up + up.half_up || // above the bar, or under it
+               top[0].v.x / 2.0f <= up.bar_up + up.half_up * (2.0f * kGroupUp - 1.0f)));
+        CHECK(top[0].v.x / 2.0f <= 1.0f);
+        CHECK(up.edge_up - up.edge_half_up == Approx(p.edge_up - p.edge_half_up));
+        CHECK(up.edge_half_across == p.edge_half_across);
+    }
+    Wanted above;
+    above.height = 40.0f; // over the frame's top, not across it
+    CHECK(At(above).edge_half_up == Approx(p.edge_half_up));
+    Live live;
+    live.Set(p);
+    REQUIRE(live.Get().edge_half_up == p.edge_half_up);
+    REQUIRE(live.Get().edge_up == p.edge_up);
+}
