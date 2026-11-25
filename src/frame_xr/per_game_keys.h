@@ -80,8 +80,7 @@ void ForEachMenuKey(F&& f) {
     f(v.gba_allow_editing);
     f(v.gba_rotate_pages);
     f(v.gba_map_refresh);
-    f(v.layer_depth);
-    f(v.invert_depth);
+    Settings::ForEachConsoleSetting(f); // each console group's own four (settings.h)
     // Controls (AzaharFrame reticle)
     f(v.vr_touchpad_touch);
     f(v.vr_bottom_screen_reticle);

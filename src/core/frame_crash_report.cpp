@@ -1118,13 +1118,14 @@ std::string SettingsSummary() {
         }
         return "Unknown";
     };
-    const u32 res = v.resolution_factor.GetValue();
+    const auto own = Settings::RunningGraphics(); // the running console's
+    const u32 res = own.resolution_factor.GetValue();
     std::string s;
     s += fmt::format("Graphics API: {}\n", api(v.graphics_api.GetValue()));
     s += fmt::format("Internal Resolution: {}\n", res == 0 ? std::string("Auto")
                                                              : fmt::format("{}x", res));
     s += fmt::format("Dynamic Resolution: {}\n", on(v.vr_dynamic_resolution.GetValue()));
-    s += fmt::format("Texture Filter: {}\n", filter(v.texture_filter.GetValue()));
+    s += fmt::format("Texture Filter: {}\n", filter(own.texture_filter.GetValue()));
     s += fmt::format("Async Shaders: {}\n", on(v.async_shader_compilation.GetValue()));
     s += fmt::format("Accurate Image Copies: {}\n",
                      Settings::GetImageCopyAccuracyName(v.image_copy_accuracy.GetValue()));
@@ -1149,8 +1150,8 @@ std::string SettingsSummary() {
     s += fmt::format("{}: {}%\n", Names::kHudSpacingHorizontal, // AzaharFrame hudmove
                      v.vr_immersive_hud_spacing_x.GetValue());
     s += fmt::format("{}: {}%\n", Names::kHudSpacingVertical, v.vr_immersive_hud_spacing_y.GetValue());
-    s += fmt::format("Screen Layout: {}\n", v.vr_screen_layout.GetValue());
-    s += fmt::format("Screen Curve: {}\n", v.vr_screen_curve.GetValue());
+    s += fmt::format("Screen Layout: {}\n", own.screen_layout.GetValue());
+    s += fmt::format("Screen Curve: {}\n", own.screen_curve.GetValue());
     // AzaharFrame natural: World Scale, Follow Screen Size and the Full modes' 3D Depth.
     s += fmt::format("{}: {:.0f}%\n", FrameXr::Immersive::Names::kWorldScale,
                      v.vr_immersive_world_scale.GetValue());

@@ -22,15 +22,16 @@ bool WithSetting(Menu::Id id, F&& f) {
     auto& v = Settings::values;
     switch (id) {
     case Id::HideBottomScreen:
-        f(v.vr_hide_bottom_screen);
+        f(Settings::RunningGraphics().hide_bottom_screen);
         return true;
     case Id::ScreenShape:
         f(v.vr_top_aspect);
         return true;
     case Id::ScreenGap:
-        f(v.vr_screen_gap);
+        f(Settings::RunningGraphics().screen_gap);
+        return true;
     case Id::ScreenLayout:
-        f(v.vr_screen_layout);
+        f(Settings::RunningGraphics().screen_layout);
         return true;
     case Id::ImmersiveMode:
         f(v.vr_immersive_mode);
@@ -89,10 +90,10 @@ bool WithSetting(Menu::Id id, F&& f) {
         }
         return true;
     case Id::InternalResolution:
-        f(v.resolution_factor);
+        f(Settings::RunningGraphics().resolution_factor); // the running console's
         return true;
     case Id::TextureFilter:
-        f(v.texture_filter);
+        f(Settings::RunningGraphics().texture_filter);
         return true;
     case Id::AsyncShaders:
         f(v.async_shader_compilation);
@@ -137,10 +138,10 @@ bool WithSetting(Menu::Id id, F&& f) {
         f(v.gba_map_refresh);
         return true;
     case Id::LayerDepth:
-        f(v.layer_depth);
+        f(Settings::RunningGraphics().layer_depth);
         return true;
     case Id::InvertDepth:
-        f(v.invert_depth);
+        f(Settings::RunningGraphics().invert_depth);
         return true;
     case Id::TouchpadTouch: // AzaharFrame reticle: the Controls tab's rows
         f(v.vr_touchpad_touch);

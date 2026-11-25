@@ -375,8 +375,8 @@ struct AltXrRenderer::Impl {
     /// The scales of both screens for the output `presented_vr` says.
     void PickScales(const AltScreenImage& primary, const AltScreenImage& secondary,
                     bool has_overlay) {
-        presented_setting = Settings::values.resolution_factor.GetValue();
-        presented_filter = Settings::values.texture_filter.GetValue();
+        presented_setting = Settings::RunningGraphics().resolution_factor.GetValue();
+        presented_filter = Settings::RunningGraphics().texture_filter.GetValue();
         if (!sharp_pixels) {
             return;
         }
@@ -848,8 +848,8 @@ bool AltXrRenderer::NeedsPresent() const {
     }
     const bool vr = impl->XrShowsScreens();
     if (impl->sharp_pixels &&
-        (impl->presented_setting != Settings::values.resolution_factor.GetValue() ||
-         impl->presented_filter != Settings::values.texture_filter.GetValue())) {
+        (impl->presented_setting != Settings::RunningGraphics().resolution_factor.GetValue() ||
+         impl->presented_filter != Settings::RunningGraphics().texture_filter.GetValue())) {
         return true;
     }
     return vr != impl->presented_vr ||

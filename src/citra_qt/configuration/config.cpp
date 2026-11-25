@@ -657,8 +657,9 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.gba_allow_editing);
     ReadGlobalSetting(Settings::values.gba_rotate_pages);
     ReadGlobalSetting(Settings::values.gba_map_refresh);
-    ReadGlobalSetting(Settings::values.layer_depth);
-    ReadGlobalSetting(Settings::values.invert_depth);
+    // each console group's own Internal Resolution, Texture Filter, Layer Depth and Invert Depth
+    // (the 3DS's keep their keys, below)
+    Settings::ForEachConsoleSetting([this](auto& setting) { ReadGlobalSetting(setting); });
     // AzaharFrame reticle: the Controls tab's rows, a global value and a game's own (Per-Game)
     ReadGlobalSetting(Settings::values.vr_touchpad_touch);
     ReadGlobalSetting(Settings::values.vr_bottom_screen_reticle);
@@ -761,6 +762,7 @@ void QtConfig::ReadVrValues() {
         ReadGlobalSetting(Settings::values.vr_immersive_offset_y);
         ReadGlobalSetting(Settings::values.vr_last_ipd_mm); // AzaharFrame ipd
         ReadGlobalSetting(Settings::values.vr_screen_curve); // AzaharFrame curve
+        Settings::ForEachConsoleGlobalSetting([this](auto& s) { ReadGlobalSetting(s); });
         ReadGlobalSetting(Settings::values.vr_move_screens);  // AzaharFrame menu
         ReadGlobalSetting(Settings::values.vr_hint_reticle_shown);
         ReadGlobalSetting(Settings::values.vr_hint_mouse_shown);
@@ -1462,8 +1464,7 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.gba_allow_editing);
     WriteGlobalSetting(Settings::values.gba_rotate_pages);
     WriteGlobalSetting(Settings::values.gba_map_refresh);
-    WriteGlobalSetting(Settings::values.layer_depth);
-    WriteGlobalSetting(Settings::values.invert_depth);
+    Settings::ForEachConsoleSetting([this](auto& setting) { WriteGlobalSetting(setting); });
     // AzaharFrame reticle: the Controls tab's rows, a global value and a game's own (Per-Game)
     WriteGlobalSetting(Settings::values.vr_touchpad_touch);
     WriteGlobalSetting(Settings::values.vr_bottom_screen_reticle);
@@ -1556,6 +1557,7 @@ void QtConfig::SaveVrValues() {
         WriteGlobalSetting(Settings::values.vr_immersive_offset_y);
         WriteGlobalSetting(Settings::values.vr_last_ipd_mm); // AzaharFrame ipd
         WriteGlobalSetting(Settings::values.vr_screen_curve); // AzaharFrame curve
+        Settings::ForEachConsoleGlobalSetting([this](auto& s) { WriteGlobalSetting(s); });
         WriteGlobalSetting(Settings::values.vr_move_screens);  // AzaharFrame menu
         WriteGlobalSetting(Settings::values.vr_hint_reticle_shown);
         WriteGlobalSetting(Settings::values.vr_hint_mouse_shown);

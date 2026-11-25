@@ -13,6 +13,7 @@
 #include "audio_core/input_details.h"
 #include "audio_core/sink_details.h"
 #include "common/common_types.h"
+#include "common/console_group.h"
 #include "common/setting_keys.h"
 #include "common/string_util.h"
 #include "core/hle/service/cam/cam_params.h"
@@ -584,6 +585,12 @@ struct TouchFromButtonMap {
 /// A special region value indicating that citra will automatically select a region
 /// value to fit the region lockout info of the game
 static constexpr s32 REGION_VALUE_AUTO_SELECT = -1;
+
+/// Internal Resolution a console group starts with (the 3DS's is Values::resolution_factor's 4).
+/// The GBA group's 4 shows as what the screen can show, at most (alt_present.h); the DS's follows
+/// what its renderer costs.
+inline constexpr u32 kDsResolutionDefault = 4;
+inline constexpr u32 kGbaResolutionDefault = 4;
 
 struct Values {
     // Controls
@@ -1251,12 +1258,92 @@ struct Values {
     // GBA DS's, as Common::AltCore::DriverOption
     SwitchableSetting<bool> gba_rotate_pages{false, "gba_rotate_pages"};
     SwitchableSetting<u32, true> gba_map_refresh{1, 0, 3, "gba_map_refresh"};
-    // Layer Depth: 0 off, 1 to 3: how far back the background layers go in the headset.
+    // The graphics settings a console group has of its own (Settings::Graphics): the 3DS's are
+    // resolution_factor and texture_filter above, which keep their keys and values. The GBA group
+    // (GBA, Game Boy, Game Boy Color) has Layer Depth (0 off, 1 to 3: how far back the background
+    // layers go in the headset) under the keys it had before there were groups.
+    SwitchableSetting<u32, true> ds_resolution_factor{kDsResolutionDefault, 0, 18,
+                                                      "ds_resolution_factor"};
+    SwitchableSetting<TextureFilter> ds_texture_filter{TextureFilter::NoFilter,
+                                                       "ds_texture_filter"};
+    SwitchableSetting<u32, true> ds_layer_depth{0, 0, 3, "ds_layer_depth"};
+    SwitchableSetting<bool> ds_invert_depth{false, "ds_invert_depth"};
+    SwitchableSetting<u32, true> gba_resolution_factor{kGbaResolutionDefault, 0, 18,
+                                                       "gba_resolution_factor"};
+    SwitchableSetting<TextureFilter> gba_texture_filter{TextureFilter::NoFilter,
+                                                        "gba_texture_filter"};
     SwitchableSetting<u32, true> layer_depth{0, 0, 3, "layer_depth"};
     SwitchableSetting<bool> invert_depth{false, "invert_depth"};
+    // Position: Screen Layout, Screen Gap, Hide Secondary Screen (per game too) and Screen Curve
+    // (global only), as vr_screen_layout, vr_screen_gap, vr_hide_bottom_screen and
+    // vr_screen_curve are the 3DS's.
+    SwitchableSetting<bool> ds_vr_hide_bottom_screen{false, "ds_vr_hide_bottom_screen"};
+    SwitchableSetting<u32, true> ds_vr_screen_layout{0, 0, 1, "ds_vr_screen_layout"};
+    SwitchableSetting<u32, true> ds_vr_screen_gap{0, 0, 20, "ds_vr_screen_gap"};
+    SwitchableSetting<u32, true> ds_vr_screen_curve{0, 0, 180, "ds_vr_screen_curve"};
+    SwitchableSetting<bool> gba_vr_hide_bottom_screen{false, "gba_vr_hide_bottom_screen"};
+    SwitchableSetting<u32, true> gba_vr_screen_layout{0, 0, 1, "gba_vr_screen_layout"};
+    SwitchableSetting<u32, true> gba_vr_screen_gap{0, 0, 20, "gba_vr_screen_gap"};
+    SwitchableSetting<u32, true> gba_vr_screen_curve{0, 0, 180, "gba_vr_screen_curve"};
+    // The 3DS has no Layer Depth: what Graphics(N3DS) gives for it, never read or saved.
+    SwitchableSetting<u32, true> n3ds_layer_depth_unused{0, 0, 3, "n3ds_layer_depth_unused"};
+    SwitchableSetting<bool> n3ds_invert_depth_unused{false, "n3ds_invert_depth_unused"};
 };
 
 extern Values values;
+
+/// One console group's copy of the settings that are not shared between emulators. The code that
+/// draws or shows a game reads the running console's through Graphics(ActiveConsole()); moving one
+/// more setting to the groups is a member here, one in Values per group, and the lines of
+/// ForEachConsoleSetting (config.cpp, per_game_keys.h, RestoreGlobalState).
+struct ConsoleGraphics {
+    SwitchableSetting<u32, true>& resolution_factor;
+    SwitchableSetting<TextureFilter>& texture_filter;
+    SwitchableSetting<u32, true>& layer_depth;
+    SwitchableSetting<bool>& invert_depth;
+    SwitchableSetting<u32, true>& screen_layout;
+    SwitchableSetting<u32, true>& screen_gap;
+    SwitchableSetting<bool>& hide_bottom_screen;
+    SwitchableSetting<u32, true>& screen_curve; // global only: no game's own value
+};
+
+ConsoleGraphics Graphics(ConsoleGroup group);
+
+/// The group of the game that is running (N3DS while none, or a 3DS game).
+ConsoleGroup ActiveConsole();
+void SetActiveConsole(ConsoleGroup group);
+inline ConsoleGraphics RunningGraphics() {
+    return Graphics(ActiveConsole());
+}
+
+/// Calls `f` with every setting of every console group beyond the 3DS's own (not the 3DS's:
+/// they are Settings::values.resolution_factor and texture_filter, as before).
+template <typename F>
+void ForEachConsoleSetting(F&& f) {
+    auto& v = values;
+    f(v.ds_resolution_factor);
+    f(v.ds_texture_filter);
+    f(v.ds_layer_depth);
+    f(v.ds_invert_depth);
+    f(v.gba_resolution_factor);
+    f(v.gba_texture_filter);
+    f(v.layer_depth);
+    f(v.invert_depth);
+    f(v.ds_vr_screen_layout);
+    f(v.ds_vr_screen_gap);
+    f(v.ds_vr_hide_bottom_screen);
+    f(v.gba_vr_screen_layout);
+    f(v.gba_vr_screen_gap);
+    f(v.gba_vr_hide_bottom_screen);
+}
+
+/// The same for the settings that have no game's own value (Screen Curve).
+template <typename F>
+void ForEachConsoleGlobalSetting(F&& f) {
+    auto& v = values;
+    f(v.ds_vr_screen_curve);
+    f(v.gba_vr_screen_curve);
+}
 
 bool IsConfiguringGlobal();
 void SetConfiguringGlobal(bool is_global);
