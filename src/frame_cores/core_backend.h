@@ -77,6 +77,7 @@ public:
     virtual void RunFrame(FrameOutput& out) = 0;
 
     virtual double NominalFps() const = 0;
+    /// Of the last frame's sound: a game may change it at any time.
     virtual uint32_t AudioSampleRate() const = 0;
     virtual Common::AltCore::Capabilities GetCapabilities() const = 0;
 

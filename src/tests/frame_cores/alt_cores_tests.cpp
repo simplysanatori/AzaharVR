@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <csetjmp>
 #include <csignal>
 #include <cstdint>
@@ -29,6 +30,7 @@
 #include "frame_cores/audio_resampler.h"
 #include "frame_cores/cheat_store.h"
 #include "frame_cores/frame_driver.h"
+#include "frame_cores/gba_core.h"
 #include "frame_cores/nds_core.h"
 #include "frame_cores/rom_info.h"
 
@@ -542,6 +544,45 @@ TEST_CASE("AltCoreHost: a held game is as a paused one", "[frame_cores]") {
     job.held = false;
     REQUIRE(host.StepFrames(1));
     CHECK_FALSE(host.IsHeld());
+}
+
+TEST_CASE("GBA sound: the rate is the game's own, as it changes it", "[frame_cores]") {
+    TempDir tmp("gbarate");
+    const fs::path rom_path = tmp.path / "hb.gba";
+    std::vector<uint8_t> rom = MakeHomebrewGbaRom();
+    PutLE32(rom, 0xE8, 0xE3A01C42u); // mov r1, #0x4200: SOUNDBIAS, 65536 Hz
+    PutLE32(rom, 0xEC, 0xE1C018B8u); // strh r1, [r0, #0x88]
+    PutLE32(rom, 0xF0, 0xEAFFFFFEu); // b .
+    WriteFile(rom_path, rom);
+
+    FrameCores::GbaCore core;
+    CHECK(core.AudioSampleRate() == 32768);
+    FrameCores::CorePaths paths;
+    paths.game_dir = (tmp.path / "data").string();
+    fs::create_directories(paths.game_dir);
+    REQUIRE(core.Load(rom_path.string(), paths, {}));
+    FrameCores::FrameOutput out;
+    for (int i = 0; i < 10; ++i) {
+        core.RunFrame(out);
+    }
+    CHECK(core.AudioSampleRate() == 65536);
+    const std::size_t frames = out.audio_pcm.size() / 2;
+    CHECK(frames > 1000); // 65536 / 59.73
+    CHECK(frames < 1200);
+    core.Unload();
+}
+
+TEST_CASE("AudioResampler: a new rate is read as that rate", "[frame_cores]") {
+    FrameCores::AudioResampler resampler;
+    REQUIRE(resampler.Init(32768, /*use_null_sink=*/true));
+    const std::vector<int16_t> sound(1024 * 2, 1000);
+    resampler.Push(sound.data(), 1024);
+    CHECK(std::abs(resampler.BufferedMs() - 31.25) < 0.01);
+    resampler.SetCoreSampleRate(65536);
+    CHECK(std::abs(resampler.BufferedMs() - 15.625) < 0.01);
+    resampler.SetCoreSampleRate(0); // not a rate
+    CHECK(std::abs(resampler.BufferedMs() - 15.625) < 0.01);
+    resampler.Shutdown();
 }
 
 TEST_CASE("GBA adapter boots homebrew ROM, renders, saves/loads state",

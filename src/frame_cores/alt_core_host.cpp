@@ -139,6 +139,7 @@ struct AltCoreHost::Impl {
     Common::AltCore::InputState latest_input{};
     FrameOutput last_frame{};
     bool page_before = false; ///< BtnTurnPage in the last frame. core_mutex held.
+    uint32_t hidden_frames = 0; ///< this many frames are not shown. core_mutex held.
     HostStats stats{};
 
     std::atomic<bool> running{false};
@@ -435,6 +436,10 @@ struct AltCoreHost::Impl {
     bool PutLocked(const std::vector<uint8_t>& state) {
         const bool ok = core->LoadStateFromMemory(state.data(), state.size());
         core->AfterStateLoad();
+        // melonDS draws a frame's 3D ahead of it, and a state does not hold it
+        const bool ds = rom_info.kind == Common::AltCore::CoreKind::NDS ||
+                        rom_info.kind == Common::AltCore::CoreKind::DSi;
+        hidden_frames = ds ? 1 : 0;
         return ok;
     }
 
@@ -450,14 +455,17 @@ struct AltCoreHost::Impl {
         return false;
     }
 
-    /// After a load: no sound of before it, and while paused one frame, so its picture shows.
+    /// After a load: no sound of before it, and while paused a frame that is shown, so its picture
+    /// is.
     void ShowLoadedLocked() {
         audio.Flush();
         if (headless || !paused.load(std::memory_order_acquire)) {
             return;
         }
         double ms = 0.0;
-        ExecuteSingleFrameLocked(ms);
+        for (uint32_t left = hidden_frames + 1; left > 0; --left) {
+            ExecuteSingleFrameLocked(ms);
+        }
         core->CloseMicrophone();
         audio.Flush();
         if (callbacks.on_rumble && last_rumble > 0.0f) {
@@ -628,12 +636,17 @@ struct AltCoreHost::Impl {
             }
         }
 
+        audio.SetCoreSampleRate(core->AudioSampleRate());
         if (!last_frame.audio_pcm.empty()) {
             audio.Push(last_frame.audio_pcm.data(), last_frame.audio_pcm.size() / 2u);
         }
 
         NoteScreens();
-        Present(fast_forward.load(std::memory_order_relaxed));
+        if (hidden_frames > 0) {
+            --hidden_frames;
+        } else {
+            Present(fast_forward.load(std::memory_order_relaxed));
+        }
 
         const float rumble = last_frame.rumble;
         if (callbacks.on_rumble && (rumble > 0.0f || last_rumble > 0.0f)) {
@@ -833,6 +846,7 @@ bool AltCoreHost::Boot(const std::string& rom_path, const std::string& data_dir,
     impl->caps = impl->core->GetCapabilities();
     impl->last_frame = FrameOutput{};
     impl->page_before = false;
+    impl->hidden_frames = 0;
     impl->last_rumble = 0.0f;
     impl->screens = {};
     impl->paused.store(false, std::memory_order_relaxed);
