@@ -5745,6 +5745,13 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
             } else if (r.command == C::AddCheat && !r.text.empty()) {
                 alt_core_host->HandleMenuCommand(FrameCores::AltMenuCommand::AddCheat, 0, r.text);
                 FramePushAltCheats();
+            } else if (r.command == C::AddCheat) { // no text: the keyboard asks (lane/cheats-dl)
+                FrameAltCheats::Add(
+                    *alt_core_host,
+                    [this]() -> FrameCores::AltCoreHost* {
+                        return AltGameRunning() ? alt_core_host.get() : nullptr;
+                    },
+                    [this] { FramePushAltCheats(); });
             } else if (r.command == C::DownloadCheats) { // lane/cheats-dl
                 FrameAltCheats::Start(
                     *alt_core_host,

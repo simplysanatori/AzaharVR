@@ -110,6 +110,12 @@ struct ChtParse {
 /// An entry with no code is a heading and is left out.
 ChtParse ParseCht(std::string_view text, System system);
 
+/// A code the player typed (the Cheats tab's Add Cheat), as ParseCht's: "" and `code` set when it
+/// is valid for the system, else why not, in the 3DS flow's words ("Enter a Code", "Line 2: Not a
+/// Code"). Lines of one or two hex words (DS: 8+8 digits; GBA: 8+8, or 8+4 for Code Breaker; Game
+/// Boy: one word, 8 digits or a Game Genie code "XXX-XXX"); a word may be joined as 16 (or 12) digits.
+std::string NormalizeTyped(const std::string& text, System system, std::string& code);
+
 // ---- The download ----
 
 struct Pins {

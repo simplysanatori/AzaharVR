@@ -383,3 +383,65 @@ TEST_CASE("RomCrc32 reads the whole file", "[frame_cores][cheat_db]") {
     std::filesystem::remove(path);
     CHECK_FALSE(RomCrc32(path.string()));
 }
+
+TEST_CASE("NormalizeTyped: Add Cheat's code, checked for the system", "[frame_cores][cheat_db]") {
+    std::string code;
+    // DS: Action Replay lines, as the 3DS flow reads them
+    CHECK(NormalizeTyped("020c35dc e5950170\n  94808004   fffe0000 ", System::Nds, code).empty());
+    CHECK(code == "020C35DC E5950170\n94808004 FFFE0000");
+    CHECK(NormalizeTyped("020C35DCE5950170", System::Nds, code).empty()); // one 16-digit word
+    CHECK(code == "020C35DC E5950170");
+    CHECK(NormalizeTyped("221A02BC 00000001 221A02B4 00000001", System::Nds, code).empty());
+    CHECK(code == "221A02BC 00000001\n221A02B4 00000001");
+    CHECK(NormalizeTyped("", System::Nds, code) == "Enter a Code");
+    CHECK(NormalizeTyped(" \n\n", System::Nds, code) == "Enter a Code");
+    CHECK(NormalizeTyped("221A02BC 00000001\nhello", System::Nds, code) == "Line 2: Not a Code");
+    CHECK(NormalizeTyped("221A02BC", System::Nds, code) == "Line 1: Not a Code");
+    CHECK(NormalizeTyped("3300397F 00FF", System::Nds, code) == "Line 1: Not a Code"); // GBA type
+    CHECK(NormalizeTyped("007-E48", System::Nds, code) == "Line 1: Not a Code");        // GB type
+
+    // GBA: 8+8 (GameShark, Action Replay) or 8+4 (Code Breaker)
+    CHECK(NormalizeTyped("3300397f 00ff\n0A0B0C0D 0E0F1011", System::Gba, code).empty());
+    CHECK(code == "3300397F 00FF\n0A0B0C0D 0E0F1011");
+    CHECK(NormalizeTyped("3300397F00FF", System::Gba, code).empty()); // one 12-digit word
+    CHECK(code == "3300397F 00FF");
+    CHECK(NormalizeTyped("007-E48", System::Gba, code) == "Line 1: Not a Code");
+    CHECK(NormalizeTyped("3300397F 00F", System::Gba, code) == "Line 1: Not a Code");
+    CHECK(NormalizeTyped("00FF 3300397F", System::Gba, code) == "Line 1: Not a Code");
+    std::string many; // over the 64 words gba-ds reads
+    for (int i = 0; i < 33; ++i) {
+        many += "3300397F 00FF\n";
+    }
+    CHECK_FALSE(NormalizeTyped(many, System::Gba, code).empty());
+
+    // Game Boy: a word of 8 digits (GameShark) or a Game Genie code, one a line or more a line
+    for (const System s : {System::Gb, System::Gbc}) {
+        CHECK(NormalizeTyped("916412cb\n007-e48 007-E48-A1B", s, code).empty());
+        CHECK(code == "916412CB\n007-E48\n007-E48-A1B");
+        CHECK(NormalizeTyped("221A02BC 00000001", s, code) == "Line 1: Not a Code");
+        CHECK(NormalizeTyped("00-E48", s, code) == "Line 1: Not a Code");
+        CHECK(NormalizeTyped("", s, code) == "Enter a Code");
+    }
+
+    // Too much text, and junk: refused, never a crash
+    CHECK_FALSE(NormalizeTyped(std::string(70000, '0'), System::Nds, code).empty());
+    std::mt19937 rng(5);
+    for (int i = 0; i < 200; ++i) {
+        std::string junk(rng() % 300, '\0');
+        for (auto& c : junk) {
+            c = (rng() % 3 == 0) ? static_cast<char>(rng()) : "0123456789ABCDEF -\n+"[rng() % 20];
+        }
+        for (const System s : {System::Nds, System::Gba, System::Gb, System::Gbc}) {
+            std::string out;
+            if (NormalizeTyped(junk, s, out).empty()) {
+                CHECK_FALSE(out.empty());
+                // what it keeps, ParseCht reads the same
+                std::string cht = "cheat0_desc=\"x\"\ncheat0_code=\"";
+                for (const char c : out) {
+                    cht += c == '\n' || c == ' ' ? '+' : c;
+                }
+                CHECK(ParseCht(cht + "\"\n", s).cheats.size() == 1);
+            }
+        }
+    }
+}
