@@ -37,7 +37,7 @@
 #include "Savestate.h"
 
 #include "common/logging/log.h"
-#include "frame_cores/cheat_db.h"
+#include "frame_cores/cheat_merge.h"
 #include "frame_cores/rom_info.h"
 
 namespace FrameCores {

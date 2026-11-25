@@ -57,12 +57,13 @@ std::string_view NextLine(std::string_view& text) {
     return line;
 }
 
+/// Every byte but letters, digits, '-', '_' and '~' (so no ".." survives in a name).
 std::string PctEncode(std::string_view s) {
     std::string out;
     for (const char ch : s) {
         const auto c = static_cast<unsigned char>(ch);
         if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-            c == '-' || c == '.' || c == '_' || c == '~') {
+            c == '-' || c == '_' || c == '~') {
             out += ch;
         } else {
             char buf[4];
@@ -433,23 +434,6 @@ ChtParse ParseCht(std::string_view text, System system) {
         out.cheats.push_back(std::move(entry));
     }
     return out;
-}
-
-int MergeImported(std::vector<CheatEntry>& list, const std::vector<CheatEntry>& incoming) {
-    int added = 0;
-    for (const auto& in : incoming) {
-        if (list.size() >= kMaxStoredCheats) {
-            break;
-        }
-        const bool have = std::any_of(list.begin(), list.end(), [&](const CheatEntry& e) {
-            return e.name == in.name && e.code == in.code;
-        });
-        if (!have) {
-            list.push_back(CheatEntry{in.name, in.code, false});
-            ++added;
-        }
-    }
-    return added;
 }
 
 Result Download(const Cheats::Online::HttpGet& get, System system, std::string_view game_code,

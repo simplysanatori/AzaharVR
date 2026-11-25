@@ -16,7 +16,7 @@
 #include <vector>
 
 #include "common/logging/log.h"
-#include "frame_cores/cheat_db.h"
+#include "frame_cores/cheat_merge.h"
 #include "frame_cores/cheat_store.h"
 #include "frame_cores/driver_runner.h"
 #include "frame_cores/rom_info.h"

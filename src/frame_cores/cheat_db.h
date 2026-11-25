@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "core/cheats/online.h"
+#include "frame_cores/cheat_merge.h"
 #include "frame_cores/core_backend.h"
 
 namespace FrameCores::CheatDb {
@@ -43,7 +44,6 @@ inline constexpr std::size_t kMaxChtBytes = 1024 * 1024; // the largest DS file 
 inline constexpr int kMaxCheats = 2000;                  // one DS file has 1537
 inline constexpr std::size_t kMaxNameLength = 120;
 inline constexpr std::size_t kMaxFileNameLength = 200;
-inline constexpr std::size_t kMaxStoredCheats = 4000;    // a game's list, own and downloaded
 inline constexpr std::uint64_t kMaxRomBytes = 1ull << 30;
 
 enum class System { Nds, Gba, Gb, Gbc };
@@ -109,10 +109,6 @@ struct ChtParse {
 /// (Nds, Gba; "XXXXXXXX YYYYYYYY", Gba also "XXXXXXXX YYYY") or one word each (Gb, Gbc).
 /// An entry with no code is a heading and is left out.
 ChtParse ParseCht(std::string_view text, System system);
-
-/// Puts the entries `incoming` into `list` after its own, off, leaving out one with the same name
-/// and code, up to kMaxStoredCheats. Returns how many were added.
-int MergeImported(std::vector<CheatEntry>& list, const std::vector<CheatEntry>& incoming);
 
 // ---- The download ----
 
