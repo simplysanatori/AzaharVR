@@ -1127,6 +1127,34 @@ view is the Game's Camera; otherwise `over_shoulder` decides
 
 **1.3.0: the Game's Camera is held back.** Its view was broken on the headset (Pit far off in the air; the camp's view wrong). `Menu::kGameCameraOffered` (`menu/angels_aim_tab.h`) is false: Camera lists First Person and Over the Shoulder, and a saved `vr_kiu_game_camera` is not used. `AZAHARFRAME_KIU_GAME_CAMERA=1` still turns it on for work on it.
 
+### Powers (AzaharFrame kiupowers; test switches, off)
+
+The game's power panel is at +0xB64 of the battle UI's 2D context (`[0xEE3098 + 0x140]`, `kiu_ui.h`), on the bottom screen
+(`kiu_powers.h`; its code words are checked first, EUR and USA Rev 1; USA never run).
+
+| Field | What |
+|---|---|
+| +0 & 0x4000 | in the air (the dots), else the bar |
+| +4 & 0x20000, & 0x10000000 | the name bubble is up; a power was just used |
+| +0x104 f32 | the name's timer, refilled by each step |
+| +0x118, +0x184, +0x11C + 8n | the selected place, how many, a power (uses in its first byte) |
+| +0x1B4 f32 | the charge in the air, 0 to 3 dots (about 0.0194 a second) |
+
+- **The bar's draws** (`video_core/kiu_powers.h`). Draws of the bottom pass (viewport 240 x 320) of that context. Read from guest memory, told
+  apart by place, texture and TEV; the wanted ones are drawn again from the same textures (a pack's too) into a transparent strip under the
+  bottom screen's picture, in the same XR image (`RendererVulkan::DrawKiuPowers`). In the game's order: paper (the selected place's piece tinted
+  FFD200, alpha 0xBF: "the gold"), the name bubble (u 183 to 206, v 72 to 96 of the sheet's 256), the cards, the icons, the counts, the arrows,
+  the name. Left out: the paper but the gold piece, the cards.
+- **Their TEV** (any other is not drawn again): paper, bubble, arrows: texture x vertex colour; icons and counts: the texture mixed toward the
+  vertex colour by its alpha, alpha = the texture's x a stage constant; the name: the vertex colour, alpha = the texture's red x the vertex alpha.
+- The cards, icons and counts are cut to x 8 to 124, as the game's scissor does. The bar's idle fade (its alphas, 0.5 seen) is divided out; the
+  opacity multiplies the finished strip, so nothing shows through the icons.
+- **In the air** any of D-pad Left, Right and Down spends a dot. With Fire and Power in Angel's Aim the bumpers send nothing there
+  (`AZAHARFRAME_KIU_SKY_BUMPERS=1`: as before); the off hand's trigger (D-pad Down) does it.
+  V (desktop): both bumpers: nothing held, the charge goes on; the trigger: 1.736 to 0.737, once. The player's own charge is
+  `[0xD635E0] + 0x1238`; the panel's is set from it, so writing the panel's does not stick.
+- Switches: `vis/power_menu.h`.
+
 ### Single screen (AzaharFrame kiu1s; test switches, all off)
 
 Where to look was learnt from **UprisingHack** (https://github.com/patricksmill/UprisingHack,
