@@ -140,10 +140,14 @@ void FrameGames::Queue(std::vector<CoverJob> jobs, bool first) {
 
 void FrameGames::FindCovers() {
     covers_enabled = hooks.covers_on && hooks.covers_on();
+    const bool tab = std::any_of(rows.begin(), rows.end(), [](const GameEntry& g) {
+        return g.system != Common::GameSystem::N3DS; // as GamesTabApplies
+    });
     std::vector<CoverJob> jobs;
     for (const GameEntry& row : rows) {
         const bool load = covers_loaded.insert(GameOf(row).Id() + row.path).second;
-        const bool fetch = covers_enabled && covers_automatic.insert(GameOf(row).Id() + row.path).second;
+        const bool fetch =
+            covers_enabled && tab && covers_automatic.insert(GameOf(row).Id() + row.path).second;
         if (load || fetch) {
             jobs.push_back({.path = row.path, .game = GameOf(row), .fetch = fetch, .automatic = true});
         }
