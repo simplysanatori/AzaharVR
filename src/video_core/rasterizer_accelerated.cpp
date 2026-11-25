@@ -519,6 +519,30 @@ void RasterizerAccelerated::HudCensus(const char* done) {
     if ((flat || om.depth_test_enable == 0 || all) && (flat || all || vertex_batch.size() <= 96) &&
         hud_census_seen.insert(kind).second) {
         LOG_INFO(Render, "kiu census {:X}: {}", key, line);
+        // A draw through a camera: its place in the frame, and the camera's rows and the first
+        // bone's, as the game set them.
+        const int r = Settings::values.vr_si_mode_register_offset.GetValue();
+        if (!flat && r >= 4 && r + 2 < 96) {
+            float n0 = 1e9f, n1 = -1e9f, m0 = 1e9f, m1 = -1e9f, w0 = 1e9f, w1 = -1e9f;
+            for (const auto& v : vertex_batch) {
+                w0 = std::min(w0, v.position.w);
+                w1 = std::max(w1, v.position.w);
+                n0 = std::min(n0, v.position.x / v.position.w);
+                n1 = std::max(n1, v.position.x / v.position.w);
+                m0 = std::min(m0, v.position.y / v.position.w);
+                m1 = std::max(m1, v.position.y / v.position.w);
+            }
+            std::string rows;
+            for (const int at : {r - 4, r - 3, r, r + 1, r + 2, 25, 26, 27}) {
+                const auto& f = pica.vs_setup.uniforms.f[at];
+                rows += fmt::format(" c{} {:.3f},{:.3f},{:.3f},{:.3f}", at, f.x.ToFloat32(),
+                                    f.y.ToFloat32(), f.z.ToFloat32(), f.w.ToFloat32());
+            }
+            LOG_INFO(Render, "kiu census {:X}: tex {:08X} verts {} ndc up {:.2f}..{:.2f} across "
+                     "{:.2f}..{:.2f} w {:.1f}..{:.1f}:{}", key,
+                     tex ? regs.texturing.texture0.GetPhysicalAddress() : 0u, vertex_batch.size(),
+                     n0, n1, m0, m1, w0, w1, rows);
+        }
     }
 }
 

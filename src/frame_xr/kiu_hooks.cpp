@@ -189,7 +189,6 @@ struct State {
     Ui::State ui;
     Ui::Steady ui_page, ui_pause, ui_pictures;
     uint32_t hud_cost_vblanks = 0; ///< AzaharFrame kiuhud
-    std::string hud_slots_logged;
     Ui::SteadyMenu ui_menu;
     Ui::SteadyMenu ui_weapon_menu; ///< the same, read whatever the switches say (the weapon)
     int menu_up = Ui::kNoMenu; ///< as said to the view
@@ -583,23 +582,6 @@ void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
                  now.illustration ? " an illustration" : now.pictures ? " pictures" : "",
                  now.vertex_base, now.index_offset, now.raw_flags, now.raw_parts, now.raw_page,
                  battle);
-    }
-    if (census != 0 && now.known) { // AzaharFrame kiuhud: the context's texture slots, as they change
-        uint32_t count = 0, table = 0;
-        std::string slots;
-        if (mem.Read32(now.context + 0x8, count) && mem.Read32(now.context + 0x10, table) &&
-            count <= 64) {
-            for (uint32_t i = 0; i < count; ++i) {
-                uint32_t format = 0, at = 0;
-                mem.Read32(table + i * 12, format);
-                mem.Read32(table + i * 12 + 4, at);
-                slots += fmt::format(" {}:{:08X}/{:X}", i, at << 3, format);
-            }
-        }
-        if (slots != s.hud_slots_logged) {
-            s.hud_slots_logged = slots;
-            LOG_INFO(Frontend, "xr: Kid Icarus hooks: the battle UI's texture slots:{}", slots);
-        }
     }
     VideoCore::Immersive::g_hud_census_state.store(
         (battle ? 1u : 0u) | (now.known ? 2u : 0u) | (now.shown ? 4u : 0u) |
