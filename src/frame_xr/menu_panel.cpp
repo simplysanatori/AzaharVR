@@ -256,6 +256,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::ScreenGap;
     case Id::ScreenLayout:
         return MenuSetting::ScreenLayout;
+    case Id::ScreenCurve:
+        return MenuSetting::ScreenCurve;
     case Id::ImmersiveMode:
         return MenuSetting::ImmersiveMode;
     case Id::MarginX: // AzaharFrame fovaxis
@@ -405,6 +407,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::KiuPowerMenuOpacity;
     case Id::KiuStickClick: // AzaharFrame kiucam
         return MenuSetting::KiuStickClick;
+    case Id::Kiu60Fps: // AzaharFrame kiu60
+        return MenuSetting::Kiu60Fps;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         return MenuSetting::KiuHideOffHand;
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim
@@ -1029,10 +1033,7 @@ void MenuPanel::BuildModel(const Host& host) {
         }
         view.requires_ctgp7 = false;
     }
-    // AzaharFrame kiufix: the Angel's Aim segment only while Kid Icarus: Uprising is open
-    if (!m.mods.angels_aim.shown && view.mods_segment == Menu::ModsSegment::AngelsAim) {
-        view.mods_segment = Menu::ModsSegment::Cheats;
-    }
+    // (AzaharFrame kiufix: the Angel's Aim segment too: AimPageKeep, below.)
     if (!m.mods.angels_aim.shown) {
         view.angels_intro = false; // AzaharFrame kiuweap2: its prompt goes with the game
     }
@@ -1043,11 +1044,14 @@ void MenuPanel::BuildModel(const Host& host) {
                                                  .count() /
                                              66);
     }
-    m.hide_bottom_screen = v.vr_hide_bottom_screen.GetValue();
+    // Position: the running console's own (settings.h Graphics)
+    const Settings::ConsoleGraphics position = Settings::Graphics(
+        Common::AltCore::GroupOf(GetCoreCapabilities().kind));
+    m.hide_bottom_screen = position.hide_bottom_screen.GetValue();
     m.screen_shape = static_cast<int>(std::min<u32>(v.vr_top_aspect.GetValue(), 6)); // fixes7
-    m.screen_curve = NearestStep(kCurveSteps, v.vr_screen_curve.GetValue());
-    m.screen_layout = static_cast<int>(std::min<u32>(v.vr_screen_layout.GetValue(), 1));
-    m.screen_gap = static_cast<int>(std::min<u32>(v.vr_screen_gap.GetValue(), 20));
+    m.screen_curve = NearestStep(kCurveSteps, position.screen_curve.GetValue());
+    m.screen_layout = static_cast<int>(std::min<u32>(position.screen_layout.GetValue(), 1));
+    m.screen_gap = static_cast<int>(std::min<u32>(position.screen_gap.GetValue(), 20));
     m.second_free = host.second_free;
     m.move_screens = static_cast<int>(std::min<u32>(v.vr_move_screens.GetValue(), 2)); // menu
     m.touchpad_touch = v.vr_touchpad_touch.GetValue() == 2 ? 1 : 0; // AzaharFrame menuux
@@ -1236,6 +1240,7 @@ void MenuPanel::BuildModel(const Host& host) {
     m.kiu_power_menu_opacity =
         static_cast<int>(std::clamp<u32>(v.vr_kiu_power_menu_opacity.GetValue(), 20, 100));
     m.kiu_stick_click = static_cast<int>(std::min<u32>(v.vr_kiu_stick_click.GetValue(), 1)); // AzaharFrame kiucam
+    m.kiu_60fps = v.vr_kiu_60fps.GetValue() ? 1 : 0; // AzaharFrame kiu60
     m.kiu_hide_off_hand = static_cast<int>(v.vr_kiu_hide_off_hand.GetValue()); // AzaharFrame kiuhands
     m.kiu_talk_portraits = v.vr_kiu_talk_portraits.GetValue() ? 1 : 0; // AzaharFrame kiuaim
     m.kiu_talk_portraits_opacity = static_cast<int>(
@@ -1264,11 +1269,14 @@ void MenuPanel::BuildModel(const Host& host) {
                   !v.factor_3d.UsingGlobal(), v.factor_3d.GetValue())
             : std::min<u32>(v.factor_3d.GetValue(), 100));
     // AzaharFrame menuux: the renderer's settings.
-    m.internal_resolution = static_cast<int>(std::min<u32>(v.resolution_factor.GetValue(), 18));
+    // the running console's own (settings.h Graphics)
+    const Settings::ConsoleGraphics own = Settings::Graphics(
+        Common::AltCore::GroupOf(GetCoreCapabilities().kind));
+    m.internal_resolution = static_cast<int>(std::min<u32>(own.resolution_factor.GetValue(), 18));
     m.dynamic_resolution = v.vr_dynamic_resolution.GetValue();
     m.texture_filter = 0;
     for (std::size_t i = 0; i < Menu::kTextureFilters.size(); i++) {
-        if (static_cast<int>(v.texture_filter.GetValue()) == Menu::kTextureFilters[i]) {
+        if (static_cast<int>(own.texture_filter.GetValue()) == Menu::kTextureFilters[i]) {
             m.texture_filter = static_cast<int>(i);
         }
     }
@@ -1470,8 +1478,8 @@ void MenuPanel::BuildModel(const Host& host) {
         m.gba_allow_editing = v.gba_allow_editing.GetValue();
         m.gba_rotate_pages = v.gba_rotate_pages.GetValue();
         m.gba_map_refresh = static_cast<int>(v.gba_map_refresh.GetValue());
-        m.layer_depth = static_cast<int>(v.layer_depth.GetValue());
-        m.invert_depth = v.invert_depth.GetValue();
+        m.layer_depth = static_cast<int>(own.layer_depth.GetValue());
+        m.invert_depth = own.invert_depth.GetValue();
         const DsHeld held = GetDsHeld();
         m.ds_lid_closed = held.lid_closed;
         if (!Menu::TabShown(view.tab, m)) {
@@ -1532,7 +1540,7 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
     const u32 u = static_cast<u32>(std::max(value, 0));
     switch (id) {
     case Id::HideBottomScreen:
-        Apply(v.vr_hide_bottom_screen, value != 0, per_game);
+        Apply(Settings::Graphics(Common::AltCore::GroupOf(GetCoreCapabilities().kind)).hide_bottom_screen, value != 0, per_game);
         r.setting = MenuSetting::HideBottomScreen;
         ShowToastText("Hide Secondary Screen: Restart Game to Apply", ToastTime::Long);
         break;
@@ -1542,15 +1550,15 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         break;
     case Id::ScreenCurve:
         r.value = static_cast<int>(kCurveSteps[std::min<std::size_t>(u, kCurveSteps.size() - 1)]);
-        Apply(v.vr_screen_curve, static_cast<u32>(r.value), false);
+        Apply(Settings::Graphics(Common::AltCore::GroupOf(GetCoreCapabilities().kind)).screen_curve, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::ScreenCurve;
         break;
     case Id::ScreenLayout: // AzaharFrame layout
-        Apply(v.vr_screen_layout, std::min<u32>(u, 1), per_game);
+        Apply(Settings::Graphics(Common::AltCore::GroupOf(GetCoreCapabilities().kind)).screen_layout, std::min<u32>(u, 1), per_game);
         r.setting = MenuSetting::ScreenLayout;
         break;
     case Id::ScreenGap:
-        Apply(v.vr_screen_gap, std::min<u32>(u, 20), per_game);
+        Apply(Settings::Graphics(Common::AltCore::GroupOf(GetCoreCapabilities().kind)).screen_gap, std::min<u32>(u, 20), per_game);
         r.setting = MenuSetting::ScreenGap;
         break;
     case Id::MoveScreens: // AzaharFrame menu, global
@@ -1567,7 +1575,7 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
     // takes effect at the next frame (the rasterizer cache starts again: a short hitch).
     case Id::InternalResolution:
         r.value = std::clamp(value + 1, 1, Menu::kMaxResolution);
-        Apply(v.resolution_factor, static_cast<u32>(r.value), per_game);
+        Apply(Settings::Graphics(Common::AltCore::GroupOf(GetCoreCapabilities().kind)).resolution_factor, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::InternalResolution;
         DynamicResolution::Reset(); // from the new value, no step off
         break;
@@ -1583,7 +1591,8 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         break;
     case Id::TextureFilter:
         r.value = Menu::kTextureFilters[std::min<std::size_t>(u, Menu::kTextureFilters.size() - 1)];
-        Apply(v.texture_filter, static_cast<Settings::TextureFilter>(r.value), per_game);
+        Apply(Settings::Graphics(Common::AltCore::GroupOf(GetCoreCapabilities().kind)).texture_filter,
+              static_cast<Settings::TextureFilter>(r.value), per_game);
         r.setting = MenuSetting::TextureFilter;
         break;
     case Id::AsyncShaders:
@@ -1939,6 +1948,11 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         Apply(v.vr_kiu_stick_click, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::KiuStickClick;
         break;
+    case Id::Kiu60Fps: // AzaharFrame kiu60
+        r.value = std::clamp(value, 0, 1);
+        Apply(v.vr_kiu_60fps, r.value != 0, per_game);
+        r.setting = MenuSetting::Kiu60Fps;
+        break;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         r.value = std::clamp(value, 0, 1);
         Apply(v.vr_kiu_hide_off_hand, r.value != 0, per_game);
@@ -2190,12 +2204,12 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         break;
     case Id::LayerDepth:
         r.value = std::clamp(value, 0, static_cast<int>(Common::LayerDepth::kMaxLevel));
-        Apply(v.layer_depth, static_cast<u32>(r.value), per_game);
+        Apply(Settings::Graphics(Common::AltCore::GroupOf(GetCoreCapabilities().kind)).layer_depth, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::LayerDepth;
         break;
     case Id::InvertDepth:
         r.value = value != 0 ? 1 : 0;
-        Apply(v.invert_depth, r.value != 0, per_game);
+        Apply(Settings::Graphics(Common::AltCore::GroupOf(GetCoreCapabilities().kind)).invert_depth, r.value != 0, per_game);
         r.setting = MenuSetting::InvertDepth;
         break;
     default:
@@ -2215,7 +2229,8 @@ void MenuPanel::UseGlobal(Id id, Host& host) {
         return;
     }
     const auto& v = Settings::values;
-    const bool hide = v.vr_hide_bottom_screen.GetValue();
+    const auto& own = Settings::Graphics(Common::AltCore::GroupOf(GetCoreCapabilities().kind));
+    const bool hide = own.hide_bottom_screen.GetValue();
     const bool async = v.async_shader_compilation.GetValue();
     const u32 console = v.ds_console_mode.GetValue();
     const u32 second = v.gba_second_screen.GetValue();
@@ -2224,7 +2239,7 @@ void MenuPanel::UseGlobal(Id id, Host& host) {
     }
     if (id == Id::InternalResolution) {
         DynamicResolution::Reset(); // from the global value, no step off
-    } else if (id == Id::HideBottomScreen && hide != v.vr_hide_bottom_screen.GetValue()) {
+    } else if (id == Id::HideBottomScreen && hide != own.hide_bottom_screen.GetValue()) {
         ShowToastText("Hide Secondary Screen: Restart Game to Apply", ToastTime::Long);
     } else if (id == Id::AsyncShaders && async != v.async_shader_compilation.GetValue()) {
         ShowToastText("Async Shader Compilation: Restart Game to Apply", ToastTime::Long);
@@ -2709,12 +2724,9 @@ void MenuPanel::Click(Target t, Host& host) {
         if (model.notice.kind != Menu::ModsDialogKind::None) {
             ask(MenuCommand::NoticeAnswer, 2);
         } else if (view.angels_intro) {
-            // AzaharFrame kiuweap2: the prompt's Controls: the Controls tab at Aiming
+            // AzaharFrame kiuweap2: the prompt's Show Angel's Aim: the page's front view
             view.angels_intro = false;
-            view.tab = Menu::Tab::Controls;
-            view.page = Menu::Page::Tabs;
-            view.controls_section = Menu::ControlsSection::Motion;
-            scroll_to_aiming = true;
+            Menu::AimPageOpen(view, -1);
         } else if (view.mods_segment == Menu::ModsSegment::Ctgp7 && // AzaharFrame ctgp7
                    model.mods.ctgp7.dialog.kind != Menu::ModsDialogKind::None) {
             ask_text(MenuCommand::Ctgp7Dialog, view.dialog_check ? "checked" : "", 2);
@@ -2946,11 +2958,8 @@ void MenuPanel::Click(Target t, Host& host) {
             host.reset_aim_calibration();
         }
         break;
-    case Id::AngelsAimSettings: // AzaharFrame kiufix: the Controls tab at Aiming
-        view.tab = Menu::Tab::Controls;
-        view.page = Menu::Page::Tabs;
-        view.controls_section = Menu::ControlsSection::Motion;
-        scroll_to_aiming = true;
+    case Id::AngelsAimLink: // AzaharFrame kiuaim: the Angel's Aim page's front view
+        Menu::AimPageOpen(view, -1);
         break;
     case Id::AngelsAimGroup: // AzaharFrame kiuaim: a group's row, More, Back
         Menu::AimPagePress(model, view, t.index);
@@ -3049,6 +3058,7 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::KiuPowerMenu: // AzaharFrame kiuaim
     case Id::KiuHudLinked: // AzaharFrame kiu140
     case Id::KiuStickClick: // AzaharFrame kiucam
+    case Id::Kiu60Fps: // AzaharFrame kiu60
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim
     case Id::KiuPortraitsLinked:
@@ -3531,7 +3541,7 @@ void MenuPanel::Frame(const FrameInfo& info, const Input::InputFrame& in, bool h
                     !view.open_link.empty())) {
             Click({Id::DialogCancel}, host);
         } else if (view.tab == Menu::Tab::Mods && // AzaharFrame kiuaim: a group's page, More
-                   view.mods_segment == Menu::ModsSegment::AngelsAim && Menu::AimPageOn() &&
+                   view.mods_segment == Menu::ModsSegment::AngelsAim &&
                    Menu::AimPageBack(model, view)) {
         } else if (mods_shown && view.mods_page == Menu::ModsPage::Install) {
             Click({Id::ModsBack}, host);
@@ -3688,12 +3698,6 @@ void MenuPanel::Frame(const FrameInfo& info, const Input::InputFrame& in, bool h
             chain.Upload(reinterpret_cast<const uint8_t*>(shared->pixels.data()));
             layout = shared->layout;
             stale_uploaded = true; // AzaharFrame kbd
-            // AzaharFrame kiufix: Angel's Aim's Aiming Settings: the Controls tab at Aiming, once
-            // its page is drawn (the scroll that does it is the page's own).
-            if (scroll_to_aiming && layout.controls && view.tab == Menu::Tab::Controls) {
-                scroll_to_aiming = false;
-                view.scroll[static_cast<std::size_t>(Menu::Tab::Controls)] = layout.aiming_scroll;
-            }
         }
     }
     if (stale && stale_uploaded && !chain.Busy()) {

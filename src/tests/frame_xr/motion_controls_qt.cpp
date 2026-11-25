@@ -840,3 +840,63 @@ TEST_CASE("VR group: Angel's Aim is Recommended only in Kid Icarus: Uprising's P
         CHECK(mode->itemText(3) == QString::fromUtf8(FrameXr::Immersive::Names::kModeAngelsAim));
     }
 }
+
+// AzaharVR: Screen Curve per game in a game's Properties: Use global or its own item; a value set
+// in the headset between two items stays while the item shown is its nearest one.
+TEST_CASE("VR group: Screen Curve per game in Properties", "[frame_xr][curve]") {
+    App();
+    auto& curve = Settings::values.vr_screen_curve;
+    Keep<u32, true> keep{curve};
+    constexpr int kOffset = ConfigurationShared::USE_GLOBAL_OFFSET;
+    Settings::SetConfiguringGlobal(true);
+    Values(curve, 30u, 20u); // global 30, the game's own 20 (between 15 and 30, nearest 15)
+    // The global settings keep editing the global value, the game's own stays
+    {
+        ConfigureFrameVr w;
+        auto* combo = In<QComboBox>(w, "frame_vr_curve_row");
+        REQUIRE(combo);
+        CHECK(!combo->isHidden());
+        CHECK(combo->count() == 7);
+        combo->setCurrentIndex(3); // 45
+        w.ApplyConfiguration();
+    }
+    CHECK(curve.GetValue(true) == 45u);
+    CHECK(!curve.UsingGlobal());
+    CHECK(curve.GetValue() == 20u);
+    Settings::SetConfiguringGlobal(false);
+    // The game's Properties: its own value shows as its nearest item, and is kept as it is
+    {
+        ConfigureFrameVr w;
+        auto* combo = In<QComboBox>(w, "frame_vr_curve_row");
+        REQUIRE(combo);
+        CHECK(!combo->isHidden());
+        CHECK(combo->count() == 7 + kOffset);
+        CHECK(combo->currentIndex() == 1 + kOffset); // 15
+        w.ApplyConfiguration();
+    }
+    CHECK(!curve.UsingGlobal());
+    CHECK(curve.GetValue() == 20u);
+    // Another item: that item's value
+    {
+        ConfigureFrameVr w;
+        auto* combo = In<QComboBox>(w, "frame_vr_curve_row");
+        REQUIRE(combo);
+        combo->setCurrentIndex(4 + kOffset); // 60
+        w.ApplyConfiguration();
+    }
+    CHECK(!curve.UsingGlobal());
+    CHECK(curve.GetValue() == 60u);
+    CHECK(curve.GetValue(true) == 45u);
+    // Use global: the game follows the global value again
+    {
+        ConfigureFrameVr w;
+        auto* combo = In<QComboBox>(w, "frame_vr_curve_row");
+        REQUIRE(combo);
+        CHECK(combo->currentIndex() == 4 + kOffset);
+        combo->setCurrentIndex(ConfigurationShared::USE_GLOBAL_INDEX);
+        w.ApplyConfiguration();
+    }
+    CHECK(curve.UsingGlobal());
+    CHECK(curve.GetValue() == 45u);
+    Settings::SetConfiguringGlobal(true);
+}

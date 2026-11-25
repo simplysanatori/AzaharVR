@@ -609,6 +609,8 @@ bool Instance::CreateDevice() {
         vk::PhysicalDeviceFeatures2{
             .features{
                 .robustBufferAccess = features.robustBufferAccess,
+                // DS games over 1x: the 3D pass writes its two targets through different masks
+                .independentBlend = features.independentBlend,
                 .geometryShader = features.geometryShader,
                 .logicOp = features.logicOp,
                 .samplerAnisotropy = features.samplerAnisotropy,

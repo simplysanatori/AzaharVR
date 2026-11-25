@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0 (Unreleased)
+
+### Kid Icarus: Uprising: Angel's Aim
+
+- Settings that act only in Angel's Aim are under **Mods** > **Angel's Aim**. **Settings** > **Immersive** links to it.
+
 ## 1.3.0 (November 2026)
 
 Azahar for Frame is now **Azahar VR**: the same app, now also for Windows and Linux PCs with SteamVR. On the Steam Frame it is still called Azahar for Frame. The repository is now `simplysanatori/AzaharVR`; old links redirect.

@@ -2121,7 +2121,7 @@ GMainWindow::GMainWindow(Core::System& system_)
                 const u32 factor = parts[1].toUInt();
                 QTimer::singleShot(ms, this, [ms, factor] {
                     LOG_INFO(Frontend, "xr test: Internal Resolution {} at {} ms", factor, ms);
-                    Settings::values.resolution_factor.SetValue(factor);
+                    Settings::RunningGraphics().resolution_factor.SetValue(factor);
                 });
             }
 
@@ -3712,6 +3712,9 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     }
     const FrameCores::RomInfo& info = *info_opt;
     const std::string name = FrameCores::DisplayTitle(info, path); // AzaharVR: not the header's
+    // this console's own Internal Resolution, Texture Filter and Layer Depth from here on
+    Settings::SetActiveConsole(
+        Common::AltCore::GroupOf(FrameCores::DetectCoreKind(path)));
 
     StoreRecentFile(filename);
     const std::string config_file_name = fmt::format("{:016X}", info.title_id);
@@ -3731,8 +3734,8 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     options.force_nds = console == Common::AltCore::DsConsoleDS;
     options.force_dsi = console == Common::AltCore::DsConsoleDSi;
     options.second_screen = Settings::values.gba_second_screen.GetValue();
-    options.layer_depth = Settings::values.layer_depth.GetValue();
-    Common::LayerDepth::Get().inverted = Settings::values.invert_depth.GetValue();
+    options.layer_depth = Settings::RunningGraphics().layer_depth.GetValue();
+    Common::LayerDepth::Get().inverted = Settings::RunningGraphics().invert_depth.GetValue();
     if (!AltWindowOpen(info) ||
         !alt_core_host->Boot(path, data_dir, /*headless_for_test=*/false, options)) {
         LOG_CRITICAL(Frontend, "Failed to load application!");
@@ -3743,6 +3746,7 @@ bool GMainWindow::BootAltGame(const QString& filename) {
         g_frame_game_config_name.clear();
 #endif
         Settings::RestoreGlobalState(false);
+        Settings::SetActiveConsole(Settings::ConsoleGroup::N3DS);
         return false;
     }
 
@@ -3813,6 +3817,7 @@ void GMainWindow::ShutdownAltGame() {
 #endif
     AltWindowClose();
     Settings::RestoreGlobalState(false);
+    Settings::SetActiveConsole(Settings::ConsoleGroup::N3DS);
     UpdateWindowTitle();
     LOG_INFO(Frontend, "Alt core stopped");
 }
@@ -3861,8 +3866,8 @@ void GMainWindow::ApplyAltSettings() {
     alt_core_host->SetDriverOption(Option::RotatePages, v.gba_rotate_pages.GetValue() ? 1 : 0);
     alt_core_host->SetDriverOption(Option::MapRefresh, v.gba_map_refresh.GetValue());
     if (caps.layer_depth) {
-        Common::LayerDepth::Get().inverted = v.invert_depth.GetValue();
-        alt_core_host->SetLayerDepth(v.layer_depth.GetValue());
+        Common::LayerDepth::Get().inverted = Settings::RunningGraphics().invert_depth.GetValue();
+        alt_core_host->SetLayerDepth(Settings::RunningGraphics().layer_depth.GetValue());
     }
 }
 #endif
@@ -3871,6 +3876,7 @@ void GMainWindow::BootGame(const QString& filename) {
     if (emu_thread) {
         ShutdownGame();
     }
+    Settings::SetActiveConsole(Settings::ConsoleGroup::N3DS); // a 3DS game's own settings
 #ifdef ENABLE_ALT_CORES
     if (alt_core_host && alt_core_host->IsRunning()) {
         ShutdownAltGame();
@@ -5960,16 +5966,16 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     const u32 u = static_cast<u32>(std::max(r.value, 0));
     switch (r.setting) {
     case S::HideBottomScreen:
-        set(v.vr_hide_bottom_screen, r.value != 0);
+        set(Settings::RunningGraphics().hide_bottom_screen, r.value != 0);
         break;
     case S::ScreenShape:
         set(v.vr_top_aspect, u);
         break;
     case S::ScreenCurve:
-        set(v.vr_screen_curve, u);
+        set(Settings::RunningGraphics().screen_curve, u);
         break;
     case S::ScreenLayout: // AzaharFrame layout
-        set(v.vr_screen_layout, u);
+        set(Settings::RunningGraphics().screen_layout, u);
         break;
     case S::ImmersiveOffsetReset:
         set(v.vr_immersive_offset_x, 0.0f);
@@ -6115,7 +6121,7 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         set(v.vr_touchpad_touch, std::min<u32>(u, 2));
         break;
     case S::InternalResolution: // AzaharFrame menuux: the renderer reads it every frame
-        set(v.resolution_factor, std::clamp<u32>(u, 1, 18));
+        set(Settings::RunningGraphics().resolution_factor, std::clamp<u32>(u, 1, 18));
         break;
     case S::DynamicResolution:
         set(v.vr_dynamic_resolution, r.value != 0);
@@ -6125,7 +6131,8 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         set(v.vr_bfi_set_panel, (r.value & 2) != 0);
         break;
     case S::TextureFilter:
-        set(v.texture_filter, static_cast<Settings::TextureFilter>(std::min<u32>(u, 5)));
+        set(Settings::RunningGraphics().texture_filter,
+            static_cast<Settings::TextureFilter>(std::min<u32>(u, 5)));
         break;
     case S::AsyncShaders: // from the next start
         set(v.async_shader_compilation, r.value != 0);
@@ -6308,6 +6315,9 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::KiuStickClick: // AzaharFrame kiucam
         set(v.vr_kiu_stick_click, std::min<u32>(u, 1));
         break;
+    case S::Kiu60Fps: // AzaharFrame kiu60
+        set(v.vr_kiu_60fps, r.value != 0);
+        break;
     case S::KiuHideOffHand: // AzaharFrame kiuhands
         set(v.vr_kiu_hide_off_hand, r.value != 0);
         break;
@@ -6387,7 +6397,7 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         set(v.gba_solar_level, std::min<u32>(u, 10));
         break;
     case S::ScreenGap:
-        set(v.vr_screen_gap, std::min<u32>(u, 20));
+        set(Settings::RunningGraphics().screen_gap, std::min<u32>(u, 20));
         break;
     case S::SecondScreen: // from the next start (BootAltGame)
         set(v.gba_second_screen, std::min<u32>(u, 2));
@@ -6418,10 +6428,10 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         set(v.gba_map_refresh, std::min<u32>(u, 3));
         break;
     case S::LayerDepth:
-        set(v.layer_depth, std::min<u32>(u, Common::LayerDepth::kMaxLevel));
+        set(Settings::RunningGraphics().layer_depth, std::min<u32>(u, Common::LayerDepth::kMaxLevel));
         break;
     case S::InvertDepth:
-        set(v.invert_depth, r.value != 0);
+        set(Settings::RunningGraphics().invert_depth, r.value != 0);
         break;
     }
 #ifdef ENABLE_ALT_CORES

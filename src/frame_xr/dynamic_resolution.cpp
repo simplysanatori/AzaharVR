@@ -722,7 +722,7 @@ void NoteSecond(const Second& s) {
     // steps) is the ceiling; the floor is FloorFactor's (1x, or the setting with
     // kFloorAtSetting); at Internal Resolution 1x nothing is taken off.
     const u32 base = VideoCore::DynamicResolution::g_base.load(std::memory_order_relaxed);
-    const int setting = static_cast<int>(Settings::values.resolution_factor.GetValue());
+    const int setting = static_cast<int>(Settings::RunningGraphics().resolution_factor.GetValue());
     const int max_drop = MaxDrop(static_cast<int>(base), setting);
     // AzaharFrame fixd: no game on view (a game starting, stopping or loaded: session 651's
     // Load Anyway at 1818 s was logged as a step up from 0 game frames): from the level

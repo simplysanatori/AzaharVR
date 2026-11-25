@@ -267,7 +267,7 @@ void ApplyPresetSettings(const ImmersivePreset& preset) {
         fill(v.vr_immersive_scale_y, static_cast<s32>(preset.scale_y), "Vertical Scale");
     }
     if (preset.hide_bottom >= 0) {
-        fill(v.vr_hide_bottom_screen, preset.hide_bottom != 0, "Hide Bottom Screen");
+        fill(Settings::RunningGraphics().hide_bottom_screen, preset.hide_bottom != 0, "Hide Bottom Screen");
     }
     if (preset.top_aspect >= 0) {
         fill(v.vr_top_aspect, static_cast<u32>(preset.top_aspect), "Top Screen Aspect");
@@ -277,10 +277,11 @@ void ApplyPresetSettings(const ImmersivePreset& preset) {
         fill(v.factor_3d, static_cast<u32>(preset.factor_3d), "3D Depth");
     }
     if (preset.resolution >= 0) {
-        fill(v.resolution_factor, static_cast<u32>(preset.resolution), "Internal Resolution");
+        fill(Settings::RunningGraphics().resolution_factor, static_cast<u32>(preset.resolution), "Internal Resolution");
     }
     if (preset.texture_filter >= 0) {
-        fill(v.texture_filter, static_cast<Settings::TextureFilter>(preset.texture_filter),
+        fill(Settings::RunningGraphics().texture_filter,
+             static_cast<Settings::TextureFilter>(preset.texture_filter),
              "Texture Filter");
     }
     // 1.2.0 RC2 (the owner): Async Shader Compilation, Motion Clarity in the Off and Wide modes,

@@ -33,6 +33,7 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_top_aspect);
     f(v.vr_screen_gap);
     f(v.vr_screen_layout);
+    f(v.vr_screen_curve); // AzaharVR: per game too
     f(v.vr_immersive_mode);
     f(v.vr_immersive_positional_game_scaler);
     f(v.vr_immersive_world_scale); // AzaharFrame natural
@@ -80,8 +81,7 @@ void ForEachMenuKey(F&& f) {
     f(v.gba_allow_editing);
     f(v.gba_rotate_pages);
     f(v.gba_map_refresh);
-    f(v.layer_depth);
-    f(v.invert_depth);
+    Settings::ForEachConsoleSetting(f); // each console group's own four (settings.h)
     // Controls (AzaharFrame reticle)
     f(v.vr_touchpad_touch);
     f(v.vr_bottom_screen_reticle);
@@ -152,6 +152,7 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_kiu_game_camera); // AzaharFrame kiu133
     f(v.vr_kiu_pit_opacity);
     f(v.vr_kiu_stick_click); // AzaharFrame kiucam
+    f(v.vr_kiu_60fps); // AzaharFrame kiu60
     f(v.vr_controls_preset_done);
     // Mode 3's two registers, which a game's preset sets at boot (presets.cpp) and no row
     // writes: the read put them back to Auto, so the first change made in the menu took Mario

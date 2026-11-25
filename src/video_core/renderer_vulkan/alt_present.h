@@ -35,6 +35,35 @@ struct AltPresentUniformData {
 static_assert(sizeof(AltPresentUniformData) == 112,
               "AltPresentUniformData must match present shader push constants");
 
+/// The XR swapchain of a screen: its pixels a whole number of times, about the size that makes a
+/// handheld's picture sharp edged (the console's own pixels up to 4 times). A picture over the
+/// console's own size keeps the swapchain of the highest scale it may have (`max_scale`), so a
+/// change of `scale` on its own (Dynamic Resolution) remakes nothing.
+constexpr std::array<u32, 2> AltTargetSize(u32 width, u32 height, u32 scale, u32 max_scale) {
+    constexpr u32 kMaxW = 1600;
+    constexpr u32 kMaxH = 960;
+    const u32 own = scale > 1 ? scale : 1;
+    const u32 w = width / own > 1 ? width / own : 1;
+    const u32 h = height / own > 1 ? height / own : 1;
+    const u32 fit = kMaxW / w < kMaxH / h ? kMaxW / w : kMaxH / h;
+    const u32 base = fit < 1 ? 1 : (fit > 4 ? 4 : fit);
+    const u32 top = max_scale > own ? max_scale : own;
+    u32 times = base; // 1x: as it was before there was a scale
+    if (top > 1) {
+        times = top;
+        while (times < base) {
+            times += top;
+        }
+    }
+    return {w * times, h * times};
+}
+
+/// Whether a picture fills a target with the same number of pixels for each of its own.
+constexpr bool AltTargetEven(u32 width, u32 height, u32 target_w, u32 target_h) {
+    return width != 0 && height != 0 && target_w % width == 0 && target_h % height == 0 &&
+           target_w / width == target_h / height;
+}
+
 /// The Primary Screen's texture among the present shader's three. The right eye's own picture
 /// (Layer Depth) is at this slot too, in a set of its own.
 constexpr u32 kAltPrimarySlot = 0;

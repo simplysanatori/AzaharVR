@@ -1254,3 +1254,31 @@ in both builds by its code; no code or layout of it is used.
   V, all by the beam and the trigger, each pixel asked and touched, ZL, ZR and L 0: the title (0), the file (2), the main menu
   (4), the hub (3) and back; the Cauldron (5): a drag along the intensity bar (155,22 to 93,22: 4.0 to 2.2) and Move Out, the
   battle, Retreat, the hub again. A grip on the panel moved nothing. Not run: the rooms past the hub, a swap, a re-centre, a wrist turned up (the mock's wrist screen did not come up), the stick and buttons.
+
+### 60 FPS (AzaharFrame kiu60; `vr_kiu_60fps`, off; `AZAHARFRAME_KIU_60FPS=1` / `=0` wins over it)
+
+`core/file_sys/kiu_60fps.h`, EUR Rev 0 and USA Rev 1, put into the code as the game starts (the loader, an IPS made in memory);
+code that isn't exactly the game's is left alone, with a log line. The setting is read at the start (a toast says so if it's
+changed after). Run by the desktop's flat build and VR mock; see reports/102/rig60 for the runs.
+
+- **Five words** make the game's loop 60: the vsync manager's rate and interval (30 and 2 to 60 and 1), the wait's parity, the updates
+  a picture, and the update's length (2.0 to 1.0 of a 60th). V: walk and dash end at the same speed; a picture every VBlank.
+- **The touch camera.** The game's touch speed at 60 was doubled where the stylus moved every other VBlank: an update with no movement
+  in it kept the last speed that was not zero (a ring of two), so a step was counted twice. 25 words (`kTouch`) in the
+  speed's update replace the ring by the mean of the last two updates, held for two more when it is zero, and ease it at 60 not 30. What isn't
+  changed: the six-update history a flick's speed is the biggest of (100 ms at 60, 200 at 30).
+- **Right Stick, Snap Turn.** By the host's clock (`kiu_turn.h`): no change.
+- **Turn Zone.** A push is taken once an update: it's scaled by the game's own update length (`UpdateShareFor`). V (Immersive Mode off, the C-Stick
+  mod's code, Direct Aim): five pushes, 60 against 30 from 0.961 to 0.997. With the stick's turning on (always in Angel's Aim) it makes none, and with the
+  C-Stick mod's code the option is off, so a player meets it at 60 only with the mod's `code.ips` and that mod's code together.
+- **Save states** carry the code and the rate they were made with. At a VBlank, if the code is the other of the two and the vsync manager's
+  rate too, all of it is written over (`TurnTo`, logged) to what the run was started at (`g_run`, from the loader); otherwise it is left.
+- **A mod's `exefs/code.ips`** with the same words (made from this table by the test `[.kiu60mod]`): the loader finds its code there already, puts nothing on and says
+  so; `g_run` is 60 whatever the option. A code file that differs (a C-Stick mod's) is left alone with a log line.
+- **What counts pictures.** Nothing of ours counts the game's: the talk card's misses, the cutscene's and menus' windows and Pit's opacity count
+  VBlanks (60 a second at either rate), the power menu's stay and fade, the snap's cooldown and the triggers the clock. V (VR mock, the same inputs at 30
+  and 60, one save state): the hand's power menu up 1.75 s at both, the game's name bubble 1 s a second, the cutscene 290 and 289 VBlanks, portraits 3.7 s.
+- **R's recentre** is the game's (its camera mode 3, no `D38` of ours): it turns to a heading the game keeps, and did nothing 11 degrees off (25 it turned). V: 4 + 3 taps in VR and 16 flat,
+  the same input at 30 and 60, end within 0.2 degrees in VR and, flat, within 4.6 (Pit's facing there differed by the same; one tap chose Pit's facing at 30
+  and the dummies' at 60, 4 degrees apart). One earlier pair ended 160 degrees apart (30: Pit stood turned round before the tap); it did not come again in 4 runs, 7 taps at each rate; why isn't known.
+- **A touch flick under about 0.12 s** turns up to 17 % more at 60: at 30 the game samples a part of it only.

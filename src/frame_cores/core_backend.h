@@ -16,7 +16,16 @@
 #include "frame_cores/microphone.h"
 #include "video_core/renderer_vulkan/alt_xr_renderer.h"
 
+namespace melonDS {
+class NDS;
+}
+namespace Vulkan {
+struct AltGraphics;
+}
+
 namespace FrameCores {
+
+struct NdsHiresRenderer;
 
 struct CorePaths {
     std::string data_dir;  ///< Root user data folder
@@ -45,6 +54,8 @@ struct CoreBootOptions {
     uint32_t second_screen = 0;    ///< SecondScreen (GBA and Game Boy games)
     uint32_t layer_depth = 0;      ///< 0 off, 1 to 3: how far back the layers go
     DriverOverride driver;
+    /// Tests: what draws a DS game over 1x (NdsHiresMaker)
+    std::function<std::unique_ptr<NdsHiresRenderer>(melonDS::NDS&, std::string&)> ds_renderer;
 };
 
 struct CheatEntry {
@@ -76,6 +87,7 @@ struct FrameOutput {
     bool options_changed = false; ///< Capabilities::driver_options, driver_options_on
     uint32_t updated_options = 0;
     uint32_t updated_options_on = 0;
+    bool caps_changed = false; ///< GetCapabilities gives others than before the frame
 };
 
 /// Internal emulation backend interface implemented by GbaCore, GbCore, and NdsCore.
@@ -135,6 +147,13 @@ public:
     virtual void SetLayerDepth(uint32_t /*level*/) {}
     /// The farthest a layer may move from the next frame on (layer_depth.h). 0: no right picture.
     virtual void SetMaxLayerShift(float /*share*/) {}
+    /// Internal Resolution from the next frame on, and the highest it may become by Dynamic
+    /// Resolution (has_internal_resolution).
+    virtual void SetResolution(uint32_t /*factor*/, uint32_t /*ceiling*/) {}
+    /// The presenter's graphics, to draw with over 1x; null: they go now.
+    virtual void SetGraphics(const Vulkan::AltGraphics* /*graphics*/) {}
+    /// The pixels of pictures that are the GPU's (AltScreenImage::image) into `frame`.
+    virtual void ReadPictures(FrameOutput& /*frame*/) {}
     /// The Secondary Screen's next page (GBA games), from the next frame.
     virtual void TurnPage() {}
     /// An option of the driver's (GBA and Game Boy games), between frames.

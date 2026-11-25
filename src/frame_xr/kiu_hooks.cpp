@@ -15,6 +15,7 @@
 #include "common/settings.h" // AzaharFrame kiutoggles: Third Person
 #include "core/core.h"
 #include "core/core_timing.h"
+#include "core/file_sys/kiu_60fps.h" // AzaharFrame kiu60
 #include "core/hle/kernel/process.h"
 #include "core/memory.h"
 #include "frame_xr/auto_shape.h" // AzaharFrame kiufix2
@@ -27,6 +28,7 @@
 #include "frame_xr/kiu_hooks.h"
 #include "frame_xr/kiu_pit_opacity.h" // AzaharFrame kiu133
 #include "frame_xr/kiu_turn.h" // AzaharFrame kiufov
+#include "frame_xr/menu/angels_aim_tab.h" // AzaharFrame kiu60: its toasts
 #include "frame_xr/kiu_scan.h"
 #include "frame_xr/test_switches.h"
 #include "frame_xr/kiu_cutscene.h" // AzaharFrame kiu140
@@ -173,6 +175,7 @@ struct State {
     uint32_t reticle_tex_logged = 0;
     uint32_t model_hidden = 0;
     bool model_looked = false;
+    bool sixty_off = false; ///< AzaharFrame kiu60: code that is neither the game's nor ours
     /// AzaharFrame kiu133: the actor whose model node was looked for, where it was found
     /// (KiuModel::FindModel; 0: not found), and the VBlanks until the next look when it was not.
     uint32_t model_actor = 0;
@@ -661,6 +664,53 @@ void CutsceneOff(State& s) {
     VideoCore::Immersive::g_drawn_angle.reg.store(0, std::memory_order_relaxed);
 }
 
+/// AzaharFrame kiu60 (core/file_sys/kiu_60fps.h): the setting as this run started (the loader made
+/// the game's code from it, and says what it is in g_run). Here, a save state made at the other
+/// rate is brought to it, and the setting changed while the game runs says that it counts from the
+/// next start.
+std::atomic<bool> g_sixty{false};
+
+bool SixtyWanted() {
+    const auto asked = Switch(FileSys::Kiu60::kSwitch);
+    return FileSys::Kiu60::Wanted(asked ? std::optional<std::string_view>(*asked) : std::nullopt,
+                                  Settings::values.vr_kiu_60fps.GetValue());
+}
+
+void SixtyFps(State& s, uint64_t title, GuestMemory& mem) {
+    namespace K60 = FileSys::Kiu60;
+    const K60::Build* build = K60::BuildFor(title);
+    if (!build) {
+        return;
+    }
+    const bool sixty = g_sixty.load(std::memory_order_relaxed);
+    const K60::Run run = K60::g_run.load(std::memory_order_relaxed);
+    if (!s.sixty_off && run != K60::Run::Leave) {
+        const K60::Turned turned = K60::TurnTo(
+            *build, run == K60::Run::At60,
+            [&](uint32_t a) {
+                uint32_t v = 0;
+                return mem.Read32(a, v) ? std::optional<uint32_t>(v) : std::nullopt;
+            },
+            [&](uint32_t a, uint32_t v) { mem.WriteCode(a, v); },
+            [&](uint32_t a, uint32_t v) { mem.WriteData(a, v); });
+        if (turned == K60::Turned::Yes) {
+            LOG_INFO(Frontend, "xr: Kid Icarus {} FPS: the game was at {} (a save state)",
+                     run == K60::Run::At60 ? 60 : 30, run == K60::Run::At60 ? 30 : 60);
+        } else if (turned == K60::Turned::Differs) {
+            s.sixty_off = true; // the loader's line says where, or a mod did it
+        }
+    }
+    static bool said = false; // emulation thread
+    const bool other = SixtyWanted() != sixty;
+    if (other != said && !s.sixty_off && run != K60::Run::Leave) {
+        said = other;
+        if (other) {
+            ShowToastText(sixty ? Menu::kKiu60FpsOffToast : Menu::kKiu60FpsOnToast,
+                          ToastTime::Long);
+        }
+    }
+}
+
 void Hook(int64_t ticks) {
     State& s = TheState();
     const int64_t host_now = NowNs();
@@ -706,6 +756,7 @@ void Hook(int64_t ticks) {
     }
     Memory::MemorySystem& memory = system.Memory();
     GuestMemory mem(system, memory, *process);
+    SixtyFps(s, title, mem); // AzaharFrame kiu60
     // AzaharFrame kiumode: the game's code first: Angel's Aim (Immersive Mode 4) is in effect only
     // where it is the mapped one (kiu_first_person.h).
     // AzaharFrame kiuusa: the European game or USA Rev 1 (KiuTurn::kBuilds), by title and code.
@@ -1212,6 +1263,8 @@ void OnGameBoot() {
 }
 
 void OnGameSettings(uint64_t /*title_id*/) {
+    // AzaharFrame kiu60: what this run plays at; the setting changed later counts from the next.
+    g_sixty.store(SixtyWanted(), std::memory_order_relaxed);
     // AzaharFrame kiumode: every game, before its presets: the last run's code check and
     // registers are forgotten (no setting is written).
     Kiu::FirstPerson::OnGameBoot();

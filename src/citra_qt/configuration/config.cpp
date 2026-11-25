@@ -563,6 +563,7 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.vr_top_aspect);
     ReadGlobalSetting(Settings::values.vr_screen_gap);
     ReadGlobalSetting(Settings::values.vr_screen_layout); // AzaharFrame layout; AzaharVR: per game too
+    ReadGlobalSetting(Settings::values.vr_screen_curve); // AzaharFrame curve; AzaharVR: per game too
     ReadGlobalSetting(Settings::values.vr_immersive_game_fov);
     ReadGlobalSetting(Settings::values.vr_immersive_match_camera); // AzaharFrame depth
     // AzaharFrame fovonce: Off | Set Once | Always; a config with only the old switch keeps its
@@ -657,8 +658,9 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.gba_allow_editing);
     ReadGlobalSetting(Settings::values.gba_rotate_pages);
     ReadGlobalSetting(Settings::values.gba_map_refresh);
-    ReadGlobalSetting(Settings::values.layer_depth);
-    ReadGlobalSetting(Settings::values.invert_depth);
+    // each console group's own Internal Resolution, Texture Filter, Layer Depth and Invert Depth
+    // (the 3DS's keep their keys, below)
+    Settings::ForEachConsoleSetting([this](auto& setting) { ReadGlobalSetting(setting); });
     // AzaharFrame reticle: the Controls tab's rows, a global value and a game's own (Per-Game)
     ReadGlobalSetting(Settings::values.vr_touchpad_touch);
     ReadGlobalSetting(Settings::values.vr_bottom_screen_reticle);
@@ -742,6 +744,7 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.vr_kiu_game_camera); // AzaharFrame kiu133
     ReadGlobalSetting(Settings::values.vr_kiu_pit_opacity);
     ReadGlobalSetting(Settings::values.vr_kiu_stick_click); // AzaharFrame kiucam
+    ReadGlobalSetting(Settings::values.vr_kiu_60fps); // AzaharFrame kiu60
     if (!global) {
         // AzaharFrame kiu: what the Controls preset already decided (a game's file only).
         ReadGlobalSetting(Settings::values.vr_controls_preset_done);
@@ -763,7 +766,6 @@ void QtConfig::ReadVrValues() {
         ReadGlobalSetting(Settings::values.vr_immersive_offset_x); // AzaharFrame vrsize
         ReadGlobalSetting(Settings::values.vr_immersive_offset_y);
         ReadGlobalSetting(Settings::values.vr_last_ipd_mm); // AzaharFrame ipd
-        ReadGlobalSetting(Settings::values.vr_screen_curve); // AzaharFrame curve
         ReadGlobalSetting(Settings::values.vr_move_screens);  // AzaharFrame menu
         ReadGlobalSetting(Settings::values.vr_hint_reticle_shown);
         ReadGlobalSetting(Settings::values.vr_hint_mouse_shown);
@@ -1436,6 +1438,7 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.vr_top_aspect);
     WriteGlobalSetting(Settings::values.vr_screen_gap);
     WriteGlobalSetting(Settings::values.vr_screen_layout); // AzaharFrame layout; AzaharVR: per game too
+    WriteGlobalSetting(Settings::values.vr_screen_curve); // AzaharFrame curve; AzaharVR: per game too
     WriteGlobalSetting(Settings::values.vr_immersive_game_fov);
     WriteGlobalSetting(Settings::values.vr_immersive_match_camera_mode); // AzaharFrame fovonce
     if (!global) {
@@ -1465,8 +1468,7 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.gba_allow_editing);
     WriteGlobalSetting(Settings::values.gba_rotate_pages);
     WriteGlobalSetting(Settings::values.gba_map_refresh);
-    WriteGlobalSetting(Settings::values.layer_depth);
-    WriteGlobalSetting(Settings::values.invert_depth);
+    Settings::ForEachConsoleSetting([this](auto& setting) { WriteGlobalSetting(setting); });
     // AzaharFrame reticle: the Controls tab's rows, a global value and a game's own (Per-Game)
     WriteGlobalSetting(Settings::values.vr_touchpad_touch);
     WriteGlobalSetting(Settings::values.vr_bottom_screen_reticle);
@@ -1542,6 +1544,7 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.vr_kiu_game_camera); // AzaharFrame kiu133
     WriteGlobalSetting(Settings::values.vr_kiu_pit_opacity);
     WriteGlobalSetting(Settings::values.vr_kiu_stick_click); // AzaharFrame kiucam
+    WriteGlobalSetting(Settings::values.vr_kiu_60fps); // AzaharFrame kiu60
     if (!global) {
 #ifdef ENABLE_FRAME_XR
         FrameXr::MirrorGyroAim(); // AzaharFrame kiugyro: kept by builds that drop vr_gyro_aim
@@ -1561,7 +1564,6 @@ void QtConfig::SaveVrValues() {
         WriteGlobalSetting(Settings::values.vr_immersive_offset_x); // AzaharFrame vrsize
         WriteGlobalSetting(Settings::values.vr_immersive_offset_y);
         WriteGlobalSetting(Settings::values.vr_last_ipd_mm); // AzaharFrame ipd
-        WriteGlobalSetting(Settings::values.vr_screen_curve); // AzaharFrame curve
         WriteGlobalSetting(Settings::values.vr_move_screens);  // AzaharFrame menu
         WriteGlobalSetting(Settings::values.vr_hint_reticle_shown);
         WriteGlobalSetting(Settings::values.vr_hint_mouse_shown);

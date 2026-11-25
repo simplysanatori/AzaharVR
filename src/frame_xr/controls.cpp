@@ -1154,9 +1154,6 @@ void VrUi::MenuFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
 // AzaharFrame tabmenu: the menu panel; the screens' part of its buttons is done here.
 void VrUi::TabMenuFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame& in,
                         bool have_input, std::vector<Quad>& layers) {
-    // AzaharFrame kiuaim: the Angel's Aim page with fewer rows on view, unless the switch says 0.
-    Menu::SetAimPage(
-        Menu::AimPageSwitchOn(Common::FrameTestSwitches::Value(Menu::kKiuAimPageSwitch)));
     // AzaharFrame kiuaim: with the Bottom Screen's page open the real one stays on view: on the
     // wrist it is placed here as in play (the page as last drawn: a frame behind at most).
     // (The switch at 2: with any of the menu's pages, for a mock run, which presses no row.)
@@ -1197,7 +1194,7 @@ void VrUi::TabMenuFrame(Runtime& rt, const FrameInfo& info, const Input::InputFr
             }
         }
     };
-    // AzaharFrame kiuaim2: Check Aim (was Calibrate Aim), from the Controls tab's Aiming rows:
+    // AzaharFrame kiuaim2: Check Aim (was Calibrate Aim), from the Angel's Aim page's Aiming rows:
     // with Direct Aim on in a game whose reticle has been read (its targets go where the reticle
     // can reach).
     host.aim_calibrated = aim_map.set && aim_map_title == GameTitleId();
@@ -1297,7 +1294,7 @@ void VrUi::WatchPlacement(bool screens_live) {
         return;
     }
     const uint32_t detach = DetachMode();
-    const uint32_t layout = Settings::values.vr_screen_layout.GetValue();
+    const uint32_t layout = Settings::RunningGraphics().screen_layout.GetValue();
     ScreenPlacement place = GetScreenPlacement();
     if (!placement_live) {
         placement_live = true;
@@ -1397,7 +1394,7 @@ uint32_t VrUi::CurveFor(const Immersive::ScreenLayers& shown) const {
         GetCoreCapabilities().screens.rotation_deg != 0) {
         return 0; // the runtime has no cylinder, the immersive screen is on view, or rotated
     }
-    return std::min(Settings::values.vr_screen_curve.GetValue(), Rig::kMaxCurveDeg);
+    return std::min(Settings::RunningGraphics().screen_curve.GetValue(), Rig::kMaxCurveDeg);
 }
 
 void VrUi::ShowGripHint(bool immersive, const Input::ScreenQuads& quads, bool swapped,
@@ -1444,14 +1441,14 @@ void VrUi::ShowGripHint(bool immersive, const Input::ScreenQuads& quads, bool sw
 }
 
 void VrUi::CycleScreenLayout() {
-    const uint32_t after = Rig::NextLayout(Settings::values.vr_screen_layout.GetValue());
-    Settings::values.vr_screen_layout.SetValue(after);
+    const uint32_t after = Rig::NextLayout(Settings::RunningGraphics().screen_layout.GetValue());
+    Settings::RunningGraphics().screen_layout.SetValue(after);
     bridge.mapper().ReanchorDrag(); // the second screen moved under a hand that holds it
     ShowToastText(Rig::LayoutToast(after));
     LOG_INFO(Frontend, "xr: screen layout {}", Rig::LayoutName(after));
     std::scoped_lock lock{hooks_mutex};
     // AzaharVR: the game's own layout goes to its file
-    const auto& changed = Settings::values.vr_screen_layout.UsingGlobal()
+    const auto& changed = Settings::RunningGraphics().screen_layout.UsingGlobal()
                               ? hooks.vr_setting_changed
                               : hooks.game_setting_changed;
     if (changed) {
@@ -1490,21 +1487,25 @@ void VrUi::StepScreenCurve(int dir) {
         LOG_INFO(Frontend, "xr: screen curve: the runtime has no cylinder layers");
         return;
     }
-    const uint32_t before = Settings::values.vr_screen_curve.GetValue();
+    const uint32_t before = Settings::RunningGraphics().screen_curve.GetValue();
     const uint32_t after = Rig::StepCurve(before, dir);
     ShowToastText(Rig::CurveToast(after)); // also at the ends, so the press shows
     if (after == before) {
         return;
     }
-    Settings::values.vr_screen_curve.SetValue(after);
+    Settings::RunningGraphics().screen_curve.SetValue(after);
     bridge.mapper().ReanchorDrag(); // the surface under the hand moved
     // Only the screen in the main slot bends; the second one stays flat.
     const ScreenPlacement now = GetScreenPlacement();
     LOG_INFO(Frontend, "xr: screen curve {} degrees (main slot radius {:.2f} m at the top size)",
              after, Rig::CurveRadius(now.top_size.width, after));
     std::scoped_lock lock{hooks_mutex};
-    if (hooks.vr_setting_changed) {
-        hooks.vr_setting_changed();
+    // the game's own curve goes to its file, as Screen Layout's does
+    const auto& changed = Settings::RunningGraphics().screen_curve.UsingGlobal()
+                              ? hooks.vr_setting_changed
+                              : hooks.game_setting_changed;
+    if (changed) {
+        changed();
     }
 }
 
@@ -2775,7 +2776,7 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         Rig::Slots slots = SlotsOf(place);
         const float linked_scale =
             Rig::LinkedScale(GetCoreCapabilities().screens.equal_screens,
-                             Settings::values.vr_screen_layout.GetValue());
+                             Settings::RunningGraphics().screen_layout.GetValue());
         if (Rig::Detach(slots, detach, ToInput(place.bottom_pose), linked_scale)) {
             PutSlots(place, slots);
             SetScreenPlacement(place);

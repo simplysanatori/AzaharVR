@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 
@@ -28,6 +29,18 @@ inline u32 Apply(u32 base) {
     g_base.store(base, std::memory_order_relaxed);
     const u32 drop = g_drop.load(std::memory_order_relaxed);
     return base > drop ? base - drop : 1;
+}
+
+/// The factor another console's game may be drawn at, for Internal Resolution `setting` (0: Auto,
+/// which is `automatic` now): with Dynamic Resolution `on`, two steps over the setting, which then
+/// is its floor, as the 3DS's immersive modes draw (vr_immersive.h). 1x stays 1x.
+constexpr u32 AltBase(u32 setting, u32 automatic, bool on) {
+    constexpr u32 kSteps = 2;
+    constexpr u32 kMaxScale = 8;
+    if (setting == 0) {
+        return std::max(automatic, 1u);
+    }
+    return on && setting > 1 ? std::max(setting, std::min(setting + kSteps, kMaxScale)) : setting;
 }
 
 // How far behind the GPU is: the XR target notes when a frame's last work went to the queue

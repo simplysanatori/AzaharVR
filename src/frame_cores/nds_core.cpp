@@ -38,8 +38,10 @@
 
 #include "common/logging/log.h"
 #include "frame_cores/cheat_merge.h"
+#include "frame_cores/nds_resolution.h"
 #include "frame_cores/nds_stereo_renderer.h"
 #include "frame_cores/rom_info.h"
+#include "video_core/renderer_vulkan/alt_graphics.h"
 
 namespace FrameCores {
 namespace {
@@ -186,10 +188,12 @@ std::string FormatArCodeHex(const std::vector<melonDS::u32>& words) {
 
 struct NdsCore::Impl {
     std::unique_ptr<melonDS::NDS> nds;
-    StereoSoft* stereo = nullptr; ///< `nds`'s renderer, once the game has had Layer Depth
+    StereoSoft* stereo = nullptr; ///< `nds`'s renderer, once it was made for Layer Depth
     float max_layer_shift = Common::LayerDepth::kNoLimit;
     int32_t depth_convergence = 0; ///< 0: each scene's own
     bool depth_on_secondary = false;
+    NdsResolution resolution;
+    std::optional<Vulkan::AltGraphics> graphics;
     bool is_dsi = false;
     bool loaded = false;
 
@@ -242,18 +246,34 @@ struct NdsCore::Impl {
         return NdsDepth::MakeDepth(opts.layer_depth, max_layer_shift, inverted, depth_convergence);
     }
 
-    /// Between frames.
-    void ApplyDepth() {
+    /// Between frames. Layer Depth's two eyes are the software renderer's, at 1x.
+    void ApplyRenderer() {
         const NdsDepth::Depth depth = Depth();
-        if (depth.on && !stereo) {
-            auto renderer = std::make_unique<StereoSoft>(*nds);
-            stereo = renderer.get();
-            nds->SetRenderer(std::move(renderer));
-            ApplyRenderSettings();
+        resolution.Apply(*nds, opts.threaded_3d, depth.on);
+        if (resolution.Scale() > 1) {
+            stereo = nullptr; // another renderer is there
+        } else if (depth.on && !stereo) {
+            if (loaded) {
+                resolution.PutSoftware(*nds, opts.threaded_3d);
+            } else {
+                nds->SetRenderer(MakeSoft(*nds));
+                ApplyRenderSettings();
+            }
         }
         if (stereo) {
             stereo->SetDepth(depth, depth_on_secondary);
         }
+    }
+
+    /// The renderer of 1x. The console has it at once.
+    std::unique_ptr<melonDS::Renderer> MakeSoft(melonDS::NDS& console) {
+        stereo = nullptr;
+        if (!Depth().on) {
+            return std::make_unique<melonDS::SoftRenderer>(console);
+        }
+        auto renderer = std::make_unique<StereoSoft>(console);
+        stereo = renderer.get();
+        return renderer;
     }
 
     void ApplyRenderSettings() {
@@ -263,6 +283,23 @@ struct NdsCore::Impl {
         settings.HiresCoordinates = false;
         settings.BetterPolygons = false;
         nds->GetRenderer().SetRenderSettings(settings);
+    }
+
+    NdsHiresMaker HiresMaker() const {
+        if (opts.ds_renderer) {
+            return opts.ds_renderer;
+        }
+        return graphics ? VulkanNdsHires(*graphics) : NdsHiresMaker{};
+    }
+
+    /// Not while Layer Depth is drawn: at 1x then.
+    bool ResolutionShown() const {
+        return resolution.Available() && !Depth().on;
+    }
+
+    void SetResolutionCaps() {
+        caps.has_internal_resolution = ResolutionShown();
+        caps.has_dynamic_resolution = ResolutionShown();
     }
 
     void FlushPendingSaves(bool force) {
@@ -495,6 +532,9 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
     impl->is_dsi = use_dsi;
     impl->caps = Common::AltCore::Capabilities::ForNDS(use_dsi);
     impl->caps.layer_depth = true;
+    impl->resolution = NdsResolution(
+        impl->HiresMaker(), [i = impl.get()](melonDS::NDS& nds) { return i->MakeSoft(nds); });
+    impl->SetResolutionCaps();
 
     // Prepare battery save if already on disk
     melonDS::NDSCart::NDSCartArgs cart_args{};
@@ -586,7 +626,7 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
     }
 
     impl->ApplyRenderSettings();
-    impl->ApplyDepth();
+    impl->ApplyRenderer();
 
     impl->nds->SetNDSCart(std::move(cart));
     if (!use_dsi) {
@@ -616,6 +656,7 @@ void NdsCore::Unload() {
         impl->nds->Stop(melonDS::Platform::StopReason::External);
         impl->nds.reset();
         impl->stereo = nullptr;
+        impl->resolution.Detach();
     }
     impl->microphone.Stop();
     impl->microphone.Close();
@@ -649,6 +690,7 @@ void NdsCore::RunFrame(FrameOutput& out) {
         out.audio_pcm.clear();
         out.rumble = 0.0f;
         out.metrics_changed = false;
+        out.caps_changed = false;
         impl->FlushPendingSaves(false);
         return;
     }
@@ -661,6 +703,7 @@ void NdsCore::RunFrame(FrameOutput& out) {
     out.audio_pcm.clear();
     out.rumble = 0.0f;
     out.metrics_changed = false;
+    out.caps_changed = false;
 
     if (!impl->loaded || !impl->nds) {
         return;
@@ -679,18 +722,22 @@ void NdsCore::RunFrame(FrameOutput& out) {
         impl->nds->ReleaseScreen();
     }
 
-    impl->ApplyDepth();
+    impl->ApplyRenderer();
     impl->nds->RunFrame();
 
     void* top_fb = nullptr;
     void* bot_fb = nullptr;
-    if (impl->nds->GPU.GetFramebuffers(&top_fb, &bot_fb)) {
+    if (impl->resolution.GetScreens(out.primary, out.secondary)) {
+        // over 1x
+    } else if (impl->nds->GPU.GetFramebuffers(&top_fb, &bot_fb)) {
         if (top_fb) {
             out.primary.pixels = static_cast<const uint32_t*>(top_fb);
             out.primary.width = kDsWidth;
             out.primary.height = kDsHeight;
             out.primary.stride_pixels = kDsWidth;
             out.primary.bgra = true;
+            out.primary.scale = 1;
+            out.primary.max_scale = impl->resolution.Ceiling();
         }
         if (bot_fb) {
             out.secondary.pixels = static_cast<const uint32_t*>(bot_fb);
@@ -698,8 +745,12 @@ void NdsCore::RunFrame(FrameOutput& out) {
             out.secondary.height = kDsHeight;
             out.secondary.stride_pixels = kDsWidth;
             out.secondary.bgra = true;
+            out.secondary.scale = 1;
+            out.secondary.max_scale = impl->resolution.Ceiling();
         }
         if (const NdsDepth::Depth depth = impl->Depth(); depth.on) {
+            out.primary.max_scale = 1; // the pictures of both eyes are the console's own size
+            out.secondary.max_scale = 1;
             // Always one, so that the headset's screens are not made again each time a game has no
             // right picture
             out.primary_right = out.primary;
@@ -732,6 +783,11 @@ void NdsCore::RunFrame(FrameOutput& out) {
         impl->rumble_until_ms.store(0, std::memory_order_relaxed);
     }
 
+    if (impl->caps.has_internal_resolution != impl->ResolutionShown()) {
+        impl->SetResolutionCaps();
+        out.caps_changed = true;
+    }
+
     if (impl->metrics_dirty) {
         impl->metrics_dirty = false;
         out.metrics_changed = true;
@@ -751,6 +807,7 @@ bool NdsCore::SaveStateToMemory(std::vector<uint8_t>& out) {
         return false;
     }
     melonDS::Savestate state(melonDS::Savestate::DEFAULT_SIZE);
+    const NdsResolution::CapturesStay captures{impl->resolution, *impl->nds};
     const bool ok = impl->nds->DoSavestate(&state) && !state.Error; // the renderer told by it
     if (!ok || state.Length() == 0) {
         out.clear();
@@ -978,6 +1035,20 @@ void NdsCore::SetDepthOnSecondary(bool on) {
 
 NdsDepth::Lines NdsCore::DepthLines() const {
     return impl->stereo ? impl->stereo->LastLines() : NdsDepth::Lines{};
+}
+
+void NdsCore::SetResolution(uint32_t factor, uint32_t ceiling) {
+    impl->resolution.SetFactor(factor, ceiling);
+}
+
+void NdsCore::SetGraphics(const Vulkan::AltGraphics* graphics) {
+    impl->graphics = graphics ? std::optional{*graphics} : std::nullopt;
+    impl->resolution.SetMaker(impl->HiresMaker(), impl->nds.get(), impl->opts.threaded_3d);
+    impl->SetResolutionCaps();
+}
+
+void NdsCore::ReadPictures(FrameOutput& frame) {
+    impl->resolution.ReadScreens(frame.primary, frame.secondary);
 }
 
 void NdsCore::OnSignalStop(int reason) {

@@ -16,15 +16,26 @@ class EmuWindow;
 
 namespace Vulkan {
 
+struct AltGraphics;
+
 struct AltScreenImage {
     const uint32_t* pixels = nullptr; ///< RGBA8888 (bytes R, G, B, A) or BGRA8888 if bgra=true
     uint32_t width = 0;
     uint32_t height = 0;
     uint32_t stride_pixels = 0;       ///< 0 means tightly packed (= width)
     bool bgra = false;                ///< True for melonDS BGRA8888 buffers
+    uint32_t scale = 1;               ///< Pixels for one of the console's
+    uint32_t max_scale = 1;           ///< What `scale` may become (Dynamic Resolution's ceiling)
+    /// Instead of `pixels`: layer `layer` of a VkImage (R8G8B8A8, in the general layout) on
+    /// AltXrRenderer::Graphics' device, while `alive` is there. What draws it is submitted already,
+    /// and the next that draws into it is after the Present that shows it.
+    uint64_t image = 0;
+    uint32_t layer = 0;
+    uint32_t x = 0; ///< its first column
+    std::weak_ptr<const void> alive{};
 
     bool HasPicture() const {
-        return pixels != nullptr && width > 0 && height > 0;
+        return (pixels != nullptr || image != 0) && width > 0 && height > 0;
     }
 };
 
@@ -51,7 +62,12 @@ inline AltEyePictures AltCutEyes(const AltScreenImage& left, const AltScreenImag
             image.stride_pixels = image.width;
         }
         if (!Common::LayerDepth::CutsRightEdge(right_eye, layer_shift)) {
-            image.pixels += columns;
+            if (image.image != 0) {
+                image.x += columns;
+            }
+            if (image.pixels) {
+                image.pixels += columns;
+            }
         }
         image.width -= columns;
         return image;
@@ -108,6 +124,9 @@ public:
 
     /// The headset shows the screens now, not the window.
     bool ShowsInVr() const;
+
+    /// Until Shutdown, for a core that draws on the GPU itself.
+    AltGraphics Graphics() const;
 
 private:
     struct Impl;

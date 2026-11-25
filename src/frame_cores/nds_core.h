@@ -98,6 +98,9 @@ public:
 
     /// Layer Depth's, of the last frame.
     NdsDepth::Lines DepthLines() const;
+    void SetResolution(uint32_t factor, uint32_t ceiling) override;
+    void SetGraphics(const Vulkan::AltGraphics* graphics) override;
+    void ReadPictures(FrameOutput& frame) override;
 
     // Platform callback entrypoints routed from melonds_platform.cpp via userdata.
     void OnSignalStop(int reason);
