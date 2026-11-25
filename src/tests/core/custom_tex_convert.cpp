@@ -4,6 +4,7 @@
 // AzaharFrame cppconv: the texture pack converter (core/custom_tex/convert.h): the file walk, the
 // names, the sizes, pack.json, the marker, stop, and the switch to the copy and back.
 
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -380,4 +381,52 @@ TEST_CASE("convert: Stop from another thread, then carry on", "[texparts][conver
         CHECK(fs::file_size(root / "pack-astc4x4" / ("t" + std::to_string(i) + ".ktx")) ==
               C::KtxSize(256, 256, {4, 4}));
     }
+}
+
+TEST_CASE("convert: textures at a time by what the game does", "[texparts][convert]") {
+    CHECK(C::JobsFor(8, false, false) == 7);
+    CHECK(C::JobsFor(8, false, true) == 7);
+    CHECK(C::JobsFor(8, true, true) == 6);
+    CHECK(C::JobsFor(8, true, false) == 2);
+    CHECK(C::JobsFor(2, true, true) == 2);
+    CHECK(C::JobsFor(1, false, false) == 1);
+    CHECK(C::UsableCpus() >= 1);
+}
+
+TEST_CASE("convert: the number of textures at a time changes while it runs", "[texparts][convert]") {
+    const fs::path root = TempDir("jobs");
+    const fs::path pack = root / "pack";
+    for (int i = 0; i < 24; i++) {
+        Write(pack / ("t" + std::to_string(i) + ".png"), MakePng(128, 128, i));
+    }
+    C::Request request = Req(pack);
+    request.jobs = 1;
+    request.max_jobs = 4;
+    std::atomic<bool> over{false};
+    C::Converter converter(request);
+    std::thread changer([&] {
+        for (int i = 0; !over; i++) {
+            converter.SetJobs(1 + i % 5);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    const C::Result r = converter.Run();
+    over = true;
+    changer.join();
+    CHECK(r.code == C::kOk);
+    for (int i = 0; i < 24; i++) {
+        CHECK(fs::file_size(root / "pack-astc4x4" / ("t" + std::to_string(i) + ".ktx")) ==
+              C::KtxSize(128, 128, {4, 4}));
+    }
+
+    // Workers that wait for a turn end with Stop
+    request.output = (root / "stopped").string();
+    C::Converter stopped(request);
+    std::thread stopper([&] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        stopped.Stop();
+    });
+    const C::Result s = stopped.Run();
+    stopper.join();
+    CHECK((s.code == C::kStopped || s.code == C::kOk));
 }

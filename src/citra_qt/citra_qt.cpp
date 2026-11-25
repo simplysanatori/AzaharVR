@@ -1899,6 +1899,9 @@ GMainWindow::GMainWindow(Core::System& system_)
                             });
                             // AzaharFrame ui3: Optimize for Frame switches packs only between runs
                             g_frame_mods->SetGameRunningSource([this]() { return emulation_running; });
+                            g_frame_mods->SetMenuOpenSource([]() {
+                                return g_frame_mirror && g_frame_mirror->MenuOpen();
+                            });
                         }
                         g_frame_mods->Open(have_id ? title_id : 0, g_frame_runs);
                         // AzaharFrame integ3: the pack too large to preload: Optimize for Frame

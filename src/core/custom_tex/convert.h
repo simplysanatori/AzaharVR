@@ -19,6 +19,7 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <functional>
 #include <mutex>
 #include <optional>
@@ -69,7 +70,8 @@ struct Request {
     std::string output; ///< where the copy goes; "" = DefaultOutput
     std::string block = "4x4";
     std::string quality = "medium"; ///< fast, medium, thorough, or 0-100
-    int jobs = 0;                   ///< textures at a time; <= 0: one less than the CPUs
+    int jobs = 0;                   ///< textures at a time at first; <= 0: one less than the CPUs
+    int max_jobs = 0;               ///< the most SetJobs can raise it to; 0: `jobs`
     bool low_priority = true;       ///< the workers run at nice 19 and idle I/O (Linux)
 };
 
@@ -84,6 +86,12 @@ using ProgressFn = std::function<void(const Progress&)>;
 struct Estimate {
     u64 textures = 0, total_bytes = 0, need_bytes = 0;
 };
+/// Textures at a time, of `cpus`: two while a game plays; all but two while it waits behind the open
+/// VR menu; else all but one.
+int JobsFor(int cpus, bool game_running, bool menu_open);
+/// The CPUs this process may use.
+int UsableCpus();
+
 /// How much there is, from the PNG headers (a second or two for a big pack). nullopt (with
 /// `error`) when the pack is not readable or is an optimized copy already.
 std::optional<Estimate> EstimatePack(const Request& request, std::string* error);
@@ -104,18 +112,27 @@ public:
     Result Run();
     /// From any thread, before or during Run. A stopped run removes its half-written files.
     void Stop();
+    /// From any thread, during Run: how many textures are worked on at a time. The ones in hand are
+    /// finished. Never more than Request::max_jobs.
+    void SetJobs(int jobs);
 
 private:
     bool Stopped() const {
         return stop_.load();
     }
     Result RunInner();
+    /// Until worker `index` may take a texture; false when there is none left or Stop was called.
+    bool AwaitTurn(int index);
 
     Request request_;
     ProgressFn progress_;
     std::atomic<bool> stop_{false};
     std::mutex encoders_mutex_;
     std::vector<AstcEncoder*> encoders_; ///< the workers', to cancel the texture in hand
+    std::mutex turn_mutex_; ///< for what follows
+    std::condition_variable turn_;
+    int jobs_ = 1;           ///< the workers below this index take textures
+    bool none_left_ = false; ///< every texture has been taken
 };
 
 /// Makes the folder Azahar reads (load/textures/<TitleID>) use `out_dir`, the copy of the pack it
