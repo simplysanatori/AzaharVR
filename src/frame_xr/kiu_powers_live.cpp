@@ -7,6 +7,9 @@
 #include <mutex>
 
 #include "common/frame_test_switches.h"
+#include "common/settings.h"
+#include "frame_xr/input/kiu_trigger_layout.h"
+#include "frame_xr/kiu_first_person.h"
 #include "frame_xr/kiu_powers_live.h"
 
 namespace FrameXr::Kiu::Powers {
@@ -27,6 +30,7 @@ Vis::Powers::Settings SettingsNow() {
     if (!s.powers && !s.dots) {
         return s;
     }
+    s.gold = value("AZAHARFRAME_KIU_POWERS_GOLD") != "0";
     s.at = P::AtFrom(value("AZAHARFRAME_KIU_POWERS_AT"));
     s.powers_opacity = P::OpacityFrom(value("AZAHARFRAME_KIU_POWERS_OPACITY"));
     s.dots_opacity = P::OpacityFrom(value("AZAHARFRAME_KIU_POWER_DOTS_OPACITY"));
@@ -34,6 +38,20 @@ Vis::Powers::Settings SettingsNow() {
     s.width_deg = P::NumberFrom(value("AZAHARFRAME_KIU_POWERS_DEG"), 6.0f, 30.0f, s.width_deg);
     s.up_m = P::NumberFrom(value("AZAHARFRAME_KIU_POWERS_UP"), 0.0f, 0.3f, s.up_m);
     return s;
+}
+
+bool AirNoBumpersWanted() {
+    return Settings::values.vr_kiu_trigger_layout.GetValue() == Input::KiuTriggers::kFireAndPower &&
+           Kiu::FirstPerson::AngelsAim() &&
+           Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_SKY_BUMPERS") != "1";
+}
+
+bool AirNoBumpers() {
+    if (!AirNoBumpersWanted()) {
+        return false;
+    }
+    std::scoped_lock lock{g_mutex};
+    return g_state.known && g_state.air;
 }
 
 void SetGame(const State& state, bool playing) {

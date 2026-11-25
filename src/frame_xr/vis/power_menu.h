@@ -9,6 +9,7 @@
 //
 //   AZAHARFRAME_KIU_POWERS=1              the powers: the game's own icons, arrows and name
 //                                         (video_core/kiu_powers.h) over what is behind them
+//   AZAHARFRAME_KIU_POWERS_GOLD=0         without the gold piece behind the selected power
 //   AZAHARFRAME_KIU_POWER_DOTS=1          the dots
 //   AZAHARFRAME_KIU_POWERS_AT=hand        over the off hand: the powers for a while after one is
 //                                         selected or used, the dots always (the default)
@@ -38,6 +39,7 @@ enum class At : uint8_t { Hand, Bar, Right };
 
 struct Settings {
     bool powers = false, dots = false;
+    bool gold = true; ///< the selected power's gold piece behind it
     At at = At::Hand;
     float powers_opacity = 1.0f, dots_opacity = 1.0f;
     float stay_s = 1.5f;

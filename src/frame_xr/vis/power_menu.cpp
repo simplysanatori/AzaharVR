@@ -37,7 +37,7 @@ float NumberFrom(const std::optional<std::string>& text, float low, float high, 
 }
 
 float OpacityFrom(const std::optional<std::string>& text) {
-    return 0.01f * NumberFrom(text, 20.0f, 100.0f, 100.0f);
+    return NumberFrom(text, 20.0f, 100.0f, 100.0f) / 100.0f;
 }
 
 Show::Out Show::Update(const Settings& s, const Frame& f) {
@@ -56,8 +56,10 @@ Show::Out Show::Update(const Settings& s, const Frame& f) {
     last_ = f.game;
 
     const bool here = f.game.known && f.battle && (!hand || f.tracked);
-    const bool powers =
-        s.powers && here && !(hand && f.bottom_up) && !f.game.air && f.game.count != 0;
+    // Not with the Bottom Screen on view where it would be twice: over the hand never, with the
+    // HUD not beside the Persistent one.
+    const bool twice = f.bottom_up && (hand || !f.bottom_taken);
+    const bool powers = s.powers && here && !twice && !f.game.air && f.game.count != 0;
     if (!powers) {
         left_s_ = 0.0f;
         shown_ = 0.0f;

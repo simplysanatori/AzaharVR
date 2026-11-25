@@ -86,8 +86,10 @@ void PowerLayers::Destroy() {
     KP::g_alpha.store(0.0f, std::memory_order_relaxed);
 }
 
-PowerLayers::Out PowerLayers::Update(Runtime& rt, const In& in) {
-    Out out;
+std::vector<Quad> PowerLayers::Update(Runtime& rt, const In& in) {
+    struct {
+        Quad powers, dots;
+    } out;
     const P::Settings settings = Kiu::Powers::SettingsNow();
     const float dt =
         time_ != 0 ? static_cast<float>(std::min<XrTime>(in.time - time_, 100'000'000)) * 1e-9f : 0;
@@ -210,10 +212,14 @@ PowerLayers::Out PowerLayers::Update(Runtime& rt, const In& in) {
             return;
         }
         logged = up;
+        if (!up) {
+            LOG_INFO(Frontend, "xr: Angel's Aim: the {} away", what);
+            return;
+        }
         const Input::Vec3f to = ToInput(q.pose).position - screen.head;
         const float d = std::max(Input::Length(to), 0.01f);
-        LOG_INFO(Frontend, "xr: Angel's Aim: the {} {} ({}; {:.1f} x {:.1f} deg, {:.2f} m away)",
-                 what, up ? "up" : "away",
+        LOG_INFO(Frontend, "xr: Angel's Aim: the {} up ({}; {:.1f} x {:.1f} deg, {:.2f} m away)",
+                 what,
                  settings.at == P::At::Hand  ? "over the hand"
                  : settings.at == P::At::Bar ? "under the bar"
                                              : "at the right",
@@ -222,7 +228,13 @@ PowerLayers::Out PowerLayers::Update(Runtime& rt, const In& in) {
     };
     say(powers_up, logged_powers_, "powers", out.powers);
     say(dots_up, logged_dots_, "dots", out.dots);
-    return out;
+    std::vector<Quad> quads;
+    for (const Quad* q : {&out.powers, &out.dots}) {
+        if (q->swapchain != XR_NULL_HANDLE) {
+            quads.push_back(*q);
+        }
+    }
+    return quads;
 }
 
 } // namespace FrameXr

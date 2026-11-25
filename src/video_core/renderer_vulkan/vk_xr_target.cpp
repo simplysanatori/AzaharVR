@@ -94,7 +94,10 @@ void main() {
 }
 )";
 
-// AzaharFrame kiupowers: one of the game's quads, its texture times its colour, premultiplied.
+// AzaharFrame kiupowers: one of the game's quads, coloured as the game's TEV does (kiu_powers.h
+// Tev: 1 texture times colour, 2 the icons', 3 the name's), premultiplied. In an sRGB image the
+// premultiplied colour is made linear as a whole, so over black it is what the game's own blend
+// (in the display's values) gives and a soft edge is no lighter than in the game.
 constexpr std::string_view XR_SPRITE_FRAG = R"(
 #version 450 core
 #extension GL_ARB_separate_shader_objects : enable
@@ -105,8 +108,8 @@ layout (location = 0) out vec4 color;
 layout (push_constant, std140) uniform DrawInfo {
     mat4 modelview_matrix;
     vec4 tint;
-    vec4 o_resolution;
-    int screen_id_l;
+    vec4 opacity_constant; // x: the opacity, w: the TEV constant's alpha
+    int tev;
     int screen_id_r;
     int layer;
     int reverse_interlaced;
@@ -119,11 +122,19 @@ vec3 ToLinear(vec3 c) {
 }
 
 void main() {
-    vec4 c = texture(textures[0], frag_tex_coord) * tint;
+    vec4 t = texture(textures[0], frag_tex_coord);
+    vec4 c = t * tint;
+    if (tev == 2) {
+        c = vec4(mix(t.rgb, tint.rgb, tint.a), t.a * opacity_constant.w);
+    } else if (tev == 3) {
+        c = vec4(tint.rgb, t.r * tint.a);
+    }
+    c.a = clamp(c.a, 0.0, 1.0);
+    vec3 rgb = c.rgb * c.a;
 #ifdef XR_SRGB_TARGET
-    c.rgb = ToLinear(c.rgb);
+    rgb = ToLinear(rgb);
 #endif
-    color = vec4(c.rgb * c.a, c.a);
+    color = vec4(rgb, c.a) * opacity_constant.x;
 }
 )";
 

@@ -73,11 +73,17 @@ public:
 
     /// AzaharFrame kiupowers: the power bar's sprites of the game's last bottom screen, and their
     /// textures, in the order the sprites name them (video_core/kiu_powers.h).
+    bool KiuPowersFresh() const { // the game still draws them (it draws every other frame)
+        return powers_tick - powers_drawn <= 6;
+    }
     const std::vector<VideoCore::KiuPowers::Sprite>& KiuPowersSprites() const {
         return powers_sprites;
     }
     template <typename F>
     void KiuPowersTextures(F&& each) {
+        if (!KiuPowersFresh()) {
+            return;
+        }
         for (const auto& texture : powers_textures) {
             Surface& surface = res_cache.GetTextureSurface(texture);
             each(surface.ImageView(), res_cache.GetSampler(texture.config).Handle());
@@ -167,7 +173,9 @@ private:
     // AzaharFrame kiupowers
     std::vector<VideoCore::KiuPowers::Sprite> powers_sprites;
     std::vector<Pica::TexturingRegs::FullTextureConfig> powers_textures;
-    u64 powers_tick = 0, powers_drawn = 0; ///< TickFrames; the one of the sprites' picture
+    u64 powers_tick = 0, powers_drawn = 0; ///< TickFrames; the one of the sprites' last draw
+    u32 powers_offset = UINT32_MAX;        ///< the last draw's place in the batch's indices
+    static constexpr std::size_t kMostPowersSprites = 64; ///< the bar has 25
 };
 
 } // namespace Vulkan

@@ -21,6 +21,12 @@ Vis::Powers::Settings SettingsNow();
 void SetGame(const State& state, bool playing);
 State Game(bool* playing);
 
+/// Fire and Power's bumpers send nothing in an air battle (input/kiu_trigger_layout.h): wanted
+/// (the layout, Angel's Aim, not AZAHARFRAME_KIU_SKY_BUMPERS=1: the game is read for it), and in
+/// force now (the game says an air battle). Any thread.
+bool AirNoBumpersWanted();
+bool AirNoBumpers();
+
 /// The XR thread, each frame (controls.cpp), before the layers are made.
 struct Hands {
     bool tracked = false; ///< the off hand's

@@ -1154,7 +1154,6 @@ void Runtime::FrameLoop() {
         XrPosef label_top_pose{{0, 0, 0, 1}, {0, 0, 0}};
         XrExtent2Df label_top_size{0.0f, 0.0f};
         Hud::BadgeAnchor badge_anchor; // AzaharFrame shaderbadge: the main screen, if any
-        PowerLayers::In powers_in; // AzaharFrame kiupowers
         // AzaharFrame imglag: whether this frame's layers carry the top screen, and its picture's
         // serial (what the compositor shows on the next refresh, with the image lag).
         bool top_carried = false;
@@ -1165,6 +1164,7 @@ void Runtime::FrameLoop() {
         proj_fallback.clear();
         std::size_t proj_at = 0;
         bool proj_placed = false;
+        PowerLayers::In powers_in; // AzaharFrame kiupowers
         const bool proj_mode = want_proj && ui && fs.shouldRender; // AzaharFrame projdef
         const bool proj_also_quads = // AzaharFrame projscreen: a mock check only
             proj_mode && TestSwitches::OnFrom(Common::FrameTestSwitches::Value(Vis::kProjAlsoQuadsSwitch));
@@ -1710,26 +1710,6 @@ void Runtime::FrameLoop() {
                 }
             }
         }
-        // AzaharFrame kiupowers: the powers and the dots, over the screens and under everything else.
-        if (fs.shouldRender) {
-            powers_in.head = LatestViewPose();
-            powers_in.time = fs.predictedDisplayTime;
-            const PowerLayers::Out powers = power_layers.Update(*this, powers_in);
-            for (const Quad* q : {&powers.powers, &powers.dots}) {
-                if (q->swapchain == XR_NULL_HANDLE) {
-                    continue;
-                }
-                const uint64_t chain = reinterpret_cast<uint64_t>(q->swapchain);
-                // Their places in the list from the first frame they may show on.
-                SlotQuad stand_in{local_space, *q};
-                stand_in.quad.visible = true;
-                layer_slots.Reserve(LayerSlots::Group::Extra, chain, 0, 0, stand_in);
-                if (q->visible) {
-                    layer_slots.Add(LayerSlots::Group::Extra, chain, 0, 0,
-                                    SlotQuad{local_space, *q});
-                }
-            }
-        }
         if (fs.shouldRender) {
             std::scoped_lock lock{quads_mutex};
             std::vector<const Quad*> extra;
@@ -1749,6 +1729,21 @@ void Runtime::FrameLoop() {
                     add_occluder(local_space, q.pose, q.size, 0.0f, q.eye, false);
                 }
             };
+            // AzaharFrame kiupowers: the powers and the dots, over the screens and under the rest;
+            // their places in the list from the first frame they may show on.
+            powers_in.head = LatestViewPose();
+            powers_in.time = fs.predictedDisplayTime;
+            for (const Quad& q : power_layers.Update(*this, powers_in)) {
+                const uint64_t chain = reinterpret_cast<uint64_t>(q.swapchain);
+                Quad stand_in = q;
+                stand_in.visible = true;
+                layer_slots.Reserve(LayerSlots::Group::Extra, chain, 0, 0,
+                                    SlotQuad{local_space, stand_in});
+                if (q.visible) {
+                    layer_slots.Add(LayerSlots::Group::Extra, chain, 0, 0,
+                                    SlotQuad{local_space, q});
+                }
+            }
             for (const Quad* q : extra) {
                 slot_add(LayerSlots::Group::Extra, local_space, *q);
                 panel_occluder(*q);

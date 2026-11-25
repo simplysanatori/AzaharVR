@@ -576,28 +576,50 @@ void RasterizerVulkan::NoteKiuPowersDraw() {
     if (batch.quads == 0) {
         powers_sprites.clear();
         powers_textures.clear();
+        powers_offset = UINT32_MAX;
         return;
     }
     const auto& va = regs.pipeline.vertex_attributes;
     const auto& loader = va.attribute_loaders[0];
     const u32 base = va.GetPhysicalBaseAddress();
+    // The bottom screen's, of the batch, its indices 16 bit and its vertices 24 bytes.
     if (Pica::f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f != 320.0f ||
+        regs.pipeline.index_array.format.Value() == 0 ||
         !VideoCore::KiuHud::InBatch(batch, base, regs.pipeline.index_array.offset,
                                     regs.pipeline.num_vertices) ||
-        loader.byte_count != 24) {
+        loader.byte_count != 24 || regs.texturing.main_config.texture0_enable == 0) {
         return;
     }
-    if (powers_drawn != powers_tick) { // a new picture's first draw
-        powers_drawn = powers_tick;
+    // A new picture's first draw: the batch's draws of one picture go up through its indices
+    // (a picture may be drawn over two of the emulator's frames).
+    if (regs.pipeline.index_array.offset <= powers_offset) {
         powers_sprites.clear();
         powers_textures.clear();
     }
+    powers_offset = regs.pipeline.index_array.offset;
+    powers_drawn = powers_tick;
     const u8* const index = memory.GetPhysicalPointer(base + regs.pipeline.index_array.offset);
     if (!index) {
         return;
     }
+    // Drawn over what is there, coloured in one of the ways known (kiu_powers.h Tev).
+    using Factor = Pica::FramebufferRegs::BlendFactor;
+    const auto& om = regs.framebuffer.output_merger;
     const auto stages = regs.texturing.GetTevStages();
-    const u32 constant = stages[0].const_color;
+    std::array<KP::Stage, 6> tev_stages;
+    for (std::size_t i = 0; i < 6; ++i) {
+        tev_stages[i] = {stages[i].sources_raw, stages[i].modifiers_raw, stages[i].ops_raw,
+                         stages[i].scales_raw};
+    }
+    u32 constant_stage = 0;
+    const KP::Tev tev = KP::TevOf(tev_stages, &constant_stage);
+    if (tev == KP::Tev::None || om.alphablend_enable == 0 ||
+        om.alpha_blending.factor_source_rgb != Factor::SourceAlpha ||
+        om.alpha_blending.factor_dest_rgb != Factor::OneMinusSourceAlpha) {
+        return;
+    }
+    const float constant = static_cast<float>(stages[constant_stage].const_a.Value()) / 255.0f;
+    const bool gold = KP::g_live.gold.load(std::memory_order_relaxed);
     bool texture_kept = false;
     for (u32 q = 0; q < regs.pipeline.num_vertices / 6; ++q) {
         u16 first = 0xFFFF;
@@ -624,17 +646,20 @@ void RasterizerVulkan::NoteKiuPowersDraw() {
                 s.v[k] = f[5];
             }
         }
-        const KP::Part part =
-            ok ? KP::PartOf(std::min(s.x[0], s.x[3]), std::min(s.y[0], s.y[3]),
-                            std::max(s.x[0], s.x[3]), std::max(s.y[0], s.y[3]))
-               : KP::Part::Other;
-        if (!KP::Wanted(part)) {
+        if (!ok) {
             continue;
         }
-        // The icons and the counts have no vertex colour: the flush's constant one.
-        if (part == KP::Part::Icon || part == KP::Part::Count) {
-            color = constant;
+        const auto [x0, x1] = std::minmax_element(s.x.begin(), s.x.end());
+        const auto [y0, y1] = std::minmax_element(s.y.begin(), s.y.end());
+        const auto [u0, u1] = std::minmax_element(s.u.begin(), s.u.end());
+        const auto [v0, v1] = std::minmax_element(s.v.begin(), s.v.end());
+        const KP::Part part = KP::PartOf({*x0, *y0, *x1, *y1, *u0, *v0, *u1, *v1, tev});
+        if (!KP::Wanted(part, color, gold) || powers_sprites.size() >= kMostPowersSprites) {
+            continue;
         }
+        s.part = part;
+        s.tev = tev;
+        s.constant = constant;
         for (u32 c = 0; c < 4; ++c) {
             s.color[c] = static_cast<float>(color >> (8 * c) & 0xFF) / 255.0f;
         }

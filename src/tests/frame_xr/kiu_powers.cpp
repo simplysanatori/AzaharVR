@@ -353,25 +353,109 @@ TEST_CASE("Kid Icarus powers: the strip under the bottom screen's picture", "[fr
 }
 
 TEST_CASE("Kid Icarus powers: which of the bar's quads is which", "[frame_xr][kiupowers]") {
-    // Chapter 1, three powers on view, the name up (the batch in a save state).
+    // Chapter 1, three powers on view, the name up (the batch in a save state; the draws' census).
     using KP::Part;
-    CHECK(KP::PartOf(0, 198, 47, 240) == Part::Paper);
-    CHECK(KP::PartOf(47, 198, 85, 240) == Part::Paper); // the gold one
-    CHECK(KP::PartOf(16, 176, 22, 188) == Part::Bubble);
-    CHECK(KP::PartOf(60, 188, 70, 191) == Part::Bubble);
-    CHECK(KP::PartOf(109, 191, 116, 203) == Part::Bubble);
-    CHECK(KP::PartOf(49, 202, 87, 240) == Part::Card);
-    CHECK(KP::PartOf(49, 203, 81, 235) == Part::Icon);
-    CHECK(KP::PartOf(75, 224, 87, 238) == Part::Count);
-    CHECK(KP::PartOf(-2, 210, 11, 227) == Part::Arrow);
-    CHECK(KP::PartOf(121, 210, 134, 227) == Part::Arrow);
-    CHECK(KP::PartOf(20, 180, 109.5f, 195) == Part::Name);
-    // Not the bar's: the page's corner, the help at the right, the orbs' numbers.
-    CHECK(KP::PartOf(0, 122, 118, 240) == Part::Other);
-    CHECK(KP::PartOf(193, 204, 224, 240) == Part::Other);
-    CHECK(KP::PartOf(0, 0, 320, 240) == Part::Other);
-    CHECK(KP::PartOf(49, 164, 62, 180) == Part::Other);
-    CHECK_FALSE(KP::Wanted(Part::Paper));
-    CHECK_FALSE(KP::Wanted(Part::Card));
-    CHECK(KP::Wanted(Part::Icon));
+    using KP::Tev;
+    const auto part = [](float x0, float y0, float x1, float y1, Tev tev = Tev::Modulate,
+                         float u0 = 0, float v0 = 0, float u1 = 10, float v1 = 10) {
+        // The sheet's pixels from its top left, as the game's coordinates.
+        return KP::PartOf({x0, y0, x1, y1, u0 / 256, 1 - v1 / 256, u1 / 256, 1 - v0 / 256, tev});
+    };
+    CHECK(part(0, 198, 47, 240) == Part::Paper);
+    CHECK(part(47, 198, 85, 240) == Part::Paper); // the gold one
+    CHECK(part(16, 176, 22, 188, Tev::Modulate, 183, 72, 189, 84) == Part::Bubble);
+    CHECK(part(60, 188, 70, 191, Tev::Modulate, 189, 84, 199, 84) == Part::Bubble);
+    CHECK(part(109, 191, 116, 203, Tev::Modulate, 199, 84, 206, 96) == Part::Bubble);
+    // The bubble larger and higher as a power is used, lower as it goes: still the bubble.
+    CHECK(part(6, 165, 14, 180, Tev::Modulate, 183, 72, 189, 84) == Part::Bubble);
+    CHECK(part(118, 186, 126, 200, Tev::Modulate, 199, 84, 206, 96) == Part::Bubble);
+    // The same place from another part of the sheet is not.
+    CHECK(part(16, 176, 22, 188, Tev::Modulate, 10, 211, 48, 249) == Part::Other);
+    CHECK(part(49, 202, 87, 240) == Part::Card);
+    CHECK(part(49, 203, 81, 235, Tev::Icon) == Part::Icon);
+    CHECK(part(75, 224, 87, 238, Tev::Icon) == Part::Count);
+    CHECK(part(-2, 210, 11, 227) == Part::Arrow);
+    CHECK(part(121, 210, 134, 227) == Part::Arrow);
+    CHECK(part(20, 180, 109.5f, 195, Tev::Text) == Part::Name);
+    CHECK(part(8, 168, 124, 190, Tev::Text) == Part::Name); // larger, as a power is used
+    // Not the bar's: the page's corner, the help at the right, the orbs' numbers, other words.
+    CHECK(part(0, 122, 118, 240) == Part::Other);
+    CHECK(part(193, 204, 224, 240) == Part::Other);
+    CHECK(part(0, 0, 320, 240) == Part::Other);
+    CHECK(part(49, 164, 62, 180) == Part::Other);
+    CHECK(part(0, 55, 148, 83, Tev::Text) == Part::Other);
+    CHECK(part(172, 180, 320, 195, Tev::Text) == Part::Other);
+    CHECK(part(49, 203, 81, 235, Tev::None) == Part::Other);
+    // Sliding to the next power: a place further out, held to the three places when drawn.
+    CHECK(part(-8, 203, 24, 235, Tev::Icon) == Part::Icon);
+    CHECK(part(125, 203, 157, 235, Tev::Icon) == Part::Icon);
+    CHECK(part(151, 224, 163, 238, Tev::Icon) == Part::Count);
+    CHECK(part(222, 203, 254, 235, Tev::Icon) == Part::Other);
+    CHECK(KP::Clipped(Part::Icon));
+    CHECK(KP::Clipped(Part::Count));
+    CHECK_FALSE(KP::Clipped(Part::Arrow));
+    CHECK_FALSE(KP::Clipped(Part::Name));
+    // No paper but the selected power's gold piece (ABGR), and that one only when asked for.
+    const uint32_t white = 0xBFFFFFFF, gold = 0xBF00D2FF;
+    CHECK_FALSE(KP::IsGold(Part::Paper, white));
+    CHECK(KP::IsGold(Part::Paper, gold));
+    CHECK_FALSE(KP::IsGold(Part::Bubble, gold));
+    CHECK_FALSE(KP::Wanted(Part::Paper, white, true));
+    CHECK(KP::Wanted(Part::Paper, gold, true));
+    CHECK_FALSE(KP::Wanted(Part::Paper, gold, false));
+    CHECK_FALSE(KP::Wanted(Part::Card, white, true));
+    CHECK(KP::Wanted(Part::Icon, 0, false));
+    CHECK(KP::Wanted(Part::Name, 0xFF000000, false));
+    CHECK_FALSE(KP::Wanted(Part::Other, white, true));
+}
+
+TEST_CASE("Kid Icarus powers: how a draw is coloured", "[frame_xr][kiupowers]") {
+    using KP::Stage;
+    using KP::Tev;
+    const Stage pass{0x0FFF0FFF, 0, 0, 0}, hand_on{0x00000EE3, 0, 0, 0};
+    const Stage modulate{0x0F030F03, 0, 0x00010001, 0}, icon{0x0FE300F0, 0x200, 0x00010004, 0},
+        text{0x0F030FE0, 0x2000, 0x00010000, 0};
+    uint32_t at = 9;
+    CHECK(KP::TevOf({pass, pass, modulate, pass, pass, pass}, &at) == Tev::Modulate); // the paper
+    CHECK(at == 2);
+    CHECK(KP::TevOf({pass, hand_on, modulate, pass, pass, pass}) == Tev::Modulate); // the arrows
+    CHECK(KP::TevOf({pass, hand_on, icon, pass, pass, pass}, &at) == Tev::Icon);
+    CHECK(at == 2);
+    CHECK(KP::TevOf({pass, hand_on, text, pass, pass, pass}) == Tev::Text);
+    // Anything else is not drawn again: the icons' stage with nothing handing on the texture, the
+    // words of other panels (alpha from the texture's alpha), a scale, no stage at all.
+    CHECK(KP::TevOf({pass, pass, icon, pass, pass, pass}) == Tev::None);
+    CHECK(KP::TevOf({pass, pass, Stage{0x0F030FE0, 0, 0x00010000, 0}, pass, pass, pass}) ==
+          Tev::None);
+    CHECK(KP::TevOf({pass, pass, Stage{0x0F030F03, 0, 0x00010001, 1}, pass, pass, pass}) ==
+          Tev::None);
+    CHECK(KP::TevOf({pass, pass, modulate, text, pass, pass}) == Tev::Text);
+    CHECK(KP::TevOf({pass, pass, pass, pass, pass, pass}) == Tev::None);
+}
+
+TEST_CASE("Kid Icarus powers: the bar's own fade is divided out", "[frame_xr][kiupowers]") {
+    using KP::Part;
+    using KP::Sprite;
+    using KP::Tev;
+    const auto sprite = [](Part part, Tev tev, float alpha, float constant = 1.0f) {
+        Sprite s;
+        s.part = part;
+        s.tev = tev;
+        s.color[3] = alpha;
+        s.constant = constant;
+        return s;
+    };
+    // In full: the gold piece is 0xBF, the icons take the constant, the arrows the vertex.
+    std::vector<Sprite> bar{sprite(Part::Paper, Tev::Modulate, KP::kGoldAlpha),
+                            sprite(Part::Icon, Tev::Icon, 0.0f, 1.0f),
+                            sprite(Part::Arrow, Tev::Modulate, 1.0f)};
+    CHECK(KP::BarFade(bar) == 1.0f);
+    // Faded to 40 %, the bubble on its own way out: 0.4.
+    bar = {sprite(Part::Paper, Tev::Modulate, KP::kGoldAlpha * 0.4f),
+           sprite(Part::Icon, Tev::Icon, 0.0f, 0.4f), sprite(Part::Arrow, Tev::Modulate, 0.4f),
+           sprite(Part::Bubble, Tev::Modulate, 0.9f)};
+    CHECK(std::abs(KP::BarFade(bar) - 0.4f) < 1e-4f);
+    // Nothing, or all but gone: nothing to divide by.
+    CHECK(KP::BarFade(std::vector<Sprite>{}) == 1.0f);
+    CHECK(KP::BarFade(std::vector<Sprite>{sprite(Part::Arrow, Tev::Modulate, 0.01f)}) == 1.0f);
 }

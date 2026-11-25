@@ -36,12 +36,9 @@ public:
         XrSwapchain bottom = XR_NULL_HANDLE;
         uint32_t bottom_width = 0, bottom_height = 0;
     };
-    /// In LOCAL space. A quad with a swapchain and `visible` off only keeps its place in the list
-    /// (layer_slots.h); without a swapchain there is none.
-    struct Out {
-        Quad powers, dots;
-    };
-    Out Update(Runtime& rt, const In& in);
+    /// The powers' and the dots' quads that have an image, in LOCAL space. One with `visible` off
+    /// only keeps its place in the list (layer_slots.h).
+    std::vector<Quad> Update(Runtime& rt, const In& in);
 
 private:
     Vis::AsyncOverlay dots_chain_;

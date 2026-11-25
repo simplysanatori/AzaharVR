@@ -18,8 +18,8 @@
 #include "common/logging/log.h"
 #include "common/settings.h" // AzaharFrame curve
 #include "frame_xr/controls.h"
-#include "frame_xr/kiu_first_person.h"
-#include "frame_xr/kiu_powers_live.h" // AzaharFrame kiupowers // AzaharFrame kiuvr
+#include "frame_xr/kiu_first_person.h" // AzaharFrame kiuvr
+#include "frame_xr/kiu_powers_live.h" // AzaharFrame kiupowers
 #include "frame_xr/kiu_probe.h"     // AzaharFrame kiugyro: Light Gun
 #include "frame_xr/kiu_scan.h"      // AzaharFrame kiuguns: IsKidIcarus
 #include "frame_xr/kiu_weapon.h"    // AzaharFrame kiuguns: the weapon in hand, the shots
@@ -1995,6 +1995,8 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         gyro_aim_frame.kiu_fire_and_power =
             Settings::values.vr_kiu_trigger_layout.GetValue() == Input::KiuTriggers::kFireAndPower &&
             Kiu::IsKidIcarus(GameTitleId());
+        // AzaharFrame kiupowers: in an air battle the bumpers send nothing.
+        gyro_aim_frame.kiu_air = gyro_aim_frame.kiu_fire_and_power && Kiu::Powers::AirNoBumpers();
         const uint32_t aim_source =
             Input::GyroAimSource(Settings::values.vr_motion_controls.GetValue());
         const bool on = gyro_aim_frame.mode != Input::GyroAimMode::Off;

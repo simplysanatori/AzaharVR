@@ -48,27 +48,54 @@ void RendererVulkan::DrawKiuPowers(u32 width, u32 height, float alpha) {
     if (strip.width == 0) {
         return;
     }
-    // Nothing behind them: the pass begins opaque black.
-    scheduler.Record([strip](vk::CommandBuffer cmdbuf) {
+    // Nothing behind them: the pass begins opaque black. The whole band under the picture, so
+    // nothing dark is beside the strip either.
+    scheduler.Record([strip, width, height](vk::CommandBuffer cmdbuf) {
         const vk::ClearAttachment clear = {
             .aspectMask = vk::ImageAspectFlagBits::eColor,
             .colorAttachment = 0,
             .clearValue = {.color = {.float32 = std::array{0.f, 0.f, 0.f, 0.f}}},
         };
+        const u32 top = strip.y - KP::kGapPx;
         const vk::ClearRect rect = {
-            .rect = {{0, static_cast<s32>(strip.y - KP::kGapPx)},
-                     {strip.width, strip.height + KP::kGapPx}},
+            .rect = {{0, static_cast<s32>(top)}, {width, height - top}},
             .baseArrayLayer = 0,
             .layerCount = 1,
         };
         cmdbuf.clearAttachments(clear, rect);
     });
     const std::vector<KP::Sprite>& sprites = rasterizer.KiuPowersSprites();
-    if (!(alpha > 0.0f) || sprites.empty()) {
+    if (!(alpha > 0.0f) || sprites.empty() || xr_sprite_sets.empty()) {
         return;
     }
-    // The strip's part of the bottom screen, in its pixels.
-    scheduler.Record([strip, pipeline = xr_target->SpritePipeline()](vk::CommandBuffer cmdbuf) {
+    // The strip's part of the bottom screen, in its pixels. All the sprites' vertices at once:
+    // position, texture coordinates.
+    const std::size_t count = std::min<std::size_t>(sprites.size(), 64);
+    const u64 size = count * 16 * sizeof(float);
+    auto [data, offset, invalidate] = vertex_buffer.Map(size, 16);
+    float* out = reinterpret_cast<float*>(data);
+    for (std::size_t n = 0; n < count; n++) {
+        const KP::Sprite& sprite = sprites[n];
+        for (u32 i = 0; i < 4; i++) {
+            *out++ = sprite.x[i] - static_cast<float>(KP::kLeft);
+            *out++ = sprite.y[i] - static_cast<float>(KP::kTop);
+            *out++ = sprite.u[i];
+            *out++ = sprite.v[i];
+        }
+    }
+    vertex_buffer.Commit(size);
+
+    PresentUniformData info = draw_info; // the screens' own is left as it is
+    info.modelview = Orthographic(KP::kWide, KP::kHigh);
+    const vk::Rect2D whole = {{0, static_cast<s32>(strip.y)}, {strip.width, strip.height}};
+    // The cards' part: the three places (the game's scissor).
+    const float px = static_cast<float>(strip.width) / static_cast<float>(KP::kWide);
+    const s32 places_left = static_cast<s32>((KP::kPlacesLeft - KP::kLeft) * px + 0.5f);
+    const s32 places_right = static_cast<s32>((KP::kPlacesRight - KP::kLeft) * px + 0.5f);
+    const vk::Rect2D places = {{places_left, static_cast<s32>(strip.y)},
+                               {static_cast<u32>(places_right - places_left), strip.height}};
+    scheduler.Record([this, strip, whole, pipeline = xr_target->SpritePipeline()](
+                         vk::CommandBuffer cmdbuf) {
         const vk::Viewport viewport = {
             .x = 0.0f,
             .y = static_cast<float>(strip.y),
@@ -77,43 +104,47 @@ void RendererVulkan::DrawKiuPowers(u32 width, u32 height, float alpha) {
             .minDepth = 0.0f,
             .maxDepth = 1.0f,
         };
-        const vk::Rect2D scissor = {{0, static_cast<s32>(strip.y)}, {strip.width, strip.height}};
         cmdbuf.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
         cmdbuf.setViewport(0, viewport);
-        cmdbuf.setScissor(0, scissor);
+        cmdbuf.setScissor(0, whole);
+        cmdbuf.bindVertexBuffers(0, vertex_buffer.Handle(), {0});
     });
-    draw_info.modelview = Orthographic(KP::kWide, KP::kHigh);
+    const float fade = KP::BarFade(sprites); // the bar's own, divided out
     u32 bound = UINT32_MAX;
-    for (const KP::Sprite& sprite : sprites) {
+    bool clipped = false;
+    for (std::size_t n = 0; n < count; n++) {
+        const KP::Sprite& sprite = sprites[n];
         if (sprite.texture >= xr_sprite_sets.size()) {
             continue;
         }
-        std::array<float, 16> vertices; // position, texture coordinates
-        for (u32 i = 0; i < 4; i++) {
-            vertices[i * 4] = sprite.x[i] - static_cast<float>(KP::kLeft);
-            vertices[i * 4 + 1] = sprite.y[i] - static_cast<float>(KP::kTop);
-            vertices[i * 4 + 2] = sprite.u[i];
-            vertices[i * 4 + 3] = sprite.v[i];
-        }
-        auto [data, offset, invalidate] = vertex_buffer.Map(sizeof(vertices), 16);
-        std::memcpy(data, vertices.data(), sizeof(vertices));
-        vertex_buffer.Commit(sizeof(vertices));
-        draw_info.i_resolution = Common::MakeVec(sprite.color[0], sprite.color[1], sprite.color[2],
-                                                 sprite.color[3] * alpha);
+        // The sprite shader's: the vertex colour; the opacity and the constant's alpha; the TEV.
+        const bool own_fade = sprite.part == KP::Part::Bubble || sprite.part == KP::Part::Name;
+        info.i_resolution = Common::MakeVec(sprite.color[0], sprite.color[1], sprite.color[2],
+                                            sprite.color[3]);
+        info.o_resolution = Common::MakeVec(std::min(alpha / (own_fade ? 1.0f : fade), 1.0f) ,
+                                            0.0f, 0.0f, sprite.constant);
+        info.screen_id_l = static_cast<int>(sprite.tev);
         const vk::DescriptorSet set =
             sprite.texture != bound ? xr_sprite_sets[sprite.texture] : vk::DescriptorSet{};
         bound = sprite.texture;
-        scheduler.Record([this, offset = offset, info = draw_info, set](vk::CommandBuffer cmdbuf) {
+        const bool clip = KP::Clipped(sprite.part);
+        const bool set_clip = clip != clipped;
+        clipped = clip;
+        const u32 first = static_cast<u32>(offset / (sizeof(float) * 4)) + static_cast<u32>(n) * 4;
+        scheduler.Record([this, first, info, set, set_clip,
+                          scissor = clip ? places : whole](vk::CommandBuffer cmdbuf) {
             if (set) {
                 cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                           *present_pipeline_layout, 0, set, {});
+            }
+            if (set_clip) {
+                cmdbuf.setScissor(0, scissor);
             }
             cmdbuf.pushConstants(*present_pipeline_layout,
                                  vk::ShaderStageFlagBits::eFragment |
                                      vk::ShaderStageFlagBits::eVertex,
                                  0, sizeof(info), &info);
-            cmdbuf.bindVertexBuffers(0, vertex_buffer.Handle(), {0});
-            cmdbuf.draw(4, 1, static_cast<u32>(offset) / (sizeof(float) * 4), 0);
+            cmdbuf.draw(4, 1, first, 0);
         });
     }
 }
@@ -170,7 +201,7 @@ bool RendererVulkan::RenderToXr() {
     }
     // AzaharFrame kiupowers: the sprites' textures (they may be uploaded here: outside the pass).
     xr_sprite_sets.clear();
-    if (powers_strip && powers_alpha > 0.0f) {
+    if (powers_strip && powers_alpha > 0.0f && !rasterizer.KiuPowersSprites().empty()) {
         rasterizer.KiuPowersTextures([&](vk::ImageView view, vk::Sampler texture_sampler) {
             const auto set = present_heap.Commit();
             for (u32 index = 0; index < screen_infos.size(); index++) {
