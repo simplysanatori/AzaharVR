@@ -1090,6 +1090,42 @@ int main(int argc, char** argv) {
     pg.autosave = true;
     pg.autosave_every = 2;
     pg.autosave_keep = 3;
+    // AzaharFrame kiuaim: the Angel's Aim page with `row` on view (its group, More, scrolled).
+    const auto on_page = [&](const MenuModel& model, Id row, Id hover = Id::None,
+                             int index = kLabelIndex, bool tip = false) {
+        MenuView sv;
+        AimPageOpen(sv, -1);
+        frame_xr::ui::Canvas scratch;
+        scratch.Init(static_cast<int>(kPanelW * px_per_dp + 0.5f),
+                     static_cast<int>(kPanelH * px_per_dp + 0.5f));
+        for (const AimGroup g : AimFrontGroups(model)) {
+            const AimPage page = AimPageRows(model, g);
+            const auto in = [row](const std::vector<Id>& ids) {
+                return std::find(ids.begin(), ids.end(), row) != ids.end();
+            };
+            if (!in(page.rows) && !in(page.more)) {
+                continue;
+            }
+            AimPageOpen(sv, static_cast<int>(g));
+            sv.aim_more = in(page.more);
+            float& scroll = sv.scroll[static_cast<int>(Tab::Mods)];
+            for (;; scroll += kRowH) {
+                kit.Begin(scratch);
+                menu.Draw(kit, model, sv);
+                const auto& hits = menu.Hits();
+                const bool shown = std::any_of(hits.begin(), hits.end(),
+                                               [row](const auto& h) { return h.t.id == row; });
+                if (shown || scroll >= menu.MaxScroll()) {
+                    break;
+                }
+            }
+        }
+        sv.hover = {hover, index};
+        if (tip) {
+            sv.tooltip = hover;
+        }
+        return sv;
+    };
     v = settings(SettingsSection::General);
     v.hover = {Id::WindowScale, 1};
     ok &= shot("5-settings", pg, v);
@@ -1128,9 +1164,12 @@ int main(int argc, char** argv) {
     {
         // AzaharFrame kiumenus: Aiming lives on the Controls page now (it scrolls): Kid Icarus:
         // Uprising, Direct Aim with the C-Stick & Gyro mod. The page at the top, scrolled to
-        // Aiming, and to the end (Recoil's strengths, Weapon Size, Laser Sight, Check Aim).
+        // Aiming, and to the end (Recoil's strengths, Laser Sight, Grip Frees Aim). AzaharFrame
+        // kiuaim: Kid Icarus: Uprising's own rows (kiu-page-) are on the Angel's Aim page.
         MenuModel go = pg;
         go.game_title = "Kid Icarus: Uprising";
+        go.mods.angels_aim.shown = true;
+        go.mods.angels_aim.mapped = true;
         go.motion_controls = 1;
         go.gyro_aim = 2;
         go.gyro_sensitivity = 10;
@@ -1160,21 +1199,24 @@ int main(int argc, char** argv) {
         ok &= shot("kiu-controls-5-end", go, at(1.0e5f));
         MenuModel cal = go;
         cal.aim_calibrated = true;
-        ok &= shot("kiu-controls-6-end-calibrated", cal, at(1.0e5f));
+        ok &= shot("kiu-page-6-calibrated", cal, on_page(cal, Id::CalibrateAim));
         MenuModel nocal = go;
         nocal.aim_calibration_ok = false;
-        ok &= shot("kiu-controls-6b-end-calibrate-unavailable", nocal, at(1.0e5f));
-        ok &= shot("kiu-controls-7-tooltip-calibrate", go, at(1.0e5f, Id::CalibrateAim, kLabelIndex, true));
+        ok &= shot("kiu-page-6b-calibrate-unavailable", nocal, on_page(nocal, Id::CalibrateAim));
+        ok &= shot("kiu-page-7-tooltip-calibrate", go,
+                   on_page(go, Id::CalibrateAim, Id::CalibrateAim, kLabelIndex, true));
         ok &= shot("kiu-controls-7b-tooltip-laser-sight", go, at(1.0e5f, Id::LaserSight, kLabelIndex, true));
         // AzaharFrame kiuaim3: Keep Reticle on Screen, Grip Frees Aim, Turn Zone From.
         ok &= shot("kiu-controls-7c-tooltip-keep-on-screen", go, at(1.0e5f, Id::KeepOnScreen, kLabelIndex, true));
         ok &= shot("kiu-controls-7d-tooltip-grip-frees-aim", go, at(1.0e5f, Id::GripFreesAim, kLabelIndex, true));
-        ok &= shot("kiu-controls-7e-tooltip-turn-zone-from", go, at(1.0e5f, Id::TurnZoneFrom, kLabelIndex, true));
+        ok &= shot("kiu-page-7e-tooltip-turn-zone-from", go,
+                   on_page(go, Id::TurnZoneFrom, Id::TurnZoneFrom, kLabelIndex, true));
         MenuModel alt = go;
         alt.keep_on_screen = false;
         alt.grip_frees_aim = 1;
         alt.turn_zone_from = 0;
-        ok &= shot("kiu-controls-7f-end-lock-off-toggle-screen-edge", alt, at(1.0e5f));
+        ok &= shot("kiu-controls-7f-end-lock-off-toggle", alt, at(1.0e5f));
+        ok &= shot("kiu-page-7f-screen-edge", alt, on_page(alt, Id::TurnZoneFrom));
         MenuModel ls = go;
         ls.laser_sight = true;
         ls.recoil_charged = 70;
@@ -1182,7 +1224,8 @@ int main(int argc, char** argv) {
         ls.weapon_size = 1;
         ls.weapon_scale = 120;
         ok &= shot("kiu-controls-8-end-values", ls, at(1.0e5f));
-        ok &= shot("kiu-controls-8b-tooltip-weapon-size", ls, at(500.0f, Id::WeaponSize, kLabelIndex, true));
+        ok &= shot("kiu-page-8b-tooltip-weapon-size", ls,
+                   on_page(ls, Id::WeaponSize, Id::WeaponSize, kLabelIndex, true));
         ok &= shot("kiu-controls-8c-tooltip-recoil-charged", ls, at(400.0f, Id::RecoilCharged, kLabelIndex, true));
         MenuView dv = at(400.0f);
         dv.dragging = Id::RecoilRapid;
@@ -1199,7 +1242,8 @@ int main(int argc, char** argv) {
         MenuModel nr = go;
         nr.recoil = false;
         nr.weapon_in_hand = false;
-        ok &= shot("kiu-controls-11-recoil-and-weapon-off-end", nr, at(1.0e5f));
+        ok &= shot("kiu-controls-11-recoil-off-end", nr, at(1.0e5f));
+        ok &= shot("kiu-page-11-weapon-off", nr, on_page(nr, Id::WeaponInHand));
         MenuModel rr = go;
         rr.bottom_screen_reticle = 3;
         MenuView rv = at(0.0f);
@@ -1215,51 +1259,30 @@ int main(int argc, char** argv) {
         wv.controls_section = ControlsSection::Buttons;
         ok &= shot("kiu-controls-14-window-page", win, wv);
         // AzaharFrame kiuflash: Muzzle Flash and Projectiles (with its Size and Speed) under
-        // Weapon in Hand's rows: the end of the page, their tooltips, Projectiles off, one held.
+        // Weapon in Hand's rows: their tooltips, Projectiles off, one held.
         MenuModel fx = go;
         fx.projectile_size = 150;
         fx.projectile_speed = 80;
         fx.game_value[static_cast<std::size_t>(Id::Projectiles)] = true;
-        const auto aiming_at = [&](const MenuModel& model, Id row) {
-            // The scroll that shows `row` with a row to spare below (a tooltip goes above it).
-            frame_xr::ui::Canvas scratch;
-            scratch.Init(static_cast<int>(kPanelW * px_per_dp + 0.5f),
-                         static_cast<int>(kPanelH * px_per_dp + 0.5f));
-            MenuView sv = at(0.0f);
-            for (float s = 0.0f; s <= 4000.0f; s += 20.0f) {
-                sv.scroll[static_cast<int>(Tab::Controls)] = s;
-                kit.Begin(scratch);
-                menu.Draw(kit, model, sv);
-                for (const auto& hit : menu.Hits()) {
-                    if (hit.t.id == row) {
-                        return std::min(s + 180.0f, menu.MaxScroll());
-                    }
-                }
-                if (s >= menu.MaxScroll()) {
-                    break;
-                }
-            }
-            return 0.0f;
-        };
-        ok &= shot("kiu-controls-15-muzzle-flash-projectiles", fx,
-                   at(aiming_at(fx, Id::ProjectileSpeed)));
-        ok &= shot("kiu-controls-15b-tooltip-muzzle-flash", fx,
-                   at(aiming_at(fx, Id::MuzzleFlash), Id::MuzzleFlash, kLabelIndex, true));
-        ok &= shot("kiu-controls-15c-tooltip-projectiles", fx,
-                   at(aiming_at(fx, Id::Projectiles), Id::Projectiles, kLabelIndex, true));
-        ok &= shot("kiu-controls-15d-tooltip-projectile-size", fx,
-                   at(aiming_at(fx, Id::ProjectileSize), Id::ProjectileSize, kLabelIndex, true));
-        ok &= shot("kiu-controls-15e-tooltip-projectile-speed", fx,
-                   at(aiming_at(fx, Id::ProjectileSpeed), Id::ProjectileSpeed, kLabelIndex, true));
-        MenuView held = at(aiming_at(fx, Id::ProjectileSpeed));
+        ok &= shot("kiu-page-15-muzzle-flash-projectiles", fx,
+                   on_page(fx, Id::ProjectileSpeed));
+        ok &= shot("kiu-page-15b-tooltip-muzzle-flash", fx,
+                   on_page(fx, Id::MuzzleFlash, Id::MuzzleFlash, kLabelIndex, true));
+        ok &= shot("kiu-page-15c-tooltip-projectiles", fx,
+                   on_page(fx, Id::Projectiles, Id::Projectiles, kLabelIndex, true));
+        ok &= shot("kiu-page-15d-tooltip-projectile-size", fx,
+                   on_page(fx, Id::ProjectileSize, Id::ProjectileSize, kLabelIndex, true));
+        ok &= shot("kiu-page-15e-tooltip-projectile-speed", fx,
+                   on_page(fx, Id::ProjectileSpeed, Id::ProjectileSpeed, kLabelIndex, true));
+        MenuView held = on_page(fx, Id::ProjectileSpeed);
         held.dragging = Id::ProjectileSize;
         held.hover = {Id::ProjectileSize};
-        ok &= shot("kiu-controls-15f-projectile-size-held", fx, held);
+        ok &= shot("kiu-page-15f-projectile-size-held", fx, held);
         MenuModel nofx = fx;
         nofx.projectiles = false;
         nofx.muzzle_flash = false;
-        ok &= shot("kiu-controls-15g-flash-and-projectiles-off", nofx,
-                   at(aiming_at(nofx, Id::Projectiles)));
+        ok &= shot("kiu-page-15g-flash-and-projectiles-off", nofx,
+                   on_page(nofx, Id::Projectiles));
         // AzaharFrame kiuopacity: Weapon Opacity first under Weapon in Hand, Projectile Opacity
         // first under Projectiles: each at 100 %, 50 % and 20 %, their tooltips, one held, and
         // Projectiles off (its Opacity gone with it).
@@ -1268,49 +1291,49 @@ int main(int argc, char** argv) {
             op.weapon_opacity = pct;
             op.projectile_opacity = pct;
             const std::string n = std::to_string(pct);
-            ok &= shot("kiu-controls-16-weapon-opacity-" + n, op,
-                       at(aiming_at(op, Id::WeaponSize)));
-            ok &= shot("kiu-controls-17-projectile-opacity-" + n, op,
-                       at(aiming_at(op, Id::ProjectileSpeed)));
+            ok &= shot("kiu-page-16-weapon-opacity-" + n, op,
+                       on_page(op, Id::WeaponSize));
+            ok &= shot("kiu-page-17-projectile-opacity-" + n, op,
+                       on_page(op, Id::ProjectileSpeed));
         }
         MenuModel op = fx;
         op.weapon_opacity = 60;
         op.projectile_opacity = 30;
-        ok &= shot("kiu-controls-16b-tooltip-weapon-opacity", op,
-                   at(aiming_at(op, Id::WeaponOpacity), Id::WeaponOpacity, kLabelIndex, true));
-        ok &= shot("kiu-controls-17b-tooltip-projectile-opacity", op,
-                   at(aiming_at(op, Id::ProjectileOpacity), Id::ProjectileOpacity, kLabelIndex,
+        ok &= shot("kiu-page-16b-tooltip-weapon-opacity", op,
+                   on_page(op, Id::WeaponOpacity, Id::WeaponOpacity, kLabelIndex, true));
+        ok &= shot("kiu-page-17b-tooltip-projectile-opacity", op,
+                   on_page(op, Id::ProjectileOpacity, Id::ProjectileOpacity, kLabelIndex,
                       true));
-        MenuView op_held = at(aiming_at(op, Id::WeaponSize));
+        MenuView op_held = on_page(op, Id::WeaponSize);
         op_held.dragging = Id::WeaponOpacity;
         op_held.hover = {Id::WeaponOpacity};
-        ok &= shot("kiu-controls-16c-weapon-opacity-held", op, op_held);
+        ok &= shot("kiu-page-16c-weapon-opacity-held", op, op_held);
         MenuModel op_off = op;
         op_off.projectiles = false;
-        ok &= shot("kiu-controls-17c-projectiles-off", op_off,
-                   at(aiming_at(op_off, Id::Projectiles)));
+        ok &= shot("kiu-page-17c-projectiles-off", op_off,
+                   on_page(op_off, Id::Projectiles));
         // AzaharFrame kiuweap2: Muzzle Flash Size under Muzzle Flash (100, 50 and 300 %), its
         // tooltip, held, and Muzzle Flash off (the slider gone with it); the "Angel's Aim Is On"
-        // prompt (over the Controls tab: as it opens, Controls hovered, some things off with OK
+        // prompt (over the Controls tab: as it opens, Show Aiming hovered, some things off with OK
         // hovered).
         for (const int pct : {100, 50, 300}) {
             MenuModel fs = fx;
             fs.flash_size = pct;
-            ok &= shot("kiu-controls-18-muzzle-flash-size-" + std::to_string(pct), fs,
-                       at(aiming_at(fs, Id::MuzzleFlashSize)));
+            ok &= shot("kiu-page-18-muzzle-flash-size-" + std::to_string(pct), fs,
+                       on_page(fs, Id::MuzzleFlashSize));
         }
         MenuModel fs = fx;
         fs.flash_size = 150;
-        ok &= shot("kiu-controls-18b-tooltip-muzzle-flash-size", fs,
-                   at(aiming_at(fs, Id::MuzzleFlashSize), Id::MuzzleFlashSize, kLabelIndex, true));
-        MenuView fs_held = at(aiming_at(fs, Id::MuzzleFlashSize));
+        ok &= shot("kiu-page-18b-tooltip-muzzle-flash-size", fs,
+                   on_page(fs, Id::MuzzleFlashSize, Id::MuzzleFlashSize, kLabelIndex, true));
+        MenuView fs_held = on_page(fs, Id::MuzzleFlashSize);
         fs_held.dragging = Id::MuzzleFlashSize;
         fs_held.hover = {Id::MuzzleFlashSize};
-        ok &= shot("kiu-controls-18c-muzzle-flash-size-held", fs, fs_held);
+        ok &= shot("kiu-page-18c-muzzle-flash-size-held", fs, fs_held);
         MenuModel fs_off = fs;
         fs_off.muzzle_flash = false;
-        ok &= shot("kiu-controls-18d-muzzle-flash-off", fs_off,
-                   at(aiming_at(fs_off, Id::MuzzleFlash)));
+        ok &= shot("kiu-page-18d-muzzle-flash-off", fs_off,
+                   on_page(fs_off, Id::MuzzleFlash));
         MenuModel intro = fx;
         intro.gyro_aim = 1;
         intro.weapon_in_hand = true;
@@ -1318,11 +1341,11 @@ int main(int argc, char** argv) {
         intro.projectiles = true;
         intro.recoil = true;
         intro.laser_sight = true;
-        MenuView iv = at(aiming_at(intro, Id::GyroAim));
+        MenuView iv = at(330.0f);
         iv.angels_intro = true;
         ok &= shot("kiu-controls-19-angels-aim-prompt", intro, iv);
         iv.hover = {Id::DialogExtra};
-        ok &= shot("kiu-controls-19b-angels-aim-prompt-hover-controls", intro, iv);
+        ok &= shot("kiu-controls-19b-angels-aim-prompt-hover-show-aiming", intro, iv);
         MenuModel intro_off = intro;
         intro_off.laser_sight = false;
         intro_off.projectiles = false;
@@ -1601,66 +1624,48 @@ int main(int argc, char** argv) {
                           ::FrameXr::Immersive::Names::kScreenAsPanelOffToast});
     }
     {
-        // AzaharFrame kiutoggles: Angel's Aim's first-person rows under Immersive Mode (Kid
-        // Icarus: Uprising open, Angel's Aim chosen): all off and Smooth (the defaults), then on
-        // with Turning at 45 degrees, and a tooltip.
+        // AzaharFrame kiuaim: the Angel's Aim link under Immersive Mode (Kid Icarus: Uprising open,
+        // Angel's Aim chosen), hovered, and gone in another mode; the first-person rows on the page,
+        // with their tooltips.
         MenuModel ka = pg;
         ka.game_title = "Kid Icarus: Uprising";
         ka.mods.angels_aim.shown = true;
-        ka.mods.angels_aim.mapped = true; // AzaharFrame kiu132: the European game's rows
+        ka.mods.angels_aim.mapped = true; // AzaharFrame kiu132
         ka.immersive_mode = 4;
         MenuView kv = settings(SettingsSection::Immersive);
-        ok &= shot("kiutoggles-1-angels-aim-rows-default", ka, kv);
-        // AzaharFrame kiu131: Bottom Screen: Wrist (its size and opacity under it).
+        ok &= shot("kiuaim-30-settings-immersive", ka, kv);
+        kv.hover = {Id::AngelsAimLink};
+        ok &= shot("kiuaim-31-settings-immersive-link-hover", ka, kv);
+        kv.hover = {};
+        MenuModel wide = ka;
+        wide.immersive_mode = 1;
+        ok &= shot("kiuaim-32-settings-immersive-another-mode", wide, kv);
+        MenuModel kc = ka;
+        kc.gyro_aim = 2;
+        kc.recoil = kc.weapon_in_hand = kc.muzzle_flash = kc.projectiles = true;
+        MenuView cv;
+        cv.tab = Tab::Controls;
+        cv.scroll[static_cast<int>(Tab::Controls)] = 330.0f;
+        ok &= shot("kiuaim-33-controls-aiming", kc, cv);
+        cv.scroll[static_cast<int>(Tab::Controls)] = 1.0e5f;
+        ok &= shot("kiuaim-34-controls-aiming-end", kc, cv);
         ka.kiu_bottom_screen = 2;
         ka.kiu_bottom_size = 150;
         ka.kiu_bottom_opacity = 80;
         ka.kiu_view = 1; // AzaharFrame kiu133: Third Person (Camera)
-        ka.kiu_snap_turn = SnapTurnIndexOf(45);
-        ok &= shot("kiutoggles-2-angels-aim-rows-on", ka, kv);
-        kv.hover = {Id::KiuBottomScreen, kLabelIndex};
-        kv.tooltip = Id::KiuBottomScreen;
-        ok &= shot("kiutoggles-3-bottom-screen-tooltip", ka, kv);
-        kv.hover = {Id::KiuSnapTurn, kLabelIndex};
-        kv.tooltip = Id::KiuSnapTurn;
-        ok &= shot("kiutoggles-4-turning-tooltip", ka, kv);
-        // Persistent: the reset button too; each new row's tooltip; Reticle Size at 70 %.
-        ka.kiu_bottom_screen = 1;
-        ka.kiu_reticle_size = 70;
-        kv.hover = {};
-        kv.tooltip = Id::None;
-        ok &= shot("kiu131-1-bottom-screen-persistent", ka, kv);
-        const Id tips[] = {Id::KiuBottomSize, Id::KiuBottomOpacity, Id::KiuBottomReset,
-                           Id::KiuReticleSize};
-        const char* const names[] = {"kiu131-2-size-tooltip", "kiu131-3-opacity-tooltip",
-                                     "kiu131-4-reset-tooltip", "kiu131-5-reticle-size-tooltip"};
-        for (int i = 0; i < 4; i++) {
-            kv.hover = {tips[i], tips[i] == Id::KiuBottomReset ? -1 : kLabelIndex};
-            kv.tooltip = tips[i];
-            if (tips[i] == Id::KiuReticleSize) { // the last row: scrolled into view
-                kv.scroll[static_cast<int>(Tab::Settings)] = 3.0f * kRowH;
-            }
-            ok &= shot(names[i], ka, kv);
-        }
-        // AzaharFrame kiu133: Camera's Game's Camera with Pit Opacity under it at 50 %, their
-        // tooltips, and Third Person with it.
-        ka.kiu_bottom_screen = 0;
-        ka.kiu_view = 1; // AzaharFrame 1.3.0: the Game's Camera not offered yet
         ka.kiu_pit_opacity = 50;
-        kv.scroll[static_cast<int>(Tab::Settings)] = 0.0f;
-        kv.hover = {};
-        kv.tooltip = Id::None;
-        ok &= shot("kiu133-1-camera-game", ka, kv);
-        kv.hover = {Id::KiuOverShoulder, kLabelIndex};
-        kv.tooltip = Id::KiuOverShoulder;
-        ok &= shot("kiu133-2-camera-tooltip", ka, kv);
-        kv.hover = {Id::KiuPitOpacity, kLabelIndex};
-        kv.tooltip = Id::KiuPitOpacity;
-        ok &= shot("kiu133-3-pit-opacity-tooltip", ka, kv);
-        ka.kiu_view = 1;
-        kv.hover = {};
-        kv.tooltip = Id::None;
-        ok &= shot("kiu133-4-camera-shoulder", ka, kv);
+        ka.kiu_snap_turn = SnapTurnIndexOf(45);
+        ka.kiu_reticle_size = 70;
+        const auto tip = [&](const char* name, Id id) {
+            ok &= shot(name, ka, on_page(ka, id, id, kLabelIndex, true));
+        };
+        tip("kiutoggles-3-bottom-screen-tooltip", Id::KiuBottomScreen);
+        tip("kiutoggles-4-turning-tooltip", Id::KiuSnapTurn);
+        tip("kiu131-2-size-tooltip", Id::KiuBottomSize);
+        tip("kiu131-3-opacity-tooltip", Id::KiuBottomOpacity);
+        tip("kiu131-5-reticle-size-tooltip", Id::KiuReticleSize);
+        tip("kiu133-2-camera-tooltip", Id::KiuOverShoulder);
+        tip("kiu133-3-pit-opacity-tooltip", Id::KiuPitOpacity);
     }
     MenuModel gv = m; // Global chosen, the game has its own Immersive Mode
     gv.locked[static_cast<std::size_t>(Id::ImmersiveMode)] = Lock::GameValue;
@@ -3119,7 +3124,7 @@ int main(int argc, char** argv) {
     }
     // AzaharFrame kiumenus: the Mods tab's Angel's Aim segment (shown while Kid Icarus: Uprising
     // is open): the mod and the texture packs installed or not, the catalog's C-Stick rows,
-    // Report an Issue's question, Aiming Settings.
+    // Report an Issue's question.
     {
         MenuModel ka = m;
         ka.game_title = "Kid Icarus: Uprising";
@@ -3131,6 +3136,7 @@ int main(int argc, char** argv) {
         ok &= shot("aa-1-top-nothing-installed", ka, kv);
         kv.hover = {Id::ModsSegment, 3};
         ok &= shot("aa-1b-segment-hover", ka, kv);
+        kv.aim_group = static_cast<int>(AimGroup::About);
         kv.hover = {Id::AngelsAimReport};
         ok &= shot("aa-1c-report-hover", ka, kv);
         kv.hover = {};
@@ -3154,14 +3160,12 @@ int main(int argc, char** argv) {
             offer("kiu-cstick-gyro-ultrawide-21-9", "C-Stick & Gyro (Ultrawide 21:9)", "Darkshade"),
             offer("kiu-cstick-aim", "C-Stick Aim", "Darkshade")};
         kc.mods.mods.catalog = CatalogState::Ready;
+        kv.aim_group = static_cast<int>(AimGroup::ModsAndPack);
         ok &= shot("aa-3-not-installed-catalog", kc, kv);
         kv.scroll[static_cast<int>(Tab::Mods)] = 300.0f;
         ok &= shot("aa-3b-not-installed-catalog-scrolled", kc, kv);
         kv.scroll[static_cast<int>(Tab::Mods)] = 1.0e5f;
         ok &= shot("aa-3c-not-installed-catalog-end", kc, kv);
-        kv.hover = {Id::AngelsAimSettings};
-        ok &= shot("aa-3d-aiming-settings-hover", kc, kv);
-        kv.hover = {};
         // Installed
         MenuModel ki = kc;
         ki.mods.angels_aim.mod_installed = true;
@@ -3182,17 +3186,18 @@ int main(int argc, char** argv) {
         // CTGP-7 shown too: five segments
         MenuModel k5 = ka;
         k5.mods.ctgp7.shown = true;
+        kv.aim_group = -1;
         kv.scroll[static_cast<int>(Tab::Mods)] = 0.0f;
         ok &= shot("aa-7-five-segments", k5, kv);
         // No Report link yet (offline build): the button greyed
         MenuModel kn = ka;
         kn.mods.angels_aim.report_url.clear();
+        kv.aim_group = static_cast<int>(AimGroup::About);
         ok &= shot("aa-8-report-unavailable", kn, kv);
     }
-    // AzaharFrame kiuaim: the Angel's Aim page with fewer rows on view: the front view (in the
+    // AzaharFrame kiuaim: the Angel's Aim page: the front view (in the
     // mode, and out of it) and each page once (--only kiuaim).
     {
-        SetAimPage(true);
         MenuModel ka = m;
         ka.game_title = "Kid Icarus: Uprising";
         ka.scope = 1;
@@ -3236,7 +3241,7 @@ int main(int argc, char** argv) {
                 ok &= shot(std::string("kiuaim-") + num + "-" + name + "-more", ka, av);
             }
         }
-        // The rows that wait: Gyro Aim, Persistent moved, the weapon's switches off; a More page
+        // The rows that wait: Gyro Aim, In View moved, the weapon's switches off; a More page
         // scrolled to its end.
         MenuModel kw = ka;
         kw.gyro_aim = 1;
@@ -3253,11 +3258,10 @@ int main(int argc, char** argv) {
         ok &= shot("kiuaim-22-weapon-more-off", kw, av);
         av.scroll[static_cast<std::size_t>(Tab::Mods)] = 9999.0f;
         ok &= shot("kiuaim-23-weapon-more-end", ka, av);
-        SetAimPage(false);
     }
-    // AzaharFrame kiu132: the Angel's Aim segment's settings (Kid Icarus: Uprising, European, in
-    // Angel's Aim, Direct Aim and everything on), down the page; and the Kid Icarus-only rows
-    // in Kid Icarus against another game, another region and no game.
+    // AzaharFrame kiu132: the Angel's Aim page (Kid Icarus: Uprising, European, in Angel's Aim,
+    // Direct Aim and everything on), and the tabs in Kid Icarus against another game, another
+    // region and no game.
     {
         MenuModel kh = m;
         kh.game_title = "Kid Icarus: Uprising";
@@ -3274,24 +3278,13 @@ int main(int argc, char** argv) {
         MenuView hv;
         hv.tab = Tab::Mods;
         hv.mods_segment = ModsSegment::AngelsAim;
-        const float steps[] = {0.0f, 440.0f, 880.0f, 1320.0f, 1760.0f, 2200.0f, 2640.0f,
-                               3080.0f, 3520.0f, 1.0e5f};
-        for (std::size_t i = 0; i < std::size(steps); i++) {
-            hv.scroll[static_cast<int>(Tab::Mods)] = steps[i];
-            ok &= shot("kiu132-hub-" + std::to_string(i + 1) + "-at-" +
-                           (steps[i] > 1.0e4f ? std::string("end")
-                                              : std::to_string(static_cast<int>(steps[i]))),
-                       kh, hv);
-        }
-        // Immersive Mode's menu open from the View group; another mode (no first-person rows).
-        hv.scroll[static_cast<int>(Tab::Mods)] = 1320.0f;
+        // Immersive Mode's menu open on the front view; another mode (no first-person rows).
         hv.open_menu = Id::ImmersiveMode;
         ok &= shot("kiu132-hub-11-immersive-mode-menu", kh, hv);
         hv.open_menu = Id::None;
         MenuModel kw = kh;
         kw.immersive_mode = 1;
         kw.gyro_aim = 0;
-        hv.scroll[static_cast<int>(Tab::Mods)] = 440.0f;
         ok &= shot("kiu132-hub-12-wide-mode-aiming-off", kw, hv);
         // Global chosen while the game has its own values: those rows locked, as elsewhere.
         MenuModel kg = kh;
@@ -3300,12 +3293,21 @@ int main(int argc, char** argv) {
             kg.locked[static_cast<std::size_t>(id)] = Lock::GameValue;
             kg.game_value[static_cast<std::size_t>(id)] = true;
         }
-        hv.scroll[static_cast<int>(Tab::Mods)] = 440.0f;
-        hv.hover = {Id::GyroAim, kLabelIndex};
-        hv.tooltip = Id::GyroAim;
-        ok &= shot("kiu132-hub-13-global-locked", kg, hv);
+        ok &= shot("kiu132-hub-13-global-locked", kg,
+                   on_page(kg, Id::GyroAim, Id::GyroAim, kLabelIndex, true));
+        // The scope control: the count (in Per-Game) and Use Global Values for All.
+        kg.scope = 1;
+        kg.locked = {};
+        hv.hover = {Id::Scope, 1};
+        hv.tooltip = Id::Scope;
+        hv.tooltip_index = 1;
+        ok &= shot("kiu132-hub-13b-per-game-count", kg, hv);
         hv.hover = {};
         hv.tooltip = Id::None;
+        hv.tooltip_index = -1;
+        hv.open_menu = Id::ScopeMore;
+        ok &= shot("kiu132-hub-13c-use-global-values", kg, hv);
+        hv.open_menu = Id::None;
         // The C-Stick mods' section with the catalogue's rows (the note above them).
         MenuModel kc = kh;
         ModOffer o;
@@ -3319,30 +3321,27 @@ int main(int argc, char** argv) {
         o.author = "hosiniku";
         kc.mods.mods.available.push_back(o);
         kc.mods.mods.catalog = CatalogState::Ready;
+        hv.aim_group = static_cast<int>(AimGroup::ModsAndPack);
         hv.scroll[static_cast<int>(Tab::Mods)] = 1.0e5f;
         ok &= shot("kiu132-hub-14-cstick-mods-end", kc, hv);
-        // AzaharFrame kiu133: the View group with Camera's Game's Camera and Pit Opacity.
+        hv.aim_group = -1;
+        hv.scroll[static_cast<int>(Tab::Mods)] = 0.0f;
+        // AzaharFrame kiu133: the View group with Third Person and Pit Opacity.
         MenuModel kv133 = kh;
         kv133.kiu_view = 1; // AzaharFrame 1.3.0: the Game's Camera not offered yet
         kv133.kiu_pit_opacity = 60;
-        hv.scroll[static_cast<int>(Tab::Mods)] = 1320.0f;
-        ok &= shot("kiu133-hub-view", kv133, hv);
-        // AzaharFrame kiuhands: Free Hand, the View group's last row, Hidden, with its tooltip.
+        ok &= shot("kiu133-hub-view", kv133, on_page(kv133, Id::KiuPitOpacity));
+        // AzaharFrame kiuhands: Free Hand, the Weapon group's, Hidden, with its tooltip.
         MenuModel khide = kh;
         khide.kiu_hide_off_hand = 1;
-        hv.scroll[static_cast<int>(Tab::Mods)] = 2000.0f;
-        hv.hover = {Id::KiuHideOffHand, kLabelIndex};
-        hv.tooltip = Id::KiuHideOffHand;
-        ok &= shot("kiuhands-hide-off-hand", khide, hv);
-        hv.hover = {};
-        hv.tooltip = Id::None;
+        ok &= shot("kiuhands-hide-off-hand", khide,
+                   on_page(khide, Id::KiuHideOffHand, Id::KiuHideOffHand, kLabelIndex, true));
         // The C-Stick mods' two toasts (a mod left out of the run; Angel's Aim chosen with one
         // loaded).
         ok &= toast_shot("kiu132-cstick-toasts.png",
                          {kCStickModLeftOutToast, kCStickModRestartToast});
 
-        // Kid Icarus-only rows: the same views in Kid Icarus (European), Kid Icarus (USA),
-        // another game and no game.
+        // The same views in Kid Icarus (European), Kid Icarus (USA), another game and no game.
         MenuModel usa = kh;
         usa.mods.angels_aim.mapped = false;
         usa.mods.angels_aim.recommended = false;

@@ -1154,9 +1154,6 @@ void VrUi::MenuFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
 // AzaharFrame tabmenu: the menu panel; the screens' part of its buttons is done here.
 void VrUi::TabMenuFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame& in,
                         bool have_input, std::vector<Quad>& layers) {
-    // AzaharFrame kiuaim: the Angel's Aim page with fewer rows on view, unless the switch says 0.
-    Menu::SetAimPage(
-        Menu::AimPageSwitchOn(Common::FrameTestSwitches::Value(Menu::kKiuAimPageSwitch)));
     // AzaharFrame kiuaim: with the Bottom Screen's page open the real one stays on view: on the
     // wrist it is placed here as in play (the page as last drawn: a frame behind at most).
     // (The switch at 2: with any of the menu's pages, for a mock run, which presses no row.)
@@ -1197,7 +1194,7 @@ void VrUi::TabMenuFrame(Runtime& rt, const FrameInfo& info, const Input::InputFr
             }
         }
     };
-    // AzaharFrame kiuaim2: Check Aim (was Calibrate Aim), from the Controls tab's Aiming rows:
+    // AzaharFrame kiuaim2: Check Aim (was Calibrate Aim), from the Angel's Aim page's Aiming rows:
     // with Direct Aim on in a game whose reticle has been read (its targets go where the reticle
     // can reach).
     host.aim_calibrated = aim_map.set && aim_map_title == GameTitleId();
