@@ -152,6 +152,8 @@ Rect WithHud(At at, const VideoCore::KiuHud::Place& hud, float tan_x, float tan_
              float high, float row);
 /// `r` moved by these degrees to the right and up, held to the screen.
 Rect Moved(Rect r, float tan_x, float tan_y, float across_deg, float height_deg);
+/// AzaharFrame kiuhs3a: `r` in the plane of the screen at `screen` with these half sizes (metres).
+Place OnScreen(const Rect& r, const Input::Posef& screen, float half_x, float half_y);
 /// The gap the bar and the score need between them, beside their own, for the powers in the middle
 /// of the linked HUD (KiuHud::Wanted::link_gap; 0 for the other places).
 float HudGap(const Settings& s);

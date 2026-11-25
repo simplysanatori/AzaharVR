@@ -260,6 +260,13 @@ Rect Moved(Rect r, float tan_x, float tan_y, float across_deg, float height_deg)
     return {r.left + x, r.right + x, r.down + y, r.up + y};
 }
 
+Place OnScreen(const Rect& r, const Input::Posef& screen, float half_x, float half_y) {
+    return {{screen.orientation,
+             Input::Transform(screen, {0.5f * (r.left + r.right) * half_x,
+                                       0.5f * (r.down + r.up) * half_y, 0.0f})},
+            (r.right - r.left) * half_x, (r.up - r.down) * half_y};
+}
+
 float HudGap(const Settings& s) {
     namespace KH = VideoCore::KiuHud;
     if ((!s.powers && !s.dots) || s.at != At::Middle) {

@@ -1582,7 +1582,8 @@ void Runtime::FrameLoop() {
                 powers_in.bottom_persistent = shown.bottom_persistent;
                 powers_in.top_pose[0] = shown.top_pose[0];
                 powers_in.top_pose[1] = shown.top_pose[1];
-                powers_in.top_size = shown.top_size[0];
+                powers_in.top_size[0] = shown.top_size[0];
+                powers_in.top_size[1] = shown.top_size[1];
                 powers_in.top_in_view = shown.top_space == view_space;
                 const ScreenChain& chain =
                     LayerChain(static_cast<std::size_t>(VideoCore::XrScreen::Bottom));
@@ -1788,12 +1789,14 @@ void Runtime::FrameLoop() {
             powers_in.time = fs.predictedDisplayTime;
             for (const Quad& q : power_layers.Update(*this, powers_in)) {
                 const uint64_t chain = reinterpret_cast<uint64_t>(q.swapchain);
+                // AzaharFrame kiuhs3a: with the HUD a quad an eye, the right's a place of its own.
+                const int32_t kind = q.eye == XR_EYE_VISIBILITY_RIGHT ? 1 : 0;
                 Quad stand_in = q;
                 stand_in.visible = true;
-                layer_slots.Reserve(LayerSlots::Group::Extra, chain, 0, 0,
+                layer_slots.Reserve(LayerSlots::Group::Extra, chain, kind, 0,
                                     SlotQuad{local_space, stand_in});
                 if (q.visible) {
-                    layer_slots.Add(LayerSlots::Group::Extra, chain, 0, 0,
+                    layer_slots.Add(LayerSlots::Group::Extra, chain, kind, 0,
                                     SlotQuad{local_space, q});
                 }
             }
