@@ -2319,7 +2319,15 @@ constexpr std::array<int, 6> kMouseLeftChips{DsButton::ZL,   DsButton::L,     Ds
                                              DsButton::Left, DsButton::Right, DsButton::Down};
 constexpr std::array<int, 6> kMouseRightChips{DsButton::ZR, DsButton::R, DsButton::X,
                                               DsButton::A,  DsButton::Y, DsButton::B};
-
+// AzaharVR: the GBA's and the Game Boy's own buttons (a Game Boy has no L and R); Auto Fire leads
+// to the button it presses.
+constexpr std::array<int, 5> kGbaLeftChips{DsButton::L, DsButton::Up, DsButton::Left,
+                                           DsButton::Down, DsButton::Right};
+constexpr std::array<int, 5> kGbaRightChips{DsButton::R, DsButton::A, DsButton::X, DsButton::B,
+                                            DsButton::Y};
+constexpr std::array<int, 4> kGbLeftChips{DsButton::Up, DsButton::Left, DsButton::Down,
+                                          DsButton::Right};
+constexpr std::array<int, 4> kGbRightChips{DsButton::A, DsButton::X, DsButton::B, DsButton::Y};
 
 bool IsStick(int target) {
     return Remap::IsStick(target);
@@ -2406,7 +2414,10 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
     // The columns keep room for the widest chip; the drawing takes what is left.
     const float col_w = kChipPadL + kGlyph + kChipGap +
                         kit.TextWidthSized(kChipText, true, kWidestChip) + kChipPadR + 1.0f;
-    const DsDrawing ds = PlaceDs({c.x0 + col_w + kLeader, art.y0, c.x1 - col_w - kLeader, art.y1});
+    const DrawnConsole drawn = DrawnFor(model.core.kind);
+    const bool gba = drawn == DrawnConsole::Gba;
+    const DsDrawing ds =
+        PlaceDs({c.x0 + col_w + kLeader, art.y0, c.x1 - col_w - kLeader, art.y1}, drawn);
     const int lit = listening ? view.remap.listening : -1;
     DrawDs(kit, ds, lit);
 
@@ -2446,6 +2457,11 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
         if (t == DsButton::TurnPage) {
             return "Turn Secondary Screen Page: " + (name.empty() ? std::string("None") : name);
         }
+        if (gba && (t == DsButton::X || t == DsButton::Y)) {
+            return std::string(t == DsButton::X ? Common::AltCore::kAutoFireALabel
+                                                : Common::AltCore::kAutoFireBLabel) +
+                   ": " + (name.empty() ? std::string("None") : name);
+        }
         return name;
     };
     const auto chip_w = [&](int t, float max_w) {
@@ -2471,7 +2487,13 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
             }
         };
         const bool sticks = HasSticks(dev);
-        if (sticks) {
+        if (gba && model.core.kind == Common::AltCore::CoreKind::GBA) {
+            column(kGbaLeftChips, true);
+            column(kGbaRightChips, false);
+        } else if (gba) {
+            column(kGbLeftChips, true);
+            column(kGbRightChips, false);
+        } else if (sticks) {
             column(kLeftChips, true);
             column(kRightChips, false);
         } else {
@@ -2560,7 +2582,7 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
         {
             const float sel_w = chip_w(DsButton::Select, c.W());
             const float start_w = chip_w(DsButton::Start, c.W());
-            const float home_w = chip_w(DsButton::Home, c.W());
+            const float home_w = gba ? 0.0f : chip_w(DsButton::Home, c.W());
             // AzaharVR: the running DS game's Microphone Blow, PokeDaisy's quick menu or a GBA
             // game's Turn Secondary Screen Page: first in the row, in what the three leave.
             const int t = RowApplies(Id::DsMicBlow, model.core) ? int{DsButton::MicBlow}
@@ -2577,7 +2599,9 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
             mid = std::min(mid, c.x1 - start_w - kChipGap * 0.5f);
             Rect start{mid + kChipGap * 0.5f, under.y0, mid + kChipGap * 0.5f + start_w, under.y1};
             Rect sel{start.x0 - kChipGap - sel_w, start.y0, start.x0 - kChipGap, start.y1};
-            float hx = std::min(ds.Anchor(DsButton::Home).x - home_w * 0.5f, sel.x0 - kChipGap - home_w);
+            float hx = gba ? sel.x0
+                           : std::min(ds.Anchor(DsButton::Home).x - home_w * 0.5f,
+                                      sel.x0 - kChipGap - home_w);
             if (hx < row_x) {
                 const float dx = std::min(row_x - hx, c.x1 - start.x1);
                 hx += dx;
@@ -2587,7 +2611,9 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
                 sel.x1 += dx;
             }
             const Rect home{hx, start.y0, hx + home_w, start.y1};
-            chips.push_back({DsButton::Home, home, {home.Cx(), home.y0}});
+            if (!gba) {
+                chips.push_back({DsButton::Home, home, {home.Cx(), home.y0}});
+            }
             chips.push_back({DsButton::Select, sel, {sel.Cx(), sel.y0}});
             chips.push_back({DsButton::Start, start, {start.Cx(), start.y0}});
         }
@@ -2595,8 +2621,8 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
         // Open Menu has no leader.
         const Rect bs = ds.BottomScreen();
         const DsPoint touch_at{bs.x0 + 6.0f, bs.y0 + bs.H() * 0.8f};
-        const auto off_the_drawing = [](int t) {
-            return t == DsButton::OpenMenu || t == DsButton::Modifier || t == DsButton::MicBlow ||
+        const auto off_the_drawing = [gba](int t) {
+            return (gba && t == DsButton::Touch) || t == DsButton::OpenMenu || t == DsButton::Modifier || t == DsButton::MicBlow ||
                    t == DsButton::QuickMenu || t == DsButton::TurnPage;
         };
         for (const Chip& ch : chips) {
@@ -2607,7 +2633,7 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
             kit.Line(ch.from.x, ch.from.y, to.x, to.y, 1.5f, Tok::kOutline);
         }
         for (const Chip& ch : chips) {
-            if (ch.target == DsButton::Touch) {
+            if (ch.target == DsButton::Touch && !gba) {
                 const bool on = ch.target == lit;
                 if (on) {
                     kit.Dot(touch_at.x, touch_at.y, 7.0f, Tok::kPrimary, 0.3f);
@@ -2644,7 +2670,7 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
                        StateOf(view, tg));
         const Rect gb{r.x0 + kChipPadL, r.Cy() - kGlyph * 0.5f, r.x0 + kChipPadL + kGlyph,
                       r.Cy() + kGlyph * 0.5f};
-        DrawDsGlyph(kit, gb, t, glyph_fg, glyph_bg);
+        DrawDsGlyph(kit, gb, t, glyph_fg, glyph_bg, drawn);
         const float tx = gb.x1 + kChipGap;
         kit.TextSized(tx, r.Cy() + kit.CapHeightSized(kChipText, true) * 0.5f, kChipText, true, ink,
                       kit.Fit(Type::Label, text, r.x1 - kChipPadR - tx + 1.0f));
@@ -2654,7 +2680,7 @@ void TabMenu::DrawEditControls(Kit& kit, const MenuModel& model, const MenuView&
 
     // The Pointer Test: where the touchpad or the mouse touches the bottom screen now.
     const PointerTest& pt = model.devices.pointer;
-    if (HasPointer(dev) && pt.shown) {
+    if (HasPointer(dev) && pt.shown && !gba) {
         const Rect bs = ds.BottomScreen();
         const float x = bs.x0 + std::clamp(pt.x, 0.0f, 1.0f) * bs.W();
         const float y = bs.y0 + std::clamp(pt.y, 0.0f, 1.0f) * bs.H();

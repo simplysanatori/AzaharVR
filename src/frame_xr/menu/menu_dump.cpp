@@ -918,6 +918,14 @@ int main(int argc, char** argv) {
         at.ring = 0.5f;
         ok &= shot("edit-3ds-mouse-chord", mp, v, at);
 
+        // AzaharVR: a GBA game: its own console and Auto Fire
+        MenuModel mg = me;
+        mg.core = Common::AltCore::Capabilities::ForGBA();
+        mg.core.has_pages = true;
+        mg.devices.selected = 0;
+        v.hover = {};
+        ok &= shot("edit-gba-frame", mg, v);
+
         // AzaharFrame keys: a keyboard, its default (Azahar's desktop keys, gamepads.cpp's
         // DefaultKeyboardMapping), then listening, then a WASD Circle Pad.
         namespace K = Input::Key;

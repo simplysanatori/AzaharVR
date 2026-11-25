@@ -7,8 +7,10 @@
 // devices' button names, and the Controls tab's edit screen (AzaharFrame padsui).
 
 #include <algorithm>
+#include <cmath>
 #include <initializer_list>
 #include <set>
+#include <vector>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include "frame_xr/input/key_names.h"
@@ -351,6 +353,35 @@ TEST_CASE("Edit Controls: the 3DS drawing keeps every input inside it", "[frame_
     CHECK(d.box.Contains(bs.x0, bs.y0));
 }
 
+TEST_CASE("Edit Controls: the Game Boy Advance drawing keeps every input inside it",
+          "[frame_xr]") {
+    using Common::AltCore::CoreKind;
+    CHECK(DrawnFor(CoreKind::GBA) == DrawnConsole::Gba);
+    CHECK(DrawnFor(CoreKind::GB) == DrawnConsole::Gba);
+    for (const CoreKind kind : {CoreKind::N3DS, CoreKind::NDS, CoreKind::DSi}) {
+        CHECK(DrawnFor(kind) == DrawnConsole::Ds);
+    }
+    const DsDrawing d = PlaceDs({100.0f, 50.0f, 400.0f, 400.0f}, DrawnConsole::Gba);
+    CHECK(d.box.W() == 300.0f); // width bound
+    CHECK(d.box.Cy() == 225.0f);
+    std::vector<DsPoint> at;
+    for (const int t : std::initializer_list<int>{B::A, B::B, B::Up, B::Down, B::Left, B::Right,
+                                                  B::L, B::R, B::Start, B::Select}) {
+        const DsPoint p = d.Anchor(t);
+        INFO("button " << t);
+        CHECK(d.box.Contains(p.x, p.y));
+        CHECK(d.Radius(t) > 0.0f);
+        for (const DsPoint& q : at) { // a dot of its own
+            CHECK(std::hypot(p.x - q.x, p.y - q.y) > 6.0f);
+        }
+        at.push_back(p);
+    }
+    CHECK(d.Anchor(B::X).x == d.Anchor(B::A).x); // Auto Fire A
+    CHECK(d.Anchor(B::Y).x == d.Anchor(B::B).x);
+    CHECK(d.Anchor(B::L).x < d.Anchor(B::R).x);
+    CHECK(d.Anchor(B::B).x < d.Anchor(B::A).x);
+}
+
 namespace {
 
 struct EditScreen {
@@ -440,6 +471,48 @@ TEST_CASE("Edit Controls: a chip on every 3DS button, the devices, Cancel only w
     s.Draw();
     CHECK(s.Has(Id::RemapCancel, -1));
     CHECK_FALSE(s.Has(Id::EditDevice, 0)); // the snackbar is where the devices were
+}
+
+TEST_CASE("Edit Controls: GBA and Game Boy games have their own buttons", "[frame_xr]") {
+    for (const bool game_boy : {false, true}) {
+        for (const int device : {0, 1, 2}) {
+            EditScreen s;
+            s.m.core = game_boy ? Common::AltCore::Capabilities::ForGB()
+                                : Common::AltCore::Capabilities::ForGBA();
+            s.m.devices.selected = device;
+            s.Draw();
+            INFO("device " << device << (game_boy ? ", Game Boy" : ", GBA"));
+            for (const int b : {B::A, B::B, B::X, B::Y, B::Up, B::Down, B::Left, B::Right, B::Start,
+                                B::Select}) {
+                CHECK(s.Has(Id::RemapChip, b));
+            }
+            CHECK(s.Has(Id::RemapChip, B::L) == !game_boy);
+            CHECK(s.Has(Id::RemapChip, B::R) == !game_boy);
+            for (const int b : {int{B::ZL}, int{B::ZR}, int{B::Home}, kDsCirclePad, kDsCStick}) {
+                CHECK_FALSE(s.Has(Id::RemapChip, b));
+            }
+            const auto& hits = s.menu.Hits();
+            for (std::size_t i = 0; i < hits.size(); i++) {
+                for (std::size_t j = i + 1; j < hits.size(); j++) {
+                    if (hits[i].t.id != Id::RemapChip || hits[j].t.id != Id::RemapChip) {
+                        continue;
+                    }
+                    const Rect &a = hits[i].r, &b = hits[j].r;
+                    INFO(hits[i].t.index << " and " << hits[j].t.index);
+                    CHECK((a.x1 <= b.x0 || b.x1 <= a.x0 || a.y1 <= b.y0 || b.y1 <= a.y0));
+                }
+            }
+        }
+    }
+    // Every other console: the 3DS
+    for (const auto& core :
+         {Common::AltCore::Capabilities::ForNDS(), Common::AltCore::Capabilities::ForN3DS()}) {
+        EditScreen s;
+        s.m.core = core;
+        s.Draw();
+        CHECK(s.Has(Id::RemapChip, B::ZL));
+        CHECK(s.Has(Id::RemapChip, B::Home));
+    }
 }
 
 TEST_CASE("Edit Controls: a pad with a touchpad shows Touchpad Touch, the mouse its Mouse Mode",
