@@ -457,12 +457,12 @@ constexpr PortraitState PortraitsFor(bool wanted, bool battle, bool pictures, bo
            : pictures && !paused ? PortraitState::Up
                                  : PortraitState::Ready;
 }
-/// The same layer is the pause panel's (AZAHARFRAME_KIU_PAUSE_PANEL=1): there, shrunk, through a
-/// battle, so pausing adds no layer either (a screen's layer that comes moves every quad after it
-/// to another overlay for a refresh, layer_slots.h).
-constexpr PortraitState LayerFor(PortraitState portraits, bool pause_wanted, bool battle) {
-    return portraits == PortraitState::Off && pause_wanted && battle ? PortraitState::Ready
-                                                                     : portraits;
+/// The same layer is the pause panel's and the menu panel's (AZAHARFRAME_KIU_PAUSE_PANEL=1,
+/// _MENU_PANEL=1): `keep` it there, shrunk, whenever the view is on, so that pausing, a menu coming
+/// up and a battle starting after it add or take no layer (a screen's layer that comes moves every
+/// quad after it to another overlay for a refresh, layer_slots.h).
+constexpr PortraitState LayerFor(PortraitState portraits, bool keep) {
+    return portraits == PortraitState::Off && keep ? PortraitState::Ready : portraits;
 }
 void SetPortraits(PortraitState state);
 PortraitState Portraits();

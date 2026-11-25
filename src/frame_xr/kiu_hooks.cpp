@@ -504,11 +504,11 @@ void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
     const bool is_paused = s.ui_pause.Update(now.paused);
     Kiu::FirstPerson::SetBattleUi(page && is_page, pause && is_paused && battle);
     const bool pictures = s.ui_pictures.Update(now.pictures);
-    // The pause panel's layer is there all through a battle too (LayerFor).
+    // The pause and menu panels' layer is there whenever the view is (LayerFor).
     Kiu::FirstPerson::SetPortraits(Kiu::FirstPerson::LayerFor(
         Kiu::FirstPerson::PortraitsFor(portraits, battle, pictures,
                                        now.paused || s.ui_pause.On()),
-        pause, battle));
+        pause || menu_panel));
     if (!menu_screens) {
         s.ui_menu = {}; // switched off with a menu up: nothing kept for the next time
     }

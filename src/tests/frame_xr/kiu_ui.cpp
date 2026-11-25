@@ -448,14 +448,13 @@ TEST_CASE("Kid Icarus UI: a panel left where the head was is upright", "[frame_x
     CHECK(same(no_roll(mul(about(1, -70.0f), about(0, -85.0f))),
                mul(about(1, -70.0f), about(0, -kPanelPitchDeg))));
 }
-TEST_CASE("Kid Icarus UI: the pause panel's layer through a battle", "[frame_xr][kiu1s]") {
+TEST_CASE("Kid Icarus UI: the panels' layer is kept while the view is on", "[frame_xr][kiu1s]") {
     using namespace FirstPerson;
     using enum PortraitState;
-    CHECK(LayerFor(Off, false, true) == Off);
-    CHECK(LayerFor(Off, true, false) == Off); // no battle
-    CHECK(LayerFor(Off, true, true) == Ready);
-    CHECK(LayerFor(Up, true, true) == Up);
-    CHECK(LayerFor(Ready, false, true) == Ready);
+    CHECK(LayerFor(Off, false) == Off);
+    CHECK(LayerFor(Off, true) == Ready); // outside a battle too: the view before and after a menu
+    CHECK(LayerFor(Up, true) == Up);
+    CHECK(LayerFor(Ready, false) == Ready);
     // Paused, the panel has the layer; the wrist screen, while it is up, has it instead.
     CHECK_FALSE(PortraitsHere(Ready, false, true, false));
     CHECK(PausePanelShown(true, false));

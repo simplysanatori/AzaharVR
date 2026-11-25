@@ -1146,7 +1146,7 @@ in both builds by its code; no code or layout of it is used.
 | +0x3124 (+0, +1, +3, +4) | the talk's message: shown, shown, its screen (0 top, 1 bottom), its line |
 | +0xB64 | the bottom screen's own UI, flags first: & 0x800 another picture instead of all below (its pass, +0x31B8 & 0x400, too) |
 | +0xB64 +0xD8 | the portraits' object (EUR 0x9E2D4C draws it): +0 & 0x3000000 hidden, +8 & 0xF its four places in use. V: set as they start to fade in, clear 0.4 s after the words, as they are gone |
-| +0xB64 +0x1FC, +0x200 | an illustration's share of the picture (the portraits have the rest); with flag 0x1000000 only while one of the pieces at +0x200 is up. I: never seen set |
+| +0xB64 +0x1FC, +0x200 | an illustration's share of the picture (the portraits have the rest); with flag 0x1000000 only while one of the pieces at +0x200 is up. V: Chapter 1's flight, Medusa's line: 0 to 1 in 0.3 s, 1 for 10 s |
 
 - **`AZAHARFRAME_KIU_PAGE=1`.** The 2D is a page (`PagePlace`) outside a battle as before, and also (45 degrees high, `PagePlaceInBattle`)
   while the game itself draws a page instead of the HUD, two VBlanks in a row, or a menu is up: its number is the byte `[[[0xE6F98C] + 0xC] + 0x72C]`
@@ -1161,24 +1161,33 @@ in both builds by its code; no code or layout of it is used.
   the top screen (EUR 0x9E9D2C), as Subtitles: Upper does. The bottom keeps its line, the setting is not touched.
   V: Practice Range, the words of the bottom screen on top from the switch on (two quads more in the top pass).
 - **`AZAHARFRAME_KIU_PAUSE_PANEL=1`.** While the pause screen is drawn in a battle, the Secondary Screen is a
-  panel in front (36 degrees wide, 4 below straight ahead, 0.8 m), pointable, still where the head was as
-  the game paused. The Secondary Screen up on the wrist wins.
-  V: START: up in the same frame; the beam's trigger on Resume touched 74,82 and the game went on, the panel away;
-  it stays up through Retreat's dialog and No (the same flag). Not run: the Options pages, Yes, whether the trigger that taps
-  Resume reaches the game after. The mock does not composite, so the panel over the picture was not seen.
+  panel in front (36 degrees wide, 4 below where the head looked, 0.8 m), pointable, still where the head was as
+  the game paused, upright (`NoRoll`; at most 50 degrees up or down); a re-centre takes the head again. The Secondary
+  Screen up on the wrist wins. Its layer is the portraits' (`LayerFor`): there, shrunk, whenever the view is on, so pausing
+  adds none. Direct Aim holds no aim on it and the beam is the usual one.
+  V: START: up in the same frame, 6 layers before and after; head turned 25 left and 12 down: the panel 24.6 left, 16 down;
+  Resume, Retreat and Yes by the beam and the trigger (246,83 and 225,171 asked and touched, ZL, ZR and L 0), the hub after.
+  Not run: the Options pages, a re-centre while paused. The mock does not composite, so the panel over the picture was not seen.
 - **`AZAHARFRAME_KIU_PORTRAITS=1`.** While the game draws the talk's portraits (or an illustration), that part of the Secondary
   Screen's own picture (rows 42 to 240 of 320 x 240, `kPortraitCut`; a plain card) is a quad with the head, 25 degrees to the off
   hand's side, 7.5 below, 16 wide, to look at only, at Bottom Screen Opacity. No code patch. All through a battle the quad is there,
   shrunk to nothing between the lines and while paused, so a line changes neither the number of layers nor how the bottom screen is
   drawn. Not while the Secondary Screen is on view anyway (Persistent, the wrist, the pause panel). V: an air battle: up with the
   portraits, the rect 1280 x 792 at 0,168 of 1280 x 960, away while paused and 0.35 s after the words, 6 layers all the time. The
-  card at 13 below (the plan) was over the words' left end at their usual size, so it is above them. A boss's card is not shown.
-- **`AZAHARFRAME_KIU_MENU_SCREENS=1`.** While one of the game's menus is up (`SteadyMenu`, MENUID 0 to 58, two VBlanks), the
-  normal two screens instead of the view (`ScreenState::game_menu`; the bottom one whatever was chosen for it, and its hide
-  button does nothing). V: the title (0), the Cauldron (5), off into the battle (none 0.8 s before its UI is there), the
-  pause and its Options pages (none), Retreat, the hub (3). The game goes from one menu to the next within a frame.
-- **`AZAHARFRAME_KIU_MENU_PANEL=1`.** The same menus, as a panel: the Secondary Screen 40 degrees wide, 9 below, the Primary
-  Screen above it, 30 wide (the Cauldron: 34 and 38), 0.8 m, level, where the head was as the first menu came up; a re-centre moves
-  it; the grips move neither (`PanelGeometry::no_drag`); the wrist screen wins. With either switch Direct Aim holds no aim in a menu:
-  Keep Reticle on Screen made the aiming hand's beam touch nothing while the Primary Screen is a screen. V: the title by the beam and the trigger (160.0, 200.0 asked
-  and touched), the file select, the main menu and the hub stay on the panel. Not run: the beam on the Cauldron, the other rooms, a battle and back.
+  card at 13 below (the plan) was over the words' left end at their usual size, so it is above them. On land the same (25.3 left,
+  7.2 below in the trace), away with Bottom Screen: Persistent. An illustration is in the same cut (rows 55 to 184) and shows in
+  the card. A boss's card is not shown.
+- **`AZAHARFRAME_KIU_MENU_SCREENS=1`.** While one of the game's menus is up (`SteadyMenu`, MENUID 0 to 58, two VBlanks; gone
+  after 12 with none), the normal two screens instead of the view (`ScreenState::game_menu`; the bottom one whatever was chosen
+  for it, and its hide button does nothing). V: the title (0), the Cauldron (5), off into the battle (none 0.8 s before its UI is
+  there), the pause and its Options pages (none), Retreat, the hub (3), the page after Pit falls (51: both screens, 2 s after
+  the battle's camera is out). The game goes from one menu to the next within a frame.
+- **`AZAHARFRAME_KIU_MENU_PANEL=1`.** The same menus, as a panel: the Secondary Screen 40 degrees wide, its middle 12 below, the
+  Primary Screen above it, 32 wide, 14.5 above (the Cauldron: 34 at 14 below, 38 at 11.75 above), a degree and more between them
+  (`MenuGapDeg`), 0.8 m, level, where the head was as the first menu came up; a re-centre moves it; the grips move neither
+  (`PanelGeometry::no_drag`); no swap on it; it stays while a wrist is turned up. The layer is kept, shrunk, in the view
+  between a menu and a battle (`LayerFor`). With either switch Direct Aim holds no aim in a menu: Keep Reticle on Screen made
+  the aiming hand's beam touch nothing while the Primary Screen is a screen. The stick and the buttons go to the game as ever.
+  V, all by the beam and the trigger, each pixel asked and touched, ZL, ZR and L 0: the title (0), the file (2), the main menu
+  (4), the hub (3) and back; the Cauldron (5): a drag along the intensity bar (155,22 to 93,22: 4.0 to 2.2) and Move Out, the
+  battle, Retreat, the hub again. A grip on the panel moved nothing. Not run: the rooms past the hub, a swap, a re-centre.
