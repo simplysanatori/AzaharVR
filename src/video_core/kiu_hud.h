@@ -499,7 +499,7 @@ struct Live {
 };
 inline Live g_live;
 
-/// AzaharFrame kiu1s: the batch in force (AZAHARFRAME_KIU_HUD_EXACT=1; the emulation thread sets it
+/// AzaharFrame kiu1s: the batch in force (AZAHARFRAME_KIU_HUD_EXACT, on unless 0; the emulation thread sets it
 /// each VBlank and reads it at each draw).
 struct LiveBatch {
     std::atomic<uint32_t> vertex_base{0}, index_offset{0}, quads{0};

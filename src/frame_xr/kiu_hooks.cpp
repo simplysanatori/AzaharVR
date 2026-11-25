@@ -504,7 +504,8 @@ void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
     const auto menus_text = Switch(kSwitchMenuScreens);
     const auto which_menus =
         Kiu::FirstPerson::MenuScreensFor(menus_text ? menus_text->c_str() : nullptr);
-    const bool page = SwitchIs(kSwitchPage, "1"), exact = SwitchIs(kSwitchHudExact, "1"),
+    // AzaharFrame kiuhud: both on in first person, off with 0.
+    const bool page = !SwitchIs(kSwitchPage, "0"), exact = !SwitchIs(kSwitchHudExact, "0"),
                pause = SwitchIs(kSwitchPausePanel, "1"), trace = SwitchIs(kSwitchUiTrace, "1"),
                portraits = Kiu::FirstPerson::PortraitsWanted(),
                menu_panel = SwitchIs(kSwitchMenuPanel, "1"),
@@ -559,7 +560,7 @@ void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
     const bool is_page = s.ui_page.Update(now.page || now.menu != Ui::kNoMenu);
     const bool is_paused = s.ui_pause.Update(now.paused);
     Kiu::FirstPerson::SetBattleUi(page && is_page, pause && is_paused && battle,
-                                  !battle && now.menu != Ui::kNoMenu);
+                                  !battle && now.menu == Ui::kMenuHub);
     const bool pictures = s.ui_pictures.Update(now.pictures);
     // The pause and menu panels' layer is there whenever the view is (LayerFor).
     Kiu::FirstPerson::SetPortraits(Kiu::FirstPerson::LayerFor(

@@ -319,7 +319,9 @@ them.
 | `AZAHARFRAME_KIU_SHOULDER=<back>,<up>[,<side>]` | over the shoulder (unset: the setting Over the Shoulder, `vr_kiu_over_shoulder`, 2.5 m back and 0.5 m up when on; `0` off whatever the setting; AzaharFrame kiutoggles): the eye this many metres behind, above and to the right of the first-person eye along the camera's level view (game units = metres × the leaning scale, 7.7 per metre at life size); `AZAHARFRAME_KIU_EYE_OFFSET` wins |
 | `AZAHARFRAME_KIU_WRIST_SCREEN=0\|1` | Angel's Aim's Secondary Screen on the off hand's wrist (default 0, off; unset: the setting Bottom Screen's Wrist, `vr_kiu_bottom_screen`, AzaharFrame kiu131; before it Secondary Screen on Wrist; `1` wins over Persistent): shown while the wrist is turned up, touched by the aiming hand's beam without a shot ("The Secondary Screen on the wrist" below) |
 | `AZAHARFRAME_KIU_FP_FACTOR=<f>` | the most the game draws past its own frame on either axis in first person (1 to 8, default 6); past it the screen is smaller on that axis ("The screen in first person" below) |
-| `AZAHARFRAME_KIU_PAGE=1`, `AZAHARFRAME_KIU_HUD_EXACT=1`, `AZAHARFRAME_KIU_TALK_TOP=1`, `AZAHARFRAME_KIU_PAUSE_PANEL=1`, `AZAHARFRAME_KIU_PORTRAITS=1`, `AZAHARFRAME_KIU_MENU_SCREENS=1`, `AZAHARFRAME_KIU_MENU_PANEL=1`, `AZAHARFRAME_KIU_UI_TRACE=1` | the single screen's, each off without it, first person only, live ("Single screen" below; AzaharFrame kiu1s) |
+| `AZAHARFRAME_KIU_PAGE=0`, `AZAHARFRAME_KIU_HUD_EXACT=0` | off: the 2D as before ("Single screen" below; AzaharFrame kiuhud); on without them, first person only, live |
+| `AZAHARFRAME_KIU_HUD_CENSUS=<n>`, `AZAHARFRAME_KIU_HUD_COST=1` | log only, off by default: each kind of 2D draw of the top screen once (and again for another `<n>`) with what was made of it; the HUD's cost every 300 VBlanks |
+| `AZAHARFRAME_KIU_TALK_TOP=1`, `AZAHARFRAME_KIU_PAUSE_PANEL=1`, `AZAHARFRAME_KIU_PORTRAITS=1`, `AZAHARFRAME_KIU_MENU_SCREENS=1`, `AZAHARFRAME_KIU_MENU_PANEL=1`, `AZAHARFRAME_KIU_UI_TRACE=1` | the single screen's, each off without it, first person only, live ("Single screen" below; AzaharFrame kiu1s) |
 | `AZAHARFRAME_KIU_FP_TRACE=1\|2`, `AZAHARFRAME_KIU_FP_PROBE=<hex>` | a line of `key=value` words a second (2: a VBlank): the scene camera, the view register, the rest pose, the head, the hand's ray in the world, the reticle, the mailbox; and an actor's place in the world and in the head's view. AzaharFrame kiupit: `cam_node_44=` the scene camera node's ten words from +0x44, as floats (to find its near plane) |
 
 ### The transform (`kiu_room.h`)
@@ -1184,14 +1186,19 @@ in both builds by its code; no code or layout of it is used.
 | +0xB64 +0xD8 | the portraits' object (EUR 0x9E2D4C draws it): +0 & 0x3000000 hidden, +8 & 0xF its four places in use. V: set as they start to fade in, clear 0.4 s after the words, as they are gone |
 | +0xB64 +0x1FC, +0x200 | an illustration's share of the picture (the portraits have the rest); with flag 0x1000000 only while one of the pieces at +0x200 is up. V: Chapter 1's flight, Medusa's line: 0 to 1 in 0.3 s, 1 for 10 s |
 
-- **`AZAHARFRAME_KIU_PAGE=1`.** The 2D is a page (`PagePlace`) outside a battle as before, and also (45 degrees high, `PagePlaceInBattle`)
+- **`AZAHARFRAME_KIU_PAGE` (on; `0` off).** The 2D is a page (`PagePlace`) outside a battle as before, and also (45 degrees high, `PagePlaceInBattle`)
   while the game itself draws a page instead of the HUD, two VBlanks in a row, or a menu is up: its number is the byte `[[[0xE6F98C] + 0xC] + 0x72C]`
   (classes 0xCFC660 and 0xCFC3B4; USA 0xA0 lower), the holder null in a battle. V: the title 0, the page after Pit falls 51 (CONTINUE). That page comes 2 s after
-  the battle's camera is out, so nothing looked different with the switch; the in-battle page and its place were never seen.
-- **`AZAHARFRAME_KIU_HUD_EXACT=1`.** The HUD's draws are the top screen's draws of that context
+  the battle's camera is out. The battle's results (state: flag 0x100 of the context): whole, its rules too; its dim's corners are put exactly at the frame's
+  and not turned, so it covers the whole view. The hub (menu 3): the game's words and number are flat 2D, but the veil behind the words, the heart bag and its shadow are
+  depth tested cards in front of the room's camera (one 64 x 64 RGBA4 texture, 40 units away, 6 or 12 vertices; nothing else of the room is: census). They all go to the
+  HUD's frame (`PageInView`, `MoveCard`), in front of the room's depth; the veil, which hangs off three sides of the game's screen, is drawn again with all sides fading (`SoftVeil`).
+  V: bag and number together, following the head, turned 15 degrees and 35 down. The room's own sheets and floor reflection still end where the game's frame did.
+- **`AZAHARFRAME_KIU_HUD_EXACT` (on; `0` off).** The HUD's draws are the top screen's draws of that context
   (vertex base and index offset, `KiuHud::InBatch`) and no others but the console's battery (the dialogs' context; `IsBattery`), each moved as one by its own middle.
   The flush (EUR 0x92F5A0) only adds to a list that is replayed later for both eyes, so a draw's caller
   is not known. Batch not known: the guess (`MayBeHud`), as without the switch. V (air, land): every HUD draw logged as exact; on land the bar and score are on the same pixels as by the guess (best match at no shift).
+  Clip y is across to the LEFT: until kiuhud the guess had the bar's and the score's groups swapped, so the bar's right end (0.3 to 0.45) went with the middle.
 - **`AZAHARFRAME_KIU_TALK_TOP=1`.** One word (EUR 0x60D804, USA 0x60D6B8: `bne`, the message is the bottom
   screen's, to `mov r0, r0`), group "talk on top": the top pass draws the line with the game's own function for
   the top screen (EUR 0x9E9D2C), as Subtitles: Upper does. The bottom keeps its line, the setting is not touched.
