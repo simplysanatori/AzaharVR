@@ -34,6 +34,7 @@
 #include "citra_qt/frame_mirror.h"
 #include "frame_xr/frame_xr.h"
 #include "input_common/frame_xr.h"
+#include "video_core/vr_dynamic_resolution.h"
 #endif
 
 namespace {
@@ -106,6 +107,18 @@ bool GMainWindow::AltWindowOpen(const FrameCores::RomInfo& info) {
         return state;
     };
     g_microphone = MicrophoneSetting();
+    frontend.resolution = [this] {
+        // As RendererBase::GetResolutionScaleFactor: 0 (Auto) goes by the window
+        const u32 setting = Settings::values.resolution_factor.GetValue();
+        bool dynamic = false;
+#ifdef ENABLE_FRAME_XR
+        dynamic = FrameXr::VrShowing() && Settings::values.vr_dynamic_resolution.GetValue();
+#endif
+        const u32 base = VideoCore::DynamicResolution::AltBase(
+            setting, setting != 0 ? 0 : render_window->GetFramebufferLayout().GetScalingRatio(),
+            dynamic);
+        return FrameCores::HostResolution{VideoCore::DynamicResolution::Apply(base), base};
+    };
     frontend.microphone = [this] {
         return AudioCore::GetInputDetails(Settings::values.input_type.GetValue())
             .create_input(system, Settings::values.input_device.GetValue());

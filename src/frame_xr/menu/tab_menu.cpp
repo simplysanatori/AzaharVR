@@ -522,10 +522,12 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             depth.value = SliderText(Id::Depth3d, static_cast<float>(m.depth_3d));
             rows.push_back(depth);
             // AzaharFrame menuux: the renderer's settings people change most, for VR.
-            Row res = row(Id::InternalResolution, RowKind::MenuButton, m.internal_resolution - 1);
-            if (m.internal_resolution < 1 || m.internal_resolution > kMaxResolution) {
-                res.value = m.internal_resolution < 1 ? "Auto"
-                                                      : std::to_string(m.internal_resolution) + "x";
+            // Set over it in Azahar's window, another console's game is drawn at the highest here.
+            const int factor = Is3ds(m.core) ? m.internal_resolution
+                                             : std::min(m.internal_resolution, kMaxResolution);
+            Row res = row(Id::InternalResolution, RowKind::MenuButton, factor - 1);
+            if (factor < 1 || factor > kMaxResolution) {
+                res.value = factor < 1 ? "Auto" : std::to_string(factor) + "x";
                 res.selected = -1;
             }
             rows.push_back(res);

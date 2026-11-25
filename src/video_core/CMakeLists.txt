@@ -217,6 +217,7 @@ if (ENABLE_VULKAN)
         $<$<BOOL:${ENABLE_ALT_CORES}>:renderer_vulkan/alt_picture_filter.h>
         $<$<BOOL:${ENABLE_ALT_CORES}>:renderer_vulkan/alt_pipeline.cpp>
         $<$<BOOL:${ENABLE_ALT_CORES}>:renderer_vulkan/alt_pipeline.h>
+        $<$<BOOL:${ENABLE_ALT_CORES}>:renderer_vulkan/alt_graphics.h>
         $<$<BOOL:${ENABLE_ALT_CORES}>:renderer_vulkan/alt_present.h>
         $<$<BOOL:${ENABLE_ALT_CORES}>:renderer_vulkan/alt_window_target.cpp>
         $<$<BOOL:${ENABLE_ALT_CORES}>:renderer_vulkan/alt_window_target.h>
