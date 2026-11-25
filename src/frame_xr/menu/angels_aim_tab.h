@@ -60,11 +60,10 @@ inline constexpr const char* kAngelsAimTitle = "About Angel's Aim";
 inline constexpr const char* kAngelsAimAlpha = "Alpha";
 inline constexpr const char* kAngelsAimStatus = "Alpha Pre-Release \xC2\xB7 Very Experimental \xC2\xB7 Have Fun!";
 inline constexpr const char* kAngelsAimAbout1 =
-    "Angel's Aim brings Kid Icarus: Uprising into VR. Aim with your controller: Direct Aim puts "
-    "the reticle where you point, Gyro Aim moves it as you turn your hand. Your equipped weapon "
-    "is in your hand, with haptic feedback on every shot.";
+    "Kid Icarus: Uprising in first-person VR: full 6DoF, with weapon mesh models. Or play in "
+    "widescreen with Darkshade's C-Stick & Gyro mod.";
 inline constexpr const char* kAngelsAimAbout2 =
-    "It's the first step of a bigger project: full 6DOF aiming.";
+    "First step toward Uprising VR.";
 inline constexpr const char* kAngelsAimReportLine = "Bug reports and feature ideas welcome.";
 /// AzaharFrame kiu132: "Required" until 1.3.0. PROPOSED strings (kiu132): they need the owner's
 /// approval. The C-Stick mods are needed for the single-screen modes and are left out of a run
@@ -315,8 +314,7 @@ void AimPageFilter(const MenuModel& model, std::vector<Id>& rows);
 /// The page's own tooltip for a row whose text is ExplainFor's elsewhere (approved), or null.
 const char* AimPageTip(Id id);
 inline constexpr const char* kAimTipAiming =
-    "Direct Aim: the reticle goes where you point. Gyro Aim: it moves as you turn your hand. "
-    "Hold the grip to free it.";
+    "Hold the grip to free your aim.";
 inline constexpr const char* kAimTipGyroSensitivity =
     "How far the reticle moves as you turn your hand. Applies to every game.";
 inline constexpr const char* kAimTipRecoil =

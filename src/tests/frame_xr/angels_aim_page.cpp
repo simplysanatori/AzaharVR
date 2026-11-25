@@ -94,8 +94,7 @@ TEST_CASE("Angel's Aim page: rows that leave it or wait", "[frame_xr][kiuaim]") 
 
 TEST_CASE("Angel's Aim page: the approved tips, each within two lines", "[frame_xr][kiuaim]") {
     CHECK(std::string(AimPageTip(Id::GyroAim)) ==
-          "Direct Aim: the reticle goes where you point. Gyro Aim: it moves as you turn your "
-          "hand. Hold the grip to free it.");
+          "Hold the grip to free your aim.");
     CHECK(std::string(AimPageTip(Id::GyroSensitivity)) ==
           "How far the reticle moves as you turn your hand. Applies to every game.");
     CHECK(std::string(AimPageTip(Id::Recoil)) ==
