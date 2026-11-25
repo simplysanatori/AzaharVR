@@ -5,7 +5,10 @@
 // AzaharVR updatecheck: parsing and comparing versions, and reading the release reply (all from
 // strings; no network).
 
+#include <atomic>
+#include <chrono>
 #include <catch2/catch_test_macros.hpp>
+#include "citra_qt/update_checker.h"
 #include "citra_qt/update_version.h"
 
 using namespace UpdateChecker;
@@ -137,4 +140,13 @@ TEST_CASE("Update check: the release page", "[update]") {
           "https://github.com/simplysanatori/AzaharVR/releases/tag/1.4.0");
     CHECK(ReleasePageUrl("../x?y#z") ==
           "https://github.com/simplysanatori/AzaharVR/releases/latest");
+}
+
+TEST_CASE("Update check: a stopped check uses no network", "[update]") {
+    std::atomic_bool flag{false};
+    Mods::Transfer::Stopper stopper{flag};
+    stopper.Stop();
+    const auto start = std::chrono::steady_clock::now();
+    CHECK(UpdateChecker::GetLatestRelease(stopper) == std::nullopt);
+    CHECK(std::chrono::steady_clock::now() - start < std::chrono::seconds(1));
 }

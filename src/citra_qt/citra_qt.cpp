@@ -115,6 +115,7 @@
 #include "common/stall_telemetry.h" // AzaharFrame stall
 #ifdef ENABLE_QT_UPDATE_CHECKER
 #include "citra_qt/update_checker.h"
+#include "citra_qt/update_prompt.h" // AzaharVR updatecheck
 #include "citra_qt/update_version.h" // AzaharVR updatecheck
 #endif
 #include "citra_qt/util/clickable_label.h"
@@ -2428,6 +2429,9 @@ GMainWindow::GMainWindow(Core::System& system_)
 }
 
 GMainWindow::~GMainWindow() {
+#ifdef ENABLE_QT_UPDATE_CHECKER
+    UpdateChecker::RequestStop(); // AzaharVR updatecheck
+#endif
 #ifdef ENABLE_FRAME_XR // AzaharVR: builds with ENABLE_FRAME_XR off
     frame_memwarn.reset(); // AzaharFrame memwarn: its thread posts to this window
 #endif
@@ -8352,6 +8356,9 @@ bool GMainWindow::ConfirmClose() {
 }
 
 void GMainWindow::closeEvent(QCloseEvent* event) {
+#ifdef ENABLE_QT_UPDATE_CHECKER
+    UpdateChecker::RequestStop(); // AzaharVR updatecheck: quitting never waits for the lookup
+#endif
     if (!ConfirmClose()) {
         event->ignore();
         return;
@@ -8666,15 +8673,10 @@ void GMainWindow::OnEmulatorUpdateAvailable() {
     const auto current =
         UpdateChecker::PickBuildVersion(Common::g_build_fullname, Common::g_scm_desc);
 
-    QMessageBox update_prompt(this);
-    update_prompt.setWindowTitle(tr("Update Available"));
-    update_prompt.setIcon(QMessageBox::Information);
-    update_prompt.addButton(QMessageBox::Yes);
-    update_prompt.addButton(QMessageBox::Ignore);
-    update_prompt.setText(
-        tr("Update %1 for %2 is available.\nYou have version %3.\nWould you like to download it?")
-            .arg(version_string, QString::fromUtf8(Common::FrameProduct::kName),
-                 QString::fromStdString(current.value_or(std::string{}))));
+    const auto prompt_box =
+        UpdatePrompt::Make(this, version_string, QString::fromStdString(current.value_or(std::string{})),
+                           QString::fromUtf8(Common::FrameProduct::kName));
+    QMessageBox& update_prompt = *prompt_box;
     update_prompt.exec();
     if (update_prompt.button(QMessageBox::Yes) == update_prompt.clickedButton()) {
         QDesktopServices::openUrl(QUrl(

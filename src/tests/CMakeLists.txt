@@ -110,6 +110,7 @@ add_executable(tests
     common/xr_pacer.cpp # AzaharFrame pacing
     ../citra_qt/update_version.cpp # AzaharVR updatecheck
     citra_qt/update_version.cpp # AzaharVR updatecheck
+    ../citra_qt/update_checker.cpp # AzaharVR updatecheck: the stoppable GET
     core/core_timing.cpp
     core/sharkive.cpp # AzaharFrame cheats
     core/game_version.cpp # AzaharFrame versions

@@ -6,6 +6,7 @@
 // else is sent (no game, user or system information; the headers are the HTTP client's own).
 
 #include <array>
+#include <atomic>
 #include <optional>
 #include <string>
 #include <httplib.h>
@@ -38,11 +39,27 @@ const char* CaBundle() {
 
 } // namespace
 
+namespace {
+std::atomic_bool g_stop_flag{false};
+Mods::Transfer::Stopper g_stopper{g_stop_flag};
+} // namespace
+
+void UpdateChecker::RequestStop() {
+    g_stopper.Stop();
+}
+
 std::optional<std::string> UpdateChecker::GetLatestRelease() {
+    return GetLatestRelease(g_stopper);
+}
+
+std::optional<std::string> UpdateChecker::GetLatestRelease(Mods::Transfer::Stopper& stopper) {
     constexpr const char* host = "https://api.github.com";
     constexpr const char* path = "/repos/simplysanatori/AzaharVR/releases/latest";
     constexpr std::size_t max_body = 1024 * 1024;
 
+    if (stopper.Stopped()) {
+        return std::nullopt;
+    }
     const char* ca = CaBundle();
     if (ca == nullptr) {
         LOG_INFO(Frontend, "Update check: no certificate store found");
@@ -50,6 +67,12 @@ std::optional<std::string> UpdateChecker::GetLatestRelease() {
     }
     try {
         httplib::Client client(host);
+        // The host's lookup runs on a thread of its own and the socket is watched, so a stop ends
+        // either at once (the same as the other downloads).
+        if (!Mods::Transfer::Prepare(client, host, &stopper).empty()) {
+            LOG_INFO(Frontend, "Update check: no connection");
+            return std::nullopt;
+        }
         client.set_connection_timeout(5);
         client.set_read_timeout(10);
         client.set_write_timeout(10);
@@ -69,6 +92,7 @@ std::optional<std::string> UpdateChecker::GetLatestRelease() {
                 body.append(data, len);
                 return true;
             });
+        Mods::Transfer::Finish(&stopper);
         if (too_large || !res) {
             LOG_INFO(Frontend, "Update check: no answer");
             return std::nullopt;
