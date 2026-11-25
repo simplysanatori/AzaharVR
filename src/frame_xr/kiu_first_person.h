@@ -496,6 +496,11 @@ inline constexpr Cut kPortraitCut{0, 42, 320, 198};
 /// reach 28 degrees to each side, 15 and more below.
 inline constexpr float kPortraitSideDeg = 25.0f, kPortraitDownDeg = 7.5f,
                        kPortraitWidthDeg = 16.0f;
+/// Subtitle Height there (its default), and how far down the portraits are at another.
+inline constexpr float kPortraitWordsDeg = -18.0f;
+constexpr float PortraitDown(float words_deg) {
+    return kPortraitDownDeg + kPortraitWordsDeg - words_deg;
+}
 /// Where the cut is in an image of the whole Secondary Screen of this size.
 struct CutRect {
     int x = 0, y = 0, width = 0, height = 0;
@@ -624,8 +629,9 @@ bool TalkTopWanted();
 float PortraitAlpha();
 /// AzaharFrame kiu1s: where the portraits' card is, in the head's frame: the one place to change
 /// (the owner would later have it by the off hand itself). `right`: the off hand is the right one.
-inline PanelInView PortraitPlace(bool right) {
-    return PersistentInView(kPortraitSideDeg * (right ? 1.0f : -1.0f), kPortraitDownDeg,
+/// `words_deg`: Subtitle Height, degrees up; the two move as one (the owner, 2026-11-25).
+inline PanelInView PortraitPlace(bool right, float words_deg = kPortraitWordsDeg) {
+    return PersistentInView(kPortraitSideDeg * (right ? 1.0f : -1.0f), PortraitDown(words_deg),
                             kPortraitWidthDeg,
                             static_cast<float>(kPortraitCut.width) /
                                 static_cast<float>(kPortraitCut.height));

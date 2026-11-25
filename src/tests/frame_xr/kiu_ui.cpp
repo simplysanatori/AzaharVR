@@ -409,6 +409,13 @@ TEST_CASE("Kid Icarus UI: the portraits' part of the Secondary Screen's image", 
     CHECK(kPortraitSideDeg + 0.5f * kPortraitWidthDeg <= 40.0f);
     CHECK(kPortraitDownDeg + half_up < 13.0f); // above the words
     CHECK(kPortraitDownDeg > 0.0f);
+    // Subtitle Height moves the two as one: the same distance apart at every height.
+    CHECK(PortraitDown(kPortraitWordsDeg) == kPortraitDownDeg);
+    for (float words : {-40.0f, -18.0f, 0.0f, 40.0f}) {
+        CHECK(-words - PortraitDown(words) == -kPortraitWordsDeg - kPortraitDownDeg);
+    }
+    CHECK(PortraitPlace(false, 40.0f).y > 0.0f);
+    CHECK(PortraitPlace(false, -40.0f).y < PortraitPlace(false).y);
 }
 
 TEST_CASE("Kid Icarus UI: the menu panel's two screens", "[frame_xr][kiu1s]") {
