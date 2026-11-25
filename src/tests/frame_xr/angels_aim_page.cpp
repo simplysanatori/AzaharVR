@@ -920,7 +920,7 @@ TEST_CASE("Angel's Aim page: its scope counts what the general tabs did",
     CHECK(d.Hit(Id::GyroAim, 1));
 }
 
-TEST_CASE("Angel's Aim page: the link, Show Aiming and the Mods tab land on it",
+TEST_CASE("Angel's Aim page: the link, the prompt and the Mods tab land on it",
           "[frame_xr][kiuaim][kiuaimonly]") {
     Drawn d;
     for (const Copy& copy : kCopies) {
@@ -948,7 +948,7 @@ TEST_CASE("Angel's Aim page: the link, Show Aiming and the Mods tab land on it",
         d.Draw(m, v);
         CHECK(d.Drew(kAimPageTitle));
         CHECK(d.Hit(Id::AngelsAimGroup, static_cast<int>(AimGroup::Aiming)));
-        // Show Aiming, from the prompt on any tab: the Aiming group's page.
+        // Show Angel's Aim, from the prompt on any tab: the front view, a group open before or not.
         for (const Tab tab : {Tab::Controls, Tab::Mods}) {
             MenuView p = v;
             p.tab = tab;
@@ -956,13 +956,15 @@ TEST_CASE("Angel's Aim page: the link, Show Aiming and the Mods tab land on it",
             d.Draw(m, p);
             CHECK(d.Hit(Id::DialogExtra, -1));
             p.angels_intro = false;
-            AimPageOpen(p, static_cast<int>(AimGroup::Aiming));
+            p.aim_group = static_cast<int>(AimGroup::Weapon);
+            p.aim_more = true;
+            AimPageOpen(p, -1);
             AimPageKeep(m, p);
-            CHECK(AimPageShown(m, p).group == static_cast<int>(AimGroup::Aiming));
+            CHECK(AimPageShown(m, p).group == -1);
             CHECK_FALSE(AimPageShown(m, p).more);
             d.Draw(m, p);
-            CHECK(d.Hit(Id::GyroAim, 1));
-            CHECK(d.Hit(Id::TriggerLayout, 0));
+            CHECK(d.Hit(Id::AngelsAimGroup, static_cast<int>(AimGroup::Aiming)));
+            CHECK(d.Hit(Id::AngelsAimGroup, static_cast<int>(AimGroup::Weapon)));
         }
         // The Mods tab reopens on the page when it was left there: another tab, the menu closed
         // and opened (its Main tab), then Mods again.

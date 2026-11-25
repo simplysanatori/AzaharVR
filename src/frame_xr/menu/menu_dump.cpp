@@ -1205,7 +1205,7 @@ int main(int argc, char** argv) {
                    on_page(op_off, Id::Projectiles));
         // AzaharFrame kiuweap2: Muzzle Flash Size under Muzzle Flash (100, 50 and 300 %), its
         // tooltip, held, and Muzzle Flash off (the slider gone with it); the "Angel's Aim Is On"
-        // prompt (over the Controls tab: as it opens, Show Aiming hovered, some things off with OK
+        // prompt (over the Controls tab: as it opens, Show Angel's Aim hovered, some things off with OK
         // hovered).
         for (const int pct : {100, 50, 300}) {
             MenuModel fs = fx;

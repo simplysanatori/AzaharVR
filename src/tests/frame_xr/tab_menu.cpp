@@ -3748,9 +3748,9 @@ TEST_CASE("Tab menu: the Angel's Aim prompt", "[frame_xr][tabmenu][kiuweap2]") {
     ModsDialog dlg = AngelsIntroDialog(m);
     CHECK(dlg.kind == ModsDialogKind::Notice);
     CHECK(dlg.mod == "Angel's Aim Is On");
-    CHECK(dlg.other == "Here's what's on. Change any of it under Aiming.");
+    CHECK(dlg.other == "Here's what's on. Change any of it in Angel's Aim.");
     CHECK(dlg.confirm == "OK");
-    CHECK(dlg.extra == "Show Aiming");
+    CHECK(dlg.extra == "Show Angel's Aim");
     REQUIRE(dlg.rows.size() == 5);
     CHECK(dlg.rows[0] == std::pair<std::string, std::string>{"Weapon in Hand", "On"});
     CHECK(dlg.rows[1] == std::pair<std::string, std::string>{"Muzzle Flash", "On"});
@@ -3784,7 +3784,7 @@ TEST_CASE("Tab menu: the Angel's Aim prompt", "[frame_xr][tabmenu][kiuweap2]") {
         // menu dump's to look at.)
         Audit a;
         a.Draw(m, v);
-        for (const char* s : {"Angel's Aim Is On", "Weapon in Hand", "Laser Sight", "OK", "Show Aiming"}) {
+        for (const char* s : {"Angel's Aim Is On", "Weapon in Hand", "Laser Sight", "OK", "Show Angel's Aim"}) {
             INFO(s);
             CHECK(a.Drew(s));
         }

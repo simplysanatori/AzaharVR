@@ -2528,9 +2528,9 @@ void MenuPanel::Click(Target t, Host& host) {
         if (model.notice.kind != Menu::ModsDialogKind::None) {
             ask(MenuCommand::NoticeAnswer, 2);
         } else if (view.angels_intro) {
-            // AzaharFrame kiuweap2: the prompt's Show Aiming: the Angel's Aim page's group
+            // AzaharFrame kiuweap2: the prompt's Show Angel's Aim: the page's front view
             view.angels_intro = false;
-            Menu::AimPageOpen(view, static_cast<int>(Menu::AimGroup::Aiming));
+            Menu::AimPageOpen(view, -1);
         } else if (view.mods_segment == Menu::ModsSegment::Ctgp7 && // AzaharFrame ctgp7
                    model.mods.ctgp7.dialog.kind != Menu::ModsDialogKind::None) {
             ask_text(MenuCommand::Ctgp7Dialog, view.dialog_check ? "checked" : "", 2);
