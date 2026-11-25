@@ -52,6 +52,7 @@ struct Place {
     bool on = false;
     bool page = false; ///< not the HUD: a page's 2D, whole, over the game's own frame (PagePlace)
     bool cards = false; ///< the hub's: its cards go with its 2D (MayBeCard)
+    bool room = false;  ///< the hub's: fixed in the room, not to the head (InRoom)
     float half_across = 1.0f, half_up = 1.0f;
     float middle_up = 0.0f;
     float bar_across = 0.0f, bar_up = 0.0f;
@@ -171,9 +172,11 @@ inline Place PagePlaceInBattle(float tan_half_x, float tan_half_y) {
 /// AzaharFrame kiuhud: a menu's 2D (the hub's hearts, words and battery): the game's own layout,
 /// whole, in the frame the battle's HUD has (HUD Size), its middle straight ahead at the HUD's
 /// height: in the view and readable, where the game's own frame is 2.8 to 5 times smaller there.
-inline Place PageInView(const Wanted& w, float tan_half_x, float tan_half_y, float pitch_rad) {
-    Place p = PlaceFor(w, tan_half_x, tan_half_y, pitch_rad);
-    p.page = p.cards = p.on;
+/// AzaharFrame kiuhs3: in the game camera's own frame (no pitch), which the world's turn then takes to
+/// where the head looks (InRoom): fixed in the room, in front of its straight ahead.
+inline Place PageInView(const Wanted& w, float tan_half_x, float tan_half_y) {
+    Place p = PlaceFor(w, tan_half_x, tan_half_y, 0.0f);
+    p.page = p.cards = p.room = p.on;
     return p;
 }
 
@@ -348,6 +351,26 @@ inline void MovePiece(Vertex* v, std::size_t n, const Place& p, float factor_acr
         a1 = std::max(a1, v[i].y);
     }
     MoveBy(v, n, p, factor_across, factor_up, 0.5f * (u0 + u1), -0.5f * (a0 + a1));
+}
+
+/// AzaharFrame kiuhs3: how far in front of the camera the hub's 2D is, in the game's units: where its
+/// own cards are (40, the census: 5.2 m at life size).
+inline constexpr float kRoomDistance = 40.0f;
+/// A placed vertex (any w: only its direction counts) through the world's turn `h`
+/// (vr_view_matrix.h ClipCorrection; `z_scale` and `z_constant` the projection's third row), as a point of the room at kRoomDistance. Its own depth (z over w) stays as it was placed:
+/// nothing of the room hides it.
+inline Vertex InRoom(const Vertex& placed, const float h[4][4], float z_scale, float z_constant) {
+    const float d = kRoomDistance;
+    const float at[4] = {placed.x / placed.w * d, placed.y / placed.w * d,
+                         -z_scale * d + z_constant, d};
+    float r[4];
+    for (int i = 0; i < 4; ++i) {
+        r[i] = h[i][0] * at[0] + h[i][1] * at[1] + h[i][2] * at[2] + h[i][3] * at[3];
+    }
+    // The shader keeps a vertex with w = 1 for the game's flat ones (its VrFactor rule).
+    const float k = std::abs(r[3] - 1.0f) < 1e-3f ? 1.01f : 1.0f;
+    const float depth = std::clamp(placed.z / placed.w, -1.0f, 0.0f);
+    return {r[0] * k, r[1] * k, depth * r[3] * k, r[3] * k};
 }
 
 /// AzaharFrame kiuhs3: the direction marks: where an enemy is, in eight steps round the game's camera
@@ -566,7 +589,7 @@ inline std::array<VeilVertex, 54> SoftVeil(const Vertex* in, std::size_t n) {
 /// draw; a read across a write mixes two frames' numbers, which are the same or next to it.
 struct Live {
     std::array<std::atomic<float>, 13> f{};
-    std::atomic<bool> on{false}, page{false}, cards{false};
+    std::atomic<bool> on{false}, page{false}, cards{false}, room{false};
 
     void Set(const Place& p) {
         const float v[13] = {p.half_across, p.half_up,      p.middle_up, p.bar_across,
@@ -578,6 +601,7 @@ struct Live {
         }
         page.store(p.page, std::memory_order_relaxed);
         cards.store(p.cards, std::memory_order_relaxed);
+        room.store(p.room, std::memory_order_relaxed);
         on.store(p.on, std::memory_order_release);
     }
     Place Get() const {
@@ -585,6 +609,7 @@ struct Live {
         p.on = on.load(std::memory_order_acquire);
         p.page = page.load(std::memory_order_relaxed);
         p.cards = cards.load(std::memory_order_relaxed);
+        p.room = room.load(std::memory_order_relaxed);
         float* const v[13] = {&p.half_across, &p.half_up,      &p.middle_up, &p.bar_across,
                              &p.bar_up,      &p.score_across, &p.score_up,  &p.subtitle_up,
                              &p.subtitle_half_across, &p.subtitle_half_up,

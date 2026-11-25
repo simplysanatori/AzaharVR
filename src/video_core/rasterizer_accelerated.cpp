@@ -353,6 +353,7 @@ void RasterizerAccelerated::SetVRData(const int32_t &vrImmersiveMode, const floa
     // frame whose sprites come with no world (a pause, a menu) does not take an old one.
     for (auto& c : vr_soft_clip) {
         c.valid = false;
+        ++c.age;
     }
     vr_immersive_mode = vrImmersiveMode;
     vr_game_pos_scaler = gamePosScaler;
@@ -656,6 +657,33 @@ void RasterizerAccelerated::MoveCard(const VideoCore::KiuHud::Place& place) {
     }
 }
 
+void RasterizerAccelerated::PutInRoom() {
+    // The last turn of this buffer's world, or the picture before's if this one's is not known yet;
+    // none: with the head, as it was placed.
+    const u32 buffer = regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress();
+    const SoftClip* clip = nullptr;
+    for (const auto& c : vr_soft_clip) {
+        if (c.buffer == buffer && c.age <= 2 && c.z_constant != 0.0f &&
+            (!clip || c.serial > clip->serial)) {
+            clip = &c;
+        }
+    }
+    if (!clip) {
+        return;
+    }
+    for (auto& v : vertex_batch) {
+        // Placed (w 2) or a card's (w its distance); a page's dim, left as the game's (w 1), covers
+        // the whole view and stays with it.
+        if (v.position.w == 1.0f) {
+            continue;
+        }
+        const KiuHud::Vertex r =
+            KiuHud::InRoom({v.position.x, v.position.y, v.position.z, v.position.w}, clip->h,
+                           clip->z_scale, clip->z_constant);
+        v.position = {r.x, r.y, r.z, r.w};
+    }
+}
+
 bool RasterizerAccelerated::MoveMarks(const VideoCore::KiuHud::Place& place) {
     namespace H = VideoCore::KiuHud;
     H::Draw d;
@@ -767,6 +795,9 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
         if (done) {
             if (!placed) {
                 put();
+            }
+            if (place.room) { // AzaharFrame kiuhs3
+                PutInRoom();
             }
             return;
         }
@@ -1325,6 +1356,9 @@ void RasterizerAccelerated::ApplyVRDataToPicaVSUniforms(Pica::Shader::Generator:
                 }
                 slot->valid =
                     VideoCore::Immersive::ClipCorrection(proj, vr_world_eye, patched, slot->h);
+                slot->z_scale = slot->valid ? proj[2][2] : 0.0f;
+                slot->z_constant = slot->valid ? proj[2][3] : 0.0f;
+                slot->age = 0;
                 slot->buffer = buffer;
                 slot->serial = ++vr_soft_clip_serial;
             }

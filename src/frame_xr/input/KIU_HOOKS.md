@@ -1193,7 +1193,11 @@ in both builds by its code; no code or layout of it is used.
   and not turned, so it covers the whole view. The hub (menu 3): the game's words and number are flat 2D, but the veil behind the words, the heart bag and its shadow are
   depth tested cards in front of the room's camera (one 64 x 64 RGBA4 texture, 40 units away, 6 or 12 vertices; nothing else of the room is: census). They all go to the
   HUD's frame (`PageInView`, `MoveCard`), in front of the room's depth; the veil, which hangs off three sides of the game's screen, is drawn again with all sides fading (`SoftVeil`).
-  V: bag and number together, following the head, turned 15 degrees and 35 down. The room's own sheets and floor reflection still end where the game's frame did.
+  The room's own sheets and floor reflection still end where the game's frame did.
+  AzaharFrame kiuhs3: all of it is fixed in the room (`InRoom`): the HUD's frame in front of the game's camera, 40 units away as the game's own cards, through the
+  world's turn for that eye ("The game's sprites" above; the picture before's while this one's world is not drawn yet, none with `AZAHARFRAME_KIU_FP_2D=0`: with the head).
+  V (30 and 60 FPS): at rest where it was (words on the same pixels, bag within 3 of 1600); the head turned 15 and 30, 15 down, moved 0.4 m, re-centred turned 30: with the room; rolled 20 (30 FPS) too; the words change with the choice, the battle that follows has none of it.
+  Other pages and a battle's results as before.
 - **`AZAHARFRAME_KIU_HUD_EXACT` (on; `0` off).** The HUD's draws are the top screen's draws of that context
   (vertex base and index offset, `KiuHud::InBatch`) and no others but the console's battery (the dialogs' context; `IsBattery`), each moved as one by its own middle.
   The flush (EUR 0x92F5A0) only adds to a list that is replayed later for both eyes, so a draw's caller

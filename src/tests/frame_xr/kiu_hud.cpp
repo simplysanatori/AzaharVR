@@ -7,6 +7,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include "video_core/kiu_hud.h"
+#include "video_core/vr_view_matrix.h"
 
 using Catch::Approx;
 using namespace VideoCore::KiuHud;
@@ -330,7 +331,7 @@ TEST_CASE("Kid Icarus HUD: a page's draw, quad by quad the same way; the dim sta
 
 TEST_CASE("Kid Icarus HUD: a menu's 2D in the view, in the HUD's frame", "[frame_xr][kiuhud]") {
     Wanted w;
-    const Place hud = At(w), p = PageInView(w, kTanX, kTanY, -5.0f * kRad);
+    const Place hud = At(w), p = PageInView(w, kTanX, kTanY);
     REQUIRE(p.on);
     REQUIRE(p.page);
     CHECK(p.half_across == hud.half_across);
@@ -340,13 +341,13 @@ TEST_CASE("Kid Icarus HUD: a menu's 2D in the view, in the HUD's frame", "[frame
         Vertex v[3] = {{-0.8f, 1.0f, 0, 1}, {-0.7f, 1.0f, 0, 1}, {-0.8f, 0.9f, 0, 1}};
         CHECK(MovePage(v, 3, p, f, f) == 3);
         CHECK(std::atan(v[0].y / v[0].w / f * kTanX) / kRad == Approx(30.0f).margin(0.01f));
-        const float up = std::atan(v[0].x / v[0].w / f * kTanY) / kRad - 5.0f;
+        const float up = std::atan(v[0].x / v[0].w / f * kTanY) / kRad; // in the game camera's frame
         CHECK(up < kMiddleDeg);
         CHECK(up > kMiddleDeg - 20.0f);
     }
     w.size = 150;
-    CHECK(PageInView(w, kTanX, kTanY, 0.0f).half_across > p.half_across);
-    CHECK_FALSE(PageInView(w, 0.0f, kTanY, 0.0f).on);
+    CHECK(PageInView(w, kTanX, kTanY).half_across > p.half_across);
+    CHECK_FALSE(PageInView(w, 0.0f, kTanY).on);
 }
 
 TEST_CASE("Kid Icarus HUD: the hub's cards go with its words; the veil has no border",
@@ -364,7 +365,7 @@ TEST_CASE("Kid Icarus HUD: the hub's cards go with its words; the veil has no bo
     room.depth_test = false;
     CHECK_FALSE(MayBeCard(room));
 
-    const Place p = PageInView(Wanted{}, kTanX, kTanY, 0.0f);
+    const Place p = PageInView(Wanted{}, kTanX, kTanY);
     REQUIRE(p.page);
     REQUIRE(p.cards);
     CHECK_FALSE(PagePlace(4.0f, 4.0f).cards);
@@ -507,4 +508,56 @@ TEST_CASE("Kid Icarus HUD: the direction marks stay whole, at the edges of the g
     live.Set(p);
     REQUIRE(live.Get().edge_half_up == p.edge_half_up);
     REQUIRE(live.Get().edge_up == p.edge_up);
+}
+
+TEST_CASE("Kid Icarus HUD: the hub's 2D is a point of its room", "[frame_xr][kiuhs3]") {
+    // The game's projection (45 degrees high, 5:3, the top screen turned, near 10 as its sprites
+    // have it) and a view; the patched one turns and leans.
+    const float t = std::tan(22.5f * kRad);
+    const float proj[4][4] = {{0, 1 / t, 0, 0}, {-0.6f / t, 0, 0, 0}, {0, 0, 0.001f, 10.0f}, {0, 0, -1, 0}};
+    const float c = std::cos(0.4f), s = std::sin(0.4f);
+    const float view[3][4] = {{c, 0, s, 3}, {0, 1, 0, -12}, {-s, 0, c, 40}};
+    const auto turned = [&](float yaw, float lean, float (&out)[3][4]) {
+        const float a = std::cos(yaw), b = std::sin(yaw);
+        for (int j = 0; j < 4; ++j) {
+            out[0][j] = a * view[0][j] + b * view[2][j];
+            out[1][j] = view[1][j];
+            out[2][j] = -b * view[0][j] + a * view[2][j];
+        }
+        out[0][3] += lean;
+    };
+    const auto at = [&](float yaw, float lean, const Vertex& placed) {
+        float patched[3][4], h[4][4];
+        turned(yaw, lean, patched);
+        REQUIRE(VideoCore::Immersive::ClipCorrection(proj, view, patched, h));
+        return InRoom(placed, h, proj[2][2], proj[2][3]);
+    };
+    const Vertex placed{0.2f, -0.6f, -1.0f, 2.0f}; // w 2, as MovePage puts it; x up, y to the left
+    const Vertex still = at(0.0f, 0.0f, placed);
+    CHECK(still.x / still.w == Approx(0.1f).margin(1e-4));
+    CHECK(still.y / still.w == Approx(-0.3f).margin(1e-4));
+    CHECK(still.w == Approx(kRoomDistance));
+    CHECK(still.z / still.w == Approx(-0.5f));
+    // Its place is that of a point of the room there, whatever the turn and the lean.
+    for (const float yaw : {-0.5f, 0.0f, 0.7f}) {
+        for (const float lean : {-4.0f, 0.0f, 2.5f}) {
+            const Vertex v = at(yaw, lean, placed);
+            const float d = kRoomDistance;
+            const float x = 0.3f * t / 0.6f * d, y = 0.1f * t * d, z = -d; // in the game's camera
+            const float a = std::cos(yaw), b = std::sin(yaw);
+            const float cx = a * x + b * z + lean, cz = -b * x + a * z;
+            CHECK(v.w == Approx(-cz).margin(1e-3));
+            CHECK(v.x == Approx(y / t).margin(1e-2));
+            CHECK(v.y == Approx(-0.6f / t * cx).margin(1e-2));
+        }
+    }
+    // A vertex whose depth comes out 1 is not one the shader takes for the game's flat ones.
+    const float one[4][4] = {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1.0f / kRoomDistance}};
+    const Vertex v = InRoom(placed, one, 0.001f, 10.0f);
+    CHECK(std::abs(v.w - 1.0f) > 1e-3f);
+    CHECK(v.x / v.w == Approx(0.1f * kRoomDistance));
+    CHECK(PageInView(Wanted{}, kTanX, kTanY).room);
+    CHECK_FALSE(PagePlaceInBattle(kTanX, kTanY).room);
+    CHECK_FALSE(PagePlace(4.0f, 4.0f).room);
+    CHECK_FALSE(At().room); // a battle's HUD stays with the head
 }
