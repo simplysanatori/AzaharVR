@@ -2875,8 +2875,6 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
     // Touchpad: a label and its two choices; AzaharFrame menuux: under them one line saying what
     // the chosen one does (the only row with a supporting line: the owner asked for it).
     // AzaharFrame mouse: Bottom Screen Reticle under that line, the same way.
-    // AzaharFrame ui2: the controller picture at the top, under the pages; these rows at the
-    // bottom of the pane, under the picture (owner's report 14).
     // AzaharFrame reticle: in Global, a row the game has its own value for is greyed (its
     // tooltip says why), as on the Settings tab.
     // AzaharFrame kiu: `right`, the row's right end when it shares its row (At Edge).
