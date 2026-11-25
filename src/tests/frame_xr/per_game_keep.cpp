@@ -678,6 +678,7 @@ TEST_CASE("Per-Game: the Angel's Aim page's own rows write the settings they alw
         {Id::KiuPowerMenuHeight, {"vr_kiu_power_menu_height"}},
         {Id::KiuPowerMenuOpacity, {"vr_kiu_power_menu_opacity"}},
         {Id::KiuStickClick, {"vr_kiu_stick_click"}},
+        {Id::Kiu60Fps, {"vr_kiu_60fps"}}, // AzaharFrame kiu60
         {Id::KiuHideOffHand, {"vr_kiu_hide_off_hand"}},
         {Id::KiuTalkPortraits, {"vr_kiu_talk_portraits"}},
         {Id::KiuTalkPortraitsOpacity, {"vr_kiu_talk_portraits_opacity"}},
@@ -769,6 +770,7 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
                                                        {Id::KiuReticleSize, "vr_kiu_reticle_size"},
                                                        {Id::KiuPitOpacity, "vr_kiu_pit_opacity"},
                                                        {Id::KiuHideOffHand, "vr_kiu_hide_off_hand"},
+                                                       {Id::Kiu60Fps, "vr_kiu_60fps"}, // AzaharFrame kiu60
                                                        {Id::KiuSnapTurn, "vr_kiu_snap_turn"}};
     for (const auto& [id, key] : rows) {
         INFO(key);
@@ -782,6 +784,7 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
     CHECK(std::find(labels.begin(), labels.end(), "vr_kiu_game_camera") != labels.end());
     CHECK_FALSE(Settings::values.vr_kiu_game_camera.GetDefault());
     CHECK_FALSE(Settings::values.vr_kiu_hide_off_hand.GetDefault());
+    CHECK_FALSE(Settings::values.vr_kiu_60fps.GetDefault()); // AzaharFrame kiu60
     CHECK(Settings::values.vr_kiu_pit_opacity.GetDefault() == 100u);
     CHECK_FALSE(Settings::values.vr_kiu_wrist_screen.GetDefault());
     CHECK_FALSE(Settings::values.vr_kiu_talk_panel.GetDefault());

@@ -194,6 +194,7 @@ const std::vector<AimPlace>& AimPlaces() {
         {G::View, false, Id::KiuSnapTurn},
         {G::View, false, Id::KiuCutscenes},
         {G::View, false, Id::KiuStickClick},
+        {G::View, true, Id::Kiu60Fps}, // AzaharFrame kiu60
         {G::Hud, false, Id::KiuHud},
         {G::Hud, false, Id::KiuHudSize},
         {G::Hud, false, Id::KiuSubtitleSize},

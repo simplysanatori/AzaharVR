@@ -11,6 +11,7 @@
 #include <tuple>
 #include <vector>
 #include <catch2/catch_test_macros.hpp>
+#include "frame_xr/immersive_names.h"
 #include "frame_xr/menu/angels_aim_tab.h"
 #include "frame_xr/menu/tab_menu.h"
 
@@ -264,6 +265,7 @@ TEST_CASE("Angel's Aim page: counts, and every row reachable", "[frame_xr][kiuai
     CHECK(AimPageRows(m, AimGroup::View).rows ==
           std::vector<Id>{Id::KiuOverShoulder, Id::KiuSnapTurn, Id::KiuCutscenes,
                           Id::KiuStickClick}); // Right Stick Click
+    CHECK(AimPageRows(m, AimGroup::View).more == std::vector<Id>{Id::Kiu60Fps}); // AzaharFrame kiu60
     CHECK(AimPageRows(m, AimGroup::Hud).rows ==
           std::vector<Id>{Id::KiuHud, Id::KiuHudSize, Id::KiuSubtitleSize, Id::KiuPowerMenu});
     for (const int place : {0, 1, 2, 3, 4}) { // Off, Off Hand, then the HUD's places
@@ -326,7 +328,7 @@ TEST_CASE("Angel's Aim page: presses, Back and B, and what is kept", "[frame_xr]
     CHECK(v.aim_group == -1);
     CHECK_FALSE(AimPageBack(m, v));
     // A group without More has no More page.
-    REQUIRE(AimPagePress(m, v, static_cast<int>(AimGroup::View)));
+    REQUIRE(AimPagePress(m, v, static_cast<int>(AimGroup::ModsAndPack)));
     CHECK_FALSE(AimPagePress(m, v, kAimMoreIndex));
     REQUIRE(AimPageBack(m, v));
     REQUIRE(AimPagePress(m, v, static_cast<int>(AimGroup::BottomScreen)));
@@ -927,7 +929,7 @@ TEST_CASE("Angel's Aim page: its scope counts what the general tabs did",
     CHECK(d.Hit(Id::GyroAim, 1));
 }
 
-TEST_CASE("Angel's Aim page: the link, Show Aiming and the Mods tab land on it",
+TEST_CASE("Angel's Aim page: the link, the prompt and the Mods tab land on it",
           "[frame_xr][kiuaim][kiuaimonly]") {
     Drawn d;
     for (const Copy& copy : kCopies) {
@@ -955,7 +957,7 @@ TEST_CASE("Angel's Aim page: the link, Show Aiming and the Mods tab land on it",
         d.Draw(m, v);
         CHECK(d.Drew(kAimPageTitle));
         CHECK(d.Hit(Id::AngelsAimGroup, static_cast<int>(AimGroup::Aiming)));
-        // Show Aiming, from the prompt on any tab: the Aiming group's page.
+        // Show Angel's Aim, from the prompt on any tab: the front view, a group open before or not.
         for (const Tab tab : {Tab::Controls, Tab::Mods}) {
             MenuView p = v;
             p.tab = tab;
@@ -963,13 +965,15 @@ TEST_CASE("Angel's Aim page: the link, Show Aiming and the Mods tab land on it",
             d.Draw(m, p);
             CHECK(d.Hit(Id::DialogExtra, -1));
             p.angels_intro = false;
-            AimPageOpen(p, static_cast<int>(AimGroup::Aiming));
+            p.aim_group = static_cast<int>(AimGroup::Weapon);
+            p.aim_more = true;
+            AimPageOpen(p, -1);
             AimPageKeep(m, p);
-            CHECK(AimPageShown(m, p).group == static_cast<int>(AimGroup::Aiming));
+            CHECK(AimPageShown(m, p).group == -1);
             CHECK_FALSE(AimPageShown(m, p).more);
             d.Draw(m, p);
-            CHECK(d.Hit(Id::GyroAim, 1));
-            CHECK(d.Hit(Id::TriggerLayout, 0));
+            CHECK(d.Hit(Id::AngelsAimGroup, static_cast<int>(AimGroup::Aiming)));
+            CHECK(d.Hit(Id::AngelsAimGroup, static_cast<int>(AimGroup::Weapon)));
         }
         // The Mods tab reopens on the page when it was left there: another tab, the menu closed
         // and opened (its Main tab), then Mods again.
@@ -1056,4 +1060,34 @@ TEST_CASE("Angel's Aim page: Power Menu", "[frame_xr][kiuaim]") {
     CHECK_FALSE(Has(AngelsAimFirstPersonRows(ModelFor(Case::OtherGame)), Id::KiuPowerMenu));
     CHECK_FALSE(Has(AngelsAimFirstPersonRows(ModelFor(Case::ModeOff)), Id::KiuPowerMenu));
     CHECK(Has(AngelsAimFirstPersonRows(ModelFor(Case::ModeOn)), Id::KiuPowerMenu));
+}
+
+// AzaharFrame kiu60: 60 FPS, under View's More.
+TEST_CASE("Angel's Aim page: 60 FPS", "[frame_xr][kiuaim][kiu60]") {
+    CHECK(PerGameSetting(Id::Kiu60Fps));
+    CHECK(SectionOf(Id::Kiu60Fps) == SettingsSection::Immersive);
+    CHECK(LabelFor(Id::Kiu60Fps) == "60 FPS");
+    CHECK(OptionsFor(Id::Kiu60Fps) == std::vector<std::string>{"Off", "On"}); // stored order
+    CHECK(ExplainFor(Id::Kiu60Fps) ==
+          "Runs the game at 60 FPS. Needs more power. Restart the game to change it.");
+    Kit kit{1.0f};
+    CHECK(kit.TextWidth(Type::Tooltip, kKiu60FpsTip) + 28.0f <= 2.0f * kPanelW * 0.7f);
+    CHECK(MenuModel{}.kiu_60fps == 0);
+    CHECK_FALSE(Has(AngelsAimFirstPersonRows(ModelFor(Case::OtherGame)), Id::Kiu60Fps));
+    CHECK_FALSE(Has(AngelsAimFirstPersonRows(ModelFor(Case::ModeOff)), Id::Kiu60Fps));
+    const MenuModel m = ModelFor(Case::ModeOn);
+    CHECK(Has(AngelsAimFirstPersonRows(m), Id::Kiu60Fps));
+    CHECK(Has(AimScopeRows(m), Id::Kiu60Fps)); // the page's count
+    CHECK_FALSE(Has(AimScopeRows(ModelFor(Case::OtherGame)), Id::Kiu60Fps));
+    // View's More opens on it.
+    MenuView v = AimView();
+    REQUIRE(AimPagePress(m, v, static_cast<int>(AimGroup::View)));
+    REQUIRE(AimPagePress(m, v, kAimMoreIndex));
+    Drawn d;
+    d.Draw(m, v);
+    CHECK(d.Drew("View \xC2\xB7 More"));
+    CHECK(d.Drew("60 FPS"));
+    CHECK(d.Drew(FrameXr::Immersive::Names::kExperimental)); // its chip, as HUD Spacing's rows have
+    CHECK(d.Hit(Id::Kiu60Fps, 0));
+    CHECK(d.Hit(Id::Kiu60Fps, 1));
 }

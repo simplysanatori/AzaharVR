@@ -6315,6 +6315,9 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::KiuStickClick: // AzaharFrame kiucam
         set(v.vr_kiu_stick_click, std::min<u32>(u, 1));
         break;
+    case S::Kiu60Fps: // AzaharFrame kiu60
+        set(v.vr_kiu_60fps, r.value != 0);
+        break;
     case S::KiuHideOffHand: // AzaharFrame kiuhands
         set(v.vr_kiu_hide_off_hand, r.value != 0);
         break;

@@ -327,6 +327,7 @@ enum class Id : int {
     KiuPortraitsAcross, ///< a slider, -40 to 40 degrees, while Separate (vr_kiu_portraits_across)
     KiuPortraitsHeight, ///< a slider, -40 to 40 degrees, while Separate (vr_kiu_portraits_height)
     KiuStickClick, ///< AzaharFrame kiucam: index: Switch Camera, Swap Screens (vr_kiu_stick_click)
+    Kiu60Fps, ///< AzaharFrame kiu60: index: Off, On (vr_kiu_60fps)
     KiuHideOffHand, ///< AzaharFrame kiuhands: index: Off, On (vr_kiu_hide_off_hand)
     KiuPowerMenu, ///< AzaharFrame kiuaim: index: Off, Off Hand, Health Bar, Middle, Score (vr_kiu_power_menu)
     KiuPowerMenuAcross, ///< a slider, -40 to 40 degrees, on the HUD (vr_kiu_power_menu_across)
@@ -570,6 +571,7 @@ struct MenuModel {
     int kiu_subtitle_height = -18; ///< AzaharFrame kiu140 (vr_kiu_subtitle_height)
     int kiu_subtitle_size = 130; ///< AzaharFrame kiu140 (vr_kiu_subtitle_size)
     int kiu_stick_click = 0; ///< AzaharFrame kiucam (vr_kiu_stick_click)
+    int kiu_60fps = 0; ///< AzaharFrame kiu60 (vr_kiu_60fps)
     int kiu_hide_off_hand = 0; ///< AzaharFrame kiuhands (vr_kiu_hide_off_hand)
     int kiu_talk_portraits = 0; ///< AzaharFrame kiuaim (vr_kiu_talk_portraits)
     int kiu_talk_portraits_opacity = 100; ///< percent, 20 to 100 (vr_kiu_talk_portraits_opacity)
@@ -655,7 +657,7 @@ struct MenuModel {
 
 /// AzaharFrame kiuweap2: the "Angel's Aim Is On" prompt (MenuView::angels_intro): a notice with
 /// the states of Weapon in Hand, Muzzle Flash, Projectiles, Recoil and Laser Sight, and its
-/// buttons Show Aiming (DialogExtra) and OK (DialogConfirm).
+/// buttons Show Angel's Aim (DialogExtra) and OK (DialogConfirm).
 ModsDialog AngelsIntroDialog(const MenuModel& model);
 
 /// The tabs in the rail's order, those that show now.
@@ -768,7 +770,7 @@ struct MenuView {
     /// AzaharFrame ctgp7: "Requires CTGP-7" shows (an Install Mods row of a CTGP-7 mod was pressed)
     bool requires_ctgp7 = false;
     /// AzaharFrame kiuweap2: the "Angel's Aim Is On" prompt is open (AngelsIntroDialog): OK
-    /// closes it, Show Aiming closes it and opens the Angel's Aim page's Aiming group
+    /// closes it, Show Angel's Aim closes it and opens that page
     bool angels_intro = false;
     /// AzaharFrame kiuaim: the Angel's Aim page's open group (AimGroup; -1 the front view), and
     /// its More rows in place of its own (angels_aim_tab.h)

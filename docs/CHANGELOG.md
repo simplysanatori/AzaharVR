@@ -4,7 +4,7 @@
 
 ### Kid Icarus: Uprising: Angel's Aim
 
-- Settings that act only in Angel's Aim are under **Mods** > **Angel's Aim**. **Settings** > **Immersive** links to it, and **Show Aiming** opens its **Aiming** group.
+- Settings that act only in Angel's Aim are under **Mods** > **Angel's Aim**. **Settings** > **Immersive** links to it.
 
 ## 1.3.0 (November 2026)
 

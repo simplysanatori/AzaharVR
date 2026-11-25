@@ -15,7 +15,10 @@
 #include "common/string_util.h"
 #include "common/swap.h"
 #include "core/core.h"
+#include "common/frame_test_switches.h" // AzaharFrame kiu60
+#include "core/file_sys/kiu_60fps.h" // AzaharFrame kiu60
 #include "core/file_sys/ncch_container.h"
+#include "core/file_sys/patch.h" // AzaharFrame kiu60
 #include "core/file_sys/title_metadata.h"
 #include "core/hle/kernel/kernel.h"
 #include "core/hle/kernel/process.h"
@@ -169,6 +172,33 @@ ResultStatus AppLoader_NCCH::LoadExec(std::shared_ptr<Kernel::Process>& process)
         const ResultStatus patch_result = overlay_ncch->ApplyCodePatch(code);
         if (patch_result != ResultStatus::Success && patch_result != ResultStatus::ErrorNotUsed)
             return patch_result;
+
+        // AzaharFrame kiu60: Kid Icarus: Uprising at 60 (kiu_60fps.h), after the mods' patch.
+        if (const FileSys::Kiu60::Build* build =
+                FileSys::Kiu60::BuildFor(overlay_ncch->ncch_header.program_id)) {
+            namespace K60 = FileSys::Kiu60;
+            const auto asked = Common::FrameTestSwitches::Value(K60::kSwitch);
+            const K60::Look look =
+                K60::LookAt(*build, [&code](u32 a) { return K60::ReadWord(code, a); });
+            bool patched = false;
+            if (K60::Wanted(asked ? std::optional<std::string_view>(*asked) : std::nullopt,
+                            Settings::values.vr_kiu_60fps.GetValue())) {
+                const K60::Patch patch = K60::Make(overlay_ncch->ncch_header.program_id, code);
+                if (patch.result == K60::Outcome::Made &&
+                    FileSys::Patch::ApplyIpsPatch(patch.ips, code) == ResultStatus::Success) {
+                    patched = true;
+                    LOG_INFO(Loader, "Kid Icarus 60 FPS: on ({})", patch.build->name);
+                } else if (patch.result == K60::Outcome::Differs) {
+                    LOG_WARNING(Loader,
+                                "Kid Icarus 60 FPS: off: the game's code differs (0x{:08X} holds "
+                                "0x{:08X}): another version of the game, or a mod's code",
+                                patch.address, patch.found);
+                } else if (patch.result == K60::Outcome::Already) {
+                    LOG_INFO(Loader, "Kid Icarus 60 FPS: the game's code has it already (a mod)");
+                }
+            }
+            K60::g_run.store(K60::RunFor(look.code, patched));
+        }
 
         codeset->entrypoint = codeset->CodeSegment().addr;
         codeset->memory = std::move(code);

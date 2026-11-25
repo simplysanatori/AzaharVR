@@ -350,6 +350,9 @@ Row RowFor(Id id, const MenuModel& m) {
     case Id::KiuStickClick: // AzaharFrame kiucam
         segmented(std::clamp(m.kiu_stick_click, 0, 1));
         break;
+    case Id::Kiu60Fps: // AzaharFrame kiu60
+        segmented(std::clamp(m.kiu_60fps, 0, 1));
+        break;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         segmented(std::clamp(m.kiu_hide_off_hand, 0, 1));
         break;
@@ -780,6 +783,7 @@ SettingsSection SectionOf(Id id) {
     case Id::KiuPowerMenuOpacity:
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
     case Id::KiuStickClick: // AzaharFrame kiucam
+    case Id::Kiu60Fps: // AzaharFrame kiu60
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim
     case Id::KiuTalkPortraitsOpacity:
@@ -896,6 +900,7 @@ bool PerGameSetting(Id id) {
     case Id::KiuPowerMenuOpacity:
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
     case Id::KiuStickClick: // AzaharFrame kiucam
+    case Id::Kiu60Fps: // AzaharFrame kiu60
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim
     case Id::KiuTalkPortraitsOpacity:
@@ -1103,6 +1108,7 @@ std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& m) {
         rows.push_back(Id::KiuPowerMenuOpacity);
     }
     rows.push_back(Id::KiuStickClick); // AzaharFrame kiucam
+    rows.push_back(Id::Kiu60Fps); // AzaharFrame kiu60
     rows.push_back(Id::KiuHideOffHand);
     rows.push_back(Id::KiuTalkPortraits); // AzaharFrame kiuaim
     if (m.kiu_talk_portraits != 0) {
@@ -1316,6 +1322,10 @@ const std::vector<std::string>& OptionsFor(Id id) {
     }
     case Id::KiuStickClick: { // AzaharFrame kiucam: the stored order
         static const std::vector<std::string> kChoices{kKiuStickClickCamera, kKiuStickClickSwap};
+        return kChoices;
+    }
+    case Id::Kiu60Fps: { // AzaharFrame kiu60: the stored order
+        static const std::vector<std::string> kChoices{"Off", "On"};
         return kChoices;
     }
     case Id::KiuHideOffHand: { // AzaharFrame kiuhands: the stored order (hidden or not)
@@ -1607,6 +1617,8 @@ std::string LabelFor(Id id) {
         return kKiuPowerMenuOpacityRow;
     case Id::KiuStickClick: // AzaharFrame kiucam
         return kKiuStickClickRow;
+    case Id::Kiu60Fps: // AzaharFrame kiu60
+        return kKiu60FpsRow;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         return kKiuHideOffHandRow;
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim
@@ -2126,6 +2138,8 @@ std::string ExplainFor(Id id) {
         return kKiuPowerMenuOpacityTip;
     case Id::KiuStickClick: // AzaharFrame kiucam
         return kKiuStickClickTip;
+    case Id::Kiu60Fps: // AzaharFrame kiu60
+        return kKiu60FpsTip;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         return kKiuHideOffHandTip;
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim
@@ -3324,9 +3338,20 @@ constexpr float kScopeRowsGap = 16.0f;  ///< under the toggle's line, before the
 constexpr float kScopeEditGap = 40.0f;
 
 /// The room a row's label takes.
+// An "Experimental" chip right after a row's label, where no Experimental subheader is over it
+// (Angel's Aim's page), in the style of its Alpha chip.
+constexpr float kRowChipH = 32.0f, kRowChipPad = 12.0f, kRowChipGap = 12.0f;
+const char* RowChip(Id id) {
+    return id == Id::Kiu60Fps ? Immersive::Names::kExperimental : nullptr;
+}
+float RowChipWidth(const Kit& kit, Id id) {
+    const char* chip = RowChip(id);
+    return chip ? kRowChipGap + kit.TextWidth(Type::Label, chip) + kRowChipPad * 2.0f : 0.0f;
+}
+
 float LabelRoom(const Kit& kit, const MenuModel& model, Id id) {
     (void)model;
-    return kit.TextWidth(Type::Body, LabelFor(id));
+    return kit.TextWidth(Type::Body, LabelFor(id)) + RowChipWidth(kit, id);
 }
 } // namespace
 
@@ -3880,6 +3905,14 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
         const float label_y = r.note.empty() ? cy : cy - 11.0f;
         kit.TextMid(c.x0, label_y, Type::Body, Tok::kOnSurface, LabelFor(r.id), 0,
                     enabled ? 1.0f : kDisabledContent);
+        if (const char* chip = RowChip(r.id)) {
+            const float x = c.x0 + kit.TextWidth(Type::Body, LabelFor(r.id)) + kRowChipGap;
+            const float cw = kit.TextWidth(Type::Label, chip) + kRowChipPad * 2.0f;
+            const Rect chip_r{x, label_y - kRowChipH * 0.5f, x + cw, label_y + kRowChipH * 0.5f};
+            kit.Fill(chip_r, 8.0f, Tok::kSecondaryContainer, enabled ? 1.0f : kDisabledContent);
+            kit.TextMid(chip_r.Cx(), chip_r.Cy(), Type::Label, Tok::kOnSecondaryContainer, chip, 1,
+                        enabled ? 1.0f : kDisabledContent);
+        }
         if (!r.note.empty()) {
             kit.TextSized(c.x0, cy + 20.0f, 14.0f, false,
                           r.note_warn ? Tok::kError : Tok::kOnSurfaceVariant, r.note, 0,

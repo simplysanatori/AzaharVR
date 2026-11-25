@@ -152,6 +152,7 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_kiu_game_camera); // AzaharFrame kiu133
     f(v.vr_kiu_pit_opacity);
     f(v.vr_kiu_stick_click); // AzaharFrame kiucam
+    f(v.vr_kiu_60fps); // AzaharFrame kiu60
     f(v.vr_controls_preset_done);
     // Mode 3's two registers, which a game's preset sets at boot (presets.cpp) and no row
     // writes: the read put them back to Auto, so the first change made in the menu took Mario

@@ -308,6 +308,9 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::KiuStickClick: // AzaharFrame kiucam
         f(v.vr_kiu_stick_click);
         return true;
+    case Id::Kiu60Fps: // AzaharFrame kiu60
+        f(v.vr_kiu_60fps);
+        return true;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         f(v.vr_kiu_hide_off_hand);
         return true;

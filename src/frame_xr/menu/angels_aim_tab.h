@@ -102,8 +102,8 @@ inline constexpr const char* kAngelsAimSent = "Report Sent";
 /// (tab_menu.h AngelsIntroDialog). Approved by the owner (1.3.0).
 inline constexpr const char* kAngelsIntroTitle = "Angel's Aim Is On";
 inline constexpr const char* kAngelsIntroBody =
-    "Here's what's on. Change any of it under Aiming.";
-inline constexpr const char* kAngelsIntroControls = "Show Aiming";
+    "Here's what's on. Change any of it in Angel's Aim.";
+inline constexpr const char* kAngelsIntroControls = "Show Angel's Aim";
 inline constexpr const char* kAngelsIntroOk = "OK";
 /// AzaharFrame kiufire: Trigger Layout (the page's Aiming group, with Aiming on;
 /// vr_kiu_trigger_layout). Approved by the owner (1.3.0), the tips too.
@@ -236,6 +236,13 @@ inline constexpr const char* kKiuStickClickCamera = "Switch Camera";
 inline constexpr const char* kKiuStickClickSwap = "Swap Screens";
 inline constexpr const char* kKiuStickClickTip =
     "In battles, R3 switches First Person and Third Person.";
+/// AzaharFrame kiu60: 60 FPS (vr_kiu_60fps), under View's More. PROPOSED strings, the toast too
+/// (the setting changed while the game runs: it counts from the next start).
+inline constexpr const char* kKiu60FpsRow = "60 FPS";
+inline constexpr const char* kKiu60FpsTip =
+    "Runs the game at 60 FPS. Needs more power. Restart the game to change it.";
+inline constexpr const char* kKiu60FpsOnToast = "Restart the Game for 60 FPS";
+inline constexpr const char* kKiu60FpsOffToast = "Restart the Game for 30 FPS";
 inline constexpr const char* kOverShoulderRow = "Third Person";
 inline constexpr const char* kOverShoulderTip =
     "Moves your view behind and above Pit, so you can see him.";
@@ -357,8 +364,8 @@ struct AimShown {
     bool more = false;
 };
 AimShown AimPageShown(const MenuModel& model, const MenuView& view);
-/// Opens the page from elsewhere in the menu (the Settings tab's link, Show Aiming): its front view
-/// (`group` -1) or a group's page.
+/// Opens the page from elsewhere in the menu (the Settings tab's link, Show Angel's Aim): its
+/// front view (`group` -1) or a group's page.
 void AimPageOpen(MenuView& view, int group);
 /// A press on one of those targets; true when the view changed (its scroll starts again).
 bool AimPagePress(const MenuModel& model, MenuView& view, int index);

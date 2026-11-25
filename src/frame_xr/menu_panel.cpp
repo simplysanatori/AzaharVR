@@ -407,6 +407,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::KiuPowerMenuOpacity;
     case Id::KiuStickClick: // AzaharFrame kiucam
         return MenuSetting::KiuStickClick;
+    case Id::Kiu60Fps: // AzaharFrame kiu60
+        return MenuSetting::Kiu60Fps;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         return MenuSetting::KiuHideOffHand;
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim
@@ -1238,6 +1240,7 @@ void MenuPanel::BuildModel(const Host& host) {
     m.kiu_power_menu_opacity =
         static_cast<int>(std::clamp<u32>(v.vr_kiu_power_menu_opacity.GetValue(), 20, 100));
     m.kiu_stick_click = static_cast<int>(std::min<u32>(v.vr_kiu_stick_click.GetValue(), 1)); // AzaharFrame kiucam
+    m.kiu_60fps = v.vr_kiu_60fps.GetValue() ? 1 : 0; // AzaharFrame kiu60
     m.kiu_hide_off_hand = static_cast<int>(v.vr_kiu_hide_off_hand.GetValue()); // AzaharFrame kiuhands
     m.kiu_talk_portraits = v.vr_kiu_talk_portraits.GetValue() ? 1 : 0; // AzaharFrame kiuaim
     m.kiu_talk_portraits_opacity = static_cast<int>(
@@ -1944,6 +1947,11 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = std::clamp(value, 0, 1);
         Apply(v.vr_kiu_stick_click, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::KiuStickClick;
+        break;
+    case Id::Kiu60Fps: // AzaharFrame kiu60
+        r.value = std::clamp(value, 0, 1);
+        Apply(v.vr_kiu_60fps, r.value != 0, per_game);
+        r.setting = MenuSetting::Kiu60Fps;
         break;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         r.value = std::clamp(value, 0, 1);
@@ -2716,9 +2724,9 @@ void MenuPanel::Click(Target t, Host& host) {
         if (model.notice.kind != Menu::ModsDialogKind::None) {
             ask(MenuCommand::NoticeAnswer, 2);
         } else if (view.angels_intro) {
-            // AzaharFrame kiuweap2: the prompt's Show Aiming: the Angel's Aim page's group
+            // AzaharFrame kiuweap2: the prompt's Show Angel's Aim: the page's front view
             view.angels_intro = false;
-            Menu::AimPageOpen(view, static_cast<int>(Menu::AimGroup::Aiming));
+            Menu::AimPageOpen(view, -1);
         } else if (view.mods_segment == Menu::ModsSegment::Ctgp7 && // AzaharFrame ctgp7
                    model.mods.ctgp7.dialog.kind != Menu::ModsDialogKind::None) {
             ask_text(MenuCommand::Ctgp7Dialog, view.dialog_check ? "checked" : "", 2);
@@ -3050,6 +3058,7 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::KiuPowerMenu: // AzaharFrame kiuaim
     case Id::KiuHudLinked: // AzaharFrame kiu140
     case Id::KiuStickClick: // AzaharFrame kiucam
+    case Id::Kiu60Fps: // AzaharFrame kiu60
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim
     case Id::KiuPortraitsLinked:
