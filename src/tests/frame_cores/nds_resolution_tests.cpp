@@ -403,6 +403,17 @@ TEST_CASE("Dynamic Resolution on a DS game's factor", "[frame_cores]") {
     const u32 drop = Dr::g_drop.exchange(2);
     CHECK(Dr::Apply(4) == 2);
     CHECK(Dr::Apply(1) == 1);
+    // On: from the setting up to two steps over it, at 1x nothing
+    CHECK(Dr::AltBase(1, 0, true) == 1);
+    CHECK(Dr::AltBase(2, 0, true) == 4);
+    CHECK(Dr::AltBase(6, 0, true) == 8);
+    CHECK(Dr::AltBase(7, 0, true) == 8);
+    CHECK(Dr::AltBase(8, 0, true) == 8);
+    CHECK(Dr::AltBase(10, 0, true) == 10);
+    CHECK(Dr::Apply(Dr::AltBase(4, 0, true)) == 4); // two steps off
+    CHECK(Dr::AltBase(4, 0, false) == 4);
+    CHECK(Dr::AltBase(0, 3, true) == 3); // Auto
+    CHECK(Dr::AltBase(0, 0, false) == 1);
     Dr::g_drop.store(0);
     CHECK(Dr::Apply(4) == 4);
     Dr::g_drop.store(drop);

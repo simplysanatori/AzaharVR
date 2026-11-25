@@ -109,12 +109,15 @@ bool GMainWindow::AltWindowOpen(const FrameCores::RomInfo& info) {
     g_microphone = MicrophoneSetting();
     frontend.resolution = [this] {
         // As RendererBase::GetResolutionScaleFactor: 0 (Auto) goes by the window
-        u32 factor = Settings::values.resolution_factor.GetValue();
-        if (factor == 0) {
-            factor = render_window->GetFramebufferLayout().GetScalingRatio();
-        }
-        factor = std::max(1u, factor);
-        return FrameCores::HostResolution{VideoCore::DynamicResolution::Apply(factor), factor};
+        const u32 setting = Settings::values.resolution_factor.GetValue();
+        bool dynamic = false;
+#ifdef ENABLE_FRAME_XR
+        dynamic = FrameXr::VrShowing() && Settings::values.vr_dynamic_resolution.GetValue();
+#endif
+        const u32 base = VideoCore::DynamicResolution::AltBase(
+            setting, setting != 0 ? 0 : render_window->GetFramebufferLayout().GetScalingRatio(),
+            dynamic);
+        return FrameCores::HostResolution{VideoCore::DynamicResolution::Apply(base), base};
     };
     frontend.microphone = [this] {
         return AudioCore::GetInputDetails(Settings::values.input_type.GetValue())
