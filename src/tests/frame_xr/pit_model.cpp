@@ -805,6 +805,37 @@ TEST_CASE("Tracked fingers: they come and go, the vertices stay sound", "[kiuhan
     }
 }
 
+TEST_CASE("Tracked fingers: joints gone 0.15 s each second, the hand does not flicker", "[kiuhand][kiuhands]") {
+    const PitModel m = Hand(0.025f, 0.010f);
+    const PitVec3 elbow = m.elbow;
+    Tracked t;
+    t.bend = {20, 70, 80, 45, 30};
+    PitTracked joints;
+    REQUIRE(PitTrackedFromJoints(t.Joints(), false, joints));
+    const auto expected = PitModelEvaluateTracked(m, joints, &elbow, true);
+    for (const float rate : {72.0f, 90.0f, 120.0f}) { // as SkinPit, frame by frame
+        const float dt = 1.0f / rate;
+        float lost = 0.0f;
+        bool had = false;
+        PitTracked shown;
+        for (int frame = 0; frame < static_cast<int>(3.0f * rate); frame++) {
+            const bool tracked = std::fmod(static_cast<float>(frame) * dt, 1.0f) < 0.85f;
+            const PitFingersFrom from = PitFingersKeep(tracked, had, dt, lost);
+            REQUIRE(from != PitFingersFrom::None);
+            if (from == PitFingersFrom::Joints) {
+                shown = had ? PitTrackedEase(shown, joints, dt, kFingersEase) : joints;
+            }
+            had = true;
+            const auto bones = PitModelEvaluateTracked(m, shown, &elbow, true);
+            for (std::size_t b = 0; b < bones.size(); b++) {
+                for (std::size_t k = 0; k < bones[b].size(); k++) {
+                    REQUIRE(std::abs(bones[b][k] - expected[b][k]) < 0.0001f);
+                }
+            }
+        }
+    }
+}
+
 TEST_CASE("Hand file: normals meet over a seam, not over an edge", "[kiuhand][kiuhands]") {
     PitModel m = Good();
     const auto put = [&m](std::size_t v, float x, float nx, float ny) {
