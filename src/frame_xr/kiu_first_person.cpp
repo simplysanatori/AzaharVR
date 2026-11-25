@@ -479,6 +479,11 @@ bool HudInView() {
     return text ? *text != "0" : Settings::values.vr_kiu_hud.GetValue() != 0;
 }
 
+bool WordsPlane() { // AzaharFrame kiuhs3a
+    const auto text = Common::FrameTestSwitches::Value(kSwitchWordsPlane);
+    return !text || *text != "0";
+}
+
 BottomNow BottomScreenNow() {
     BottomNow b;
     if (!AngelsAim() && !On()) {

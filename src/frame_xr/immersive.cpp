@@ -2269,6 +2269,7 @@ float AnchorFollowNow(bool follow_eye) {
 ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacement& placement) {
     ScreenLayers out;
     bool bottom_as_drawn = false; // AzaharFrame kiu140
+    bool in_plane = false; // AzaharFrame kiuhs3a: the portraits, each eye's own
     const bool wrist_up = g.wrist_shown && g.wrist_time == g.display_time; // AzaharFrame kiu1s
     out.top_space = local_space;
     out.top_pose[0] = out.top_pose[1] = placement.top_pose;
@@ -2449,10 +2450,28 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
                              right, Kiu::FirstPerson::kPortraitWordsDeg,
                              static_cast<float>(v.vr_kiu_portraits_across.GetValue()),
                              static_cast<float>(v.vr_kiu_portraits_height.GetValue()));
-            out.bottom_pose =
-                Compose(g.view.head, XrPosef{{p.qx, p.qy, p.qz, p.qw}, {p.x, p.y, p.z}});
             const float size = portraits_up ? 1.0f : Kiu::FirstPerson::kPortraitShrunk;
-            out.bottom_size = {p.width * size, p.height * size};
+            if (Kiu::FirstPerson::WordsPlane()) { // AzaharFrame kiuhs3a: where the words are
+                const Kiu::FirstPerson::InPlane at = Kiu::FirstPerson::ToPlane(
+                    p, g.solved.pitch_rad, g.solved.tan_half_y * g.solved.aspect,
+                    g.solved.tan_half_y);
+                for (int eye = 0; eye < 2; eye++) {
+                    const XrPosef screen = out.top_space == view_space
+                                               ? Compose(g.view.head, out.top_pose[eye])
+                                               : out.top_pose[eye];
+                    const float half_x = 0.5f * out.top_size[eye].width;
+                    const float half_y = 0.5f * out.top_size[eye].height;
+                    (eye ? out.bottom_pose_right : out.bottom_pose) = Compose(
+                        screen, XrPosef{{0, 0, 0, 1}, {at.u * half_x, at.v * half_y, 0.0f}});
+                    (eye ? out.bottom_size_right : out.bottom_size) = {
+                        2.0f * at.half_u * half_x * size, 2.0f * at.half_v * half_y * size};
+                }
+                in_plane = true;
+            } else {
+                out.bottom_pose =
+                    Compose(g.view.head, XrPosef{{p.qx, p.qy, p.qz, p.qw}, {p.x, p.y, p.z}});
+                out.bottom_size = {p.width * size, p.height * size};
+            }
             out.bottom_cut = cut;
             out.bottom_talk = Kiu::Talk::CutoutWanted(); // AzaharFrame kiutalk
             out.show_bottom = true;
@@ -2540,7 +2559,16 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
     const float top_distance = out.top_space == view_space || (g.engaged && IsViewMode(g.mode))
                                    ? g.solved.distance
                                    : DistanceTo(out.top_pose[0]);
-    out.bottom_first = DistanceTo(out.bottom_pose) > top_distance;
+    // (the portraits in the screen's plane are over it, aside or not)
+    out.bottom_first = !in_plane && DistanceTo(out.bottom_pose) > top_distance;
+    if (!in_plane) { // AzaharFrame kiuhs3a: the same for both eyes
+        out.bottom_pose_right = out.bottom_pose;
+        out.bottom_size_right = out.bottom_size;
+    }
+    out.bottom_per_eye = in_plane || (KiuFirstPerson() && g.live && IsViewMode(g.mode) &&
+                                      g.view.valid && Kiu::FirstPerson::WordsPlane() &&
+                                      Kiu::FirstPerson::Portraits() !=
+                                          Kiu::FirstPerson::PortraitState::Off);
     VideoCore::Immersive::g_bottom_as_drawn.store(bottom_as_drawn, std::memory_order_relaxed);
     return out;
 }

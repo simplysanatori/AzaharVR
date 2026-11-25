@@ -1657,9 +1657,18 @@ void Runtime::FrameLoop() {
                 const auto add_bottom = [&] {
                     if (shown.show_bottom && draw.bottom_visible) {
                         preview_take = shown.bottom_preview; // AzaharFrame kiuaim
+                        const float curve = shown.bottom_preview ? 0.0f : draw.bottom_curve;
+                        // AzaharFrame kiuhs3a: the portraits: a layer an eye.
+                        const bool per_eye = shown.bottom_per_eye && !shown.bottom_preview;
                         add_screen(VideoCore::XrScreen::Bottom, local_space, shown.bottom_pose,
-                                   shown.bottom_size, XR_EYE_VISIBILITY_BOTH,
-                                   shown.bottom_preview ? 0.0f : draw.bottom_curve);
+                                   shown.bottom_size,
+                                   per_eye ? XR_EYE_VISIBILITY_LEFT : XR_EYE_VISIBILITY_BOTH,
+                                   curve);
+                        if (per_eye) {
+                            add_screen(VideoCore::XrScreen::Bottom, local_space,
+                                       shown.bottom_pose_right, shown.bottom_size_right,
+                                       XR_EYE_VISIBILITY_RIGHT, curve);
+                        }
                         preview_take = false;
                     }
                 };

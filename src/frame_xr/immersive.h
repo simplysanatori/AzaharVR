@@ -68,6 +68,11 @@ struct ScreenLayers {
     XrPosef bottom_pose{};
     XrExtent2Df bottom_size{};
     bool show_bottom = true;
+    /// AzaharFrame kiuhs3a: a bottom screen layer an eye (above the left's, this the right's), kept
+    /// while Angel's Aim's portraits may show, so the layers stay as many.
+    bool bottom_per_eye = false;
+    XrPosef bottom_pose_right{};
+    XrExtent2Df bottom_size_right{};
     /// The bottom screen is farther away than the top one: submit it first. Quad layers are
     /// drawn in submission order, with no depth test, so the nearer one has to come last.
     bool bottom_first = false;
