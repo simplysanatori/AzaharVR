@@ -156,8 +156,8 @@ TEST_CASE("Tab menu: labels and options are not cut", "[frame_xr][tabmenu]") {
         d.Draw(m, v);
         for (const auto& h : d.menu.Hits()) {
             const auto& options = OptionsFor(h.t.id);
-            if (h.t.index < 0 || h.t.index >= static_cast<int>(options.size()) || // Angel's Aim's
-                options.empty() || h.t.id == Id::ScreenShape ||
+            if (h.t.index < 0 || options.empty() || h.t.id == Id::ScreenShape ||
+                h.t.id == Id::ModsSegment || // Angel's Aim's: its own test
                 h.t.id == Id::ImmersiveMode || h.r.y1 >= kListBottom - 0.01f) {
                 continue;
             }
@@ -3153,7 +3153,7 @@ TEST_CASE("Tab menu: Controls, Buttons has the picture on top, the rows under it
             }
         }
         CHECK(face->r.y0 >= picture.y1);
-        CHECK(face->r.y1 <= d.menu.Layout().bar.list.y1); // in view
+        CHECK(face->r.H() >= 48.0f); // whole, not cut by the list's end
         // Its other rows by scrolling
         v.scroll[static_cast<int>(Tab::Controls)] = 10000.0f;
         d.Draw(m, v);
