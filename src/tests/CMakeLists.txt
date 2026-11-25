@@ -269,6 +269,15 @@ if (CITRA_USE_PRECOMPILED_HEADERS)
     target_precompile_headers(tests PRIVATE precompiled_headers.h)
 endif()
 
+if (MSVC)
+    # AzaharVR: cl's old preprocessor cannot quote raw strings with an odd number of '"' in
+    # CHECK(...) (error C2017); the standard one can. Not with the precompiled header, made without it.
+    set_source_files_properties(core/homebrew_handheld.cpp PROPERTIES
+        COMPILE_OPTIONS /Zc:preprocessor
+        SKIP_PRECOMPILE_HEADERS ON
+    )
+endif()
+
 # Bundle in-place on MSVC so dependencies can be resolved by builds.
 if (MSVC)
     include(BundleTarget)

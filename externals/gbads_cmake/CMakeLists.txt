@@ -145,6 +145,11 @@ if (WIN32)
     target_include_directories(mgba PRIVATE "${MGBA_ZLIB_DIR}" "${MGBA_ZLIB_DIR}/contrib")
     target_link_libraries(mgba mgba_zlib)
     target_compile_options(mgba PRIVATE "/FI${CMAKE_CURRENT_SOURCE_DIR}/win32/mgba_shim.h")
+    # AzaharVR: mGBA's command line is for its own programs; on Windows it carries a getopt of
+    # its own, whose optind, opterr and optopt clash with externals/getopt (error LNK2005).
+    get_target_property(_mgba_sources mgba SOURCES)
+    list(FILTER _mgba_sources EXCLUDE REGEX "feature/commandline\\.c$")
+    set_property(TARGET mgba PROPERTY SOURCES ${_mgba_sources})
     alt_cores_compiler()
 
     # AzaharVR: the POSIX names gba-ds's and PokeDaisy's files use. Only for targets that link this.

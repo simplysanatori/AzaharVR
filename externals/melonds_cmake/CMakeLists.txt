@@ -256,6 +256,9 @@ set_target_properties(melonds_core PROPERTIES
 
 if (MSVC)
     target_compile_definitions(melonds_core PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS _USE_MATH_DEFINES)
+    # AzaharVR: OpenAL Soft, linked into the same program on Windows, has a CPUInfo of its own
+    # (error LNK2005 for the constructor); melonDS's is only used inside melonDS.
+    target_compile_definitions(melonds_core PRIVATE CPUInfo=MelonDSCPUInfo)
     target_compile_options(melonds_core PRIVATE /W0)
 else()
     target_compile_options(melonds_core PRIVATE
