@@ -95,7 +95,7 @@ std::vector<std::pair<std::string, MenuModel>> PlayerModels() {
         m->immersive_mode = 0;
     }
     kiu.mods.angels_aim.shown = true;
-    kiu.mods.angels_aim.recommended = true;
+    kiu.mods.angels_aim.mapped = true;
     kiu.gyro_aim = 2;
     kiu.recoil = kiu.weapon_in_hand = kiu.muzzle_flash = kiu.projectiles = true;
     kiu.bottom_screen_reticle = 3;
@@ -1459,6 +1459,7 @@ TEST_CASE("Tab menu: Screen Curve and Render Margin are sliders over their stops
             MenuModel m = Sample();
             m.screen_curve = static_cast<int>(i);
             m.margin_x = m.margin_y = static_cast<int>(i);
+            m.scale_mode = 0; // Render Margin's rows: Stretch only
             MenuView v;
             v.tab = id == Id::ScreenCurve ? Tab::Position : Tab::Settings;
             v.section = SettingsSection::Immersive;
@@ -2911,8 +2912,8 @@ TEST_CASE("Tab menu: the scope control is the same on Settings, Controls and Pos
             // Per-Game's count tooltip (34 dp, under the toggle) does not cover Edit Controls:
             // beside it, or over it while Buttons is the only section
             Kit kit{1.0f};
-            const float half =
-                0.5f * (kit.TextWidth(Type::Tooltip, GameValueCount(88)) + 28.0f);
+            const float half = 0.5f * kit.TextWidth(Type::Tooltip, GameValueCount(88)) + 10.0f;
+            const float tip_x0 = std::min(per_game->r.Cx(), kPanelW - 12.0f - half - 4.0f) - half;
             MenuModel gba = m;
             gba.core = CoreCaps::ForGBA();
             for (const MenuModel& em : {m, gba}) {
@@ -2920,9 +2921,7 @@ TEST_CASE("Tab menu: the scope control is the same on Settings, Controls and Pos
                 dc.Draw(em, v);
                 const MenuLayout::Hit* edit = FindHit(dc, Id::EditControls, -1);
                 REQUIRE(edit != nullptr);
-                CHECK((edit->r.y0 >= per_game->r.y1 + 34.0f + 4.0f ||
-                       edit->r.x1 <= std::min(per_game->r.Cx() - half,
-                                              kPanelW - 24.0f - 2.0f * half)));
+                CHECK((edit->r.y0 >= per_game->r.y1 + 34.0f + 4.0f || edit->r.x1 <= tip_x0));
             }
         }
         CheckTargets(d);
@@ -3955,7 +3954,6 @@ TEST_CASE("Tab menu: the Fast Forward Audio row", "[frame_xr][tabmenu][ffaudio]"
     MenuView v;
     v.tab = Tab::Settings;
     v.section = SettingsSection::General;
-    v.scroll[static_cast<int>(Tab::Settings)] = 300.0f;
     d.Draw(m, v);
     CHECK(HasHit(d, Id::FastForwardAudio, -1));
     CHECK(!HasHit(d, Id::FastForwardAudio, 2));

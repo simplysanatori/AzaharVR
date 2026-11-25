@@ -323,7 +323,7 @@ TEST_CASE("Sections: a 3DS game's rows, in order", "[frame_xr][tabmenu]") {
           std::set<Id>{Id::MotionControls, Id::GyroAim, Id::GyroSensitivity});
     // Kid Icarus: Uprising, out of Angel's Aim mode: its weapon rows are Aiming's, Immersive the
     // same; in it, the first-person rows right under Immersive Mode.
-    m.mods.angels_aim.shown = m.mods.angels_aim.recommended = true;
+    m.mods.angels_aim.shown = m.mods.angels_aim.mapped = true;
     m.gyro_aim = 2;
     CHECK(RowIds(Tab::Settings, m, SettingsSection::Immersive) == immersive);
     const std::vector<Id> aiming = AimingRows(m);

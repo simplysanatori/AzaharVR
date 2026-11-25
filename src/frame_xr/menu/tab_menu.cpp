@@ -2815,7 +2815,7 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
     // it is the only section), the picture under it as wide as the pane, then the rows; one shows
     // under the picture without scrolling.
     const float pages_h = buttons && !one_section ? kChoiceH : 0.0f;
-    const float picture_h = buttons ? 344.0f : 0.0f;
+    const float picture_h = buttons ? 320.0f : 0.0f;
     const float button_rows_h =
         buttons ? kChoiceH * (model.show_controllers ? 3.0f : 2.0f) : 0.0f;
     // Aiming's rows: Aiming and Gyro Sensitivity always; Recoil and Weapon in Hand (with their
@@ -2837,7 +2837,7 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
     const float scroll =
         std::clamp(view.scroll[static_cast<std::size_t>(view.tab)], 0.0f, max_scroll);
     // Where Aiming is: the scroll that brings it to the top (Angel's Aim's Aiming Settings).
-    layout.aiming_scroll = std::min(max_scroll, motion_h);
+    layout.aiming_scroll = std::min(max_scroll, 4.0f + motion_h);
     layout.controls = show_aim_rows;
     const float top = list.y0 - scroll;
     kit.Clip(list);
@@ -2849,7 +2849,8 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
     Rect edit{c.x1 - edit_w, top + kScopeEditGap - kScopeRowsGap, c.x1, 0.0f};
     if (buttons) {
         const auto& pages = OptionsFor(Id::ControlsPage);
-        const float room = one_section ? scope_x0 - kScopeGapX - c.x0 : c.W() - edit_w - 12.0f;
+        // Beside each other, the pages as wide as their labels.
+        const float room = one_section ? scope_x0 - kScopeGapX - c.x0 : 300.0f;
         const float seg_y = one_section ? c.y0 : top;
         const Rect seg{c.x0, seg_y, c.x0 + kit.SegmentedWidth(pages, room), seg_y + kControlH};
         if (!one_section) {
@@ -2896,8 +2897,9 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
                     enabled ? 1.0f : kDisabledContent);
         const auto& opts = OptionsFor(id);
         // AzaharFrame input2: up to 0.64 of the width (the reticle's four choices need it).
-        // AzaharVR: the Buttons section's two have what their labels leave, as in Settings.
-        const bool wide = id == Id::FaceButtons || id == Id::ControllersInFront;
+        // AzaharVR: the rows moved here have what their labels leave, as in Settings.
+        const bool wide = id == Id::FaceButtons || id == Id::ControllersInFront ||
+                          id == Id::MotionControls;
         const float room = shared || wide ? right - c.x0 - kit.TextWidth(Type::Body, LabelFor(id)) - 16.0f
                                   : c.W() * 0.64f;
         const float tw = kit.SegmentedWidth(opts, room);
