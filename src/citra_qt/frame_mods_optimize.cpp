@@ -134,6 +134,9 @@ void FrameMods::OptimizeAsk(const std::string& pack_id) {
         return;
     }
     const std::string png = Canon(pair.png);
+    if (deleting.count(png) != 0) {
+        return;
+    }
     optimize_checking = png;
     UpdateOptimizeRow();
     PublishTextures();
@@ -169,7 +172,7 @@ void FrameMods::OptimizeAsk(const std::string& pack_id) {
 }
 
 void FrameMods::OptimizeStart(const std::string& png) {
-    if (optimize_converter) {
+    if (optimize_converter || deleting.count(png) != 0) {
         return;
     }
     optimize_png = png;

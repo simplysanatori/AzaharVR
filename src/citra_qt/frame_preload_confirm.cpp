@@ -39,6 +39,11 @@ PB::ConfirmText FramePreloadConfirmText() {
     return t;
 }
 
+bool FrameTexturesLoading() {
+    Core::System& system = Core::System::GetInstance();
+    return system.IsPoweredOn() && system.CustomTexManager().Loading();
+}
+
 QDialog* FrameMakePreloadDialog(QWidget* parent, const PB::ConfirmText& t) {
     // A Material-style dialog in Qt widgets: the headline, the supporting text, the numbers
     // between two lines, the status row, then Cancel and Turn On at the end.

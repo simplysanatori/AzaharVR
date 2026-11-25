@@ -192,7 +192,7 @@ struct TexturePackItem {
     std::string name;   ///< "4K", "1080p", "4K (PNG)" or the pack.json name
     std::string detail; ///< one line: "Henriko Magnifico · 6.0.0 · ASTC/KTX · 2.1 GB" ("" = none)
     bool active = false;     ///< on (AzaharFrame texlayers: any number of them)
-    bool downloaded = false; ///< from Download Packs: it has Delete
+    bool can_delete = false; ///< it has Delete (CustomTex::Deletion::Check)
     bool customize = false;  ///< AzaharFrame texparts: two or more parts: the Customize button
     bool verified = false;   ///< AzaharFrame fixd: from a verified catalog entry: the Verified chip
     bool recommended = false; ///< from a recommended catalog entry: the Recommended chip
@@ -453,9 +453,16 @@ inline constexpr const char* kRemoveOriginalTitle = "Remove the Original Pack?";
 /// "Frees 4.7 GB. The optimized pack keeps working. To go back to the original, you'd need to
 /// download it again." (`catalog`; else "add it again"); no size known: no first sentence.
 std::string RemoveOriginalBody(const std::string& size, bool catalog);
-/// AzaharFrame texrow: Delete's supporting text. `both`: the row is an Optimize for Frame pair and
-/// both copies go; `zip`: the pack came from a zip (install it again), else from a download.
-std::string DeletePackBody(bool both, bool zip);
+/// Where a pack came from: Download Packs, Install from Zip, or the player put it there.
+enum class PackOrigin : uint8_t { Download, Zip, Own };
+/// Delete's supporting text. AzaharFrame texrow: `both`: the row is an Optimize for Frame pair and
+/// both copies go. `shared`: another game has it on.
+struct DeletePackText {
+    PackOrigin origin = PackOrigin::Download;
+    bool both = false;
+    bool shared = false;
+};
+std::string DeletePackBody(const DeletePackText& text);
 /// "Optimize 4K (PNG) for Frame?"
 std::string OptimizeNudgeText(const std::string& pack);
 /// "2,308"

@@ -128,7 +128,8 @@ private:
                           RemoveOriginal /* AzaharFrame ui3: the optimized copy's path */ };
         Kind kind = Kind::None;
         std::string id;
-        std::string other; ///< AzaharFrame texrow: Delete: the pair's other folder ("" none)
+        std::vector<std::string> packs; ///< Delete: the packs' ids (AzaharFrame texrow: a pair's two)
+        bool shared = false;            ///< Delete: the dialog said another game uses it
     };
 
     void AllowAnyway(const std::string& id, int value); // AzaharFrame compat
@@ -192,8 +193,13 @@ private:
     void LoadPackDownloads();
     void ListPackDownloads();
     void StartDownload(const std::string& id);
-    /// Deletes the folder (and `other`, AzaharFrame texrow: the pair's other copy, "" none).
-    void DeletePack(const std::string& folder, const std::string& other = {});
+    /// Delete on a pack's row: "Delete <Pack>?" (pack_pending); nothing is deleted before its answer.
+    void DeletePackAsk(const std::string& pack_id);
+    /// The dialog's Delete (core/custom_tex/delete.h, off the GUI thread).
+    void DeletePacks(const Pending& p);
+    /// One of the packs is in use by a download, Install from Zip, the converter or a texture load.
+    bool PacksBusy(const std::vector<std::string>& ids) const;
+    FrameXr::Menu::PackOrigin PackOriginOf(const std::string& pack_id) const;
     void PollDownload();
     void SetOffers(const std::vector<CustomTex::Download::PackInfo>& list);
     FrameXr::Menu::PackOffer* PackOffer(const std::string& id);
@@ -278,7 +284,8 @@ private:
     bool catalog_fetched = false;       ///< the texture catalog's one request a run
     u64 mods_network_title = ~0ULL;     ///< AzaharFrame stall: the title the mod list's requests ran for
     bool mods_network_running = false;  ///< AzaharFrame stall: they run now
-    std::set<std::string> downloaded;   ///< folder names Download Packs installed (for Delete)
+    std::set<std::string> deletable;    ///< the packs (ids) with Delete, from RefreshPacks
+    std::set<std::string> deleting;     ///< the packs (ids) being deleted now
     /// AzaharFrame fixd: folder names of installed packs whose catalog entry is verified (the chip)
     std::set<std::string> verified_folders;
     std::set<std::string> recommended_folders; ///< the installed packs' Recommended chip
@@ -297,5 +304,4 @@ private:
     ZipQuestion zip_question = ZipQuestion::None;
     std::string zip_mod_id;                  ///< ReplaceOther, Blocked: the mod in the library
     std::string zip_folder;                  ///< the folder browsed last (this session)
-    std::set<std::string> zip_packs;         ///< pack folders Install from Zip made (for Delete)
 };

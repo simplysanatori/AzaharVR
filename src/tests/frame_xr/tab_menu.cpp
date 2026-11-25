@@ -683,9 +683,9 @@ TEST_CASE("Tab menu: Download Packs", "[frame_xr][tabmenu]") {
     d.Draw(m, v);
     CHECK(HasHit(d, Id::DownloadPacks, -1));
 
-    // A downloaded pack has Delete; one added by hand has not.
+    // A pack that may be deleted has Delete.
     m.mods.textures = Packs(2);
-    m.mods.textures.packs[1].downloaded = true;
+    m.mods.textures.packs[1].can_delete = true;
     d.Draw(m, v);
     CHECK(HasHit(d, Id::DownloadPacks, -1));
     CHECK(!HasHit(d, Id::PackDelete, 0));
@@ -1081,12 +1081,18 @@ TEST_CASE("Mods segments: supporting lines", "[frame_xr][tabmenu]") {
 }
 
 TEST_CASE("texrow: Delete's text for a pack and an Optimize for Frame pair", "[texrow]") {
-    CHECK(DeletePackBody(false, false) == "You can download it again.");
-    CHECK(DeletePackBody(false, true) == "You can install it again from its zip.");
-    CHECK(DeletePackBody(true, false) ==
-          "Deletes the optimized pack and the original PNG pack. You can download it again.");
-    CHECK(DeletePackBody(true, true) ==
-          "Deletes the optimized pack and the original PNG pack. You can install it again from its zip.");
+    using O = PackOrigin;
+    const std::string both = "Deletes the optimized pack and the original PNG pack. ";
+    CHECK(DeletePackBody({}) == "You can download it again.");
+    CHECK(DeletePackBody({O::Zip}) == "You can install it again from its zip.");
+    CHECK(DeletePackBody({O::Own}) == "You'd need your own copy to install it again.");
+    CHECK(DeletePackBody({O::Download, true}) == both + "You can download it again.");
+    CHECK(DeletePackBody({O::Zip, true}) == both + "You can install it again from its zip.");
+    CHECK(DeletePackBody({O::Own, true}) == both + "You'd need your own copy to install it again.");
+    CHECK(DeletePackBody({O::Own, false, true}) ==
+          "Another game uses it too. You'd need your own copy to install it again.");
+    CHECK(DeletePackBody({O::Own, true, true}) ==
+          both + "Another game uses it too. You'd need your own copy to install it again.");
 }
 
 // AzaharFrame menuux: Switch to Flat, the Settings tab's renderer rows, the Touchpad row's line,
@@ -2290,7 +2296,7 @@ TEST_CASE("Tab menu: texture pack parts", "[frame_xr][tabmenu]") {
     m.mods.textures = Packs(3);
     m.mods.textures.packs[1].customize = true;
     m.mods.textures.packs[2].customize = true;
-    m.mods.textures.packs[2].downloaded = true;
+    m.mods.textures.packs[2].can_delete = true;
     d.Draw(m, v);
     CHECK(!HasHit(d, Id::PackCustomize, 0));
     REQUIRE(HasHit(d, Id::PackCustomize, 1));

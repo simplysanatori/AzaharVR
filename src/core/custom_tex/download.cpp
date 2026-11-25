@@ -29,6 +29,7 @@
 #include "common/file_util.h"
 #include "common/logging/log.h"
 #include "core/cheats/online.h"
+#include "core/custom_tex/delete.h"
 #include "core/custom_tex/download.h"
 #include "core/custom_tex/layers.h" // AzaharFrame texlayers
 #include "core/custom_tex/packs.h"
@@ -1994,20 +1995,12 @@ Result Downloader::Delete(u64 title_id, const std::string& folder) {
         result.error = "Not a downloaded pack";
         return result;
     }
-    CustomTex::Paths paths;
+    Paths paths;
     paths.load_dir = load_dir_;
-    // AzaharFrame texlayers: out of the game's list (the link moves to the next pack, if any)
     const std::string id = fs::weakly_canonical(dir, ec).generic_string();
-    if (const auto r = CustomTex::Layers::TurnOff(paths, title_id, id); !r.ok) {
-        result.error = r.error;
-        return result;
-    }
-    fs::remove_all(dir, ec);
-    if (ec) {
-        result.error = "Cannot remove the folder";
-        return result;
-    }
-    result.ok = true;
+    const Deletion::Result r = Deletion::Delete(paths, title_id, {id}, {.shared = true});
+    result.ok = r.ok;
+    result.error = r.error;
     return result;
 }
 

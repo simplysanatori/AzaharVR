@@ -750,10 +750,28 @@ std::string RemoveOriginalBody(const std::string& size, bool catalog) {
            (catalog ? "download" : "add") + " it again.";
 }
 
-std::string DeletePackBody(bool both, bool zip) { // AzaharFrame texrow
-    const std::string again = zip ? "You can install it again from its zip."
-                                  : "You can download it again.";
-    return both ? "Deletes the optimized pack and the original PNG pack. " + again : again;
+namespace {
+// Delete's sentences
+constexpr const char* kDeleteBoth = "Deletes the optimized pack and the original PNG pack.";
+constexpr const char* kDeleteShared = "Another game uses it too.";
+constexpr const char* kDeleteDownload = "You can download it again.";
+constexpr const char* kDeleteZip = "You can install it again from its zip.";
+constexpr const char* kDeleteOwn = "You'd need your own copy to install it again.";
+} // namespace
+
+std::string DeletePackBody(const DeletePackText& text) {
+    std::string body;
+    const auto add = [&body](bool shown, const char* sentence) {
+        if (shown) {
+            body += (body.empty() ? "" : " ") + std::string(sentence);
+        }
+    };
+    add(text.both, kDeleteBoth); // AzaharFrame texrow
+    add(text.shared, kDeleteShared);
+    add(text.origin == PackOrigin::Download, kDeleteDownload);
+    add(text.origin == PackOrigin::Zip, kDeleteZip);
+    add(text.origin == PackOrigin::Own, kDeleteOwn);
+    return body;
 }
 
 std::string ModVersionText(const std::string& version) { // AzaharFrame ui3
@@ -1870,8 +1888,7 @@ void TabMenu::DrawTextures(Kit& kit, const MenuModel& model, const MenuView& vie
         {
             float right = c.x1;
             float trail = c.x1; // AzaharFrame texparts: where the next button ends
-            if (p.downloaded) {
-                // Delete, for the packs Download Packs brought (they can come again).
+            if (p.can_delete) {
                 const std::string label = LabelFor(Id::PackDelete);
                 const float w = ButtonWidth(kit, label, false, 12.0f);
                 const Rect b{c.x1 - w, cy - kButtonH * 0.5f, c.x1, cy + kButtonH * 0.5f}; // integ

@@ -104,11 +104,6 @@ std::vector<fs::path> ExpandRoot(const std::string& root) {
     return out;
 }
 
-bool IsHexTitleFolder(const std::string& name, const std::string& tid) {
-    return StartsWithNoCase(name, tid) &&
-           (name.size() == tid.size() || name[tid.size()] == '-' || name[tid.size()] == '_');
-}
-
 Pack MakePack(const fs::path& folder, const std::string& title_folder, bool managed) {
     Pack pack;
     pack.path = folder.generic_string();
@@ -210,6 +205,21 @@ Result ClearLoadPlace(const Paths& paths, u64 title_id, const fs::path& load_pat
 }
 
 } // namespace
+
+bool IsTitleFolder(const std::string& name, const std::string& tid) {
+    return StartsWithNoCase(name, tid) &&
+           (name.size() == tid.size() || name[tid.size()] == '-' || name[tid.size()] == '_');
+}
+
+std::vector<std::string> ExtraRootFolders(const Paths& paths) {
+    std::vector<std::string> out;
+    for (const std::string& root : paths.extra_roots) {
+        for (const fs::path& dir : ExpandRoot(root)) {
+            out.push_back(dir.generic_string());
+        }
+    }
+    return out;
+}
 
 std::string FormatName(Format format) {
     switch (format) {
@@ -401,7 +411,7 @@ std::string DeriveName(const std::string& parent_folder, const std::string& fold
         }
     }
     std::string rest = folder;
-    if (IsHexTitleFolder(rest, title_folder)) {
+    if (IsTitleFolder(rest, title_folder)) {
         rest = rest.substr(title_folder.size());
     }
     for (const auto& t : Tokens(rest)) {
@@ -490,6 +500,11 @@ std::optional<u64> ComputeSize(const std::string& path, const std::atomic_bool* 
     return total;
 }
 
+void ForgetSize(const std::string& path) {
+    std::lock_guard lock{size_mutex};
+    size_cache.erase(Canonical(path));
+}
+
 void ForgetSizes() {
     std::lock_guard lock{size_mutex};
     size_cache.clear();
@@ -540,13 +555,11 @@ std::vector<Pack> ListPacks(const Paths& paths, u64 title_id) {
         }
     }
     // extra roots
-    for (const std::string& root : paths.extra_roots) {
-        for (const fs::path& dir : ExpandRoot(root)) {
-            std::error_code e2;
-            for (fs::directory_iterator it(dir, e2), end; !e2 && it != end; it.increment(e2)) {
-                if (IsDir(it->path()) && IsHexTitleFolder(it->path().filename().string(), tid)) {
-                    add(MakePack(it->path(), tid, false));
-                }
+    for (const std::string& dir : ExtraRootFolders(paths)) {
+        std::error_code e2;
+        for (fs::directory_iterator it(dir, e2), end; !e2 && it != end; it.increment(e2)) {
+            if (IsDir(it->path()) && IsTitleFolder(it->path().filename().string(), tid)) {
+                add(MakePack(it->path(), tid, false));
             }
         }
     }

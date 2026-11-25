@@ -2463,6 +2463,26 @@ int main(int argc, char** argv) {
         dp.mods.textures.dialog = {ModsDialogKind::DeletePack, "Pokemon X and Y HD", ""};
         v.hover = {Id::DialogConfirm};
         ok &= shot("textures-delete", dp, v);
+        { // the player's own packs: Delete, and what the dialog says
+            MenuModel own = dp;
+            own.mods.textures.dialog = {};
+            own.mods.textures.packs = {
+                {"/load/texture-packs/0004000000055D00/Original-astc4x4", "Original",
+                 "ASTC/KTX · 415 MB", true, true},
+                {"/load/textures/0004000000055D00", "Default (PNG)", "PNG · 59 MB", false, true}};
+            own.mods.textures.packs[0].customize = true;
+            v.hover = {Id::PackDelete, 1};
+            ok &= shot("textures-own", own, v);
+            v.hover = {Id::DialogCancel};
+            own.mods.textures.dialog = {
+                ModsDialogKind::DeletePack, "Default (PNG)",
+                DeletePackBody({.origin = PackOrigin::Own})};
+            ok &= shot("textures-own-delete", own, v);
+            own.mods.textures.dialog = {
+                ModsDialogKind::DeletePack, "Original",
+                DeletePackBody({.origin = PackOrigin::Own, .both = true, .shared = true})};
+            ok &= shot("textures-own-delete-pair", own, v);
+        }
         // AzaharFrame memguard: Preload Textures? with this machine's memory now (run the dump
         // inside the launcher's scope to see Azahar's Limit): OoT3D 4K as ASTC (6034295947
         // bytes) and a 0.9 GB pack, or AZAHARFRAME_DUMP_PRELOAD_BIG / _SMALL bytes

@@ -210,10 +210,29 @@ void CustomTexManager::ReleaseUploaded(Material* material) {
     }
 }
 
+namespace {
+/// Counted while it lives (CustomTexManager::Loading)
+struct LoadingScope {
+    std::atomic<int>& count;
+    explicit LoadingScope(std::atomic<int>& count_) : count{count_} {
+        ++count;
+    }
+    ~LoadingScope() {
+        --count;
+    }
+};
+} // namespace
+
+bool CustomTexManager::Loading() const {
+    // `workers` is there before textures_loaded is set, and stays
+    return loading > 0 || (textures_loaded && workers && !workers->Idle());
+}
+
 void CustomTexManager::FindCustomTextures() {
     if (textures_loaded) {
         return;
     }
+    const LoadingScope scope{loading};
     if (!workers) {
         CreateWorkers();
     }
@@ -454,6 +473,7 @@ PreloadResult CustomTexManager::PreloadTextures(
     // quarter of RAM). AZAHARFRAME_PRELOAD_FORCE=1 (tests): skip the check before, keep the
     // check while it runs.
     using namespace PreloadBudget;
+    const LoadingScope scope{loading};
     const u64 reserve = ReserveFromEnv();
     const char* force_env = std::getenv("AZAHARFRAME_PRELOAD_FORCE");
     const bool force = force_env && std::string_view{force_env} == "1";

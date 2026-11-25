@@ -497,6 +497,40 @@ std::optional<Estimate> EstimatePack(const Request& request, std::string* error)
     return est;
 }
 
+namespace {
+
+std::mutex running_mutex;
+std::multiset<std::string> running; ///< the packs read and the copies written now
+
+std::string RunningKey(const std::string& folder) {
+    std::error_code ec;
+    const fs::path c = fs::weakly_canonical(folder, ec);
+    return (ec ? fs::path(folder) : c).generic_string();
+}
+
+struct RunningEntry {
+    std::string src, out;
+    RunningEntry(const std::string& src_, const std::string& out_)
+        : src(RunningKey(src_)), out(RunningKey(out_)) {
+        std::lock_guard lock(running_mutex);
+        running.insert(src);
+        running.insert(out);
+    }
+    ~RunningEntry() {
+        std::lock_guard lock(running_mutex);
+        running.erase(running.find(src));
+        running.erase(running.find(out));
+    }
+};
+
+} // namespace
+
+bool IsRunning(const std::string& folder) {
+    const std::string key = RunningKey(folder);
+    std::lock_guard lock(running_mutex);
+    return running.count(key) != 0;
+}
+
 Result Converter::Run() {
     Result r = RunInner();
     return r;
@@ -518,6 +552,7 @@ Result Converter::RunInner() {
     const std::string& src = plan.src;
     const std::string& out = plan.out;
     result.output = out;
+    const RunningEntry entry(src, out);
 
     const std::string config_path = src + "/pack.json";
     std::error_code ec;
