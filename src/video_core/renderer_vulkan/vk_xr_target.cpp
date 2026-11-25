@@ -97,7 +97,9 @@ void main() {
 // AzaharFrame kiupowers: one of the game's quads, coloured as the game's TEV does (kiu_powers.h
 // Tev: 1 texture times colour, 2 the icons', 3 the name's), premultiplied. In an sRGB image the
 // premultiplied colour is made linear as a whole, so over black it is what the game's own blend
-// (in the display's values) gives and a soft edge is no lighter than in the game.
+// (in the display's values) gives and a soft edge is no lighter than in the game; the name's alpha
+// is what gives the game's dark letters on the light bubble. 0: the opacity alone, what the whole
+// strip is multiplied by.
 constexpr std::string_view XR_SPRITE_FRAG = R"(
 #version 450 core
 #extension GL_ARB_separate_shader_objects : enable
@@ -108,7 +110,7 @@ layout (location = 0) out vec4 color;
 layout (push_constant, std140) uniform DrawInfo {
     mat4 modelview_matrix;
     vec4 tint;
-    vec4 opacity_constant; // x: the opacity, w: the TEV constant's alpha
+    vec4 opacity_constant; // x: the strip's opacity, w: the TEV constant's alpha
     int tev;
     int screen_id_r;
     int layer;
@@ -128,13 +130,17 @@ void main() {
         c = vec4(mix(t.rgb, tint.rgb, tint.a), t.a * opacity_constant.w);
     } else if (tev == 3) {
         c = vec4(tint.rgb, t.r * tint.a);
+#ifdef XR_SRGB_TARGET
+        float dark = 1.0 - max(tint.r, max(tint.g, tint.b));
+        c.a = mix(c.a, 1.0 - ToLinear(vec3(1.0 - clamp(c.a, 0.0, 1.0))).r, dark);
+#endif
     }
     c.a = clamp(c.a, 0.0, 1.0);
     vec3 rgb = c.rgb * c.a;
 #ifdef XR_SRGB_TARGET
     rgb = ToLinear(rgb);
 #endif
-    color = vec4(rgb, c.a) * opacity_constant.x;
+    color = tev == 0 ? vec4(opacity_constant.x) : vec4(rgb, c.a);
 }
 )";
 
@@ -159,7 +165,7 @@ XrPresentTarget::XrPresentTarget(const Instance& instance_, Scheduler& scheduler
     CreateRenderPass();
     fragment_shader = Compile(XR_PRESENT_FRAG, vk::ShaderStageFlagBits::eFragment, device,
                               IsSrgb(format) ? "#define XR_SRGB_TARGET\n" : "");
-    pipeline = CreatePipeline(fragment_shader, false);
+    pipeline = CreatePipeline(fragment_shader, Blend::None);
     CreateCopyObjects();
     sink.SetScreensLive(true);
     release_thread = std::jthread([this](std::stop_token token) { ReleaseThread(token); });
@@ -188,6 +194,7 @@ XrPresentTarget::~XrPresentTarget() {
     device.destroyCommandPool(copy_pool);
     device.destroyPipeline(pipeline);
     device.destroyPipeline(sprite_pipeline); // AzaharFrame kiupowers
+    device.destroyPipeline(opacity_pipeline);
     device.destroyShaderModule(sprite_shader);
     device.destroyShaderModule(fragment_shader);
     device.destroyRenderPass(render_pass);
@@ -254,10 +261,12 @@ void XrPresentTarget::CreateRenderPass() {
 void XrPresentTarget::CreateSpritePipeline() { // AzaharFrame kiupowers
     sprite_shader = Compile(XR_SPRITE_FRAG, vk::ShaderStageFlagBits::eFragment, device,
                             IsSrgb(format) ? "#define XR_SRGB_TARGET\n" : "");
-    sprite_pipeline = CreatePipeline(sprite_shader, true);
+    sprite_pipeline = CreatePipeline(sprite_shader, Blend::Over);
+    opacity_pipeline = CreatePipeline(sprite_shader, Blend::Scale);
 }
 
-vk::Pipeline XrPresentTarget::CreatePipeline(vk::ShaderModule fragment, bool blended) {
+vk::Pipeline XrPresentTarget::CreatePipeline(vk::ShaderModule fragment, Blend blend) {
+    const bool scale = blend == Blend::Scale;
     // Vertex layout of RendererVulkan's ScreenRectVertex: position, tex_coord.
     const vk::VertexInputBindingDescription binding = {
         .binding = 0,
@@ -295,12 +304,14 @@ vk::Pipeline XrPresentTarget::CreatePipeline(vk::ShaderModule fragment, bool ble
         .sampleShadingEnable = false,
     };
     const vk::PipelineColorBlendAttachmentState blend_attachment = {
-        .blendEnable = blended, // premultiplied
-        .srcColorBlendFactor = vk::BlendFactor::eOne,
-        .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+        .blendEnable = blend != Blend::None, // Over: premultiplied
+        .srcColorBlendFactor = scale ? vk::BlendFactor::eZero : vk::BlendFactor::eOne,
+        .dstColorBlendFactor =
+            scale ? vk::BlendFactor::eSrcAlpha : vk::BlendFactor::eOneMinusSrcAlpha,
         .colorBlendOp = vk::BlendOp::eAdd,
-        .srcAlphaBlendFactor = vk::BlendFactor::eOne,
-        .dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+        .srcAlphaBlendFactor = scale ? vk::BlendFactor::eZero : vk::BlendFactor::eOne,
+        .dstAlphaBlendFactor =
+            scale ? vk::BlendFactor::eSrcAlpha : vk::BlendFactor::eOneMinusSrcAlpha,
         .alphaBlendOp = vk::BlendOp::eAdd,
         .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
                           vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,

@@ -458,4 +458,28 @@ TEST_CASE("Kid Icarus powers: the bar's own fade is divided out", "[frame_xr][ki
     // Nothing, or all but gone: nothing to divide by.
     CHECK(KP::BarFade(std::vector<Sprite>{}) == 1.0f);
     CHECK(KP::BarFade(std::vector<Sprite>{sprite(Part::Arrow, Tev::Modulate, 0.01f)}) == 1.0f);
+
+    // Divided out: an idle bar's as opaque as one in full, whatever the player's opacity; the
+    // bubble and the name keep theirs.
+    CHECK(std::abs(KP::Unfaded(Part::Icon, 0.4f, 0.4f) - 1.0f) < 1e-4f);
+    CHECK(std::abs(KP::Unfaded(Part::Paper, KP::kGoldAlpha * 0.4f, 0.4f) - KP::kGoldAlpha) < 1e-4f);
+    CHECK(KP::Unfaded(Part::Arrow, 0.5f, 0.4f) == 1.0f);
+    CHECK(KP::Unfaded(Part::Bubble, 0.9f, 0.4f) == 0.9f);
+    CHECK(KP::Unfaded(Part::Name, 0.3f, 0.4f) == 0.3f);
+}
+
+TEST_CASE("Kid Icarus powers: an arrow is drawn without its edge", "[frame_xr][kiupowers]") {
+    namespace KP = VideoCore::KiuPowers;
+    KP::Sprite s; // the right one
+    s.x = {121, 134, 121, 134};
+    s.y = {210, 210, 227, 227};
+    s.u = {55 / 256.0f, 68 / 256.0f, 55 / 256.0f, 68 / 256.0f};
+    s.v = {1 - 94 / 256.0f, 1 - 94 / 256.0f, 1 - 111 / 256.0f, 1 - 111 / 256.0f};
+    const KP::Sprite in = KP::Inset(s);
+    for (std::size_t i = 0; i < 4; ++i) {
+        CHECK(std::abs(in.x[i] - (i & 1 ? 133.5f : 121.5f)) < 1e-3f);
+        CHECK(std::abs(in.y[i] - (i & 2 ? 226.5f : 210.5f)) < 1e-3f);
+        CHECK(std::abs(in.u[i] * 256 - (i & 1 ? 67.5f : 55.5f)) < 1e-3f);
+        CHECK(std::abs((1 - in.v[i]) * 256 - (i & 2 ? 110.5f : 94.5f)) < 1e-3f);
+    }
 }

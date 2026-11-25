@@ -71,7 +71,7 @@ void RendererVulkan::DrawKiuPowers(u32 width, u32 height, float alpha) {
     // The strip's part of the bottom screen, in its pixels. All the sprites' vertices at once:
     // position, texture coordinates.
     const std::size_t count = std::min<std::size_t>(sprites.size(), 64);
-    const u64 size = count * 16 * sizeof(float);
+    const u64 size = (count + 1) * 16 * sizeof(float);
     auto [data, offset, invalidate] = vertex_buffer.Map(size, 16);
     float* out = reinterpret_cast<float*>(data);
     for (std::size_t n = 0; n < count; n++) {
@@ -82,6 +82,12 @@ void RendererVulkan::DrawKiuPowers(u32 width, u32 height, float alpha) {
             *out++ = sprite.u[i];
             *out++ = sprite.v[i];
         }
+    }
+    for (u32 i = 0; i < 4; i++) { // the whole strip, for its opacity
+        *out++ = i & 1 ? static_cast<float>(KP::kWide) : 0.0f;
+        *out++ = i & 2 ? static_cast<float>(KP::kHigh) : 0.0f;
+        *out++ = 0.0f;
+        *out++ = 0.0f;
     }
     vertex_buffer.Commit(size);
 
@@ -117,12 +123,13 @@ void RendererVulkan::DrawKiuPowers(u32 width, u32 height, float alpha) {
         if (sprite.texture >= xr_sprite_sets.size()) {
             continue;
         }
-        // The sprite shader's: the vertex colour; the opacity and the constant's alpha; the TEV.
-        const bool own_fade = sprite.part == KP::Part::Bubble || sprite.part == KP::Part::Name;
+        // The sprite shader's: the vertex colour; the constant's alpha; the TEV.
         info.i_resolution = Common::MakeVec(sprite.color[0], sprite.color[1], sprite.color[2],
-                                            sprite.color[3]);
-        info.o_resolution = Common::MakeVec(std::min(alpha / (own_fade ? 1.0f : fade), 1.0f) ,
-                                            0.0f, 0.0f, sprite.constant);
+                                            sprite.tev == KP::Tev::Icon // how grey it is
+                                                ? sprite.color[3]
+                                                : KP::Unfaded(sprite.part, sprite.color[3], fade));
+        info.o_resolution = Common::MakeVec(
+            1.0f, 0.0f, 0.0f, KP::Unfaded(sprite.part, sprite.constant, fade));
         info.screen_id_l = static_cast<int>(sprite.tev);
         const vk::DescriptorSet set =
             sprite.texture != bound ? xr_sprite_sets[sprite.texture] : vk::DescriptorSet{};
@@ -140,6 +147,21 @@ void RendererVulkan::DrawKiuPowers(u32 width, u32 height, float alpha) {
             if (set_clip) {
                 cmdbuf.setScissor(0, scissor);
             }
+            cmdbuf.pushConstants(*present_pipeline_layout,
+                                 vk::ShaderStageFlagBits::eFragment |
+                                     vk::ShaderStageFlagBits::eVertex,
+                                 0, sizeof(info), &info);
+            cmdbuf.draw(4, 1, first, 0);
+        });
+    }
+    if (alpha < 1.0f && bound != UINT32_MAX) { // all of it at once
+        info.o_resolution = Common::MakeVec(alpha, 0.0f, 0.0f, 0.0f);
+        info.screen_id_l = 0;
+        const u32 first = static_cast<u32>(offset / (sizeof(float) * 4) + count * 4);
+        scheduler.Record([this, first, info, whole,
+                          pipeline = xr_target->OpacityPipeline()](vk::CommandBuffer cmdbuf) {
+            cmdbuf.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+            cmdbuf.setScissor(0, whole);
             cmdbuf.pushConstants(*present_pipeline_layout,
                                  vk::ShaderStageFlagBits::eFragment |
                                      vk::ShaderStageFlagBits::eVertex,
