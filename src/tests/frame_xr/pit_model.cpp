@@ -715,6 +715,96 @@ TEST_CASE("Tracked fingers: a moment without joints keeps the last ones, longer 
     CHECK(kept == PitModelEvaluateTracked(m, fingers, nullptr, true));
 }
 
+TEST_CASE("Tracked fingers: the forearm goes with the controller as without them", "[kiuhand][kiuhands]") {
+    // Where 6b4f770d7 has it: as the file does, whatever the fingers do (no bone of the forearm is
+    // turned), and the hand's fit to the controller is the fingers' business in no way.
+    PitModel m = Hand(0.025f, 0.010f);
+    const PitModel thin = PitModelThinned(m, 0.92f);
+    std::vector<float> file(m.vertices), drawn(file.size());
+    const auto forearm_same = [&](const PitModel& model, const std::vector<PitMat34>& bones) {
+        PitModelSkin(model, bones, drawn);
+        std::size_t seen = 0;
+        for (std::size_t v = 0; v < m.vertex_count; v++) {
+            if (m.joints[m.bones[v * 4]].role != kPitForearm) {
+                continue;
+            }
+            seen++;
+            for (std::size_t c = 0; c < 6; c++) { // its place and its normal
+                REQUIRE(std::abs(drawn[v * kPitVertexFloats + c] - file[v * kPitVertexFloats + c]) < 0.0001f);
+            }
+        }
+        CHECK(seen == 3);
+        const std::size_t wrist = JointOf(m, kPitWrist);
+        CHECK(Distance(Apply(bones[wrist], m.joints[wrist].position.data()), m.joints[wrist].position) < 0.0001f);
+    };
+    const PitVec3 elbow = m.elbow;
+    for (const float bend : {0.0f, 30.0f, 85.0f}) {
+        Tracked t;
+        t.bend = {bend * 0.4f, bend, bend * 0.3f, bend, bend * 0.6f};
+        t.turned = Turn(1, bend) * Turn(0, -bend);
+        for (const bool right : {false, true}) {
+            PitTracked fingers;
+            REQUIRE(PitTrackedFromJoints(t.Joints(right), right, fingers));
+            for (const bool gap : {false, true}) {
+                forearm_same(m, PitModelEvaluateTracked(m, fingers, &elbow, gap));
+                forearm_same(thin, PitModelEvaluateTracked(thin, fingers, &elbow, gap));
+            }
+            const PitHandPose old = PitHandPoseFromJoints(t.Joints(right), right, 0.0f);
+            forearm_same(m, PitModelEvaluate(m, &old, &elbow, false)); // FINGERS_OLD, without joints' places
+            forearm_same(thin, PitModelEvaluate(thin, &old, &elbow, false));
+        }
+    }
+    const PitHandPose held = PitHandNamedPose(PitHandNamed::Relaxed); // no tracked fingers
+    forearm_same(m, PitModelEvaluate(m, &held, &elbow, true));
+    for (const bool left : {true, false}) {
+        CHECK(PitModelControllerFit(thin, left) == PitModelControllerFit(m, left));
+    }
+}
+
+TEST_CASE("Tracked fingers: they come and go, the vertices stay sound", "[kiuhand][kiuhands]") {
+    // As SkinPit has them one after another, into the same vertices: tracked, held, the controller's,
+    // the way before, another width, and joints no runtime should give.
+    const PitModel m = Hand(0.025f, 0.010f);
+    const PitModel thin = PitModelThinned(m, 0.85f);
+    CHECK(thin.vertex_count == m.vertex_count);
+    CHECK(thin.joints.size() == m.joints.size());
+    std::vector<float> out(std::size_t{m.vertex_count} * kPitVertexFloats);
+    const auto sound = [&](const PitModel& model, const std::vector<PitMat34>& bones) {
+        REQUIRE(bones.size() == model.joints.size());
+        std::fill(out.begin(), out.end(), std::nanf(""));
+        PitModelSkin(model, bones, out);
+        for (std::size_t i = 0; i < out.size(); i++) {
+            REQUIRE(std::isfinite(out[i]));
+            REQUIRE((i % kPitVertexFloats >= 3 || std::abs(out[i]) < 0.5f)); // on the hand
+        }
+    };
+    const PitVec3 elbow = m.elbow;
+    Tracked t;
+    t.bend = {20, 70, 80, 45, 30};
+    std::vector<PitMat34> kept;
+    PitTracked fingers;
+    REQUIRE(PitTrackedFromJoints(t.Joints(), false, fingers));
+    PitModelEvaluateTracked(m, fingers, &elbow, true, kept);
+    sound(m, kept);
+    PitHandPose pose = PitHandPoseFromJoints(t.Joints(), false, 0.0f);
+    sound(m, PitModelEvaluate(m, &pose, &elbow, false));
+    PitModelEvaluateTracked(thin, fingers, &elbow, false, kept);
+    sound(thin, kept);
+    for (const float bad : {0.0f, std::nanf(""), 1e30f}) {
+        auto joints = t.Joints();
+        joints[kPitMiddleProximal].orientation = {bad, bad, bad, bad};
+        PitTracked broken;
+        if (PitTrackedFromJoints(joints, false, broken)) {
+            PitModelEvaluateTracked(m, PitTrackedEase(fingers, broken, 0.011f, kFingersEase), &elbow, true, kept);
+            sound(m, kept);
+        }
+        // Not taken as tracked fingers, they reach the pose from before; it does not stay broken.
+        pose = PitHandEase(pose, PitHandPoseFromJoints(joints, false, 0.0f), 0.011f);
+        pose = PitHandEase(pose, PitHandPoseFromJoints(t.Joints(), false, 0.0f), 0.011f);
+        sound(m, PitModelEvaluate(m, &pose, &elbow, false));
+    }
+}
+
 TEST_CASE("Hand file: normals meet over a seam, not over an edge", "[kiuhand][kiuhands]") {
     PitModel m = Good();
     const auto put = [&m](std::size_t v, float x, float nx, float ny) {
