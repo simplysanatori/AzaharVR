@@ -10,11 +10,17 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QTimer>
+#include <QtGlobal>
 #include <catch2/catch_test_macros.hpp>
 #include "citra_qt/update_prompt.h"
 
 namespace {
 QApplication& App() {
+    // One QApplication per process, shared with the other Qt tests here (a second is undefined)
+    if (auto* existing = qobject_cast<QApplication*>(QApplication::instance())) {
+        return *existing;
+    }
+    qputenv("QT_QPA_PLATFORM", "offscreen");
     static int argc = 1;
     static char arg0[] = "frame_qt_tests";
     static char* argv[] = {arg0, nullptr};
