@@ -5430,14 +5430,13 @@ void GMainWindow::OnResumeGame(bool first_start) {
 }
 
 void GMainWindow::OnRestartGame() {
+    bool running = system.IsPoweredOn();
 #ifdef ENABLE_ALT_CORES
-    if (alt_core_host && alt_core_host->IsRunning()) {
-        alt_core_host->Reset();
-        FrameAutosaveBoot(); // as a 3DS game's restart
-        return;
-    }
+    // Started again, as a 3DS game is: a reset of the console alone would keep the second screen
+    // and console mode the game was started with.
+    running = running || (alt_core_host && alt_core_host->IsRunning());
 #endif
-    if (!system.IsPoweredOn()) {
+    if (!running) {
         return;
     }
     // Make a copy since BootGame edits game_path
