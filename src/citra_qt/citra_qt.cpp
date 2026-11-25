@@ -3725,6 +3725,7 @@ bool GMainWindow::BootAltGame(const QString& filename) {
         return false;
     }
     const FrameCores::RomInfo& info = *info_opt;
+    const std::string name = FrameCores::DisplayTitle(info, path); // AzaharVR: not the header's
 
     StoreRecentFile(filename);
     const std::string config_file_name = fmt::format("{:016X}", info.title_id);
@@ -3749,7 +3750,7 @@ bool GMainWindow::BootAltGame(const QString& filename) {
         LOG_CRITICAL(Frontend, "Failed to load application!");
         AltWindowClose();
         AltStartFailed(tr("Unable to Start Game"),
-                       tr("Failed to start %1.").arg(QString::fromStdString(info.title)));
+                       tr("Failed to start %1.").arg(QString::fromStdString(name)));
 #ifdef ENABLE_FRAME_XR
         g_frame_game_config_name.clear();
 #endif
@@ -3758,12 +3759,12 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     }
 
     game_path = filename;
-    game_title = QString::fromStdString(info.title);
+    game_title = QString::fromStdString(name);
     emulation_running = true;
     ApplyAltSettings();
     FrameAutosaveBoot();
 #ifdef ENABLE_FRAME_XR
-    Common::FrameCrash::NoteGame(info.title_id, info.title, Core::CrashReport::SettingsSummary(),
+    Common::FrameCrash::NoteGame(info.title_id, name, Core::CrashReport::SettingsSummary(),
                                  FrameXr::IsStarted() && FrameXr::VrShowing());
     if (g_frame_mirror) {
         g_frame_mirror->SetGameRunning(true);
@@ -4424,13 +4425,28 @@ void GMainWindow::StoreRecentFile(const QString& filename) {
     UpdateRecentFiles();
 }
 
+// AzaharVR: a GBA or Game Boy game by its name (FrameCores::NameOfFile), as the game list has it;
+// others by the file's name, as before.
+QString GMainWindow::RecentFileName(const QString& path) {
+#ifdef ENABLE_ALT_CORES
+    const auto kind = FrameCores::DetectCoreKind(path.toStdString());
+    if (kind == Common::AltCore::CoreKind::GBA || kind == Common::AltCore::CoreKind::GB) {
+        const std::string name = FrameCores::NameOfFile(path.toStdString());
+        if (!name.empty()) {
+            return QString::fromStdString(name);
+        }
+    }
+#endif
+    return QFileInfo(path).fileName();
+}
+
 void GMainWindow::UpdateRecentFiles() {
     const int num_recent_files =
         std::min(static_cast<int>(UISettings::values.recent_files.size()), max_recent_files_item);
 
     for (int i = 0; i < num_recent_files; i++) {
         const QString text = QStringLiteral("&%1. %2").arg(i + 1).arg(
-            QFileInfo(UISettings::values.recent_files[i]).fileName());
+            RecentFileName(UISettings::values.recent_files[i]));
         actions_recent_files[i]->setText(text);
         actions_recent_files[i]->setData(UISettings::values.recent_files[i]);
         actions_recent_files[i]->setToolTip(UISettings::values.recent_files[i]);

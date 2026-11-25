@@ -381,6 +381,7 @@ private slots:
     void OnGameListOpenDirectory(const QString& directory);
     void OnGameListAddDirectory();
     void AddGameDirectory(const QString& dir_path); ///< AzaharVR
+    static QString RecentFileName(const QString& path); ///< AzaharVR
     void OnGameListShowList(bool show);
     void OnGameListOpenPerGameProperties(const QString& file);
     void OnConfigurePerGame();

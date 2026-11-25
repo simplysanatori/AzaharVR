@@ -37,16 +37,21 @@ using Common::SystemFilter;
 /// The list's system of a probed ROM.
 GameSystem SystemOf(const RomInfo& info);
 
-/// The region a DS, DSi or GBA game's code names, as the list's Region column has it for 3DS games
-/// (the "GameRegion" translations); "" when it names none, and for Game Boy games.
+/// The region a DS or DSi game's code names, as the list's Region column has it for 3DS games
+/// (the "GameRegion" translations); "" when it names none, and for other games.
 const char* RegionOf(const RomInfo& info);
+/// The regions a file's name has a tag for ("(USA, Europe)", "(J)"), in those names; none
+/// without one.
+std::vector<const char*> RegionsOfName(const std::string& name);
 
-/// The name the VR Games tab shows: a DS game's own title; for GBA and Game Boy games, whose
-/// headers hold 12 to 16 capitals, gba-ds's name of the release, else the file's name without its
-/// bracketed tags, else the header's.
+/// A game's name wherever it is shown (lists, window title, menu headings): a DS game's banner
+/// title; for GBA and Game Boy games, whose headers hold 12 to 16 capitals, the file's name
+/// (NameOfFile), else the header's. Keys and save folders keep using RomInfo::title.
 std::string DisplayTitle(const RomInfo& info, const std::string& path);
-/// A No-Intro style name or a file's name without its extension, for showing: no "(USA)" or "[!]"
-/// tags, "Legend of Zelda, The - Minish Cap" as "The Legend of Zelda - Minish Cap".
+/// A file's name without its extension (and a .zip's ROM extension) and tags (CleanName).
+std::string NameOfFile(const std::string& path);
+/// A name for showing: no "(USA)" or "[!]" tags; "Legend of Zelda, The - Minish Cap" as "The
+/// Legend of Zelda - Minish Cap".
 std::string CleanName(std::string name);
 
 /// Fast detection of non-3DS ROM type from extension or ZIP directory entries.

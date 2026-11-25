@@ -21,7 +21,7 @@ std::optional<GameMeta> ReadMetadataWithLoader(const std::string& path) {
     if (FrameCores::DetectCoreKind(path) != Common::AltCore::CoreKind::N3DS) {
         if (const auto info = FrameCores::ProbeRom(path)) {
             GameMeta meta;
-            meta.title = info->title;
+            meta.title = FrameCores::DisplayTitle(*info, path); // AzaharVR: not the header's
             meta.icon_w = info->icon_w;
             meta.icon_h = info->icon_h;
             meta.icon_rgba = info->icon_rgba;

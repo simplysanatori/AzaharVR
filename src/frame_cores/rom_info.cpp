@@ -18,9 +18,10 @@
 
 #include <fmt/format.h>
 
+#include "common/string_util.h"
+
 extern "C" {
 #include <mgba-util/vfs.h>
-#include "profiles.h"
 }
 
 namespace FrameCores {
@@ -685,9 +686,31 @@ GameSystem SystemOf(const RomInfo& info) {
     }
 }
 
+namespace {
+
+/// A region tag's word as the list's region names have it ("" none).
+const char* RegionWord(std::string_view word) {
+    static constexpr std::array<std::pair<std::string_view, const char*>, 20> kWords{{
+        {"USA", "North America"},  {"Canada", "North America"}, {"U", "North America"},
+        {"Japan", "Japan"},        {"J", "Japan"},              {"Europe", "Europe"},
+        {"E", "Europe"},           {"Germany", "Europe"},       {"France", "Europe"},
+        {"Spain", "Europe"},       {"Italy", "Europe"},         {"Netherlands", "Europe"},
+        {"Sweden", "Europe"},      {"UK", "Europe"},            {"Scandinavia", "Europe"},
+        {"Australia", "Australia"}, {"Korea", "Korea"},         {"China", "China"},
+        {"Taiwan", "Taiwan"},      {"World", "Region free"},
+    }};
+    for (const auto& [tag, region] : kWords) {
+        if (word == tag) {
+            return region;
+        }
+    }
+    return "";
+}
+
+} // namespace
+
 const char* RegionOf(const RomInfo& info) {
-    const bool has_code = info.kind == Common::AltCore::CoreKind::GBA || Common::AltCore::IsDs(info.kind);
-    if (!has_code || info.game_code.size() < 4) {
+    if (!Common::AltCore::IsDs(info.kind) || info.game_code.size() < 4) {
         return "";
     }
     switch (info.game_code[3]) {
@@ -716,6 +739,48 @@ const char* RegionOf(const RomInfo& info) {
     }
 }
 
+std::vector<const char*> RegionsOfName(const std::string& name) {
+    for (std::size_t open = name.find('('); open != std::string::npos;
+         open = name.find('(', open + 1)) {
+        const std::size_t close = name.find(')', open);
+        if (close == std::string::npos) {
+            break;
+        }
+        const std::string_view tag = std::string_view(name).substr(open + 1, close - open - 1);
+        std::vector<const char*> regions;
+        bool all = !tag.empty();
+        const auto add = [&regions](const char* region) {
+            if (std::find(regions.begin(), regions.end(), std::string_view(region)) ==
+                regions.end()) {
+                regions.push_back(region);
+            }
+        };
+        if (tag.size() <= 3 && tag.find_first_not_of("UEJ") == std::string_view::npos) {
+            for (const char c : tag) { // GoodTools: (U), (E), (J), (UE), (JU)...
+                add(RegionWord(std::string_view(&c, 1)));
+            }
+        } else {
+            for (std::size_t at = 0; at <= tag.size();) {
+                std::size_t end = std::min(tag.find(',', at), tag.size());
+                std::string_view word = tag.substr(at, end - at);
+                while (!word.empty() && word.front() == ' ') {
+                    word.remove_prefix(1);
+                }
+                const char* region = word.size() > 1 ? RegionWord(word) : "";
+                all = all && *region != 0;
+                if (*region) {
+                    add(region);
+                }
+                at = end + 1;
+            }
+        }
+        if (all && !regions.empty()) {
+            return regions;
+        }
+    }
+    return {};
+}
+
 std::string CleanName(std::string name) {
     // the tags
     std::string out;
@@ -725,8 +790,8 @@ std::string CleanName(std::string name) {
             depth++;
         } else if ((c == ')' || c == ']') && depth > 0) {
             depth--;
-        } else if (depth == 0) {
-            out.push_back(c == '_' ? ' ' : c);
+        } else if (depth == 0 && !(c == ' ' && (out.empty() || out.back() == ' '))) {
+            out.push_back(c);
         }
     }
     // "Name, The - More" as "The Name - More"
@@ -751,18 +816,23 @@ std::string CleanName(std::string name) {
     return out;
 }
 
+std::string NameOfFile(const std::string& path) {
+    std::filesystem::path file = std::filesystem::path(path).stem();
+    static constexpr std::array<std::string_view, 6> kRoms{".gba", ".gb", ".gbc", ".nds", ".dsi",
+                                                           ".srl"};
+    const std::string inner = Common::ToLower(file.extension().string()); // "Game.gba.zip"
+    if (std::find(kRoms.begin(), kRoms.end(), inner) != kRoms.end()) {
+        file = file.stem();
+    }
+    return CleanName(file.string());
+}
+
 std::string DisplayTitle(const RomInfo& info, const std::string& path) {
     if (info.kind != Common::AltCore::CoreKind::GBA && info.kind != Common::AltCore::CoreKind::GB) {
-        return info.title;
+        return info.title; // a DS game's banner names it well
     }
-    if (info.kind == Common::AltCore::CoreKind::GBA && info.game_code.size() == 4) {
-        char name[256] = {};
-        if (profile_release_name(info.game_code.c_str(), name, sizeof(name))) {
-            return CleanName(name);
-        }
-    }
-    const std::string stem = CleanName(std::filesystem::path(path).stem().string());
-    return stem.empty() ? info.title : stem;
+    const std::string name = NameOfFile(path);
+    return name.empty() ? info.title : name;
 }
 
 const char* CoreFolder(Common::AltCore::CoreKind kind) {

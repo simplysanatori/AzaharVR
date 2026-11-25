@@ -5,6 +5,7 @@
 #include <array>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -176,36 +177,56 @@ TEST_CASE("BadgesOf: gba-ds's rule without PokeDaisy", "[frame_cores]") {
     CHECK(BadgesOf(info, "/nonexistent.nds") == GameBadges{});
 }
 
-TEST_CASE("RegionOf: the code's fourth letter", "[frame_cores]") {
+TEST_CASE("RegionOf: a DS game's code, a file's tag", "[frame_cores]") {
     RomInfo info{};
-    info.kind = CoreKind::GBA;
-    const std::array<std::pair<const char*, const char*>, 8> cases{{{"AGSE", "North America"},
-                                                                    {"AGSP", "Europe"},
-                                                                    {"AGSD", "Europe"},
-                                                                    {"AGSJ", "Japan"},
-                                                                    {"AGSK", "Korea"},
-                                                                    {"AGSU", "Australia"},
-                                                                    {"AGS", ""},
-                                                                    {"", ""}}};
+    info.kind = CoreKind::NDS;
+    const std::array<std::pair<const char*, const char*>, 6> cases{{{"AMCE", "North America"},
+                                                                    {"AMCJ", "Japan"},
+                                                                    {"AMCP", "Europe"},
+                                                                    {"AMCD", "Europe"},
+                                                                    {"AMCU", "Australia"},
+                                                                    {"AMCQ", ""}}};
     for (const auto& [code, region] : cases) {
         info.game_code = code;
         CHECK(std::string(RegionOf(info)) == region);
     }
-    info.game_code = "AGSE";
-    info.kind = CoreKind::DSi;
-    CHECK(std::string(RegionOf(info)) == "North America");
-    info.kind = CoreKind::GB;
+    info.kind = CoreKind::GBA; // its file's name says
     CHECK(std::string(RegionOf(info)).empty());
+
+    using R = std::vector<std::string>;
+    const auto of = [](const std::string& name) {
+        R out;
+        for (const char* r : RegionsOfName(name)) {
+            out.emplace_back(r);
+        }
+        return out;
+    };
+    CHECK(of("Golden Sun (USA, Europe)") == R{"North America", "Europe"});
+    CHECK(of("Pokemon - Emerald Version (Germany) (Rev 1)") == R{"Europe"});
+    CHECK(of("Tetris (World) (Rev A)") == R{"Region free"});
+    CHECK(of("Zelda (J) [!]") == R{"Japan"});
+    CHECK(of("Zelda (UE)") == R{"North America", "Europe"});
+    CHECK(of("Pokemon Lazarus (v1.2) (Hack)").empty());
+    CHECK(of("Game (En,Fr,De) (Europe)") == R{"Europe"}); // the languages are no region
+    CHECK(of("Game (USA, Beta)").empty());
+    CHECK(of("No Tags").empty());
+    CHECK(of("Broken (USA").empty());
 }
 
 TEST_CASE("CleanName and DisplayTitle", "[frame_cores]") {
     CHECK(CleanName("Golden Sun (USA, Europe)") == "Golden Sun");
     CHECK(CleanName("Legend of Zelda, The - The Minish Cap (USA) [!]") ==
           "The Legend of Zelda - The Minish Cap");
-    CHECK(CleanName("[Hack] Some_Game (v1.2)") == "Some Game");
+    CHECK(CleanName("[Hack] Some_Game (v1.2)") == "Some_Game"); // the name as it is
     CHECK(CleanName("Legend, The") == "The Legend");
     CHECK(CleanName("(USA)").empty());
     CHECK(CleanName("Odd ) Name") == "Odd ) Name");
+
+    CHECK(CleanName("Legend of Zelda, The - A Link to the Past & Four Swords (USA)") ==
+          "The Legend of Zelda - A Link to the Past & Four Swords");
+    CHECK(CleanName("Final Fantasy I & II - Dawn of Souls (USA)  (Rev 1)") ==
+          "Final Fantasy I & II - Dawn of Souls");
+    CHECK(CleanName("Pokemon Emerald, The Hack") == "Pokemon Emerald, The Hack"); // not at the end
 
     RomInfo info{};
     info.kind = CoreKind::GB;
@@ -213,8 +234,12 @@ TEST_CASE("CleanName and DisplayTitle", "[frame_cores]") {
     CHECK(DisplayTitle(info, "/roms/My Game (Japan).gb") == "My Game");
     CHECK(DisplayTitle(info, "/roms/(USA).gb") == "ZELDA"); // nothing left of the name
     info.kind = CoreKind::GBA;
-    info.game_code = "ZZZZ"; // no release name known
-    CHECK(DisplayTitle(info, "/roms/Homebrew.gba") == "Homebrew");
+    info.title = "POKEMON EMER";
+    info.game_code = "BPEE"; // a hack keeps its base game's code: its own name shows
+    CHECK(DisplayTitle(info, "/roms/Pokemon Lazarus v1.2.gba") == "Pokemon Lazarus v1.2");
+    CHECK(DisplayTitle(info, "/roms/Pokemon Emerald (USA, Europe).gba.zip") == "Pokemon Emerald");
+    CHECK(DisplayTitle(info, "/roms/Zipped (USA).zip") == "Zipped");
+    CHECK(DisplayTitle(info, "/roms/Game.v2.gba") == "Game.v2");
     info.kind = CoreKind::NDS;
     info.title = "A DS Title";
     CHECK(DisplayTitle(info, "/roms/file.nds") == "A DS Title");
