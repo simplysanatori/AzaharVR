@@ -235,7 +235,10 @@ void main() {
         c *= t;
     } else if (tev == 2) {
         c.rgb *= 1.0 - clamp((1.0 - t.rgb) * constant.rgb, 0.0, 1.0);
-        c.a *= min(2.0 * min(t.r + t.g, 1.0), 1.0);
+        // A texture pack's black may be a step or two off (4 of 255 in the HD pack: a faint square
+        // over the world, unseen over the game's backdrop).
+        float a = min(2.0 * min(t.r + t.g, 1.0), 1.0);
+        c.a *= max(a - 0.04, 0.0) / 0.96;
     }
     c = clamp(c, 0.0, 1.0);
     if (tev != 0) {

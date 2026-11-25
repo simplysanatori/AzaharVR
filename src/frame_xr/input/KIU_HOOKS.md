@@ -1187,7 +1187,8 @@ in both builds by its code; no code or layout of it is used.
   portraits reach over row 42). No frame, backdrop, words or power bar.
   - A portrait (EUR 0x9E2D4C): one draw, one quad of 256 x 256 (two while wiped in or out: the upper one's top see-through), x -5 or 69 +
     the place's, mirrored by flag 0x400; its texture 256 x 256 ETC1. TEV, two stages: (1 - texture) x AAAAAA x 2, then 1 - that, times the
-    vertex colour (the place's +0x20: its tint and fade); alpha min(1, 2 x (red + green)) x the vertex alpha.
+    vertex colour (the place's +0x20: its tint and fade); alpha min(1, 2 x (red + green)) x the vertex alpha
+    (drawn again without its lowest 4 %: a pack's black is not quite 0).
   - An illustration (0xA0F9B8): an untextured black quad (320 wide, 130 high), its pieces (one quad a draw, texture x vertex colour), four
     untextured quads (bands and lines). Pieces are cut to rows 56 to 184; the black beside the picture is left out.
   - How many the game says it draws (`frame_xr/kiu_talk.h`: the places' colour and wipe, the pieces' alpha). Fewer found, or an illustration
