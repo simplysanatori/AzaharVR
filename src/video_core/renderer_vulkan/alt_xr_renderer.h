@@ -49,8 +49,8 @@ public:
     /// Tears down Vulkan resources, clears SetScreensLive(false) and SetQueueMutex(nullptr).
     void Shutdown();
 
-    /// The output changed since the last Present (VR or flat, the window's size): a paused game is
-    /// to be presented again.
+    /// The output changed since the last Present (VR or flat, the window's size, Internal
+    /// Resolution): a paused game is to be presented again.
     bool NeedsPresent() const;
 
     /// Uploads and submits one frame. `secondary` may have pixels == nullptr when no secondary
@@ -61,6 +61,10 @@ public:
                  const AltScreenImage& overlay = {}, bool skippable = false);
 
     bool IsReady() const;
+
+    /// The pictures are scaled whole times by Internal Resolution, with sharp pixels (GBA and Game
+    /// Boy games). Else (the first) they are drawn smooth, 4x in the headset.
+    void SetSharpPixels(bool on);
 
 private:
     struct Impl;

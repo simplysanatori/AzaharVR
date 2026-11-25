@@ -172,6 +172,7 @@ add_executable(tests
     video_core/custom_texture_filter.cpp # AzaharFrame texfilt
     video_core/custom_texture_astc_decode.cpp # AzaharVR: ASTC decoded for GPUs without it
     video_core/vr_content_repeat.cpp # AzaharFrame bfikit
+    video_core/alt_picture_scale.cpp # AzaharVR: GBA and Game Boy pictures' scale
     audio_core/merryhime_3ds_audio/merry_audio/merry_audio.cpp
     audio_core/merryhime_3ds_audio/merry_audio/merry_audio.h
     audio_core/merryhime_3ds_audio/merry_audio/service_fixture.cpp

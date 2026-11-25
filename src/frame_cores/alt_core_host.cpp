@@ -842,6 +842,7 @@ bool AltCoreHost::Boot(const std::string& rom_path, const std::string& data_dir,
             impl->core.reset();
             return false;
         }
+        impl->renderer->SetSharpPixels(!Common::AltCore::IsDs(impl->rom_info.kind));
     }
 
     impl->caps = impl->core->GetCapabilities();

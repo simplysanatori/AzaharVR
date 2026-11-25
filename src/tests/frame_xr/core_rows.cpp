@@ -36,6 +36,8 @@ std::set<Id> With(std::set<Id> ids, const std::set<Id>& more) {
 
 const std::set<Id> kTwoScreens{Id::HideBottomScreen, Id::ScreenLayout, Id::MoveScreens,
                                Id::SwapScreens};
+/// GBA and Game Boy games: their pictures are drawn at a chosen scale.
+const std::set<Id> kPicture{Id::InternalResolution};
 const std::set<Id> kSaves{Id::SavesHeader, Id::Autosave, Id::AutosaveEvery, Id::AutosaveKeep,
                           Id::AutosaveCard};
 
@@ -116,21 +118,21 @@ TEST_CASE("Core rows: a 3DS game has every row but the other consoles'", "[frame
 }
 
 TEST_CASE("Core rows: the table for each other console", "[frame_xr][tabmenu]") {
-    CHECK(Table(CoreCaps::ForGB()) == Expected({}));
-    CHECK(Table(CoreCaps::ForGBA()) == Expected({Id::GbaSolarLevel}));
+    CHECK(Table(CoreCaps::ForGB()) == Expected(kPicture));
+    CHECK(Table(CoreCaps::ForGBA()) == Expected(With(kPicture, {Id::GbaSolarLevel})));
     CHECK(Table(CoreCaps::ForNDS()) == Expected(kDs));
     CHECK(Table(CoreCaps::ForNDS(true)) == Expected(kDs));
     // A GBA game without the sensor, and one whose map is on the Secondary Screen
     CoreCaps map = CoreCaps::ForGBA();
     map.has_solar_sensor = false;
     map.screens.has_bottom = true;
-    CHECK(Table(map) == Expected(kTwoScreens));
+    CHECK(Table(map) == Expected(With(kPicture, kTwoScreens)));
     // GBA and Game Boy games with a Secondary Screen to touch: how to touch it, none of the DS's
     for (CoreCaps touch : {CoreCaps::ForGBA(), CoreCaps::ForGB()}) {
         touch.has_solar_sensor = false;
         touch.screens.has_bottom = true;
         touch.has_touch = true;
-        CHECK(Table(touch) == Expected(With(kTwoScreens, kTouch)));
+        CHECK(Table(touch) == Expected(With(kPicture, With(kTwoScreens, kTouch))));
         const auto general = Drawn(Game(touch), SettingsView(SettingsSection::General));
         CHECK(!general.contains(Id::DsTouchEnabled));
         touch.has_save_import = false;
@@ -138,8 +140,11 @@ TEST_CASE("Core rows: the table for each other console", "[frame_xr][tabmenu]") 
     }
     // A core that draws at a chosen resolution has the row, and Graphics with it.
     for (CoreCaps own : OtherConsoles()) {
-        CHECK(!RowApplies(Id::InternalResolution, own));
+        CHECK(RowApplies(Id::InternalResolution, own) == !Common::AltCore::IsDs(own.kind));
         CHECK(!RowApplies(Id::DynamicResolution, own));
+        own.has_internal_resolution = false;
+        CHECK(!RowApplies(Id::InternalResolution, own));
+        CHECK(!SectionShown(SettingsSection::Graphics, Game(own)));
         own.has_internal_resolution = true;
         CHECK(RowApplies(Id::InternalResolution, own));
         CHECK(!RowApplies(Id::DynamicResolution, own));
@@ -172,11 +177,21 @@ TEST_CASE("Core rows: the menu draws what the table says", "[frame_xr][tabmenu]"
         CHECK(general.contains(Id::ImportSave));
         CHECK(general.contains(Id::Autosave) == kAltAutosave);
         CHECK(general.contains(Id::DsConsoleMode) == core.has_dsi_mode);
-        // General alone: no section to pick
+        // The DS has General alone, no section to pick; a GBA or Game Boy game has Graphics too,
+        // with Internal Resolution alone
+        const bool graphics = core.has_internal_resolution;
         CHECK(SectionShown(SettingsSection::General, m));
-        CHECK(!SectionShown(SettingsSection::Graphics, m));
+        CHECK(SectionShown(SettingsSection::Graphics, m) == graphics);
         CHECK(!SectionShown(SettingsSection::Immersive, m));
-        CHECK(!general.contains(Id::SettingsSection));
+        CHECK(general.contains(Id::SettingsSection) == graphics);
+        if (graphics) {
+            // without the chrome every game view has: tab buttons and the scope switch
+            auto rows = Drawn(m, SettingsView(SettingsSection::Graphics));
+            for (const Id chrome : {Id::TabButton, Id::Scope, Id::ScopeMore}) {
+                rows.erase(chrome);
+            }
+            CHECK(rows == std::set<Id>{Id::SettingsSection, Id::InternalResolution});
+        }
         CHECK(!TabApplies(Tab::Homebrew, core));
         CHECK(TabApplies(Tab::Mods, core) == core.has_alt_cheats);
         MenuView position;
@@ -301,10 +316,10 @@ TEST_CASE("Core rows: Second Screen and Allow Game Editing", "[frame_xr][tabmenu
     }
     // Only the Console group's rows follow; a game with neither has just what it had
     CoreCaps gb = CoreCaps::ForGB();
-    CHECK(Table(gb) == Expected({Id::ImportSave}));
+    CHECK(Table(gb) == Expected(kPicture));
     gb.second_screen_choices = kPoke | kOff;
     gb.can_edit_game = true;
-    CHECK(Table(gb) == Expected(With({Id::ImportSave}, both)));
+    CHECK(Table(gb) == Expected(With(kPicture, both)));
     // Another console's capabilities never bring them: the 3DS has neither row
     CoreCaps n3ds = CoreCaps::ForN3DS();
     n3ds.second_screen_choices = kPoke | kOff;

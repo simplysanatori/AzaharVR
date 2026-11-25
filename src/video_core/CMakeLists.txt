@@ -222,6 +222,7 @@ if (ENABLE_VULKAN)
         $<$<NOT:$<BOOL:${ENABLE_LIBRETRO}>>:renderer_vulkan/vk_xr_handoff.h> # AzaharFrame handoff
         vulkan_hooks.h
         xr_content_pose.h
+        xr_screen_cover.h
         shader/generator/spv_fs_shader_gen.cpp
         shader/generator/spv_fs_shader_gen.h
     )
