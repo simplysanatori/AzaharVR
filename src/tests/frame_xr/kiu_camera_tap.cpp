@@ -26,11 +26,26 @@ TEST_CASE("Kid Icarus camera tap: in a battle only, else Swap Screens", "[frame_
     CHECK_FALSE(with([](Now& n) { n.swapped = true; })); // it swaps back
     CHECK_FALSE(with([](Now& n) { n.setting = kSwapScreens; }));
     CHECK_FALSE(Switches({}));
+    // In a cutscene it does nothing: no switch, no swap.
+    Now scene = battle;
+    scene.cutscene = true;
+    CHECK(Nothing(scene));
+    CHECK_FALSE(Nothing(battle));
+    CHECK_FALSE(Nothing({}));
+    Now other = scene;
+    other.swapped = true; // it swaps back
+    CHECK_FALSE(Nothing(other));
+    other = scene;
+    other.setting = kSwapScreens;
+    CHECK_FALSE(Nothing(other));
+    other = scene;
+    other.first_person = false;
+    CHECK_FALSE(Nothing(other));
 }
 
 TEST_CASE("Kid Icarus camera tap: the next camera", "[frame_xr][kiucam]") {
     CHECK(NextView(0) == 1); // First Person
-    CHECK(NextView(1) == 0); // Over the Shoulder
+    CHECK(NextView(1) == 0); // Third Person
     CHECK(NextView(2) == 0); // the Game's Camera
     // As the Camera row writes it: both keys, and back through ViewFor.
     for (const int view : {0, 1}) {

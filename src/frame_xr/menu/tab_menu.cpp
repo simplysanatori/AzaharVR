@@ -148,7 +148,8 @@ std::string SliderText(Id id, float value) {
     if (id == Id::KiuScoreAcross) { // AzaharFrame kiu140
         return Format("%.0f\u00B0", value);
     }
-    if (id == Id::KiuPowerMenuAcross || id == Id::KiuPowerMenuHeight) { // AzaharFrame kiuaim
+    if (id == Id::KiuPowerMenuAcross || id == Id::KiuPowerMenuHeight ||
+        id == Id::KiuPortraitsAcross || id == Id::KiuPortraitsHeight) { // AzaharFrame kiuaim
         return Format("%.0f\u00B0", value);
     }
     if (id == Id::KiuScoreHeight) { // AzaharFrame kiu140
@@ -358,6 +359,15 @@ Row RowFor(Id id, const MenuModel& m) {
         break;
     case Id::KiuTalkPortraitsOpacity:
         slider(m.kiu_talk_portraits_opacity);
+        break;
+    case Id::KiuPortraitsLinked:
+        segmented(std::clamp(m.kiu_portraits_linked, 0, 1));
+        break;
+    case Id::KiuPortraitsAcross:
+        slider(m.kiu_portraits_across);
+        break;
+    case Id::KiuPortraitsHeight:
+        slider(m.kiu_portraits_height);
         break;
     case Id::KiuReticleSize:
         slider(m.kiu_reticle_size);
@@ -782,6 +792,9 @@ SettingsSection SectionOf(Id id) {
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim
     case Id::KiuTalkPortraitsOpacity:
+    case Id::KiuPortraitsLinked:
+    case Id::KiuPortraitsAcross:
+    case Id::KiuPortraitsHeight:
     case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
@@ -894,6 +907,9 @@ bool PerGameSetting(Id id) {
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim
     case Id::KiuTalkPortraitsOpacity:
+    case Id::KiuPortraitsLinked:
+    case Id::KiuPortraitsAcross:
+    case Id::KiuPortraitsHeight:
     case Id::KiuReticleSize:
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
@@ -1109,6 +1125,14 @@ std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& m) {
     rows.push_back(Id::KiuTalkPortraits); // AzaharFrame kiuaim
     if (m.kiu_talk_portraits != 0) {
         rows.push_back(Id::KiuTalkPortraitsOpacity);
+        // Linked is with Subtitle Height, which there is with HUD: In View.
+        if (m.kiu_hud != 0) {
+            rows.push_back(Id::KiuPortraitsLinked);
+        }
+        if (m.kiu_hud == 0 || m.kiu_portraits_linked == 0) {
+            rows.push_back(Id::KiuPortraitsAcross);
+            rows.push_back(Id::KiuPortraitsHeight);
+        }
     }
     rows.push_back(Id::KiuReticleSize);
     return rows;
@@ -1153,7 +1177,8 @@ std::vector<AngelsAimRowGroup> AngelsAimGroups(const MenuModel& model) {
     AngelsAimRowGroup bottom{AngelsAimGroupKind::BottomScreen, {}};
     for (const Id id : {Id::KiuBottomScreen, Id::KiuBottomSize, Id::KiuBottomOpacity,
                         Id::KiuWristAngle, Id::KiuWristAlong, Id::KiuBottomReset,
-                        Id::KiuTalkPortraits, Id::KiuTalkPortraitsOpacity}) { // kiuaim
+                        Id::KiuTalkPortraits, Id::KiuTalkPortraitsOpacity, Id::KiuPortraitsLinked,
+                        Id::KiuPortraitsAcross, Id::KiuPortraitsHeight}) { // kiuaim
         if (has(fp, id)) {
             bottom.rows.push_back(id);
         }
@@ -1372,6 +1397,7 @@ const std::vector<std::string>& OptionsFor(Id id) {
         static const std::vector<std::string> kChoices{"Off", "On"};
         return kChoices;
     }
+    case Id::KiuPortraitsLinked: // AzaharFrame kiuaim
     case Id::KiuHudLinked: { // AzaharFrame kiu140: the stored order
         static const std::vector<std::string> kChoices{"Separate", "Linked"};
         return kChoices;
@@ -1682,6 +1708,12 @@ std::string LabelFor(Id id) {
         return kKiuTalkPortraitsRow;
     case Id::KiuTalkPortraitsOpacity:
         return kKiuTalkPortraitsOpacityRow;
+    case Id::KiuPortraitsLinked:
+        return kKiuPortraitsLinkedRow;
+    case Id::KiuPortraitsAcross:
+        return kKiuPortraitsAcrossRow;
+    case Id::KiuPortraitsHeight:
+        return kKiuPortraitsHeightRow;
     case Id::KiuReticleSize:
         return kReticleSizeRow;
     case Id::KiuOverShoulder: // AzaharFrame kiu133
@@ -2047,7 +2079,7 @@ std::string ExplainFor(Id id) {
     case Id::TurnSpeedVertical:
         return "How fast the camera turns up and down in the Turn Zone.";
     case Id::Recoil:
-        return "A short buzz in the aiming controller on each shot.";
+        return "Haptic feedback in the aiming controller on each shot.";
     case Id::WeaponInHand: // AzaharFrame kiuguns
         return "Shows the weapon Pit holds in place of the aiming controller.";
     case Id::LaserSight:
@@ -2061,9 +2093,9 @@ std::string ExplainFor(Id id) {
     case Id::ProjectileSpeed:
         return "How fast your shots look as they fly.";
     case Id::RecoilCharged: // AzaharFrame kiufix
-        return "How strong the buzz is for a charged shot.";
+        return "How strong the haptic feedback is for a charged shot.";
     case Id::RecoilRapid:
-        return "How strong the buzz is for each rapid-fire shot.";
+        return "How strong the haptic feedback is for each rapid-fire shot.";
     case Id::WeaponSize:
         return "Game Size matches Pit's weapon. Hand Size shrinks big weapons to fit your hand.";
     case Id::WeaponScale:
@@ -2195,6 +2227,12 @@ std::string ExplainFor(Id id) {
         return kKiuTalkPortraitsTip;
     case Id::KiuTalkPortraitsOpacity:
         return kKiuTalkPortraitsOpacityTip;
+    case Id::KiuPortraitsLinked:
+        return kKiuPortraitsLinkedTip;
+    case Id::KiuPortraitsAcross:
+        return kKiuPortraitsAcrossTip;
+    case Id::KiuPortraitsHeight:
+        return kKiuPortraitsHeightTip;
     case Id::KiuReticleSize:
         return kReticleSizeTip;
     case Id::KiuOverShoulder: // AzaharFrame kiu133
@@ -2408,7 +2446,8 @@ SliderRange SliderFor(Id id) {
     if (id == Id::KiuScoreAcross) { // AzaharFrame kiu140
         return {-40.0f, 40.0f, 1.0f};
     }
-    if (id == Id::KiuPowerMenuAcross || id == Id::KiuPowerMenuHeight) { // AzaharFrame kiuaim
+    if (id == Id::KiuPowerMenuAcross || id == Id::KiuPowerMenuHeight ||
+        id == Id::KiuPortraitsAcross || id == Id::KiuPortraitsHeight) { // AzaharFrame kiuaim
         return {-40.0f, 40.0f, 1.0f};
     }
     if (id == Id::KiuScoreHeight) { // AzaharFrame kiu140

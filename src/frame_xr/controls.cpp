@@ -2715,6 +2715,14 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         Input::ScreenView::Effect effect;
         // AzaharFrame kiu1s: in one of Kid Icarus's menus both screens are shown and stay so.
         const bool shown_by_menu = Immersive::GameMenu() && !screen_view.bottom_focus();
+        const Kiu::CameraTap::Now tap_now{
+            .first_person = Kiu::FirstPerson::On(),
+            .battle = Kiu::FirstPerson::Battle(),
+            .cutscene = Kiu::FirstPerson::Cutscene(),
+            .paused = Kiu::CameraTap::g_ui.paused.load(std::memory_order_relaxed),
+            .game_menu = Kiu::CameraTap::g_ui.menu.load(std::memory_order_relaxed),
+            .swapped = screen_view.bottom_focus(),
+            .setting = Settings::values.vr_kiu_stick_click.GetValue()};
         if (shown_by_menu && (cmd.toggle_bottom || cmd.toggle_other_screen)) {
             LOG_INFO(Frontend, "xr: the bottom screen stays shown in the game's menus");
         } else if (cmd.toggle_bottom) {
@@ -2725,15 +2733,9 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         } else if (cmd.swap_screens && shown.screens_fixed && !screen_view.bottom_focus()) {
             // AzaharFrame kiu1s: the menu panel's large screen is the one to touch: no swap.
             LOG_INFO(Frontend, "xr: no swap on the game's menu panel");
-        } else if (cmd.swap_screens &&
-                   Kiu::CameraTap::Switches(
-                       {.first_person = Kiu::FirstPerson::On(),
-                        .battle = Kiu::FirstPerson::Battle(),
-                        .cutscene = Kiu::FirstPerson::Cutscene(),
-                        .paused = Kiu::CameraTap::g_ui.paused.load(std::memory_order_relaxed),
-                        .game_menu = Kiu::CameraTap::g_ui.menu.load(std::memory_order_relaxed),
-                        .swapped = screen_view.bottom_focus(),
-                        .setting = Settings::values.vr_kiu_stick_click.GetValue()})) {
+        } else if (cmd.swap_screens && Kiu::CameraTap::Nothing(tap_now)) {
+            LOG_INFO(Frontend, "xr: right stick click: nothing in a cutscene");
+        } else if (cmd.swap_screens && Kiu::CameraTap::Switches(tap_now)) {
             // AzaharFrame kiucam: Angel's Aim, in a battle.
             const auto& v = Settings::values;
             camera_switch.Begin(Kiu::CameraTap::NextView(Kiu::FirstPerson::ViewFor(

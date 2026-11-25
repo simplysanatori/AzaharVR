@@ -34,7 +34,7 @@
 #include "frame_xr/vis/model_shaders.h"
 #include "frame_xr/vis/proj_screen.h" // AzaharFrame projscreen
 #include "frame_xr/vis/weapon_fit.h" // AzaharFrame kiuguns
-#include "frame_xr/kiu_first_person.h" // AzaharFrame kiu130: Over the Shoulder
+#include "frame_xr/kiu_first_person.h" // AzaharFrame kiu130: Third Person
 #include "core/frame_weapon_models.h" // AzaharFrame kiuguns
 #include "frame_xr/xr_loader.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
@@ -3583,7 +3583,7 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
     const std::array<int, 2> order = HandOrder(weapon_clear(hands[0]), weapon_clear(hands[1]));
     // AzaharFrame kiuweapon: AZAHARFRAME_KIU_WEAPON_DRAW=0 (live): the weapon's model left out
     // (weapon_fit.h kWeaponDrawSwitch); its flash and shots as before.
-    // AzaharFrame kiu130: and while the view is over the shoulder, where the game draws Pit with
+    // AzaharFrame kiu130: and while the view is in third person, where the game draws Pit with
     // his own weapon (WeaponModelDrawnFor; run time only, no setting changes). kiu133: and the
     // Game's Camera.
     const bool weapon_model = WeaponModelDrawnFor(

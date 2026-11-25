@@ -1615,7 +1615,7 @@ int main(int argc, char** argv) {
         ka.kiu_bottom_screen = 2;
         ka.kiu_bottom_size = 150;
         ka.kiu_bottom_opacity = 80;
-        ka.kiu_view = 1; // AzaharFrame kiu133: Over the Shoulder (Camera)
+        ka.kiu_view = 1; // AzaharFrame kiu133: Third Person (Camera)
         ka.kiu_snap_turn = SnapTurnIndexOf(45);
         ok &= shot("kiutoggles-2-angels-aim-rows-on", ka, kv);
         kv.hover = {Id::KiuBottomScreen, kLabelIndex};
@@ -1643,7 +1643,7 @@ int main(int argc, char** argv) {
             ok &= shot(names[i], ka, kv);
         }
         // AzaharFrame kiu133: Camera's Game's Camera with Pit Opacity under it at 50 %, their
-        // tooltips, and Over the Shoulder with it.
+        // tooltips, and Third Person with it.
         ka.kiu_bottom_screen = 0;
         ka.kiu_view = 1; // AzaharFrame 1.3.0: the Game's Camera not offered yet
         ka.kiu_pit_opacity = 50;

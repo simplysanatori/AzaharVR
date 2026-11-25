@@ -2,8 +2,8 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
-// AzaharFrame kiu133: Pit Opacity (vr_kiu_pit_opacity) in the views from outside Pit (Over the
-// Shoulder, the Game's Camera). His draws are found once per model (and again when the view or
+// AzaharFrame kiu133: Pit Opacity (vr_kiu_pit_opacity) in the views from outside Pit (Third
+// Person, the Game's Camera). His draws are found once per model (and again when the view or
 // the setting comes back): the world's draws are collected for a few VBlanks with his model
 // drawn, then a few with his model's drawn byte cleared; his are those only in the first. Then
 // the rasterizer blends those he is drawn opaque with with the chosen alpha

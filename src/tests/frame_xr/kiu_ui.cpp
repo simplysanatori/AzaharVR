@@ -409,6 +409,16 @@ TEST_CASE("Kid Icarus UI: the portraits' part of the Secondary Screen's image", 
     CHECK(kPortraitSideDeg + 0.5f * kPortraitWidthDeg <= 40.0f);
     CHECK(kPortraitDownDeg + half_up < 13.0f); // above the words
     CHECK(kPortraitDownDeg > 0.0f);
+    // Subtitle Height moves the two as one: the same distance apart at every height.
+    CHECK(PortraitDown(kPortraitWordsDeg) == kPortraitDownDeg);
+    for (float words : {-40.0f, -18.0f, 0.0f, 40.0f}) {
+        CHECK(-words - PortraitDown(words) == -kPortraitWordsDeg - kPortraitDownDeg);
+    }
+    CHECK(PortraitPlace(false, 40.0f).y > 0.0f);
+    // Separate: from its usual place, to the right and up.
+    CHECK(PortraitPlace(false, kPortraitWordsDeg, 10.0f, 0.0f).x > PortraitPlace(false).x);
+    CHECK(PortraitPlace(false, kPortraitWordsDeg, 0.0f, 10.0f).y > PortraitPlace(false).y);
+    CHECK(PortraitPlace(false, -40.0f).y < PortraitPlace(false).y);
 }
 
 TEST_CASE("Kid Icarus UI: the menu panel's two screens", "[frame_xr][kiu1s]") {
@@ -525,12 +535,11 @@ TEST_CASE("Kid Icarus UI: the portraits' setting, its switch, and the words that
     CHECK(PortraitsWantedFor(nullptr, true));
     CHECK(PortraitsWantedFor("1", false));  // the switch, when set, wins
     CHECK_FALSE(PortraitsWantedFor("0", true));
-    // The words on the Primary Screen come with the card, not beside a Secondary Screen in view.
-    CHECK(TalkTopFor(nullptr, true, false));
-    CHECK_FALSE(TalkTopFor(nullptr, false, false));
-    CHECK_FALSE(TalkTopFor(nullptr, true, true));
-    CHECK(TalkTopFor("1", false, true));
-    CHECK_FALSE(TalkTopFor("0", true, false));
+    // The words go on the Primary Screen, not beside a Secondary Screen in the view.
+    CHECK(TalkTopFor(nullptr, false)); // Off and Wrist, with the portraits or without
+    CHECK_FALSE(TalkTopFor(nullptr, true)); // Persistent: in the view already
+    CHECK(TalkTopFor("1", true));
+    CHECK_FALSE(TalkTopFor("0", false));
     // No card asked for and no panel switch: no layer.
     CHECK(LayerFor(PortraitsFor(false, true, true, false), false) == PortraitState::Off);
     CHECK(BottomAlphaFor(50) == 0.5f);

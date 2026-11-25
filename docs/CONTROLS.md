@@ -21,7 +21,7 @@ Azahar for Frame keeps CitraVR's layout and uses the Steam Frame controllers' re
 | Left stick click, tap | Hide or Show Secondary Screen | See Swapping the screens |
 | Left stick click, held for 1 second | Screen Layout | See Screen layouts |
 | Right stick click, tap | Swap Screens | The Secondary Screen becomes the Primary Screen. Tap again to swap back |
-| Right stick click, tap, in a Kid Icarus battle in Angel's Aim (PROPOSED) | Switch between First Person and Over the Shoulder | **Right Stick Click**: **Swap Screens** gives Swap Screens back |
+| R3, in a Kid Icarus battle in Angel's Aim (PROPOSED) | Switch between First Person and Third Person | **R3**: **Swap Screens** gives Swap Screens back |
 | Right stick click, held for 1 second | Reset Screens and View | |
 | Both bumpers, then **View** | Show or Hide Secondary Screen | Only in immersive mode and in games that hide it, see below |
 | Both bumpers + **View** + **Menu** | Switch between VR and Flat | |

@@ -1149,7 +1149,7 @@ struct Values {
     SwitchableSetting<bool> vr_kiu_wrist_screen{false, "vr_kiu_wrist_screen"};
     // The talk panel: the Secondary Screen with the head, below the view (AZAHARFRAME_KIU_FP_TALK).
     SwitchableSetting<bool> vr_kiu_talk_panel{false, "vr_kiu_talk_panel"};
-    // Over the shoulder: the eye 2.5 m behind and 0.5 m above first person's
+    // Third person: the eye 2.5 m behind and 0.5 m above first person's
     // (AZAHARFRAME_KIU_SHOULDER, which also takes other distances).
     SwitchableSetting<bool> vr_kiu_over_shoulder{false, "vr_kiu_over_shoulder"};
     // Right Stick turning's snap angle in degrees: 30, 45, 60 or 90; 0 (or anything else) smooth
@@ -1158,7 +1158,7 @@ struct Values {
     // AzaharFrame kiu131: Angel's Aim's Bottom Screen: 0 Off, 1 Persistent (with the view, below
     // it), 2 Wrist. It replaces vr_kiu_wrist_screen and vr_kiu_talk_panel, which are still read
     // while this is 0 and cleared whenever it is chosen (kiu_first_person.h BottomScreenModeFor).
-    SwitchableSetting<u32, true> vr_kiu_bottom_screen{0, 0, 2, "vr_kiu_bottom_screen"};
+    SwitchableSetting<u32, true> vr_kiu_bottom_screen{2, 0, 2, "vr_kiu_bottom_screen"};
     // Its size and opacity in percent (Persistent and Wrist alike).
     SwitchableSetting<u32, true> vr_kiu_bottom_size{100, 50, 200, "vr_kiu_bottom_size"};
     SwitchableSetting<u32, true> vr_kiu_bottom_opacity{100, 20, 100, "vr_kiu_bottom_opacity"};
@@ -1167,6 +1167,11 @@ struct Values {
     SwitchableSetting<bool> vr_kiu_talk_portraits{false, "vr_kiu_talk_portraits"};
     SwitchableSetting<u32, true> vr_kiu_talk_portraits_opacity{100, 20, 100,
                                                                "vr_kiu_talk_portraits_opacity"};
+    // AzaharFrame kiuaim: the portraits move with the subtitles (Subtitle Height; linked), or
+    // degrees to the right and up from their own place.
+    SwitchableSetting<bool> vr_kiu_portraits_linked{true, "vr_kiu_portraits_linked"};
+    SwitchableSetting<s32, true> vr_kiu_portraits_across{0, -40, 40, "vr_kiu_portraits_across"};
+    SwitchableSetting<s32, true> vr_kiu_portraits_height{0, -40, 40, "vr_kiu_portraits_height"};
     // AzaharFrame kiupowers: the powers (on land) and the special attack's dots (in the air) in
     // Angel's Aim: 0 off, 1 over the off hand, 2 under the health bar, 3 between the bar and the
     // score, 4 under the score; their opacity in percent; with the HUD (2 to 4), degrees to the

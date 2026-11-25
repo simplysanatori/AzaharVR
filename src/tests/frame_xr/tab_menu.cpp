@@ -3626,17 +3626,17 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
     CHECK(SectionOf(Id::KiuBottomReset) == SettingsSection::Immersive);
     CHECK_FALSE(PerGameSetting(Id::KiuBottomReset));
     CHECK(LabelFor(Id::KiuBottomScreen) == "Bottom Screen");
-    CHECK(OptionsFor(Id::KiuBottomScreen) == std::vector<std::string>{"Off", "Persistent", "Wrist"});
+    CHECK(OptionsFor(Id::KiuBottomScreen) == std::vector<std::string>{"Off", "In View", "Wrist"});
     CHECK(LabelFor(Id::KiuBottomSize) == "Bottom Screen Size");
     CHECK(LabelFor(Id::KiuBottomOpacity) == "Bottom Screen Opacity");
     CHECK(LabelFor(Id::KiuBottomReset) == "Reset Bottom Screen Position");
-    // AzaharFrame kiu133: Over the Shoulder is one of Camera's choices.
+    // AzaharFrame kiu133: Third Person is one of Camera's choices.
     CHECK(LabelFor(Id::KiuOverShoulder) == "Camera");
     // AzaharFrame 1.3.0: the Game's Camera is not offered yet (kGameCameraOffered).
     CHECK(OptionsFor(Id::KiuOverShoulder) ==
           (FrameXr::Menu::kGameCameraOffered
-               ? std::vector<std::string>{"First Person", "Over the Shoulder", "Game's Camera"}
-               : std::vector<std::string>{"First Person", "Over the Shoulder"}));
+               ? std::vector<std::string>{"First Person", "Third Person", "Game's Camera"}
+               : std::vector<std::string>{"First Person", "Third Person"}));
     CHECK(LabelFor(Id::KiuSnapTurn) == "Turning");
     CHECK(LabelFor(Id::WristSide) == "Wrist Side");
     CHECK(LabelFor(Id::KiuReticleSize) == "Reticle Size");
@@ -3650,7 +3650,7 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
     CHECK(OptionsFor(Id::KiuSnapTurn) ==
           std::vector<std::string>{"Smooth", "30\xC2\xB0", "45\xC2\xB0", "60\xC2\xB0", "90\xC2\xB0"});
     const MenuModel defaults;
-    CHECK(defaults.kiu_bottom_screen == 0);
+    CHECK(defaults.kiu_bottom_screen == 2); // Wrist
     CHECK(defaults.kiu_bottom_size == 100);
     CHECK(defaults.kiu_bottom_opacity == 100);
     CHECK(defaults.wrist_side == 0);
@@ -5394,7 +5394,7 @@ TEST_CASE("Angel's Aim settings: drawn in the segment, each control a target",
     CHECK(opened);
 }
 
-// AzaharFrame kiu133: Camera (First Person, Over the Shoulder, Game's Camera) and, in the two
+// AzaharFrame kiu133: Camera (First Person, Third Person, Game's Camera) and, in the two
 // views from outside Pit, Pit Opacity: in the Settings tab's first-person rows and the hub's
 // View group, the same rows.
 TEST_CASE("Tab menu: Angel's Aim's Camera and Pit Opacity", "[frame_xr][tabmenu][kiu133]") {

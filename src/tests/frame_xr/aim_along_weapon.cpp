@@ -735,9 +735,9 @@ TEST_CASE("AZAHARFRAME_KIU_WEAPON_DRAW: only 0 leaves the model out, live", "[fr
           FrameXr::TestSwitches::Apply::Live);
 }
 
-// AzaharFrame kiu130: over the shoulder the game draws Pit with his own weapon, so the weapon in
+// AzaharFrame kiu130: in third person the game draws Pit with his own weapon, so the weapon in
 // hand is left out at run time; nothing saved changes, and first person draws it again.
-TEST_CASE("Over the Shoulder leaves the weapon in hand out, at run time only", "[frame_xr][kiuweapon]") {
+TEST_CASE("Third Person leaves the weapon in hand out, at run time only", "[frame_xr][kiuweapon]") {
     auto& shoulder = Settings::values.vr_kiu_over_shoulder;
     auto& weapon = Settings::values.vr_light_gun_weapon;
     const bool shoulder_before = shoulder.GetValue();

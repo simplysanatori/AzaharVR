@@ -634,7 +634,7 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
         CHECK(std::find(labels.begin(), labels.end(), key) != labels.end());
         CHECK(FrameXr::PerGame::KeysOf(id) == std::vector<std::string>{key});
     }
-    // AzaharFrame kiu133: Camera is two keys: Over the Shoulder's, as before, and the Game's
+    // AzaharFrame kiu133: Camera is two keys: Third Person's, as before, and the Game's
     // Camera's.
     CHECK(FrameXr::PerGame::KeysOf(Id::KiuOverShoulder) ==
           std::vector<std::string>{"vr_kiu_over_shoulder", "vr_kiu_game_camera"});
@@ -646,18 +646,23 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
     CHECK_FALSE(Settings::values.vr_kiu_talk_panel.GetDefault());
     CHECK_FALSE(Settings::values.vr_kiu_over_shoulder.GetDefault());
     CHECK(Settings::values.vr_kiu_snap_turn.GetDefault() == 0u);
-    CHECK(Settings::values.vr_kiu_bottom_screen.GetDefault() == 0u);
+    CHECK(Settings::values.vr_kiu_bottom_screen.GetDefault() == 2u); // Wrist
     CHECK(Settings::values.vr_kiu_bottom_size.GetDefault() == 100u);
     CHECK(Settings::values.vr_kiu_bottom_opacity.GetDefault() == 100u);
     // AzaharFrame kiu1s: the talk's portraits, off, and their opacity.
     CHECK_FALSE(Settings::values.vr_kiu_talk_portraits.GetDefault());
     CHECK(Settings::values.vr_kiu_talk_portraits_opacity.GetDefault() == 100u);
+    CHECK(Settings::values.vr_kiu_portraits_linked.GetDefault());
+    CHECK(Settings::values.vr_kiu_portraits_across.GetDefault() == 0);
+    CHECK(Settings::values.vr_kiu_portraits_height.GetDefault() == 0);
     // AzaharFrame kiupowers: the power menu, off, and its opacity.
     CHECK(Settings::values.vr_kiu_power_menu.GetDefault() == 0u);
     CHECK(Settings::values.vr_kiu_power_menu_opacity.GetDefault() == 100u);
     CHECK(Settings::values.vr_kiu_power_menu_across.GetDefault() == 0);
     CHECK(Settings::values.vr_kiu_power_menu_height.GetDefault() == 0);
     for (const char* key : {"vr_kiu_talk_portraits", "vr_kiu_talk_portraits_opacity",
+                            "vr_kiu_portraits_linked", "vr_kiu_portraits_across",
+                            "vr_kiu_portraits_height",
                             "vr_kiu_power_menu", "vr_kiu_power_menu_opacity",
                             "vr_kiu_power_menu_across", "vr_kiu_power_menu_height"}) {
         INFO(key);

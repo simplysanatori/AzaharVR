@@ -411,7 +411,7 @@ enum class MenuSetting {
     KiuBottomY,      ///< `value` tenths of a degree (vr_kiu_bottom_y)
     WristSide,       ///< `value` 0 Back, 1 Inside (vr_wrist_side, global)
     KiuReticleSize,  ///< `value` percent, 30 to 150 (vr_kiu_reticle_size)
-    KiuOverShoulder, ///< `value` Camera: 0 First Person, 1 Over the Shoulder, 2 Game's Camera
+    KiuOverShoulder, ///< `value` Camera: 0 First Person, 1 Third Person, 2 Game's Camera
                      ///< (vr_kiu_over_shoulder, vr_kiu_game_camera; AzaharFrame kiu133)
     KiuPitOpacity,   ///< `value` percent, 20 to 100 (vr_kiu_pit_opacity; AzaharFrame kiu133)
     KiuSnapTurn,     ///< `value` degrees: 0 Smooth, 30, 45, 60 or 90 (vr_kiu_snap_turn)
@@ -432,6 +432,9 @@ enum class MenuSetting {
     KiuSubtitleSize, ///< AzaharFrame kiu140: `value` a slider, 50 to 250 percent (vr_kiu_subtitle_size)
     KiuTalkPortraits, ///< AzaharFrame kiuaim: `value` index: Hidden, Shown (vr_kiu_talk_portraits)
     KiuTalkPortraitsOpacity, ///< `value` percent, 20 to 100 (vr_kiu_talk_portraits_opacity)
+    KiuPortraitsLinked, ///< `value` index: Separate, Linked (vr_kiu_portraits_linked)
+    KiuPortraitsAcross, ///< `value` a slider, -40 to 40 degrees (vr_kiu_portraits_across)
+    KiuPortraitsHeight, ///< `value` a slider, -40 to 40 degrees (vr_kiu_portraits_height)
     KiuStickClick, ///< AzaharFrame kiucam: `value` index: Switch Camera, Swap Screens
     KiuHideOffHand, ///< AzaharFrame kiuhands: `value` index: Off, On (vr_kiu_hide_off_hand)
     KiuPowerMenu, ///< AzaharFrame kiuaim: `value` index: Off, Off Hand, Health Bar, Middle, Score (vr_kiu_power_menu)

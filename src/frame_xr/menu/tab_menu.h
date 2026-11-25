@@ -298,7 +298,7 @@ enum class Id : int {
     // AzaharFrame kiu131: Bottom Screen replaces Secondary Screen on Wrist and Talk Panel
     KiuBottomScreen, ///< index: Bottom Screen's Off, Persistent, Wrist (vr_kiu_bottom_screen)
     KiuBottomSize,   ///< a slider, 50 to 200 (percent), with Bottom Screen not Off
-    KiuOverShoulder, ///< index: Camera's First Person, Over the Shoulder, Game's Camera
+    KiuOverShoulder, ///< index: Camera's First Person, Third Person, Game's Camera
                      ///< (vr_kiu_over_shoulder, vr_kiu_game_camera; AzaharFrame kiu133: was a switch)
     KiuSnapTurn,     ///< index: Turning's Smooth, 30, 45, 60, 90 degrees (vr_kiu_snap_turn)
     KiuBottomOpacity, ///< AzaharFrame kiu131: a slider, 20 to 100 (percent), with it not Off
@@ -323,6 +323,9 @@ enum class Id : int {
     KiuSubtitleSize, ///< AzaharFrame kiu140: a slider, 50 to 250 percent (vr_kiu_subtitle_size)
     KiuTalkPortraits, ///< AzaharFrame kiuaim: index: Hidden, Shown (vr_kiu_talk_portraits)
     KiuTalkPortraitsOpacity, ///< AzaharFrame kiuaim: a slider, 20 to 100 percent, while Shown
+    KiuPortraitsLinked, ///< index: Separate, Linked, while Shown (vr_kiu_portraits_linked)
+    KiuPortraitsAcross, ///< a slider, -40 to 40 degrees, while Separate (vr_kiu_portraits_across)
+    KiuPortraitsHeight, ///< a slider, -40 to 40 degrees, while Separate (vr_kiu_portraits_height)
     KiuStickClick, ///< AzaharFrame kiucam: index: Switch Camera, Swap Screens (vr_kiu_stick_click)
     KiuHideOffHand, ///< AzaharFrame kiuhands: index: Off, On (vr_kiu_hide_off_hand)
     KiuPowerMenu, ///< AzaharFrame kiuaim: index: Off, Off Hand, Health Bar, Middle, Score (vr_kiu_power_menu)
@@ -552,7 +555,7 @@ struct MenuModel {
     int projectile_opacity = 100; ///< percent (20 to 100)
     int flash_size = 100;         ///< AzaharFrame kiuweap2: Muzzle Flash Size, percent (50 to 300)
     int trigger_layout = 0;       ///< AzaharFrame kiufire: 0 Original, 1 Fire and Power
-    int kiu_bottom_screen = 0;      ///< AzaharFrame kiu131: 0 Off, 1 Persistent, 2 Wrist
+    int kiu_bottom_screen = 2;      ///< AzaharFrame kiu131: 0 Off, 1 Persistent, 2 Wrist
     int kiu_bottom_size = 100;      ///< percent (50 to 200)
     int kiu_bottom_opacity = 100;   ///< percent (20 to 100)
     bool kiu_bottom_moved = false;  ///< Persistent is off its default place
@@ -575,6 +578,9 @@ struct MenuModel {
     int kiu_hide_off_hand = 0; ///< AzaharFrame kiuhands (vr_kiu_hide_off_hand)
     int kiu_talk_portraits = 0; ///< AzaharFrame kiuaim (vr_kiu_talk_portraits)
     int kiu_talk_portraits_opacity = 100; ///< percent, 20 to 100 (vr_kiu_talk_portraits_opacity)
+    int kiu_portraits_linked = 1; ///< AzaharFrame kiuaim (vr_kiu_portraits_linked)
+    int kiu_portraits_across = 0; ///< degrees (vr_kiu_portraits_across)
+    int kiu_portraits_height = 0; ///< degrees (vr_kiu_portraits_height)
     int kiu_power_menu = 0; ///< AzaharFrame kiuaim (vr_kiu_power_menu)
     int kiu_power_menu_across = 0;    ///< degrees (vr_kiu_power_menu_across)
     int kiu_power_menu_height = 0;    ///< degrees (vr_kiu_power_menu_height)

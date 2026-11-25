@@ -1325,7 +1325,7 @@ TEST_CASE("Kid Icarus hooks: first person hides the player on land", "[frame_xr]
     CHECK_FALSE(HideInFirstPerson(false, true, true, false)); // not first person
     CHECK_FALSE(HideInFirstPerson(true, false, true, false)); // the air: the haze, less damage
     CHECK_FALSE(HideInFirstPerson(true, true, false, false)); // the game's own shots
-    CHECK_FALSE(HideInFirstPerson(true, true, true, true));   // over the shoulder: to see him
+    CHECK_FALSE(HideInFirstPerson(true, true, true, true));   // in third person: to see him
 
     const uint32_t one = std::bit_cast<uint32_t>(1.0f);
     const uint32_t tiny = std::bit_cast<uint32_t>(0.001f);
@@ -1350,7 +1350,7 @@ TEST_CASE("Kid Icarus hooks: first person hides the player on land", "[frame_xr]
 TEST_CASE("Kid Icarus hooks: the player's model hidden by its draw", "[frame_xr][kiuhook][kiu131]") {
     CHECK(HideByDrawInFirstPerson(true, false));
     CHECK_FALSE(HideByDrawInFirstPerson(false, false)); // not first person
-    CHECK_FALSE(HideByDrawInFirstPerson(true, true));   // over the shoulder: to see him
+    CHECK_FALSE(HideByDrawInFirstPerson(true, true));   // in third person: to see him
     CHECK(HideByFrom(nullptr) == HideBy::Draw);
     CHECK(HideByFrom("draw") == HideBy::Draw);
     CHECK(HideByFrom("scale") == HideBy::Scale);

@@ -700,6 +700,9 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.vr_kiu_bottom_opacity);
     ReadGlobalSetting(Settings::values.vr_kiu_talk_portraits); // AzaharFrame kiu1s
     ReadGlobalSetting(Settings::values.vr_kiu_talk_portraits_opacity);
+    ReadGlobalSetting(Settings::values.vr_kiu_portraits_linked);
+    ReadGlobalSetting(Settings::values.vr_kiu_portraits_across);
+    ReadGlobalSetting(Settings::values.vr_kiu_portraits_height);
     ReadGlobalSetting(Settings::values.vr_kiu_power_menu); // AzaharFrame kiupowers
     ReadGlobalSetting(Settings::values.vr_kiu_power_menu_opacity);
     ReadGlobalSetting(Settings::values.vr_kiu_power_menu_across);
@@ -1505,6 +1508,9 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.vr_kiu_bottom_opacity);
     WriteGlobalSetting(Settings::values.vr_kiu_talk_portraits); // AzaharFrame kiu1s
     WriteGlobalSetting(Settings::values.vr_kiu_talk_portraits_opacity);
+    WriteGlobalSetting(Settings::values.vr_kiu_portraits_linked);
+    WriteGlobalSetting(Settings::values.vr_kiu_portraits_across);
+    WriteGlobalSetting(Settings::values.vr_kiu_portraits_height);
     WriteGlobalSetting(Settings::values.vr_kiu_power_menu); // AzaharFrame kiupowers
     WriteGlobalSetting(Settings::values.vr_kiu_power_menu_opacity);
     WriteGlobalSetting(Settings::values.vr_kiu_power_menu_across);
