@@ -180,6 +180,10 @@ struct ScreenPlacement {
     bool second_free = false;
     XrPosef second_pose{{0, 0, 0, 1}, {0, 0, 0}};
     float second_scale = 1.0f;
+    /// Screen Gap (input/screen_rig.h PlaceLinked): how far the linked second slot is on its way
+    /// into the main one's plane (JoinShare) and the radius it is bent with, as drawn.
+    float join_share = 0.0f;
+    float bottom_curve = 0.0f;
 };
 /// The normal top screen's size in metres: 1 m high times `scale`, as wide as "VR Screen
 /// Shape" says.

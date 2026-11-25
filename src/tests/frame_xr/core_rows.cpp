@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include <catch2/catch_test_macros.hpp>
+#include "frame_xr/input/screen_rig.h"
 #include "frame_xr/menu/core_rows.h"
 #include "frame_xr/menu/tab_menu.h"
 #include "frame_xr/ui/ui_canvas.h"
@@ -738,7 +739,10 @@ TEST_CASE("Core rows: Screen Gap", "[frame_xr][tabmenu]") {
     }
     CHECK(PerGameSetting(Id::ScreenGap));
     CHECK(LabelFor(Id::ScreenGap) == "Screen Gap");
+    CHECK(SliderFor(Id::ScreenGap).min == 0.0f);
     CHECK(SliderFor(Id::ScreenGap).max == 20.0f);
+    // The default is the layout's own place
+    CHECK(MenuModel{}.screen_gap == FrameXr::Input::ScreenRig::kScreenGapDefaultDeg);
 }
 
 TEST_CASE("Core rows: Layer Depth", "[frame_xr][tabmenu]") {

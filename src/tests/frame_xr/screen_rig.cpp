@@ -5,8 +5,10 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <vector>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include "common/settings.h"
 #include "frame_xr/input/geometry.h"
 #include "frame_xr/input/screen_rig.h"
 
@@ -275,6 +277,274 @@ TEST_CASE("FrameXr screen rig: a DS game's screens do not overlap as the player 
             const Posef old = BottomFromTop(main, at.scale);
             REQUIRE(Overlaps(MainQuad(main, kW * at.scale, at.scale, 0), old, kW, 1.0f, {}, 0.0f));
         }
+    }
+}
+
+namespace {
+
+/// A point of a drawn screen, `x` and `y` in metres from its middle along its surface.
+Vec3f OnScreen(const PanelQuad& q, float x, float y) {
+    const float r = q.curve_radius;
+    return Transform(q.pose, r > 0.0f ? Vec3f{r * std::sin(x / r), y, r * (1.0f - std::cos(x / r))}
+                                      : Vec3f{x, y, 0.0f});
+}
+
+float AngleDeg(const Vec3f& a, const Vec3f& b) {
+    return std::atan2(Length(Cross(a, b)), Dot(a, b)) / kDeg;
+}
+
+struct Shape {
+    const char* name;
+    float main_aspect;
+    float second_aspect;
+    bool equal;
+    bool turned;
+    bool swapped;
+};
+
+/// The two screens as app.cpp WithSecondSlot and Input::ScreenView::Layout draw them.
+struct Pair {
+    PanelQuad main, second;
+    float native_main = 0.0f, native_second = 0.0f; ///< heights before they are turned
+    Posef apart;
+};
+Pair DrawnPair(const Shape& shape, const Posef& main, float scale, uint32_t layout, uint32_t curve,
+               float setting) {
+    const float f = shape.equal ? LinkedScale(true, layout) : kBottomHeight;
+    // The slots' sizes, not swapped
+    float tw = shape.main_aspect * scale, th = scale, bw = shape.second_aspect * f, bh = f;
+    float mw = tw, sw = bw;
+    if (shape.turned) {
+        std::swap(tw, th);
+        std::swap(bw, bh);
+    }
+    Pair out;
+    out.apart = SecondFromMain(main, scale, tw, bw, layout, th / scale, bh, GapTurnDeg(setting));
+    if (shape.swapped) {
+        mw = scale * shape.second_aspect;
+        sw = f * shape.main_aspect;
+    }
+    LinkedIn in;
+    in.main = main;
+    in.main_width = shape.turned ? scale : mw;
+    in.main_height = shape.turned ? mw : scale;
+    in.main_curve_radius = shape.turned ? 0.0f : CurveRadius(mw, curve);
+    in.apart = out.apart;
+    in.apart_width = shape.turned ? f : sw;
+    in.apart_height = shape.turned ? sw : f;
+    in.join_size = scale / f;
+    in.layout = layout;
+    in.share = JoinShare(setting);
+    const Linked l = PlaceLinked(in);
+    out.main = {main, in.main_width, in.main_height, true, in.main_curve_radius};
+    out.second = {l.pose, in.apart_width * l.size, in.apart_height * l.size, true, l.curve_radius};
+    out.native_main = scale;
+    out.native_second = f * l.size;
+    return out;
+}
+
+constexpr Shape kShapes[] = {
+    {"DS", 4.0f / 3.0f, 4.0f / 3.0f, true, false, false},
+    {"DS turned", 4.0f / 3.0f, 4.0f / 3.0f, true, true, false},
+    {"3DS", 400.0f / 240.0f, 4.0f / 3.0f, false, false, false},
+    {"3DS swapped", 400.0f / 240.0f, 4.0f / 3.0f, false, false, true},
+    {"3DS, 21:9", 21.0f / 9.0f, 4.0f / 3.0f, false, false, false},
+    {"GBA", 1.5f, 4.0f / 3.0f, false, false, false},
+    {"GBA swapped", 1.5f, 4.0f / 3.0f, false, false, true},
+    {"GBA, its map", 1.5f, 1.5f, false, false, false},
+    {"Game Boy", 160.0f / 144.0f, 4.0f / 3.0f, false, false, false},
+};
+
+/// Calls `f` for every shape, place, layout and curve.
+template <class F>
+void EveryPair(float setting, F&& f) {
+    const Placed places[] = {{{0.0f, 0.0f, -2.0f}, 1.0f},    {{0.0f, 0.0f, -2.0f}, kMinScale},
+                             {{0.0f, 0.0f, -2.0f}, kMaxScale}, {{0.0f, 0.46f, -2.91f}, 2.35f},
+                             {{-0.9f, -0.3f, -2.53f}, 1.58f}, {{0.7f, 0.5f, -1.2f}, 0.8f}};
+    for (const Shape& shape : kShapes) {
+        for (const Placed& at : places) {
+            const Posef main{FaceViewer(at.at, {}, {0.0f, 1.0f, 0.0f}), at.at};
+            for (const uint32_t layout : {kLayoutStacked, kLayoutSideBySide}) {
+                for (const uint32_t curve : {0u, 15u, 45u, 90u}) {
+                    if (shape.turned && curve != 0) {
+                        continue; // never bent (VrUi::CurveFor)
+                    }
+                    INFO(shape.name << " at " << at.at.x << ", " << at.at.y << ", " << at.at.z
+                                    << " scale " << at.scale << " layout " << layout << " curve "
+                                    << curve << " gap " << setting);
+                    f(DrawnPair(shape, main, at.scale, layout, curve, setting), layout);
+                }
+            }
+        }
+    }
+}
+
+} // namespace
+
+TEST_CASE("FrameXr screen rig: every console's Screen Gap starts at the layout's own place",
+          "[frame_xr]") {
+    static_assert(Settings::kScreenGapDefault == kScreenGapDefaultDeg);
+    for (const auto group : {Settings::ConsoleGroup::N3DS, Settings::ConsoleGroup::DS,
+                             Settings::ConsoleGroup::GBA}) {
+        CHECK(Settings::Graphics(group).screen_gap.GetDefault() == kScreenGapDefaultDeg);
+    }
+}
+
+TEST_CASE("FrameXr screen rig: Screen Gap at its default and above is the layout's place, turned",
+          "[frame_xr]") {
+    CHECK(GapTurnDeg(0.0f) == 0.0f);
+    CHECK(GapTurnDeg(static_cast<float>(kScreenGapDefaultDeg)) == 0.0f);
+    CHECK(GapTurnDeg(20.0f) == 16.0f);
+    CHECK(JoinShare(0.0f) == 1.0f);
+    CHECK(JoinShare(1.0f) == Approx(0.75f));
+    CHECK(JoinShare(static_cast<float>(kScreenGapDefaultDeg)) == 0.0f);
+    CHECK(JoinShare(20.0f) == 0.0f);
+    CHECK(JoinShare(NAN) == 0.0f);
+    for (const float setting : {4.0f, 5.0f, 20.0f}) {
+        EveryPair(setting, [](const Pair& p, uint32_t) {
+            // To the bit
+            REQUIRE(p.second.pose.position.x == p.apart.position.x);
+            REQUIRE(p.second.pose.position.y == p.apart.position.y);
+            REQUIRE(p.second.pose.position.z == p.apart.position.z);
+            REQUIRE(p.second.pose.orientation.x == p.apart.orientation.x);
+            REQUIRE(p.second.pose.orientation.y == p.apart.orientation.y);
+            REQUIRE(p.second.pose.orientation.z == p.apart.orientation.z);
+            REQUIRE(p.second.pose.orientation.w == p.apart.orientation.w);
+            REQUIRE(p.second.curve_radius == 0.0f);
+        });
+    }
+}
+
+TEST_CASE("FrameXr screen rig: Screen Gap 0 joins the screens", "[frame_xr]") {
+    constexpr float kMetres = 1e-4f;
+    EveryPair(0.0f, [](const Pair& p, uint32_t layout) {
+        const bool side = layout == kLayoutSideBySide;
+        const PanelQuad &m = p.main, &s = p.second;
+        // The same pixel size, which is the same height
+        REQUIRE(p.native_second == Approx(p.native_main).epsilon(1e-5));
+        // Edge to edge and centred
+        for (const float at : {-0.5f, -0.25f, 0.0f, 0.25f, 0.5f}) {
+            const Vec3f a = side ? OnScreen(m, m.width_m * 0.5f, at * s.height_m)
+                                 : OnScreen(m, at * s.width_m, -m.height_m * 0.5f);
+            const Vec3f b = side ? OnScreen(s, -s.width_m * 0.5f, at * s.height_m)
+                                 : OnScreen(s, at * s.width_m, s.height_m * 0.5f);
+            REQUIRE(Length(a - b) < kMetres);
+            REQUIRE(AngleDeg(a, b) < 0.01f);
+        }
+        // In the main screen's plane, or on its cylinder
+        const Posef to_main = Inverse(m.pose);
+        for (int i = 0; i <= 8; ++i) {
+            for (int j = 0; j <= 8; ++j) {
+                const Vec3f w = OnScreen(s, (i / 8.0f - 0.5f) * s.width_m,
+                                         (j / 8.0f - 0.5f) * s.height_m);
+                const Vec3f l = Transform(to_main, w);
+                const float r = m.curve_radius;
+                const float off = r > 0.0f ? std::hypot(l.x, l.z - r) - r : l.z;
+                REQUIRE(std::abs(off) < kMetres);
+            }
+        }
+        if (!side || m.curve_radius == 0.0f) {
+            for (const Vec3f& axis : {Vec3f{1, 0, 0}, Vec3f{0, 1, 0}, Vec3f{0, 0, 1}}) {
+                REQUIRE(AngleDeg(Rotate(m.pose.orientation, axis),
+                                 Rotate(s.pose.orientation, axis)) < 0.01f);
+            }
+        } else {
+            REQUIRE(AngleDeg(Rotate(m.pose.orientation, Vec3f{0, 1, 0}),
+                             Rotate(s.pose.orientation, Vec3f{0, 1, 0})) < 0.01f);
+        }
+        // Bent together
+        REQUIRE(s.curve_radius == Approx(m.curve_radius));
+    });
+}
+
+TEST_CASE("FrameXr screen rig: joined edges overlap by as much as asked, on the same surface",
+          "[frame_xr]") {
+    const Posef main{Quatf{}, {0.0f, 0.2f, -2.0f}};
+    const float w = 4.0f / 3.0f;
+    LinkedIn in;
+    in.main = main;
+    in.main_width = w;
+    in.main_height = 1.0f;
+    in.apart_width = w;
+    in.apart_height = 1.0f;
+    in.share = 1.0f;
+    in.overlap = kJoinOverlapProjected * 2.0f;
+    in.apart = SecondFromMain(main, 1.0f, w, w, kLayoutStacked);
+    const Linked below = PlaceLinked(in);
+    CHECK(below.pose.position.y == Approx(main.position.y - 1.0f + 0.003f).margin(1e-5));
+    CHECK(below.pose.position.z == Approx(main.position.z).margin(1e-6));
+    in.layout = kLayoutSideBySide;
+    in.apart = SecondFromMain(main, 1.0f, w, w, kLayoutSideBySide);
+    const Linked beside = PlaceLinked(in);
+    CHECK(beside.pose.position.x == Approx(w - 0.003f).margin(1e-5));
+    in.main_curve_radius = CurveRadius(w, 90);
+    const Linked bent = PlaceLinked(in);
+    const float arc = (w - 0.003f) / in.main_curve_radius;
+    CHECK(bent.pose.position.x ==
+          Approx(std::sin(arc) * in.main_curve_radius).margin(1e-5));
+    CHECK(bent.curve_radius == Approx(in.main_curve_radius));
+}
+
+TEST_CASE("FrameXr screen rig: joined screens are each hit where they are drawn", "[frame_xr]") {
+    EveryPair(0.0f, [](const Pair& p, uint32_t) {
+        for (const Vec3f& from : {Vec3f{0.2f, -0.3f, -0.1f}, Vec3f{-0.2f, 0.0f, 0.0f}}) {
+            for (const float u : {0.02f, 0.5f, 0.98f}) {
+                for (const float v : {0.02f, 0.5f, 0.98f}) {
+                    const Vec3f at = OnScreen(p.second, (u - 0.5f) * p.second.width_m,
+                                              (0.5f - v) * p.second.height_m);
+                    // A bent screen's far end may be seen from behind
+                    const Vec3f d = Normalized(at - from);
+                    const float ang = p.second.curve_radius > 0.0f
+                                          ? (u - 0.5f) * p.second.width_m / p.second.curve_radius
+                                          : 0.0f;
+                    const Vec3f normal = Rotate(p.second.pose.orientation,
+                                                Vec3f{-std::sin(ang), 0.0f, std::cos(ang)});
+                    if (Dot(normal, d) > -0.05f) {
+                        continue;
+                    }
+                    const QuadHit hit = IntersectQuad({from, d}, p.second);
+                    REQUIRE(hit.in_bounds);
+                    REQUIRE(hit.u == Approx(u).margin(0.003));
+                    REQUIRE(hit.v == Approx(v).margin(0.003));
+                    REQUIRE_FALSE(IntersectQuad({from, d}, p.main).in_bounds);
+                }
+            }
+        }
+    });
+}
+
+TEST_CASE("FrameXr screen rig: Screen Gap between 0 and its default, with no jump or overlap",
+          "[frame_xr]") {
+    // The default ends where the layout's place is
+    for (const float setting : {3.999f, 0.001f}) {
+        const float end = setting > 2.0f ? 4.0f : 0.0f;
+        std::vector<Pair> ends;
+        EveryPair(end, [&](const Pair& p, uint32_t) { ends.push_back(p); });
+        std::size_t i = 0;
+        EveryPair(setting, [&](const Pair& p, uint32_t) {
+            const Pair& e = ends[i++];
+            for (const float x : {-0.5f, 0.0f, 0.5f}) {
+                for (const float y : {-0.5f, 0.0f, 0.5f}) {
+                    REQUIRE(Length(OnScreen(p.second, x * p.second.width_m, y * p.second.height_m) -
+                                   OnScreen(e.second, x * e.second.width_m,
+                                            y * e.second.height_m)) < 0.01f);
+                }
+            }
+        });
+    }
+    for (const float setting : {1.0f, 2.0f, 3.0f}) {
+        EveryPair(setting, [](const Pair& p, uint32_t) {
+            for (const Vec3f& eye : {Vec3f{-0.032f, 0.0f, 0.0f}, Vec3f{0.032f, 0.0f, 0.0f}}) {
+                for (int i = 0; i <= 16; ++i) {
+                    for (int j = 0; j <= 16; ++j) {
+                        const Vec3f at = OnScreen(p.second, (i / 16.0f - 0.5f) * p.second.width_m,
+                                                  (j / 16.0f - 0.5f) * p.second.height_m);
+                        REQUIRE_FALSE(
+                            IntersectQuad({eye, Normalized(at - eye)}, p.main).in_bounds);
+                    }
+                }
+            }
+        });
     }
 }
 

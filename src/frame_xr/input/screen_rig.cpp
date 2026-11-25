@@ -63,6 +63,22 @@ Vec3f SpherePoint(const Vec3f& eye, const Ray& ray, float radius) {
     return ray.origin + ray.direction * t;
 }
 
+Quatf Slerp(const Quatf& from, Quatf to, float t) {
+    float dot = from.x * to.x + from.y * to.y + from.z * to.z + from.w * to.w;
+    if (dot < 0.0f) {
+        to = {-to.x, -to.y, -to.z, -to.w};
+        dot = -dot;
+    }
+    float a = 1.0f - t, b = t;
+    if (dot < 0.9995f) {
+        const float angle = std::acos(dot);
+        a = std::sin(angle * a) / std::sin(angle);
+        b = std::sin(angle * b) / std::sin(angle);
+    }
+    return Normalized({from.x * a + to.x * b, from.y * a + to.y * b, from.z * a + to.z * b,
+                       from.w * a + to.w * b});
+}
+
 bool Finite(const Posef& p) {
     return std::isfinite(p.position.x) && std::isfinite(p.position.y) &&
            std::isfinite(p.position.z) && std::isfinite(p.orientation.x) &&
@@ -141,6 +157,121 @@ Posef SecondFromMain(const Posef& main, float scale, float main_width, float sec
     s.position = Rotate(turn, main.position);
     s.orientation = Normalized(Multiply(turn, main.orientation));
     return s;
+}
+
+float GapTurnDeg(float setting_deg) {
+    return std::isfinite(setting_deg)
+               ? std::max(setting_deg - static_cast<float>(kScreenGapDefaultDeg), 0.0f)
+               : 0.0f;
+}
+
+float JoinShare(float setting_deg) {
+    return std::isfinite(setting_deg)
+               ? std::clamp(1.0f - setting_deg / static_cast<float>(kScreenGapDefaultDeg), 0.0f,
+                            1.0f)
+               : 0.0f;
+}
+
+Linked PlaceLinked(const LinkedIn& in) {
+    const float s = std::clamp(in.share, 0.0f, 1.0f);
+    if (s <= 0.0f) {
+        return {in.apart, 1.0f, 0.0f};
+    }
+    const bool side = in.layout == kLayoutSideBySide;
+    const float curvature = in.main_curve_radius > 0.0f ? 1.0f / in.main_curve_radius : 0.0f;
+    // The frame of the main screen's surface `arc` along it from its middle, and back.
+    const auto along = [](const Posef& from, float k, float arc) {
+        const float a = k * arc;
+        // x = sin(a) / k, z = (1 - cos(a)) / k, steady towards k = 0
+        const float x = std::abs(a) > 1e-3f ? std::sin(a) / k : arc * (1.0f - a * a / 6.0f);
+        const float z = std::abs(a) > 1e-3f ? (1.0f - std::cos(a)) / k : arc * a * 0.5f;
+        const Quatf turn{0.0f, std::sin(-a / 2), 0.0f, std::cos(-a / 2)};
+        return Posef{Normalized(Multiply(from.orientation, turn)),
+                     from.position + Rotate(from.orientation, Vec3f{x, 0.0f, z})};
+    };
+    const float overlap = in.overlap * s;
+    const Posef joined =
+        side ? along(in.main, curvature, in.main_width * 0.5f - overlap)
+             : Posef{in.main.orientation,
+                     Transform(in.main, {0.0f, -in.main_height * 0.5f + overlap, 0.0f})};
+    const Vec3f apart_edge =
+        Transform(in.apart, side ? Vec3f{-in.apart_width * 0.5f, 0.0f, 0.0f}
+                                 : Vec3f{0.0f, in.apart_height * 0.5f, 0.0f});
+    Linked out;
+    out.size = 1.0f + (in.join_size - 1.0f) * s;
+    const float k = curvature * s;
+    out.curve_radius = k > 0.0f ? 1.0f / k : 0.0f;
+    const Posef edge{Slerp(in.apart.orientation, joined.orientation, s),
+                     apart_edge + (joined.position - apart_edge) * s};
+    if (side) {
+        out.pose = along(edge, k, in.apart_width * out.size * 0.5f);
+    } else {
+        out.pose = {edge.orientation,
+                    Transform(edge, {0.0f, -in.apart_height * out.size * 0.5f, 0.0f})};
+    }
+    if (s >= 1.0f) {
+        return out;
+    }
+    // Between, a bent main screen's corners can reach over that edge as you see it: what is
+    // missing to half a degree (less towards both ends) is turned away about the viewer, as
+    // SecondFromMain does. Both edges as that turn sees them: `across` it keeps, `away` it changes.
+    struct Seen {
+        float across, away;
+    };
+    using Edge = std::array<Seen, 65>;
+    const Quatf& m = in.main.orientation;
+    const Quatf to_main{-m.x, -m.y, -m.z, m.w};
+    const auto seen = [&](const Posef& pose, float k2, float x0, float x1, float y0, float y1) {
+        Edge out_edge;
+        for (std::size_t i = 0; i < out_edge.size(); ++i) {
+            const float t = static_cast<float>(i) / static_cast<float>(out_edge.size() - 1);
+            const Vec3f v = Rotate(to_main, Transform(along(pose, k2, x0 + (x1 - x0) * t),
+                                                      {0.0f, y0 + (y1 - y0) * t, 0.0f}));
+            const float n = std::max(Length(v), 1e-3f);
+            out_edge[i] = side ? Seen{v.y / n, std::atan2(v.x, -v.z)}
+                               : Seen{v.x / n, std::atan2(-v.y, -v.z)};
+        }
+        std::sort(out_edge.begin(), out_edge.end(),
+                  [](const Seen& a, const Seen& b) { return a.across < b.across; });
+        return out_edge;
+    };
+    const auto away_at = [](const Edge& e, float across) -> std::optional<float> {
+        for (std::size_t i = 1; i < e.size(); ++i) {
+            if (across >= e[i - 1].across && across <= e[i].across) {
+                const float span = e[i].across - e[i - 1].across;
+                const float t = span > 0.0f ? (across - e[i - 1].across) / span : 0.0f;
+                return e[i - 1].away + (e[i].away - e[i - 1].away) * t;
+            }
+        }
+        return std::nullopt;
+    };
+    const float mw = in.main_width * 0.5f, mh = in.main_height * 0.5f;
+    const float sw = in.apart_width * out.size * 0.5f, sh = in.apart_height * out.size * 0.5f;
+    const Edge main_edge = side ? seen(in.main, curvature, mw, mw, -mh, mh)
+                                : seen(in.main, curvature, -mw, mw, -mh, -mh);
+    const Edge second_edge =
+        side ? seen(out.pose, k, -sw, -sw, -sh, sh) : seen(out.pose, k, -sw, sw, sh, sh);
+    const float apart = 0.5f * kDegToRad * 4.0f * s * (1.0f - s);
+    float over = 0.0f;
+    for (const Seen& p : main_edge) {
+        if (const auto other = away_at(second_edge, p.across)) {
+            over = std::max(over, p.away - *other + apart);
+        }
+    }
+    for (const Seen& p : second_edge) {
+        if (const auto other = away_at(main_edge, p.across)) {
+            over = std::max(over, *other - p.away + apart);
+        }
+    }
+    if (over > 0.0f) {
+        const Vec3f axis = Rotate(m, side ? Vec3f{0.0f, 1.0f, 0.0f} : Vec3f{1.0f, 0.0f, 0.0f});
+        const float h = -over * 0.5f;
+        const Quatf turn{axis.x * std::sin(h), axis.y * std::sin(h), axis.z * std::sin(h),
+                         std::cos(h)};
+        out.pose = {Normalized(Multiply(turn, out.pose.orientation)),
+                    Rotate(turn, out.pose.position)};
+    }
+    return out;
 }
 
 float LinkedScale(bool equal, uint32_t layout) {

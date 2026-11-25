@@ -1397,6 +1397,16 @@ uint32_t VrUi::CurveFor(const Immersive::ScreenLayers& shown) const {
     return std::min(Settings::RunningGraphics().screen_curve.GetValue(), Rig::kMaxCurveDeg);
 }
 
+void VrUi::BendScreens(Input::ScreenQuads& quads, const Immersive::ScreenLayers& shown) const {
+    Input::PanelQuad& main = screen_view.bottom_focus() ? quads.bottom : quads.top;
+    Input::PanelQuad& second = screen_view.bottom_focus() ? quads.top : quads.bottom;
+    const uint32_t deg = CurveFor(shown);
+    Rig::ApplyCurve(main, second, deg);
+    if (deg != 0) {
+        second.curve_radius = shown.bottom_curve;
+    }
+}
+
 void VrUi::ShowGripHint(bool immersive, const Input::ScreenQuads& quads, bool swapped,
                         const Input::PanelQuad* held, bool curve) {
     const ViewPose view = LatestViewPose();
@@ -1518,11 +1528,7 @@ VrUi::ScreenDraw VrUi::ScreenDrawFor(const Immersive::ScreenLayers& shown) const
                                           shown.bottom_size.height, shown.show_bottom};
     Input::ScreenQuads quads =
         screen_view.Layout(main_slot, secondary_slot, Immersive::CanToggleBottom());
-    if (screen_view.bottom_focus()) { // AzaharFrame curve
-        Rig::ApplyCurve(quads.bottom, quads.top, CurveFor(shown));
-    } else {
-        Rig::ApplyCurve(quads.top, quads.bottom, CurveFor(shown));
-    }
+    BendScreens(quads, shown); // AzaharFrame curve
     ScreenDraw draw;
     draw.swapped = screen_view.bottom_focus();
     draw.top_visible = quads.top.visible;
@@ -1915,11 +1921,9 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                                           shown.show_bottom && shown.bottom_pointable};
     Input::ScreenQuads quads = screen_view.Layout(main_slot, secondary_slot, managed);
     // AzaharFrame curve: the pointer, the touch and the drag hit the screens as they are drawn.
-    if (screen_view.bottom_focus()) {
-        Rig::ApplyCurve(quads.bottom, quads.top, CurveFor(shown));
-    } else {
-        Rig::ApplyCurve(quads.top, quads.bottom, CurveFor(shown));
-    }
+    BendScreens(quads, shown);
+    // Layer Depth moved the picture this far when it was drawn: a joined touch screen with it.
+    quads.bottom.pose.position = quads.bottom.pose.position + joined_shift;
     Input::PanelGeometry panels;
     panels.top = quads.top;
     panels.bottom = quads.bottom;
@@ -2775,8 +2779,10 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         // longer follows the main one.
         Rig::Slots slots = SlotsOf(place);
         const float linked_scale =
-            Rig::LinkedScale(GetCoreCapabilities().screens.equal_screens,
-                             Settings::RunningGraphics().screen_layout.GetValue());
+            place.join_share > 0.0f
+                ? place.bottom_size.height / NormalBottomSize().height
+                : Rig::LinkedScale(GetCoreCapabilities().screens.equal_screens,
+                                   Settings::RunningGraphics().screen_layout.GetValue());
         if (Rig::Detach(slots, detach, ToInput(place.bottom_pose), linked_scale)) {
             PutSlots(place, slots);
             SetScreenPlacement(place);
