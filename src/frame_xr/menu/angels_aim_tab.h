@@ -135,10 +135,10 @@ inline constexpr const char* kTriggerLayoutOriginalTip =
 /// Reticle). PROPOSED strings: they need the owner's approval.
 inline constexpr const char* kBottomScreenRow = "Bottom Screen";
 inline constexpr const char* kBottomScreenOff = "Off";
-inline constexpr const char* kBottomScreenPersistent = "Persistent";
+inline constexpr const char* kBottomScreenPersistent = "In View";
 inline constexpr const char* kBottomScreenWrist = "Wrist";
 inline constexpr const char* kBottomScreenTip =
-    "Persistent: always in view, low in front of you; hold a grip on it to move it. Wrist: on "
+    "In View: low in front of you; hold a grip on it to move it. Wrist: on "
     "your free hand's wrist; turn your wrist to see it, and point at it to touch.";
 inline constexpr const char* kBottomScreenSizeRow = "Bottom Screen Size";
 inline constexpr const char* kBottomScreenSizeTip = "How big the Bottom Screen is, in view or on your wrist.";

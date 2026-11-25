@@ -104,7 +104,7 @@ TEST_CASE("Angel's Aim page: the approved tips, each within two lines", "[frame_
           "How strong it is for each rapid-fire shot.");
     CHECK(AimPageTip(Id::KiuBottomScreen) == nullptr); // its own constant, everywhere
     CHECK(std::string(kBottomScreenTip) ==
-          "Persistent: always in view, low in front of you; hold a grip on it to move it. Wrist: "
+          "In View: low in front of you; hold a grip on it to move it. Wrist: "
           "on your free hand's wrist; turn your wrist to see it, and point at it to touch.");
     Kit kit{1.0f};
     for (const char* tip : {kAimTipAiming, kAimTipGyroSensitivity, kAimTipRecoil,
