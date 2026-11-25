@@ -1278,7 +1278,7 @@ changed after). Run by the desktop's flat build and VR mock; see reports/102/rig
 - **What counts pictures.** Nothing of ours counts the game's: the talk card's misses, the cutscene's and menus' windows and Pit's opacity count
   VBlanks (60 a second at either rate), the power menu's stay and fade, the snap's cooldown and the triggers the clock. V (VR mock, the same inputs at 30
   and 60, one save state): the hand's power menu up 1.75 s at both, the game's name bubble 1 s a second, the cutscene 290 and 289 VBlanks, portraits 3.7 s.
-- **R's recentre** is the game's (its camera mode 3, no `D38` of ours): it turns to a heading the game keeps, and does nothing within about 11 degrees. V: 4 + 3 taps in VR and 16 flat,
+- **R's recentre** is the game's (its camera mode 3, no `D38` of ours): it turns to a heading the game keeps, and did nothing 11 degrees off (25 it turned). V: 4 + 3 taps in VR and 16 flat,
   the same input at 30 and 60, end within 0.2 degrees in VR and, flat, within 4.6 (Pit's facing there differed by the same; one tap chose Pit's facing at 30
-  and the dummies' at 60, 4 degrees apart). One earlier pair ended 160 degrees apart (30: Pit stood turned round before the tap); it was not made again in 5 runs at either rate.
+  and the dummies' at 60, 4 degrees apart). One earlier pair ended 160 degrees apart (30: Pit stood turned round before the tap); it did not come again in 4 runs, 7 taps at each rate; why isn't known.
 - **A touch flick under about 0.12 s** turns up to 17 % more at 60: at 30 the game samples a part of it only.
