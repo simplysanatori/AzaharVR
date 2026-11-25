@@ -2433,7 +2433,7 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                     see.weapon));
             weapon_shown = true;
             // AzaharFrame kiu140: Pit's Arm on the free hand, in first person.
-            if (const auto arm = Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_ARM");
+            if (const auto arm = Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_PIT_ARM");
                 (Menu::kPitArmOffered || (arm && *arm == "1")) &&
                 Settings::values.vr_kiu_arm.GetValue() != 0 && Kiu::FirstPerson::AngelsAim() &&
                 !Kiu::FirstPerson::OutsideViewOn()) {

@@ -602,6 +602,56 @@ TEST_CASE("Pit's hand: the controller's fit puts the handle through the fist", "
     CHECK(Len(Sub(tip, V3{-0.0055f, -0.035f, 0.0185f})) < 0.02f);
 }
 
+TEST_CASE("Pit's hand: each tracked finger moves by itself", "[kiuhand]") {
+    // An open hand with one finger closed: only that one turns, in both ways of reading it.
+    const PitHandPose& open = PitHandNamedPose(PitHandNamed::Open);
+    const PitHandPose& fist = PitHandNamedPose(PitHandNamed::Fist);
+    constexpr std::array<int, 5> kFirst{kPitThumbMetacarpal, kPitIndexMetacarpal, kPitMiddleMetacarpal,
+                                        kPitRingMetacarpal, kPitLittleMetacarpal};
+    constexpr std::array<int, 5> kLast{kPitThumbTip, kPitIndexTip, kPitMiddleTip, kPitRingTip, kPitLittleTip};
+    const auto rest = PitHandJointsOf(PitHandEvaluate(open));
+    const PitFingerAngles rest_angles = PitFingerAnglesOf(rest);
+    for (std::size_t f = 0; f < 5; f++) {
+        PitHandPose one = open;
+        for (int j = kFirst[f]; j <= kLast[f]; j++) {
+            one.local[static_cast<std::size_t>(j)] = fist.local[static_cast<std::size_t>(j)];
+        }
+        const auto joints = PitHandJointsOf(PitHandEvaluate(one));
+        const PitFingerAngles angles = PitFingerAnglesOf(joints);
+        for (std::size_t g = 0; g < 5; g++) {
+            INFO("finger " << f << " closed, finger " << g);
+            CHECK((std::abs(angles.bend[g] - rest_angles.bend[g]) > 15.0f) == (g == f));
+        }
+        for (const bool from_palm : {false, true}) {
+            const PitHandPose a = PitHandPoseFromJoints(rest, false, 0.0f, from_palm);
+            const PitHandPose b = PitHandPoseFromJoints(joints, false, 0.0f, from_palm);
+            for (int j = kPitThumbMetacarpal; j <= kPitLittleTip; j++) {
+                const auto& p = a.local[static_cast<std::size_t>(j)];
+                const auto& q = b.local[static_cast<std::size_t>(j)];
+                const float same = std::abs(p.x * q.x + p.y * q.y + p.z * q.z + p.w * q.w);
+                if (j < kFirst[f] || j > kLast[f]) {
+                    INFO("finger " << f << " closed, joint " << j << " palm " << from_palm);
+                    CHECK(same > 0.99999f);
+                }
+            }
+        }
+    }
+    // Read from the palm, a hand whose palm bones are turned differs from ours by nothing beyond them.
+    auto turned = rest;
+    const PitQuat t{0.0f, 0.1736482f, 0.0f, 0.9848078f}; // 20 degrees about y
+    const auto times = [](const PitQuat& a, const PitQuat& b) {
+        return PitQuat{a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y, a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+                       a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w, a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z};
+    };
+    for (int j = kPitLittleMetacarpal; j <= kPitLittleTip; j++) {
+        turned[static_cast<std::size_t>(j)].orientation = times(t, rest[static_cast<std::size_t>(j)].orientation);
+    }
+    CHECK_FALSE(PitHandPoseDiffers(PitHandPoseFromJoints(turned, false, 0.0f, true),
+                                   PitHandPoseFromJoints(rest, false, 0.0f, true), 0.1f));
+    CHECK(PitHandPoseDiffers(PitHandPoseFromJoints(turned, false, 0.0f, false),
+                             PitHandPoseFromJoints(rest, false, 0.0f, false), 5.0f));
+}
+
 TEST_CASE("Pit's hand: hand tracking's joints give back the pose they came from", "[kiuhand]") {
     for (const PitHandNamed name : kAll) {
         INFO(PitHandNamedLabel(name));

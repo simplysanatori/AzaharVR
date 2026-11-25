@@ -211,7 +211,7 @@ inline constexpr const char* kCameraRow = "Camera";
 /// used. AZAHARFRAME_KIU_GAME_CAMERA=1 still turns it on, for work on it.
 inline constexpr bool kGameCameraOffered = false;
 /// AzaharFrame kiu140: Pit's Arm is not offered yet (the owner, 2026-11-24): no row, no hand model
-/// row, the controller on the free hand. AZAHARFRAME_KIU_ARM=1 draws it, for work on it.
+/// row, the controller on the free hand. AZAHARFRAME_KIU_PIT_ARM=1 draws it, for work on it.
 inline constexpr bool kPitArmOffered = false;
 inline constexpr const char* kCameraFirstPerson = "First Person";
 inline constexpr const char* kCameraGame = "Game's Camera";

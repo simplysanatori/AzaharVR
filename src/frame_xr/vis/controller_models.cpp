@@ -3112,7 +3112,7 @@ bool ControllerModels::PitForearm(int h, Input::Vec3f* wrist, Input::Vec3f* elbo
     }
     Mat fit_m{};
     std::copy(d.fit.transform.begin(), d.fit.transform.end(), fit_m.begin());
-    const PitVec3 e = d.pit_elbow ? d.elbow : pit_model ? pit_model->elbow : PitVec3{};
+    const PitVec3 e = pit_model ? pit_model->elbow : PitVec3{};
     const auto w = Apply(fit_m, 0.0f, 0.0f, 0.0f, 1.0f);
     const auto o = Apply(fit_m, e[0], e[1], e[2], 1.0f);
     *wrist = {w[0], w[1], w[2]};
@@ -3187,7 +3187,9 @@ void ControllerModels::FitArms(const ViewPose& views, const std::array<Hand, 2>&
         ArmDraw& d = draws[static_cast<std::size_t>(h)];
         auto& dir = arm_dir[static_cast<std::size_t>(h)];
         auto& time_ns = arm_time_ns[static_cast<std::size_t>(h)];
-        if (!d.on || !elbow || !views.valid) {
+        // AzaharFrame kiu140: Pit's forearm goes with the controller, on all three axes: where the
+        // hand's file has it, straight back from the wrist. No elbow is estimated for it.
+        if (!d.on || d.pit || !elbow || !views.valid) {
             dir = {};
             time_ns = 0;
             continue;
@@ -3200,11 +3202,7 @@ void ControllerModels::FitArms(const ViewPose& views, const std::array<Hand, 2>&
         std::copy(d.fit.transform.begin(), d.fit.transform.end(), fit_m.begin());
         const Mat world = Multiply(FromPose(aim.orientation, aim.position), fit_m);
         const auto wrist = Apply(world, 0.0f, 0.0f, 0.0f, 1.0f);
-        const PitVec3 arm_elbow = pit_model ? pit_model->elbow : PitVec3{};
-        const std::array<float, 3> e =
-            d.pit ? std::array<float, 3>{arm_elbow[0], arm_elbow[1], arm_elbow[2]}
-                  : std::array<float, 3>{live->arm.elbow[0], live->arm.elbow[1],
-                                         live->arm.elbow[2]};
+        const std::array<float, 3> e{live->arm.elbow[0], live->arm.elbow[1], live->arm.elbow[2]};
         const auto far = Apply(world, e[0], e[1], e[2], 1.0f);
         const std::array<float, 3> w3{wrist[0], wrist[1], wrist[2]};
         const std::array<float, 3> along{far[0] - w3[0], far[1] - w3[1], far[2] - w3[2]};
@@ -3217,19 +3215,6 @@ void ControllerModels::FitArms(const ViewPose& views, const std::array<Hand, 2>&
         const float dt = time_ns ? static_cast<float>(now - time_ns) * 1e-9f : -1.0f;
         time_ns = now;
         dir = SmoothDirection(dir, target, dt);
-        if (d.pit) { // AzaharFrame kiu140: the forearm's bone, in arm space
-            const float reach = std::sqrt(along[0] * along[0] + along[1] * along[1] +
-                                          along[2] * along[2]);
-            const float len = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
-            if (len > 1e-6f) {
-                const float k = reach / len;
-                const auto at = Apply(InverseAffine(world), w3[0] + dir[0] * k, w3[1] + dir[1] * k,
-                                      w3[2] + dir[2] * k, 1.0f);
-                d.elbow = {at[0], at[1], at[2]};
-                d.pit_elbow = true;
-            }
-            continue;
-        }
         d.turn = RotationBetween(w3, along, dir);
         d.turned = true;
     }
@@ -3250,7 +3235,9 @@ void ControllerModels::FitArms(const ViewPose& views, const std::array<Hand, 2>&
                              : "none",
                  kArmScale * arm_tune.scale,
                  arm_value ? std::string{kArmFitSwitch} + "=" + *arm_value : std::string{"default"},
-                 elbow ? "turned toward the elbow" : "straight");
+                 draws[0].pit || draws[1].pit ? "with the controller"
+                 : elbow                      ? "turned toward the elbow"
+                                              : "straight");
     }
 }
 
@@ -3382,17 +3369,21 @@ void ControllerModels::SkinPit(const std::array<Hand, 2>& hands) {
                              : 0.0f;
         pit_time_ns[h] = now;
         const bool left = h == static_cast<std::size_t>(Input::HandIndex(Input::Hand::Left));
+        const bool palm_turn =
+            Common::FrameTestSwitches::Value(kFingersPalmSwitch).value_or("0") == "1";
         const PitHandPose target =
             hands[h].pit_tracked
-                ? PitHandPoseFromJoints(hands[h].pit_joints, !left, 0.0f) // our palm's own shape
+                ? PitHandPoseFromJoints(hands[h].pit_joints, !left, 0.0f, // our palm's own shape
+                                        palm_turn)
                 : PitHandPoseFromInputs(hands[h].pit, PitHandGrasp::Free);
         pit_pose[h] = pit_posed[h] ? PitHandEase(pit_pose[h], target, dt) : target;
         pit_posed[h] = true;
-        const PitVec3 elbow = arm_draws[h].pit_elbow ? arm_draws[h].elbow : pit_model->elbow;
+        const PitVec3 elbow = pit_model->elbow;
         const float moved = std::hypot(elbow[0] - p.elbow[h][0], elbow[1] - p.elbow[h][1],
                                        elbow[2] - p.elbow[h][2]);
         if (!p.skinned_once[h] || moved > 0.001f || PitHandPoseDiffers(pit_pose[h], p.skinned[h])) {
-            PitModelSkin(*pit_model, PitModelEvaluate(*pit_model, &pit_pose[h], &elbow),
+            PitModelSkin(*pit_model, PitModelEvaluate(*pit_model, &pit_pose[h], &elbow,
+                                                          !hands[h].pit_tracked),
                          {p.map[h], std::size_t{pit_model->vertex_count} * kPitVertexFloats});
             p.skinned[h] = pit_pose[h];
             p.elbow[h] = elbow;
