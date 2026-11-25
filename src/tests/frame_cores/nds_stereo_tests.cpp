@@ -871,6 +871,7 @@ struct Scene {
     /// The 3D is the picture behind it, in banks C and D
     bool clear_image = false;
     uint32_t scroll_3d = 0; ///< BG0HOFS of the 3D
+    bool blank = false;     ///< both engines' layers are off (white)
     /// Nothing behind engine A's layers, where its backdrop is and what is behind its 3D
     bool dark = false;
 };
@@ -925,7 +926,7 @@ void AddEngine(WriteListGame& game, const Scene& scene, bool b) {
         control = 0x10014 | 0x100u << scene.single | bg0;
         game.Write16(io + 0x4C, 0);
     }
-    game.Write32(io, control);
+    game.Write32(io, control | (scene.blank ? 0x80 : 0));
 }
 
 void MoveEngine(WriteListGame& game, const Scene& scene, bool b) {
@@ -951,7 +952,7 @@ void MoveEngine(WriteListGame& game, const Scene& scene, bool b) {
         const bool turned = i == 5 || i == 6;
         const uint32_t x = i * 23 + (window ? 0 : shift(priority));
         game.Write16(oam + i * 8, (i * 15) | (window ? 0x0800 : 0) | (turned ? 0x0300 : 0));
-        game.Write16(oam + i * 8 + 2, 0x8000 | ((x - (scene.single == 4 ? 12 : 0)) & 0x1FF),
+        game.Write16(oam + i * 8 + 2, 0x8000 | ((x - (scene.single == 4 ? 50u : 0u)) & 0x1FF),
                      turned ? 0 : 1);
         game.Write16(oam + i * 8 + 4, (i * 4) | priority << 10 | (i & 15) << 12);
     }
@@ -1722,6 +1723,42 @@ TEST_CASE("NDS Layer Depth: turned on in the game", "[frame_cores]") {
     }
 }
 
+TEST_CASE("NDS Layer Depth: a picture is cut or its layers end, never both", "[frame_cores]") {
+    const LayerShifts layers{0, 3, 6, 9};
+    const LayerShifts inverted{0, -3, -6, -9};
+    CHECK(EdgeShift(-9) == -9.0f / kWidth);
+    CHECK(EdgeLayers(inverted) == LayerShifts{});
+    CHECK(EdgeShift(9) == (kCutsEdge ? 9.0f / kWidth : 0.0f));
+    CHECK(EdgeLayers(layers) == (kCutsEdge ? LayerShifts{} : layers));
+    CHECK(EdgeShift(0) == 0.0f);
+}
+
+TEST_CASE("NDS Layer Depth: a pixel ends with what it is from", "[frame_cores]") {
+    const std::array<uint16_t, 4> bgcnt{2, 0x41, 3, 0};
+    const LayerShifts shifts{0, 3, 6, 9};
+    CHECK(PixelShift(0x01, bgcnt.data(), shifts) == 6);
+    CHECK(PixelShift(0x02, bgcnt.data(), shifts) == 3);
+    CHECK(PixelShift(0x04, bgcnt.data(), shifts) == 9);
+    CHECK(PixelShift(0x08, bgcnt.data(), shifts) == 0);
+    CHECK(PixelShift(0x20, bgcnt.data(), shifts) == 9); // the backdrop
+    CHECK(PixelShift(0x10, bgcnt.data(), shifts) == 0); // sprites, also translucent ones
+    CHECK(PixelShift(0x90, bgcnt.data(), shifts) == 0);
+    CHECK(PixelShift(0x41, bgcnt.data(), shifts) == 0); // 3D is BG0 too
+}
+
+TEST_CASE("NDS Layer Depth: a picture without layers has no edge", "[frame_cores]") {
+    const uint32_t level = GENERATE(1u, 3u);
+    Game game({.blank = true}, level, true);
+    game.core.SetDepthOnSecondary(true);
+    game.Run(kStart);
+    for (int i = 0; i < 10; ++i) {
+        game.Run();
+        REQUIRE(game.HasRight());
+        REQUIRE((game.Right() == game.Left()));
+        REQUIRE((game.RightBottom() == game.Bottom()));
+    }
+}
+
 TEST_CASE("NDS Layer Depth: a layer ends where the game's picture does", "[frame_cores]") {
     const uint32_t level = GENERATE(1u, 3u);
     const bool inverted = GENERATE(false, true);
@@ -1773,7 +1810,7 @@ TEST_CASE("NDS Layer Depth: 3D past the picture's edges is not squeezed at them"
         INFO("frame " << i);
         REQUIRE(game.core.DepthLines().with_3d == 192);
         Pixels right = game.Right();
-        if (scroll == 4 && !inverted) { // what the game has beyond its edge there is the scene's
+        if (scroll == 4 && !inverted && !clear_image) { // beyond the game's edge is the scene's
             for (std::size_t at = 0; at < right.size(); at += kWidth) {
                 std::fill_n(right.begin() + static_cast<std::ptrdiff_t>(at), shift, kBlack);
             }
