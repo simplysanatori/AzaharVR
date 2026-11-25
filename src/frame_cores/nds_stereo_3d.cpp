@@ -22,6 +22,7 @@ static_assert(std::is_trivially_copyable_v<melonDS::Vertex>);
 static_assert(std::is_trivially_copyable_v<melonDS::Polygon>);
 
 constexpr u32 kMaxVertices = 10; // of a polygon
+constexpr int kFine = 16;        // of a pixel: HiresPosition's
 
 /// Not a degenerate one, which a state load can leave with its vertices unset.
 bool IsDrawn(const melonDS::Polygon* polygon) {
@@ -33,17 +34,25 @@ bool IsDrawn(const melonDS::Polygon* polygon) {
 } // namespace
 
 NdsRight3D::NdsRight3D(melonDS::GPU3D& game, melonDS::SoftRenderer& parent)
-    : melonDS::Renderer3D(game), owner{parent} {}
+    : melonDS::Renderer3D(game), owner{&parent} {}
+
+NdsRight3D::NdsRight3D(melonDS::GPU3D& game) : melonDS::Renderer3D(game) {}
 
 NdsRight3D::~NdsRight3D() {
     Stop();
 }
 
+melonDS::GPU3D& NdsRight3D::Scene() {
+    if (!scene) {
+        scene = std::make_unique<melonDS::GPU3D>(GPU);
+        static_assert(sizeof(scene->VertexRAM) / sizeof(melonDS::Vertex) == kVertices);
+    }
+    return *scene;
+}
+
 void NdsRight3D::Create(bool threaded) {
     // Once, with no polygons: the thread draws a frame as soon as it is made
-    scene = std::make_unique<melonDS::GPU3D>(GPU);
-    static_assert(sizeof(scene->VertexRAM) / sizeof(melonDS::Vertex) == kVertices);
-    soft = std::make_unique<melonDS::SoftRenderer3D>(*scene, owner);
+    soft = std::make_unique<melonDS::SoftRenderer3D>(Scene(), *owner);
     soft->Reset(); // not threaded yet; its buffers start undefined
     soft->SetThreaded(threaded);
     running = threaded;
@@ -106,7 +115,13 @@ void NdsRight3D::Start(const NdsDepth::Depth& depth, int screen, bool threaded) 
         Create(threaded);
     }
     Drop(); // the thread is idle from here on
+    Prepare(depth, screen);
+    soft->RenderFrame();
+    running = threaded;
+    taken = 0;
+}
 
+NdsDepth::SceneShift NdsRight3D::Prepare(const NdsDepth::Depth& depth, int screen) {
     const melonDS::GPU2D& engine = GPU.GPU2D_A;
     const NdsDepth::SceneView seen = Measure();
     NdsDepth::SceneView view{depth.convergence, 0};
@@ -123,11 +138,11 @@ void NdsRight3D::Start(const NdsDepth::Depth& depth, int screen, bool threaded) 
         NdsDepth::MakeRoom(depth.layers, engine.DispCnt,
                            {engine.BGCnt[0], engine.BGCnt[1], engine.BGCnt[2], engine.BGCnt[3]});
     offset = NdsDepth::SceneOffset(depth.layers);
-    FillScene(NdsDepth::Offset(NdsDepth::MakeScene(room, view), offset));
     far_shift = room.farthest;
-    soft->RenderFrame();
-    running = threaded;
-    taken = 0;
+    Scene();
+    const NdsDepth::SceneShift shift = NdsDepth::Offset(NdsDepth::MakeScene(room, view), offset);
+    FillScene(shift);
+    return shift;
 }
 
 /// What is behind the scene has no more to the left than the left eye has either; it would be in
@@ -273,17 +288,21 @@ bool NdsRight3D::CopyPolygon(const melonDS::Polygon& from, melonDS::Polygon& to,
         if (game_index >= kVertices) {
             return false;
         }
-        const int by =
-            place.each ? NdsDepth::VertexShift(shift, from.Vertices[i]->Position[3]) : placed;
+        const int32_t w = place.each ? from.Vertices[i]->Position[3] : place.w;
+        const int by = place.each ? NdsDepth::VertexShift(shift, w) : placed;
+        // HiresPosition's, which only a renderer over 1x reads
+        const int fine = NdsDepth::VertexShiftUnits(shift, w, kFine);
         Slot& slot = slots[game_index][place.each ? 0 : 1];
-        if (slot.frame != frame || slot.shift != by) {
+        if (slot.frame != frame || slot.shift != by || slot.fine != fine) {
             if (vertex_count == kVertices) {
                 return false;
             }
-            slot = {frame, static_cast<u32>(vertex_count++), by};
+            slot = {frame, static_cast<u32>(vertex_count++), by, fine};
             melonDS::Vertex& copy = scene->VertexRAM[slot.index];
             copy = *from.Vertices[i];
             copy.FinalPosition[0] = NdsDepth::ShiftVertexX(copy.FinalPosition[0], by);
+            copy.HiresPosition[0] =
+                std::clamp<s32>(copy.HiresPosition[0] + fine, 0, NdsDepth::kMaxX * kFine);
         }
         to.Vertices[i] = &scene->VertexRAM[slot.index];
     }

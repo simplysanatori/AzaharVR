@@ -15,6 +15,7 @@
 #include "common/logging/log.h"
 #include "frame_cores/ds_gl/ds_gl_vk.h"
 #include "frame_cores/ds_gl/nds_gl_captures.h"
+#include "frame_cores/nds_gl_stereo.h"
 #include "frame_cores/nds_resolution.h"
 #include "video_core/renderer_vulkan/alt_graphics.h"
 
@@ -65,18 +66,19 @@ struct HasContext {
 };
 
 /// melonDS's own hi-res renderer, drawing on Vulkan.
-class NdsGlRenderer final : private HasContext, public melonDS::GLRenderer, public NdsHires {
+class NdsGlRenderer final : private HasContext, public StereoGl, public NdsHires {
 public:
     NdsGlRenderer(melonDS::NDS& nds, ContextPtr context_)
-        : HasContext{std::move(context_)}, melonDS::GLRenderer{nds, false} {}
+        : HasContext{std::move(context_)}, StereoGl{nds} {}
 
     bool Init() override {
         // A context that failed makes no shaders or textures, and says so here alone.
-        return melonDS::GLRenderer::Init() && DsGl::Healthy();
+        return StereoGl::Init() && DsGl::Healthy();
     }
 
     bool SetScale(uint32_t scale) override {
         alive.reset(); // the screens' images are made again
+        right_alive.reset();
         melonDS::RendererSettings settings{};
         settings.ScaleFactor = static_cast<int>(scale);
         SetRenderSettings(settings);
@@ -88,6 +90,30 @@ public:
         return DsGl::Healthy();
     }
 
+    bool SetDepth(const NdsDepth::Depth& depth, bool secondary_too) override {
+        if (depth.on != HasRight()) {
+            right_alive.reset();
+        }
+        return StereoGl::SetDepth(depth, secondary_too) && DsGl::Healthy();
+    }
+
+    bool GetRight(int screen, Vulkan::AltScreenImage& right) override {
+        DsGl::Texture texture;
+        const GLuint name = Right(screen);
+        if (name == 0 || !DsGl::GetTexture(name, texture) || texture.layers < 2) {
+            return false;
+        }
+        if (!right_alive) {
+            right_alive = std::make_shared<char>();
+        }
+        Show(right, texture, static_cast<uint32_t>(screen), right_alive);
+        return true;
+    }
+
+    int RightShift() const override {
+        return StereoGl::RightShift();
+    }
+
     bool GetScreens(Vulkan::AltScreenImage& top, Vulkan::AltScreenImage& bottom) override {
         DsGl::Flush(false);
         DsGl::Texture texture;
@@ -95,17 +121,9 @@ public:
             return false;
         }
         alive = std::make_shared<char>(); // of this image
-        for (uint32_t i = 0; i < 2; i++) {
-            Vulkan::AltScreenImage& out = i == 0 ? top : bottom;
-            out = {};
-            out.width = texture.width;
-            out.height = texture.height;
-            out.stride_pixels = texture.width;
-            out.bgra = false;
-            out.image = reinterpret_cast<uint64_t>(texture.image);
-            out.layer = i;
-            out.alive = alive;
-        }
+        right_alive.reset();
+        Show(top, texture, 0, alive);
+        Show(bottom, texture, 1, alive);
         return true;
     }
 
@@ -127,6 +145,18 @@ public:
     }
 
 private:
+    static void Show(Vulkan::AltScreenImage& out, const DsGl::Texture& texture, uint32_t layer,
+                     const std::shared_ptr<char>& alive) {
+        out = {};
+        out.width = texture.width;
+        out.height = texture.height;
+        out.stride_pixels = texture.width;
+        out.bgra = false;
+        out.image = reinterpret_cast<uint64_t>(texture.image);
+        out.layer = layer;
+        out.alive = alive;
+    }
+
     uint32_t Output() {
         void* top = nullptr;
         void* bottom = nullptr;
@@ -136,6 +166,7 @@ private:
 
     bool has_captures = false; ///< those of before it was the console's renderer
     std::shared_ptr<char> alive;
+    std::shared_ptr<char> right_alive;
     std::array<std::vector<uint32_t>, 2> pixels;
 };
 

@@ -224,6 +224,10 @@ if (TARGET frame_cores)
     add_library(nds_resolution_tests OBJECT EXCLUDE_FROM_ALL frame_cores/nds_resolution_tests.cpp)
     target_link_libraries(nds_resolution_tests PRIVATE frame_cores melonds_core citra_common catch2
         Threads::Threads)
+    # melonDS's shaders, as melonds_hires has them
+    target_include_directories(nds_resolution_tests PRIVATE
+        ${CMAKE_BINARY_DIR}/externals/melonds_cmake/hires)
+    add_dependencies(nds_resolution_tests melonds_hires)
     target_sources(tests PRIVATE $<TARGET_OBJECTS:nds_resolution_tests>)
 endif()
 if (TARGET gbads_game)

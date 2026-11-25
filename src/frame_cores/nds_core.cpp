@@ -246,10 +246,10 @@ struct NdsCore::Impl {
         return NdsDepth::MakeDepth(opts.layer_depth, max_layer_shift, inverted, depth_convergence);
     }
 
-    /// Between frames. Layer Depth's two eyes are the software renderer's, at 1x.
+    /// Between frames.
     void ApplyRenderer() {
         const NdsDepth::Depth depth = Depth();
-        resolution.Apply(*nds, opts.threaded_3d, depth.on);
+        resolution.Apply(*nds, opts.threaded_3d, depth, depth_on_secondary);
         if (resolution.Scale() > 1) {
             stereo = nullptr; // another renderer is there
         } else if (depth.on && !stereo) {
@@ -292,9 +292,9 @@ struct NdsCore::Impl {
         return graphics ? VulkanNdsHires(*graphics) : NdsHiresMaker{};
     }
 
-    /// Not while Layer Depth is drawn: at 1x then.
+    /// Not while Layer Depth is drawn where that is at 1x only.
     bool ResolutionShown() const {
-        return resolution.Available() && !Depth().on;
+        return resolution.Available() && !(resolution.DepthIsFlat() && Depth().on);
     }
 
     void SetResolutionCaps() {
@@ -727,8 +727,19 @@ void NdsCore::RunFrame(FrameOutput& out) {
 
     void* top_fb = nullptr;
     void* bot_fb = nullptr;
-    if (impl->resolution.GetScreens(out.primary, out.secondary)) {
-        // over 1x
+    const NdsDepth::Depth depth = impl->Depth();
+    int farthest = 0;
+    if (impl->resolution.GetScreens(out.primary, out.secondary)) { // over 1x
+        if (depth.on) {
+            out.primary_right = out.primary;
+            farthest = impl->resolution.GetRight(0, out.primary_right)
+                           ? impl->resolution.RightShift()
+                           : depth.layers[3];
+            if (impl->depth_on_secondary) {
+                out.secondary_right = out.secondary;
+                impl->resolution.GetRight(1, out.secondary_right);
+            }
+        }
     } else if (impl->nds->GPU.GetFramebuffers(&top_fb, &bot_fb)) {
         if (top_fb) {
             out.primary.pixels = static_cast<const uint32_t*>(top_fb);
@@ -748,18 +759,15 @@ void NdsCore::RunFrame(FrameOutput& out) {
             out.secondary.scale = 1;
             out.secondary.max_scale = impl->resolution.Ceiling();
         }
-        if (const NdsDepth::Depth depth = impl->Depth(); depth.on) {
-            out.primary.max_scale = 1; // the pictures of both eyes are the console's own size
-            out.secondary.max_scale = 1;
+        if (depth.on && impl->stereo) {
             // Always one, so that the headset's screens are not made again each time a game has no
             // right picture
             out.primary_right = out.primary;
-            int farthest = depth.layers[3];
+            farthest = depth.layers[3];
             if (const melonDS::u32* right = impl->stereo->Right(0)) {
                 out.primary_right.pixels = right;
                 farthest = impl->stereo->RightShift(0);
             }
-            out.layer_shift = NdsDepth::EdgeShift(farthest);
             if (impl->depth_on_secondary) {
                 out.secondary_right = out.secondary;
                 if (const melonDS::u32* right = impl->stereo->Right(1)) {
@@ -767,6 +775,9 @@ void NdsCore::RunFrame(FrameOutput& out) {
                 }
             }
         }
+    }
+    if (out.primary_right.HasPicture()) {
+        out.layer_shift = NdsDepth::EdgeShift(farthest);
     }
 
     const int max_frames = static_cast<int>(impl->audio_scratch.size() / 2u);

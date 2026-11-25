@@ -25,9 +25,24 @@
 #include "core/autosave.h"
 #include "core/frontend/alt_screens.h"
 #include "frame_cores/alt_core_host.h"
+#include "frame_cores/ds_gl/ds_gl_state.h"
+#include "frame_cores/nds_gl_edge.h"
 #include "frame_cores/nds_resolution.h"
 #include "video_core/renderer_vulkan/alt_present.h"
 #include "video_core/vr_dynamic_resolution.h"
+
+namespace {
+#include "OpenGL_shaders/2DCompositorFS.h"
+#include "OpenGL_shaders/2DCompositorVS.h"
+#include "OpenGL_shaders/2DSpriteFS.h"
+#include "OpenGL_shaders/3DClearBitmapFS.h"
+#include "OpenGL_shaders/3DClearBitmapVS.h"
+#include "OpenGL_shaders/3DClearFS.h"
+#include "OpenGL_shaders/3DClearVS.h"
+#include "OpenGL_shaders/3DFinalPassFogFS.h"
+#include "OpenGL_shaders/3DRenderFS.h"
+#include "OpenGL_shaders/FinalPassFS.h"
+} // namespace
 
 using FrameCores::NdsHires;
 using FrameCores::NdsHiresRenderer;
@@ -48,6 +63,9 @@ struct Log {
     bool can_init = true;
     uint32_t too_big = 99;
     bool works = true;
+    bool second_eye = false;        ///< it can draw one
+    uint32_t too_big_for_both = 99; ///< with the second eye
+    std::vector<int> depths;        ///< the farthest layer's shift, at each change
 };
 
 /// melonDS's software renderer, its picture blown up
@@ -107,6 +125,21 @@ public:
         scale = to;
         return to < log.too_big;
     }
+    bool SetDepth(const FrameCores::NdsDepth::Depth& to, bool) override {
+        if (depth != to) {
+            log.depths.push_back(to.layers[3]);
+        }
+        depth = to;
+        return !depth.on || (log.second_eye && scale < log.too_big_for_both);
+    }
+    bool GetRight(int screen, AltScreenImage& right) override {
+        const auto& from = pixels[static_cast<std::size_t>(screen)];
+        if (!depth.on || from.empty()) {
+            return false;
+        }
+        right.pixels = from.data();
+        return true;
+    }
     bool GetScreens(AltScreenImage& top, AltScreenImage& bottom) override {
         std::array<void*, 2> from{};
         if (!log.works || !soft->GetFramebuffers(&from[0], &from[1])) {
@@ -137,6 +170,7 @@ private:
     Log& log;
     std::unique_ptr<melonDS::SoftRenderer> soft;
     uint32_t scale = 1;
+    FrameCores::NdsDepth::Depth depth{};
     std::array<std::vector<uint32_t>, 2> pixels;
 };
 
@@ -374,6 +408,105 @@ TEST_CASE("DS resolution: what fails leaves the game at 1x", "[frame_cores]") {
     }
 }
 
+TEST_CASE("DS resolution: Layer Depth over 1x", "[frame_cores]") {
+    const auto depth = FrameCores::NdsDepth::MakeDepth(2, 1.0f);
+    const auto inverted = FrameCores::NdsDepth::MakeDepth(2, 1.0f, true);
+    Log log;
+    log.second_eye = true;
+    auto nds = Console();
+    NdsResolution resolution{Maker(log)};
+    AltScreenImage top, bottom, right;
+    const auto has_right = [&] {
+        REQUIRE(resolution.GetScreens(top, bottom));
+        right = top;
+        return resolution.GetRight(0, right);
+    };
+    SECTION("both change as the game runs") {
+        resolution.SetFactor(4, 8);
+        resolution.Apply(*nds, true, depth);
+        CHECK(resolution.Scale() == 4);
+        CHECK(has_right());
+        CHECK(right.scale == 4);
+        CHECK(right.max_scale == 8);
+        resolution.Apply(*nds, true, inverted);
+        resolution.Apply(*nds, true, inverted);
+        resolution.Apply(*nds, true);
+        CHECK_FALSE(has_right());
+        resolution.SetFactor(2, 8);
+        resolution.Apply(*nds, true, depth);
+        CHECK(has_right());
+        CHECK(right.scale == 2);
+        CHECK(log.depths == std::vector<int>{6, -6, 0, 6});
+        CHECK(log.made == 1);
+        resolution.SetFactor(1, 8);
+        resolution.Apply(*nds, true, depth);
+        CHECK(resolution.Scale() == 1);
+        CHECK(resolution.Ceiling() == 8);
+        CHECK(IsSoftware(*nds));
+        CHECK_FALSE(resolution.GetRight(0, right));
+        resolution.SetFactor(3, 8);
+        resolution.Apply(*nds, true, depth);
+        CHECK(has_right());
+        CHECK_FALSE(resolution.DepthIsFlat());
+    }
+    SECTION("no second eye, at any time: Layer Depth at 1x, the rest as before") {
+        const bool live = GENERATE(false, true);
+        resolution.SetFactor(4, 8);
+        if (live) {
+            resolution.Apply(*nds, true);
+            CHECK(resolution.Scale() == 4);
+        }
+        log.second_eye = false;
+        resolution.Apply(*nds, true, depth);
+        CHECK(resolution.Scale() == 1);
+        CHECK(resolution.Ceiling() == 1);
+        CHECK(resolution.DepthIsFlat());
+        CHECK(resolution.Available());
+        CHECK(IsSoftware(*nds));
+        log.second_eye = true; // not asked again
+        resolution.Apply(*nds, true, depth);
+        CHECK(resolution.Scale() == 1);
+        CHECK(log.made == 1);
+        resolution.Apply(*nds, true);
+        CHECK(resolution.Scale() == 4);
+        CHECK(resolution.Ceiling() == 8);
+        resolution.Apply(*nds, true, depth);
+        CHECK(resolution.Scale() == 1);
+    }
+    SECTION("too big for both eyes") {
+        log.too_big_for_both = 6;
+        resolution.SetFactor(4, 8);
+        resolution.Apply(*nds, true, depth);
+        CHECK(has_right());
+        resolution.SetFactor(8, 8);
+        resolution.Apply(*nds, true, depth);
+        CHECK(resolution.Scale() == 1);
+        CHECK(resolution.DepthIsFlat());
+        resolution.Apply(*nds, true);
+        CHECK(resolution.Scale() == 8);
+    }
+    SECTION("stops working with both eyes") {
+        resolution.SetFactor(4, 4);
+        resolution.Apply(*nds, true, depth);
+        log.works = false;
+        CHECK_FALSE(resolution.GetScreens(top, bottom));
+        CHECK(resolution.DepthIsFlat());
+        resolution.Apply(*nds, true, depth);
+        CHECK(IsSoftware(*nds));
+        log.works = true;
+        resolution.Apply(*nds, true);
+        CHECK(resolution.Scale() == 4);
+        log.works = false; // and again without
+        CHECK_FALSE(resolution.GetScreens(top, bottom));
+        CHECK_FALSE(resolution.Available());
+        resolution.Apply(*nds, true);
+        CHECK(IsSoftware(*nds));
+    }
+    nds.reset();
+    resolution.Detach();
+    CHECK(log.made == log.gone);
+}
+
 TEST_CASE("Alternate consoles' XR swapchains", "[frame_cores]") {
     using Size = std::array<u32, 2>;
     // A console's own pixels, as before
@@ -396,6 +529,78 @@ TEST_CASE("Alternate consoles' XR swapchains", "[frame_cores]") {
     CHECK(AltTargetSize(2048, 1536, 8, 8) == Size{2048, 1536});
     CHECK_FALSE(AltTargetEven(768, 576, 1024, 768));
     CHECK_FALSE(AltTargetEven(0, 0, 1024, 768));
+}
+
+// The submodule's: a melonDS whose shaders are written otherwise needs another nds_gl_edge.h
+TEST_CASE("DS resolution: melonDS's shaders are those the right eye's edge is put in",
+          "[frame_cores]") {
+    namespace Edge = FrameCores::NdsGlEdge;
+    struct Pair {
+        const char* vertex;
+        const char* fragment;
+        int edges; ///< mentions of uEdge
+    };
+    const Pair pair = GENERATE(Pair{k2DCompositorVS, k2DCompositorFS, 4},
+                               Pair{k3DClearVS, k3DClearFS, 2},
+                               Pair{k3DClearBitmapVS, k3DClearBitmapFS, 2});
+    const auto mentions = [](const std::string& text) {
+        int count = 0;
+        for (std::size_t at = text.find("uEdge"); at != std::string::npos;
+             at = text.find("uEdge", at + 1)) {
+            count++;
+        }
+        return count;
+    };
+    std::string log;
+    std::string fragment = pair.fragment;
+    CHECK(DsGl::Compiles(pair.vertex, fragment, log));
+    REQUIRE(Edge::Patch(fragment));
+    CHECK(mentions(fragment) == pair.edges);
+    const bool compiles = DsGl::Compiles(pair.vertex, fragment, log);
+    INFO(log);
+    CHECK(compiles);
+    // Written otherwise it stays as it is, and that is known
+    std::string other = pair.fragment;
+    other.replace(other.find("void main()"), 11, "void Main()");
+    if (const std::size_t at = other.find("int effect = 0;"); at != std::string::npos) {
+        other.replace(at, 15, "int how = 0;");
+    }
+    const std::string was = other;
+    CHECK_FALSE(Edge::Patch(other));
+    CHECK(other == was);
+    // The others are left alone
+    for (const char* source : {k2DSpriteFS, k3DRenderFS, k3DFinalPassFogFS, kFinalPassFS}) {
+        std::string same = source;
+        CHECK(Edge::Patch(same));
+        CHECK(same == source);
+    }
+}
+
+TEST_CASE("Layer Depth's cut of a DS game's pictures over 1x", "[frame_cores]") {
+    for (u32 scale = 1; scale <= 8; scale++) {
+        CAPTURE(scale);
+        AltScreenImage left{};
+        left.width = 256 * scale;
+        left.height = 192 * scale;
+        left.scale = scale;
+        left.max_scale = 8;
+        left.image = 1;
+        AltScreenImage right = left;
+        right.image = 2;
+        const auto eyes = Vulkan::AltCutEyes(left, right, -6.0f / 256.0f); // Invert Depth
+        CHECK(eyes.left.x == 6 * scale);
+        CHECK(eyes.right.x == 0);
+        CHECK(eyes.left.image == 1);
+        CHECK(eyes.right.image == 2);
+        CHECK(eyes.left.pixels == nullptr);
+        CHECK(eyes.right.pixels == nullptr);
+        CHECK(eyes.left.width == 250 * scale);
+        CHECK(Vulkan::AltShowsStereo(eyes.left, eyes.right));
+        // Dynamic Resolution remakes nothing here either
+        CHECK(AltTargetSize(eyes.left.width, eyes.left.height, scale, 8) ==
+              AltTargetSize(250 * 8, 192 * 8, 8, 8));
+        CHECK(Vulkan::AltCutEyes(left, right, 0.0f).left.width == left.width);
+    }
 }
 
 TEST_CASE("Dynamic Resolution on a DS game's factor", "[frame_cores]") {
@@ -476,7 +681,8 @@ TEST_CASE("DS resolution: a game's setting, its states and its sizes", "[frame_c
         CHECK(screens.bottom_width == 256);
         CHECK(screens.bottom_height == 192);
     }
-    // Layer Depth: both eyes at 1x, no row; and back, whichever changes first
+    // Layer Depth, of a renderer without a second eye: both eyes at 1x, no row; and back, whichever
+    // changes first
     const auto right = [&host] { return host.LastFrame().primary_right.HasPicture(); };
     host.SetLayerDepth(2);
     REQUIRE(host.StepFrames(2));
@@ -506,6 +712,30 @@ TEST_CASE("DS resolution: a game's setting, its states and its sizes", "[frame_c
     CHECK(picture.scale == 3);
     CHECK_FALSE(right());
     CHECK(Small(picture) == small);
+
+    // With a second eye both are there at once
+    log.second_eye = true;
+    host.SetLayerDepth(1);
+    REQUIRE(host.StepFrames(2));
+    CHECK(picture.scale == 1); // not asked again in this game
+    host.Stop();
+    REQUIRE(host.Boot(rom.string(), data, /*headless_for_test=*/true, opts));
+    REQUIRE(host.StepFrames(20));
+    host.SetLayerDepth(2);
+    for (const uint32_t factor : {3u, 8u, 1u, 2u, 3u}) {
+        setting = {factor, 8};
+        REQUIRE(host.StepFrames(2));
+        CAPTURE(factor);
+        CHECK(picture.scale == factor);
+        CHECK(picture.max_scale == 8);
+        CHECK(Small(picture) == small);
+        CHECK(right());
+        CHECK(host.LastFrame().primary_right.width == picture.width);
+        CHECK(host.GetCapabilities().has_internal_resolution);
+    }
+    host.SetLayerDepth(0);
+    REQUIRE(host.StepFrames(2));
+    CHECK_FALSE(right());
 
     // States, Restart and the other console keep the factor
     REQUIRE(host.MakeAutosave(A::Reason::Timer, 2));

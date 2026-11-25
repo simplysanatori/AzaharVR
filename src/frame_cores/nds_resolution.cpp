@@ -51,6 +51,12 @@ void NdsResolution::Fail(const std::string& why) {
     failed = true;
 }
 
+void NdsResolution::FailDepth(const std::string& why) {
+    LOG_ERROR(Core, "NdsCore: Layer Depth is at 1x: {}", why);
+    depth_is_flat = true;
+    leave = true;
+}
+
 /// The software renderer in place of another. Its 3D thread begins with the coming frame's 3D, once
 /// more, when it is turned on: only after DrawAhead, which tells it there is something to draw.
 void NdsResolution::PutSoftware(melonDS::NDS& nds, bool threaded) {
@@ -62,10 +68,16 @@ void NdsResolution::PutSoftware(melonDS::NDS& nds, bool threaded) {
     nds.GetRenderer().SetRenderSettings(settings);
 }
 
-void NdsResolution::Apply(melonDS::NDS& nds, bool threaded, bool soft_only) {
-    const uint32_t to = Available() && !soft_only ? wanted : 1;
+void NdsResolution::Apply(melonDS::NDS& nds, bool threaded, const NdsDepth::Depth& depth,
+                          bool depth_on_secondary) {
+    depth_on = depth.on;
+    held = depth.on && depth_is_flat;
+    const uint32_t to = Available() && !held ? wanted : 1;
     if (to == scale && !leave) {
-        return;
+        if (!hires || hires->SetDepth(depth, depth_on_secondary)) {
+            return;
+        }
+        FailDepth("no second eye");
     }
     if (to > 1 && !hires) {
         std::string why = "no reason given";
@@ -89,13 +101,18 @@ void NdsResolution::Apply(melonDS::NDS& nds, bool threaded, bool soft_only) {
             mark = 0;
         }
     }
-    if (to > 1 && !hires->SetScale(to)) {
-        Fail("the renderer cannot draw at " + std::to_string(to) + "x");
+    if (to > 1 && !leave && !hires->SetScale(to)) {
+        const std::string why = "the renderer cannot draw at " + std::to_string(to) + "x";
+        depth.on ? FailDepth(why + " for both eyes") : Fail(why);
         leave = true;
+    }
+    if (to > 1 && !leave && !hires->SetDepth(depth, depth_on_secondary)) {
+        FailDepth("no second eye at " + std::to_string(to) + "x");
     }
     if (to == 1 || leave) {
         hires = nullptr;
         leave = false;
+        held = depth.on && depth_is_flat;
         scale = 1;
         PutSoftware(nds, threaded);
         return;
@@ -109,7 +126,8 @@ bool NdsResolution::GetScreens(Vulkan::AltScreenImage& top, Vulkan::AltScreenIma
         return false;
     }
     if (!hires->GetScreens(top, bottom)) {
-        Fail("the renderer stopped working");
+        constexpr const char* why = "the renderer stopped working";
+        depth_on ? FailDepth(why) : Fail(why);
         leave = true;
         return false;
     }
@@ -118,6 +136,21 @@ bool NdsResolution::GetScreens(Vulkan::AltScreenImage& top, Vulkan::AltScreenIma
         image->max_scale = std::max(scale, ceiling);
     }
     return true;
+}
+
+bool NdsResolution::GetRight(int screen, Vulkan::AltScreenImage& right) {
+    Vulkan::AltScreenImage image = right;
+    if (!hires || !hires->GetRight(screen, image)) {
+        return false;
+    }
+    image.scale = scale;
+    image.max_scale = right.max_scale;
+    right = image;
+    return true;
+}
+
+int NdsResolution::RightShift() const {
+    return hires ? hires->RightShift() : 0;
 }
 
 void NdsResolution::ReadScreens(Vulkan::AltScreenImage& top, Vulkan::AltScreenImage& bottom) {
@@ -134,6 +167,7 @@ void NdsResolution::SetMaker(NdsHiresMaker to, melonDS::NDS* nds, bool threaded)
     maker = std::move(to);
     leave = false;
     failed = false;
+    depth_is_flat = held = false;
 }
 
 NdsResolution::CapturesStay::CapturesStay(const NdsResolution& resolution, melonDS::NDS& nds_) {
