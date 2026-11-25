@@ -84,6 +84,15 @@ public:
     vk::Pipeline Pipeline() const {
         return pipeline;
     }
+    /// AzaharFrame kiupowers: a textured quad times a colour (the push constants' i_resolution),
+    /// over what the pass has, into an image with nothing there (renderer_vulkan_xr.cpp
+    /// DrawKiuPowers). Made when first asked for.
+    vk::Pipeline SpritePipeline() {
+        if (!sprite_pipeline) {
+            CreateSpritePipeline();
+        }
+        return sprite_pipeline;
+    }
 
 private:
     struct SpillSlot {
@@ -103,7 +112,8 @@ private:
     };
 
     void CreateRenderPass();
-    void CreatePipeline(vk::ShaderModule vertex_shader, vk::PipelineLayout pipeline_layout);
+    vk::Pipeline CreatePipeline(vk::ShaderModule fragment, bool blended);
+    void CreateSpritePipeline(); ///< AzaharFrame kiupowers
     void CreateCopyObjects();
     bool CreateSpill(Screen& screen);
     void DestroySpill(Screen& screen);
@@ -128,6 +138,10 @@ private:
     vk::RenderPass render_pass;
     vk::ShaderModule fragment_shader;
     vk::Pipeline pipeline;
+    vk::ShaderModule vertex_shader;
+    vk::PipelineLayout pipeline_layout;
+    vk::ShaderModule sprite_shader; ///< AzaharFrame kiupowers
+    vk::Pipeline sprite_pipeline;
     std::array<Screen, kScreens> screens;
     // The handoff thread's copy of a spilled frame into the swapchain images.
     vk::CommandPool copy_pool;

@@ -56,6 +56,7 @@
 #include "frame_xr/vis/proj_screen_layer.h"
 #include "frame_xr/watchdog.h"
 #include "frame_xr/xr_loader.h"
+#include "video_core/kiu_powers.h" // AzaharFrame kiupowers
 #include "video_core/vr_content_repeat.h" // AzaharFrame bfikit
 #include "video_core/vr_dynamic_resolution.h" // AzaharFrame menuux
 #include "input_common/main.h" // AzaharFrame flat: SDL pump count
@@ -1153,6 +1154,7 @@ void Runtime::FrameLoop() {
         XrPosef label_top_pose{{0, 0, 0, 1}, {0, 0, 0}};
         XrExtent2Df label_top_size{0.0f, 0.0f};
         Hud::BadgeAnchor badge_anchor; // AzaharFrame shaderbadge: the main screen, if any
+        PowerLayers::In powers_in; // AzaharFrame kiupowers
         // AzaharFrame imglag: whether this frame's layers carry the top screen, and its picture's
         // serial (what the compositor shows on the next refresh, with the image lag).
         bool top_carried = false;
@@ -1453,6 +1455,10 @@ void Runtime::FrameLoop() {
                 q.image_rect = {{0, 0},
                                 {static_cast<int32_t>(chain.width),
                                  static_cast<int32_t>(chain.height)}};
+                if (!top) { // AzaharFrame kiupowers: the picture, not the strip under it
+                    q.image_rect.extent.height = static_cast<int32_t>(
+                        VideoCore::KiuPowers::PictureHeight(chain.width, chain.height));
+                }
                 if (packed_top && top) {
                     const int32_t half =
                         static_cast<int32_t>((chain.height - VideoCore::kXrPackedGap) / 2);
@@ -1529,6 +1535,22 @@ void Runtime::FrameLoop() {
                     quad_layers.push_back(layer);
                 }
             };
+            { // AzaharFrame kiupowers
+                powers_in.playing = !draw.swapped && shown.head_driven && shown.show_top;
+                powers_in.bottom_shown = shown.show_bottom && draw.bottom_visible;
+                powers_in.bottom_persistent = shown.bottom_persistent;
+                powers_in.top_pose[0] = shown.top_pose[0];
+                powers_in.top_pose[1] = shown.top_pose[1];
+                powers_in.top_size = shown.top_size[0];
+                powers_in.top_in_view = shown.top_space == view_space;
+                const ScreenChain& chain =
+                    LayerChain(static_cast<std::size_t>(VideoCore::XrScreen::Bottom));
+                if (chain.handle != XR_NULL_HANDLE && chain.has_image) {
+                    powers_in.bottom = chain.handle;
+                    powers_in.bottom_width = chain.width;
+                    powers_in.bottom_height = chain.height;
+                }
+            }
             // AzaharFrame screenswap: with the bottom screen in focus the screens trade places
             // (immersive is paused then); a hidden screen is not added. (AzaharFrame flash: `draw`
             // is taken above, for Motion Clarity.)
@@ -1685,6 +1707,26 @@ void Runtime::FrameLoop() {
                         continue;
                     }
                     layer_slots.Reserve(g, hud_chain, 0, 0, SlotQuad{local_space, hud_stand_in});
+                }
+            }
+        }
+        // AzaharFrame kiupowers: the powers and the dots, over the screens and under everything else.
+        if (fs.shouldRender) {
+            powers_in.head = LatestViewPose();
+            powers_in.time = fs.predictedDisplayTime;
+            const PowerLayers::Out powers = power_layers.Update(*this, powers_in);
+            for (const Quad* q : {&powers.powers, &powers.dots}) {
+                if (q->swapchain == XR_NULL_HANDLE) {
+                    continue;
+                }
+                const uint64_t chain = reinterpret_cast<uint64_t>(q->swapchain);
+                // Their places in the list from the first frame they may show on.
+                SlotQuad stand_in{local_space, *q};
+                stand_in.quad.visible = true;
+                layer_slots.Reserve(LayerSlots::Group::Extra, chain, 0, 0, stand_in);
+                if (q->visible) {
+                    layer_slots.Add(LayerSlots::Group::Extra, chain, 0, 0,
+                                    SlotQuad{local_space, *q});
                 }
             }
         }

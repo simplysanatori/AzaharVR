@@ -107,6 +107,8 @@ private:
                         bool flipped);
 #ifndef HAVE_LIBRETRO
     bool RenderToXr(); // AzaharFrame: renderer_vulkan_xr.cpp; true: drew and submitted
+    /// AzaharFrame kiupowers: the power bar's sprites into the strip (in the bottom screen's pass).
+    void DrawKiuPowers(u32 width, u32 height, float alpha);
     bool XrShowsScreens() const; // AzaharFrame: the headset shows the screens (no window)
 #endif
 
@@ -158,6 +160,7 @@ private:
 
     std::array<ScreenInfo, 3> screen_infos{};
     PresentUniformData draw_info{};
+    std::vector<vk::DescriptorSet> xr_sprite_sets; ///< AzaharFrame kiupowers: by texture
     vk::ClearColorValue clear_color{};
 
     vk::ShaderModule cursor_vertex_shader{};

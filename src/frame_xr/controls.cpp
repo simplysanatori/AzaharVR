@@ -18,7 +18,8 @@
 #include "common/logging/log.h"
 #include "common/settings.h" // AzaharFrame curve
 #include "frame_xr/controls.h"
-#include "frame_xr/kiu_first_person.h" // AzaharFrame kiuvr
+#include "frame_xr/kiu_first_person.h"
+#include "frame_xr/kiu_powers_live.h" // AzaharFrame kiupowers // AzaharFrame kiuvr
 #include "frame_xr/kiu_probe.h"     // AzaharFrame kiugyro: Light Gun
 #include "frame_xr/kiu_scan.h"      // AzaharFrame kiuguns: IsKidIcarus
 #include "frame_xr/kiu_weapon.h"    // AzaharFrame kiuguns: the weapon in hand, the shots
@@ -1789,6 +1790,11 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                                 at, // AzaharFrame kiu140
                                 Input::Rotate(ToInput(head_view.head).orientation, {0, 1, 0}));
         wrist_on = w.shown;
+        { // AzaharFrame kiupowers: the hands the powers go over and stay clear of
+            const Input::HandInput& aiming =
+                in.hand[static_cast<std::size_t>(Input::HandIndex(Input::OtherHand(hand)))];
+            Kiu::Powers::SetHands({off.active, off.aim, aiming.active, aiming.aim});
+        }
         wrist_wanted = wanted; // AzaharFrame kiupanel
         Immersive::SetWristScreen(w.shown, ToXr(w.pose), {wrist_w, wrist_h}, info.display_time);
         if (w.changed && wrist_logs < 200) {

@@ -147,6 +147,7 @@ RasterizerVulkan::RasterizerVulkan(Memory::MemorySystem& memory, Pica::PicaCore&
 RasterizerVulkan::~RasterizerVulkan() = default;
 
 void RasterizerVulkan::TickFrame() {
+    ++powers_tick; // AzaharFrame kiupowers
     scheduler.WaitWorker();
     res_cache.TickFrame();
 }
@@ -569,9 +570,90 @@ void RasterizerVulkan::DrawTriangles() {
     Draw(false, false);
 }
 
+void RasterizerVulkan::NoteKiuPowersDraw() {
+    namespace KP = VideoCore::KiuPowers;
+    const VideoCore::KiuHud::Batch batch = KP::g_live.Get();
+    if (batch.quads == 0) {
+        powers_sprites.clear();
+        powers_textures.clear();
+        return;
+    }
+    const auto& va = regs.pipeline.vertex_attributes;
+    const auto& loader = va.attribute_loaders[0];
+    const u32 base = va.GetPhysicalBaseAddress();
+    if (Pica::f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f != 320.0f ||
+        !VideoCore::KiuHud::InBatch(batch, base, regs.pipeline.index_array.offset,
+                                    regs.pipeline.num_vertices) ||
+        loader.byte_count != 24) {
+        return;
+    }
+    if (powers_drawn != powers_tick) { // a new picture's first draw
+        powers_drawn = powers_tick;
+        powers_sprites.clear();
+        powers_textures.clear();
+    }
+    const u8* const index = memory.GetPhysicalPointer(base + regs.pipeline.index_array.offset);
+    if (!index) {
+        return;
+    }
+    const auto stages = regs.texturing.GetTevStages();
+    const u32 constant = stages[0].const_color;
+    bool texture_kept = false;
+    for (u32 q = 0; q < regs.pipeline.num_vertices / 6; ++q) {
+        u16 first = 0xFFFF;
+        for (u32 k = 0; k < 6; ++k) {
+            u16 i;
+            std::memcpy(&i, index + (q * 6 + k) * 2, 2);
+            first = std::min(first, i);
+        }
+        // Four vertices in a row: top left, top right, bottom left, bottom right.
+        KP::Sprite s;
+        u32 color = 0;
+        bool ok = true;
+        for (u32 k = 0; k < 4 && ok; ++k) {
+            const u8* const v =
+                memory.GetPhysicalPointer(base + loader.data_offset + (first + k) * 24u);
+            ok = v != nullptr;
+            if (ok) {
+                float f[6];
+                std::memcpy(f, v, sizeof f);
+                std::memcpy(&color, v + 12, 4);
+                s.x[k] = f[0];
+                s.y[k] = f[1];
+                s.u[k] = f[4];
+                s.v[k] = f[5];
+            }
+        }
+        const KP::Part part =
+            ok ? KP::PartOf(std::min(s.x[0], s.x[3]), std::min(s.y[0], s.y[3]),
+                            std::max(s.x[0], s.x[3]), std::max(s.y[0], s.y[3]))
+               : KP::Part::Other;
+        if (!KP::Wanted(part)) {
+            continue;
+        }
+        // The icons and the counts have no vertex colour: the flush's constant one.
+        if (part == KP::Part::Icon || part == KP::Part::Count) {
+            color = constant;
+        }
+        for (u32 c = 0; c < 4; ++c) {
+            s.color[c] = static_cast<float>(color >> (8 * c) & 0xFF) / 255.0f;
+        }
+        if (!texture_kept) {
+            texture_kept = true;
+            powers_textures.push_back(regs.texturing.GetTextures()[0]);
+        }
+        s.texture = static_cast<u32>(powers_textures.size() - 1);
+        powers_sprites.push_back(s);
+    }
+}
+
 bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     MICROPROFILE_SCOPE(Vulkan_Drawing);
     SyncDrawState();
+    if (accelerate && is_indexed &&
+        VideoCore::KiuPowers::g_live.strip.load(std::memory_order_relaxed)) { // kiupowers
+        NoteKiuPowersDraw();
+    }
     if (VideoCore::Immersive::g_draw_log.load(std::memory_order_relaxed)) { // AzaharFrame kiu133
         const auto& om = regs.framebuffer.output_merger;
         const auto& va = regs.pipeline.vertex_attributes;

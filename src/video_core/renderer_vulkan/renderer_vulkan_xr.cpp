@@ -16,6 +16,7 @@
 #include "common/logging/log.h"
 #include "common/settings.h"
 #include "video_core/renderer_vulkan/renderer_vulkan.h"
+#include "video_core/kiu_powers.h" // AzaharFrame kiupowers
 #include "video_core/vr_immersive.h" // AzaharFrame doubling
 #include "video_core/vulkan_hooks.h"
 
@@ -40,6 +41,82 @@ std::array<f32, 4 * 4> Orthographic(u32 width, u32 height) {
 }
 
 } // Anonymous namespace
+
+void RendererVulkan::DrawKiuPowers(u32 width, u32 height, float alpha) {
+    namespace KP = VideoCore::KiuPowers;
+    const KP::PixelRect strip = KP::StripIn(width, height);
+    if (strip.width == 0) {
+        return;
+    }
+    // Nothing behind them: the pass begins opaque black.
+    scheduler.Record([strip](vk::CommandBuffer cmdbuf) {
+        const vk::ClearAttachment clear = {
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .colorAttachment = 0,
+            .clearValue = {.color = {.float32 = std::array{0.f, 0.f, 0.f, 0.f}}},
+        };
+        const vk::ClearRect rect = {
+            .rect = {{0, static_cast<s32>(strip.y - KP::kGapPx)},
+                     {strip.width, strip.height + KP::kGapPx}},
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        };
+        cmdbuf.clearAttachments(clear, rect);
+    });
+    const std::vector<KP::Sprite>& sprites = rasterizer.KiuPowersSprites();
+    if (!(alpha > 0.0f) || sprites.empty()) {
+        return;
+    }
+    // The strip's part of the bottom screen, in its pixels.
+    scheduler.Record([strip, pipeline = xr_target->SpritePipeline()](vk::CommandBuffer cmdbuf) {
+        const vk::Viewport viewport = {
+            .x = 0.0f,
+            .y = static_cast<float>(strip.y),
+            .width = static_cast<float>(strip.width),
+            .height = static_cast<float>(strip.height),
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f,
+        };
+        const vk::Rect2D scissor = {{0, static_cast<s32>(strip.y)}, {strip.width, strip.height}};
+        cmdbuf.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+        cmdbuf.setViewport(0, viewport);
+        cmdbuf.setScissor(0, scissor);
+    });
+    draw_info.modelview = Orthographic(KP::kWide, KP::kHigh);
+    u32 bound = UINT32_MAX;
+    for (const KP::Sprite& sprite : sprites) {
+        if (sprite.texture >= xr_sprite_sets.size()) {
+            continue;
+        }
+        std::array<float, 16> vertices; // position, texture coordinates
+        for (u32 i = 0; i < 4; i++) {
+            vertices[i * 4] = sprite.x[i] - static_cast<float>(KP::kLeft);
+            vertices[i * 4 + 1] = sprite.y[i] - static_cast<float>(KP::kTop);
+            vertices[i * 4 + 2] = sprite.u[i];
+            vertices[i * 4 + 3] = sprite.v[i];
+        }
+        auto [data, offset, invalidate] = vertex_buffer.Map(sizeof(vertices), 16);
+        std::memcpy(data, vertices.data(), sizeof(vertices));
+        vertex_buffer.Commit(sizeof(vertices));
+        draw_info.i_resolution = Common::MakeVec(sprite.color[0], sprite.color[1], sprite.color[2],
+                                                 sprite.color[3] * alpha);
+        const vk::DescriptorSet set =
+            sprite.texture != bound ? xr_sprite_sets[sprite.texture] : vk::DescriptorSet{};
+        bound = sprite.texture;
+        scheduler.Record([this, offset = offset, info = draw_info, set](vk::CommandBuffer cmdbuf) {
+            if (set) {
+                cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                          *present_pipeline_layout, 0, set, {});
+            }
+            cmdbuf.pushConstants(*present_pipeline_layout,
+                                 vk::ShaderStageFlagBits::eFragment |
+                                     vk::ShaderStageFlagBits::eVertex,
+                                 0, sizeof(info), &info);
+            cmdbuf.bindVertexBuffers(0, vertex_buffer.Handle(), {0});
+            cmdbuf.draw(4, 1, static_cast<u32>(offset) / (sizeof(float) * 4), 0);
+        });
+    }
+}
 
 bool RendererVulkan::RenderToXr() {
     VideoCore::XrScreenSink* sink = VideoCore::GetXrScreenSink();
@@ -70,12 +147,16 @@ bool RendererVulkan::RenderToXr() {
     const u32 scale = std::clamp<u32>(GetResolutionScaleFactor(), 1, kMaxScale);
     // AzaharFrame doubling: packed, both eyes in the TopLeft swapchain (left above, right below).
     const bool packed = xr_target->Packed();
+    const bool powers_strip = // AzaharFrame kiupowers
+        VideoCore::KiuPowers::g_live.strip.load(std::memory_order_relaxed);
+    const float powers_alpha = VideoCore::KiuPowers::g_alpha.load(std::memory_order_relaxed);
     const std::array<vk::Extent2D, XrPresentTarget::kScreens> sizes = {
         vk::Extent2D{kTopWidth * scale,
                      packed ? 2 * kScreenHeight * scale + VideoCore::kXrPackedGap
                             : kScreenHeight * scale},
         packed ? vk::Extent2D{} : vk::Extent2D{kTopWidth * scale, kScreenHeight * scale},
-        vk::Extent2D{kBottomWidth * scale, kScreenHeight * scale},
+        // AzaharFrame kiupowers: with the strip under the picture.
+        vk::Extent2D{kBottomWidth * scale, VideoCore::KiuPowers::ImageHeight(scale, powers_strip)},
     };
     if (!xr_target->Prepare(sizes)) {
         return false;
@@ -87,6 +168,17 @@ bool RendererVulkan::RenderToXr() {
         update_queue.AddImageSampler(present_set, 0, index, screen_infos[index].image_view,
                                      sampler);
     }
+    // AzaharFrame kiupowers: the sprites' textures (they may be uploaded here: outside the pass).
+    xr_sprite_sets.clear();
+    if (powers_strip && powers_alpha > 0.0f) {
+        rasterizer.KiuPowersTextures([&](vk::ImageView view, vk::Sampler texture_sampler) {
+            const auto set = present_heap.Commit();
+            for (u32 index = 0; index < screen_infos.size(); index++) {
+                update_queue.AddImageSampler(set, 0, index, view, texture_sampler);
+            }
+            xr_sprite_sets.push_back(set);
+        });
+    }
     renderpass_cache.EndRendering();
 
     std::array<XrPresentTarget::Target, XrPresentTarget::kScreens> targets{};
@@ -96,7 +188,10 @@ bool RendererVulkan::RenderToXr() {
         return false;
     }
     for (u32 screen_id = 0; screen_id < XrPresentTarget::kScreens; screen_id++) {
-        const XrPresentTarget::Target& target = targets[screen_id];
+        XrPresentTarget::Target& target = targets[screen_id];
+        if (screen_id == static_cast<u32>(VideoCore::XrScreen::Bottom)) { // AzaharFrame kiupowers
+            target.height = VideoCore::KiuPowers::PictureHeight(target.width, target.height);
+        }
         scheduler.Record([target, present_set, renderpass = xr_target->RenderPass(),
                           pipeline = xr_target->Pipeline(),
                           layout = *present_pipeline_layout](vk::CommandBuffer cmdbuf) {
@@ -145,6 +240,9 @@ bool RendererVulkan::RenderToXr() {
         DrawSingleScreen(screen_id, 0.0f, 0.0f, static_cast<float>(target.width),
                          static_cast<float>(target.height),
                          Layout::DisplayOrientation::Landscape);
+        if (powers_strip && screen_id == static_cast<u32>(VideoCore::XrScreen::Bottom)) {
+            DrawKiuPowers(target.fb_width, target.fb_height, powers_alpha);
+        }
         if (target.end_pass) {
             scheduler.Record([](vk::CommandBuffer cmdbuf) { cmdbuf.endRenderPass(); });
         }

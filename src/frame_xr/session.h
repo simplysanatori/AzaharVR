@@ -28,6 +28,7 @@
 #include "common/frame_log_gate.h" // AzaharFrame bfidr
 #include "frame_xr/frame_xr.h"
 #include "frame_xr/hud.h" // AzaharFrame vrqol
+#include "frame_xr/power_layers.h" // AzaharFrame kiupowers
 #include "frame_xr/instance_policy.h" // AzaharFrame flat2
 #include "frame_xr/pacing.h" // AzaharFrame pacing
 #include "frame_xr/perf_line.h" // AzaharFrame bfidr
@@ -213,6 +214,7 @@ public:
     std::unique_ptr<VulkanBridge> vulkan;
     std::unique_ptr<VrUi> ui; ///< controllers, picker, pointer (controls.cpp)
     Hud hud;                  ///< passthrough background and toasts (hud.cpp)
+    PowerLayers power_layers; ///< AzaharFrame kiupowers
     bool alpha_blend_supported = false; ///< the runtime offers XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND
     std::vector<std::string> enabled_extensions; ///< chosen once, the same for every instance
     StartOptions start_options;                  ///< AzaharFrame flat2: for a new instance

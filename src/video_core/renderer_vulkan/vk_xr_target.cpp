@@ -94,6 +94,39 @@ void main() {
 }
 )";
 
+// AzaharFrame kiupowers: one of the game's quads, its texture times its colour, premultiplied.
+constexpr std::string_view XR_SPRITE_FRAG = R"(
+#version 450 core
+#extension GL_ARB_separate_shader_objects : enable
+
+layout (location = 0) in vec2 frag_tex_coord;
+layout (location = 0) out vec4 color;
+
+layout (push_constant, std140) uniform DrawInfo {
+    mat4 modelview_matrix;
+    vec4 tint;
+    vec4 o_resolution;
+    int screen_id_l;
+    int screen_id_r;
+    int layer;
+    int reverse_interlaced;
+};
+
+layout (set = 0, binding = 0) uniform sampler2D textures[3];
+
+vec3 ToLinear(vec3 c) {
+    return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), greaterThan(c, vec3(0.04045)));
+}
+
+void main() {
+    vec4 c = texture(textures[0], frag_tex_coord) * tint;
+#ifdef XR_SRGB_TARGET
+    c.rgb = ToLinear(c.rgb);
+#endif
+    color = vec4(c.rgb * c.a, c.a);
+}
+)";
+
 bool IsSrgb(vk::Format format) {
     return format == vk::Format::eR8G8B8A8Srgb || format == vk::Format::eB8G8R8A8Srgb;
 }
@@ -101,10 +134,11 @@ bool IsSrgb(vk::Format format) {
 } // Anonymous namespace
 
 XrPresentTarget::XrPresentTarget(const Instance& instance_, Scheduler& scheduler_,
-                                 VideoCore::XrScreenSink& sink_, vk::ShaderModule vertex_shader,
-                                 vk::PipelineLayout pipeline_layout)
+                                 VideoCore::XrScreenSink& sink_, vk::ShaderModule vertex_shader_,
+                                 vk::PipelineLayout pipeline_layout_)
     : instance{instance_}, scheduler{scheduler_}, sink{sink_}, device{instance.GetDevice()},
-      format{static_cast<vk::Format>(sink.SwapchainFormat())}, packed{sink.PackedTop()} {
+      format{static_cast<vk::Format>(sink.SwapchainFormat())}, vertex_shader{vertex_shader_},
+      pipeline_layout{pipeline_layout_}, packed{sink.PackedTop()} {
     const char* no_wait = Common::TestHookEnv("AZAHARFRAME_XR_NO_GPU_WAIT");
     skip_gpu_wait = no_wait && no_wait[0] == '1';
     if (skip_gpu_wait) {
@@ -112,7 +146,9 @@ XrPresentTarget::XrPresentTarget(const Instance& instance_, Scheduler& scheduler
                                    "without waiting for the GPU (test only)");
     }
     CreateRenderPass();
-    CreatePipeline(vertex_shader, pipeline_layout);
+    fragment_shader = Compile(XR_PRESENT_FRAG, vk::ShaderStageFlagBits::eFragment, device,
+                              IsSrgb(format) ? "#define XR_SRGB_TARGET\n" : "");
+    pipeline = CreatePipeline(fragment_shader, false);
     CreateCopyObjects();
     sink.SetScreensLive(true);
     release_thread = std::jthread([this](std::stop_token token) { ReleaseThread(token); });
@@ -140,6 +176,8 @@ XrPresentTarget::~XrPresentTarget() {
     device.destroyFence(copy_fence);
     device.destroyCommandPool(copy_pool);
     device.destroyPipeline(pipeline);
+    device.destroyPipeline(sprite_pipeline); // AzaharFrame kiupowers
+    device.destroyShaderModule(sprite_shader);
     device.destroyShaderModule(fragment_shader);
     device.destroyRenderPass(render_pass);
 }
@@ -202,11 +240,13 @@ void XrPresentTarget::CreateRenderPass() {
     render_pass = device.createRenderPass(info);
 }
 
-void XrPresentTarget::CreatePipeline(vk::ShaderModule vertex_shader,
-                                     vk::PipelineLayout pipeline_layout) {
-    fragment_shader = Compile(XR_PRESENT_FRAG, vk::ShaderStageFlagBits::eFragment, device,
-                              IsSrgb(format) ? "#define XR_SRGB_TARGET\n" : "");
+void XrPresentTarget::CreateSpritePipeline() { // AzaharFrame kiupowers
+    sprite_shader = Compile(XR_SPRITE_FRAG, vk::ShaderStageFlagBits::eFragment, device,
+                            IsSrgb(format) ? "#define XR_SRGB_TARGET\n" : "");
+    sprite_pipeline = CreatePipeline(sprite_shader, true);
+}
 
+vk::Pipeline XrPresentTarget::CreatePipeline(vk::ShaderModule fragment, bool blended) {
     // Vertex layout of RendererVulkan's ScreenRectVertex: position, tex_coord.
     const vk::VertexInputBindingDescription binding = {
         .binding = 0,
@@ -244,7 +284,13 @@ void XrPresentTarget::CreatePipeline(vk::ShaderModule vertex_shader,
         .sampleShadingEnable = false,
     };
     const vk::PipelineColorBlendAttachmentState blend_attachment = {
-        .blendEnable = false,
+        .blendEnable = blended, // premultiplied
+        .srcColorBlendFactor = vk::BlendFactor::eOne,
+        .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+        .colorBlendOp = vk::BlendOp::eAdd,
+        .srcAlphaBlendFactor = vk::BlendFactor::eOne,
+        .dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+        .alphaBlendOp = vk::BlendOp::eAdd,
         .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
                           vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
     };
@@ -284,7 +330,7 @@ void XrPresentTarget::CreatePipeline(vk::ShaderModule vertex_shader,
         },
         vk::PipelineShaderStageCreateInfo{
             .stage = vk::ShaderStageFlagBits::eFragment,
-            .module = fragment_shader,
+            .module = fragment,
             .pName = "main",
         },
     };
@@ -304,7 +350,7 @@ void XrPresentTarget::CreatePipeline(vk::ShaderModule vertex_shader,
     };
     const auto [result, made] = device.createGraphicsPipeline({}, info);
     ASSERT_MSG(result == vk::Result::eSuccess, "Unable to build the XR present pipeline");
-    pipeline = made;
+    return made;
 }
 
 void XrPresentTarget::CreateCopyObjects() {
