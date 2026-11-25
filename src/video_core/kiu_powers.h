@@ -178,6 +178,25 @@ struct Sprite {
     Tev tev = Tev::Modulate;
 };
 
+/// With the HUD: the row at the strip's top and the bubble, its tail up, under it (over it on the
+/// game's screen), so the row is close to the pieces above.
+inline constexpr float kRowTop = 198.0f, kRowHigh = 42.0f;
+constexpr Sprite BelowRow(Sprite s) {
+    constexpr float kUp = kRowTop - static_cast<float>(kTop);
+    // The tail's tip: at 203 over the row's icons, 199 under them.
+    constexpr float kTurn = 203.0f + 199.0f;
+    float middle = 0.0f;
+    for (const float y : s.y) {
+        middle += 0.25f * y;
+    }
+    for (float& y : s.y) {
+        y = s.part == Part::Bubble ? kTurn - y
+            : s.part == Part::Name ? y + kTurn - 2.0f * middle
+                                   : y - kUp;
+    }
+    return s;
+}
+
 /// The bar's own fade (it goes to about 40 % when nothing is selected for a while): the most
 /// opaque of what is drawn, 1 for a bar in full. The gold piece is 0xBF of it. Drawn again without
 /// it (divided out): what shows is the player's opacity alone.
@@ -219,6 +238,8 @@ constexpr Sprite Inset(Sprite s) {
 
 /// The strip's opacity for the game's next pictures (the XR thread; 0: not drawn).
 inline std::atomic<float> g_alpha{0.0f};
+/// Laid out with the bubble under the row (BelowRow), as g_alpha.
+inline std::atomic<bool> g_below{false};
 
 /// The emulation thread: the batch whose draws are looked at (none: quads 0), and whether the
 /// bottom screen's XR image has the strip: for as long as the switch is on and the game runs,

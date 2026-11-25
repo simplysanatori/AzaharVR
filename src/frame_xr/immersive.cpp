@@ -34,6 +34,7 @@
 #include "frame_xr/immersive_names.h" // AzaharFrame kiu
 #include "frame_xr/ipd_smoother.h" // AzaharFrame ipd
 #include "frame_xr/kiu_first_person.h" // AzaharFrame kiuvr
+#include "frame_xr/kiu_powers_live.h" // AzaharFrame kiupowers
 #include "frame_xr/input/input_frame.h"
 #include "frame_xr/presets.h" // AzaharFrame immersive: preset screen sizes
 #include "frame_xr/render_margin.h" // AzaharFrame fovaxis
@@ -1710,6 +1711,7 @@ void OnFrame(const FrameInfo& info) {
         wanted.bar_height = static_cast<float>(v.vr_kiu_bar_height.GetValue());
         wanted.score_across = static_cast<float>(v.vr_kiu_score_across.GetValue());
         wanted.score_height = static_cast<float>(v.vr_kiu_score_height.GetValue());
+        wanted.link_gap = Kiu::Powers::HudGapNow(); // AzaharFrame kiupowers
         wanted.subtitle_size = static_cast<int>(v.vr_kiu_subtitle_size.GetValue());
         wanted.subtitle_height = static_cast<float>(v.vr_kiu_subtitle_height.GetValue());
         hud_place = VideoCore::KiuHud::PlaceFor(wanted, g.solved.tan_half_y * g.solved.aspect,

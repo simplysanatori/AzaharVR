@@ -74,8 +74,9 @@ void RendererVulkan::DrawKiuPowers(u32 width, u32 height, float alpha) {
     const u64 size = (count + 1) * 16 * sizeof(float);
     auto [data, offset, invalidate] = vertex_buffer.Map(size, 16);
     float* out = reinterpret_cast<float*>(data);
+    const bool below = KP::g_below.load(std::memory_order_relaxed);
     for (std::size_t n = 0; n < count; n++) {
-        const KP::Sprite& sprite = sprites[n];
+        const KP::Sprite sprite = below ? KP::BelowRow(sprites[n]) : sprites[n];
         for (u32 i = 0; i < 4; i++) {
             *out++ = sprite.x[i] - static_cast<float>(KP::kLeft);
             *out++ = sprite.y[i] - static_cast<float>(KP::kTop);

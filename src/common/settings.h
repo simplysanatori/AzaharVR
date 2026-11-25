@@ -1153,6 +1153,15 @@ struct Values {
     SwitchableSetting<bool> vr_kiu_talk_portraits{false, "vr_kiu_talk_portraits"};
     SwitchableSetting<u32, true> vr_kiu_talk_portraits_opacity{100, 20, 100,
                                                                "vr_kiu_talk_portraits_opacity"};
+    // AzaharFrame kiupowers: the powers (on land) and the special attack's dots (in the air) in
+    // Angel's Aim: 0 off, 1 over the off hand, 2 under the health bar, 3 between the bar and the
+    // score, 4 under the score; their opacity in percent; with the HUD (2 to 4), degrees to the
+    // right and up from that place.
+    SwitchableSetting<u32, true> vr_kiu_power_menu{0, 0, 4, "vr_kiu_power_menu"};
+    SwitchableSetting<u32, true> vr_kiu_power_menu_opacity{100, 20, 100,
+                                                           "vr_kiu_power_menu_opacity"};
+    SwitchableSetting<s32, true> vr_kiu_power_menu_across{0, -40, 40, "vr_kiu_power_menu_across"};
+    SwitchableSetting<s32, true> vr_kiu_power_menu_height{0, -40, 40, "vr_kiu_power_menu_height"};
     // AzaharFrame kiu140: HUD in Angel's Aim: 0 where the game puts it, 1 in the view, its size in
     // percent; the health bar and the score side by side as one (linked), where that is (degrees
     // to the right and up from straight ahead), or each with a place of its own.

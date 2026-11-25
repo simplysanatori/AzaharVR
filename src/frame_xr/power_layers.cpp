@@ -147,6 +147,7 @@ std::vector<Quad> PowerLayers::Update(Runtime& rt, const In& in) {
     }
     // Drawn by the game's next picture: at once at the opacity it starts with.
     KP::g_alpha.store(show.powers, std::memory_order_relaxed);
+    KP::g_below.store(settings.at != P::At::Hand, std::memory_order_relaxed);
 
     const bool powers_up = show.powers > 0.0f && out.powers.swapchain != XR_NULL_HANDLE;
     const bool dots_up = show.dots > 0.0f && out.dots.swapchain != XR_NULL_HANDLE;
@@ -154,8 +155,20 @@ std::vector<Quad> PowerLayers::Update(Runtime& rt, const In& in) {
     const Screen screen = powers_up || dots_up ? ScreenFrom(in) : Screen{};
     VideoCore::KiuHud::Place hud = hud_now;
     if (!hud.on || hud.page) { // the HUD is not in the view: where it would be
-        hud = VideoCore::KiuHud::PlaceFor({}, screen.tan_x, screen.tan_y, 0.0f);
+        VideoCore::KiuHud::Wanted wanted;
+        wanted.link_gap = P::HudGap(settings);
+        hud = VideoCore::KiuHud::PlaceFor(wanted, screen.tan_x, screen.tan_y, 0.0f);
     }
+    const auto with_hud = [&](float wide, float high, float row) {
+        return P::Moved(
+            P::WithHud(settings.at, hud, screen.tan_x, screen.tan_y, wide, high, row),
+            screen.tan_x, screen.tan_y, settings.across_deg, settings.height_deg);
+    };
+    // Over the hand: to the eyes, upright, whatever the hand does.
+    const auto face = [&](P::Billboard& b) {
+        return b.Update(hands.off.position + Input::Vec3f{0.0f, settings.up_m, 0.0f}, head.position,
+                        dt);
+    };
     const auto put = [&](Quad& q, const P::Place& p) {
         q.pose = ToXr(p.pose);
         q.size = {p.width, p.height};
@@ -168,16 +181,17 @@ std::vector<Quad> PowerLayers::Update(Runtime& rt, const In& in) {
         P::Place p;
         if (settings.at == P::At::Hand) {
             p = P::OverHand(hands.off, head.position, settings.up_m, settings.width_deg, kAspect,
-                            powers_width_);
+                            powers_width_, face(powers_face_));
         } else {
-            p = screen.At(P::WithHud(settings.at, hud, screen.tan_x, screen.tan_y,
-                                     static_cast<float>(KP::kWide),
-                                     static_cast<float>(KP::kHigh)));
+            p = screen.At(with_hud(static_cast<float>(KP::kWide), static_cast<float>(KP::kHigh),
+                                   static_cast<float>(KP::kRowHigh)));
+            powers_face_.Reset();
         }
         powers_width_ = settings.at == P::At::Hand ? p.width : 0.0f; // not the HUD's
         put(out.powers, p);
     } else {
         powers_width_ = 0.0f;
+        powers_face_.Reset();
     }
     if (dots_up) {
         // The dots are at the image's left: the part that has them in the middle over the hand, at
@@ -191,13 +205,16 @@ std::vector<Quad> PowerLayers::Update(Runtime& rt, const In& in) {
         float shift = 0.0f; // of the image's width, to the right
         if (settings.at == P::At::Hand) {
             p = P::OverHand(hands.off, head.position, settings.up_m,
-                            P::kDotDeg * settings.width_deg / 13.6f * kWide, kAspect, dots_width_);
+                            P::kDotDeg * settings.width_deg / 13.6f * kWide, kAspect, dots_width_,
+                            face(dots_face_));
             shift = 0.5f * (1.0f - part);
         } else {
             constexpr float kDot = P::kHudDotPx / P::kHudScale;
-            p = screen.At(P::WithHud(settings.at, hud, screen.tan_x, screen.tan_y, kDot * kWide,
-                                     kDot * kWide / kAspect));
-            shift = settings.at == P::At::Right ? 1.0f - part : 0.0f;
+            p = screen.At(with_hud(kDot * kWide, kDot * kWide / kAspect, kDot * kWide / kAspect));
+            shift = settings.at == P::At::Score    ? 1.0f - part
+                    : settings.at == P::At::Middle ? 0.5f * (1.0f - part)
+                                                   : 0.0f;
+            dots_face_.Reset();
         }
         dots_width_ = settings.at == P::At::Hand ? p.width : 0.0f; // not the HUD's
         p.pose.position =
@@ -205,6 +222,7 @@ std::vector<Quad> PowerLayers::Update(Runtime& rt, const In& in) {
         put(out.dots, p);
     } else {
         dots_width_ = 0.0f;
+        dots_face_.Reset();
     }
 
     const auto say = [&](bool up, bool& logged, const char* what, const Quad& q) {
@@ -220,9 +238,10 @@ std::vector<Quad> PowerLayers::Update(Runtime& rt, const In& in) {
         const float d = std::max(Input::Length(to), 0.01f);
         LOG_INFO(Frontend, "xr: Angel's Aim: the {} up ({}; {:.1f} x {:.1f} deg, {:.2f} m away)",
                  what,
-                 settings.at == P::At::Hand  ? "over the hand"
-                 : settings.at == P::At::Bar ? "under the bar"
-                                             : "at the right",
+                 settings.at == P::At::Hand     ? "over the hand"
+                 : settings.at == P::At::Bar    ? "under the bar"
+                 : settings.at == P::At::Middle ? "between the bar and the score"
+                                                : "under the score",
                  2.0f * std::atan(0.5f * q.size.width / d) * 57.2958f,
                  2.0f * std::atan(0.5f * q.size.height / d) * 57.2958f, d);
     };

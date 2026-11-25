@@ -24,20 +24,32 @@ Hands g_hands;
 Vis::Powers::Settings SettingsNow() {
     namespace P = Vis::Powers;
     const auto value = [](const char* name) { return Common::FrameTestSwitches::Value(name); };
-    P::Settings s;
-    s.powers = value("AZAHARFRAME_KIU_POWERS") == "1";
-    s.dots = value("AZAHARFRAME_KIU_POWER_DOTS") == "1";
-    if (!s.powers && !s.dots) {
-        return s;
+    // The settings are Angel's Aim's: without it no strip in the bottom screen's image either.
+    uint32_t menu = Settings::values.vr_kiu_power_menu.GetValue();
+    if (menu != 0 && !Kiu::FirstPerson::AngelsAim()) {
+        menu = 0;
     }
-    s.gold = value("AZAHARFRAME_KIU_POWERS_GOLD") != "0";
-    s.at = P::AtFrom(value("AZAHARFRAME_KIU_POWERS_AT"));
-    s.powers_opacity = P::OpacityFrom(value("AZAHARFRAME_KIU_POWERS_OPACITY"));
-    s.dots_opacity = P::OpacityFrom(value("AZAHARFRAME_KIU_POWER_DOTS_OPACITY"));
-    s.stay_s = P::NumberFrom(value("AZAHARFRAME_KIU_POWERS_S"), 0.5f, 30.0f, s.stay_s);
-    s.width_deg = P::NumberFrom(value("AZAHARFRAME_KIU_POWERS_DEG"), 6.0f, 30.0f, s.width_deg);
-    s.up_m = P::NumberFrom(value("AZAHARFRAME_KIU_POWERS_UP"), 0.0f, 0.3f, s.up_m);
+    P::Switches sw;
+    sw.powers = value("AZAHARFRAME_KIU_POWERS");
+    sw.dots = value("AZAHARFRAME_KIU_POWER_DOTS");
+    if (menu != 0 || sw.powers == "1" || sw.dots == "1") {
+        sw.gold = value("AZAHARFRAME_KIU_POWERS_GOLD");
+        sw.at = value("AZAHARFRAME_KIU_POWERS_AT");
+        sw.powers_opacity = value("AZAHARFRAME_KIU_POWERS_OPACITY");
+        sw.dots_opacity = value("AZAHARFRAME_KIU_POWER_DOTS_OPACITY");
+        sw.stay_s = value("AZAHARFRAME_KIU_POWERS_S");
+        sw.width_deg = value("AZAHARFRAME_KIU_POWERS_DEG");
+        sw.up_m = value("AZAHARFRAME_KIU_POWERS_UP");
+    }
+    P::Settings s =
+        P::SettingsFor(menu, Settings::values.vr_kiu_power_menu_opacity.GetValue(), sw);
+    s.across_deg = static_cast<float>(Settings::values.vr_kiu_power_menu_across.GetValue());
+    s.height_deg = static_cast<float>(Settings::values.vr_kiu_power_menu_height.GetValue());
     return s;
+}
+
+float HudGapNow() {
+    return Vis::Powers::HudGap(SettingsNow());
 }
 
 bool AirNoBumpersWanted() {

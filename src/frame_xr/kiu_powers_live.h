@@ -13,11 +13,13 @@
 
 namespace FrameXr::Kiu::Powers {
 
-/// The switches now (power_menu.h); both off without them. Any thread.
+/// The settings and switches now (power_menu.h SettingsFor). Any thread.
 Vis::Powers::Settings SettingsNow();
+/// What they want between the bar and the score beside their own gap (KiuHud::Wanted::link_gap).
+float HudGapNow();
 
 /// The emulation thread, each VBlank: what the game says. `playing`: first person in a battle, no
-/// cutscene. Not known while neither switch is on.
+/// cutscene. Not known while neither the powers nor the dots are on.
 void SetGame(const State& state, bool playing);
 State Game(bool* playing);
 
