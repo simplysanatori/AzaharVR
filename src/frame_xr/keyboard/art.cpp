@@ -19,6 +19,9 @@
 #include <unordered_map>
 
 #include "common/logging/log.h"
+#ifdef _WIN32 // AzaharVR: Font::Load
+#include "common/string_util.h"
+#endif
 #include "frame_xr/keyboard/layout.h"
 #include "frame_xr/keyboard/stb_truetype.h"
 #include "frame_xr/picker/logo_loader.h"
@@ -182,7 +185,11 @@ constexpr float kTextGamma = 0.80f;
 class Font {
 public:
     bool Load(const std::string& path) {
+#ifdef _WIN32 // AzaharVR: the name is UTF-8 (FindArtFile)
+        std::ifstream f(Common::UTF8ToUTF16W(path), std::ios::binary);
+#else
         std::ifstream f(path, std::ios::binary);
+#endif
         if (!f) {
             return false;
         }

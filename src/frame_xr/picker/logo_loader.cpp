@@ -14,6 +14,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include "common/string_util.h"
 #endif
 
 namespace frame_xr::picker {
@@ -51,7 +52,11 @@ std::string FindArtFile(const std::string& name) {
     for (const fs::path& dir : dirs) {
         const fs::path p = dir / name;
         if (fs::is_regular_file(p, ec)) {
+#ifdef _WIN32 // AzaharVR: UTF-8 (string() is the ANSI code page and throws for other letters)
+            return Common::UTF16ToUTF8(p.wstring());
+#else
             return p.string();
+#endif
         }
     }
     return {};
@@ -60,7 +65,11 @@ std::string FindArtFile(const std::string& name) {
 bool LoadPngFile(const std::string& path, std::vector<uint8_t>& rgba, int& width, int& height) {
     rgba.clear();
     width = height = 0;
+#ifdef _WIN32 // AzaharVR: the name is UTF-8
+    std::ifstream f(Common::UTF8ToUTF16W(path), std::ios::binary);
+#else
     std::ifstream f(path, std::ios::binary);
+#endif
     if (!f) {
         return false;
     }
