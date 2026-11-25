@@ -333,7 +333,8 @@ TEST_CASE("Angel's Aim page: counts, and every row reachable", "[frame_xr][kiuai
           std::vector<Id>{Id::KeepOnScreen, Id::GripFreesAim, Id::TurnZoneFrom, Id::TurnZone,
                           Id::TurnSpeed, Id::TurnSpeedVertical, Id::CalibrateAim});
     CHECK(AimPageRows(m, AimGroup::View).rows ==
-          std::vector<Id>{Id::KiuOverShoulder, Id::KiuSnapTurn, Id::KiuCutscenes});
+          std::vector<Id>{Id::KiuOverShoulder, Id::KiuSnapTurn, Id::KiuCutscenes,
+                          Id::KiuStickClick}); // Right Stick Click
     CHECK(AimPageRows(m, AimGroup::Hud).rows ==
           std::vector<Id>{Id::KiuHud, Id::KiuHudSize, Id::KiuSubtitleSize, Id::KiuPowerMenu});
     for (const int place : {0, 1, 2, 3, 4}) { // Off, Off Hand, then the HUD's places
@@ -347,7 +348,13 @@ TEST_CASE("Angel's Aim page: counts, and every row reachable", "[frame_xr][kiuai
     CHECK(AimPageRows(m, AimGroup::BottomScreen).rows ==
           std::vector<Id>{Id::KiuBottomScreen, Id::KiuBottomSize, Id::KiuBottomOpacity,
                           Id::KiuWristAngle, Id::KiuWristAlong});
-    CHECK(AimPageRows(m, AimGroup::BottomScreen).more.empty());
+    CHECK(AimPageRows(m, AimGroup::BottomScreen).more == std::vector<Id>{Id::KiuTalkPortraits});
+    for (const int shown : {0, 1}) {
+        MenuModel p = m;
+        p.kiu_talk_portraits = shown;
+        CHECK(Has(AimPageRows(p, AimGroup::BottomScreen).more, Id::KiuTalkPortraitsOpacity) ==
+              (shown != 0));
+    }
     CHECK(AimPageRows(m, AimGroup::Weapon).rows ==
           std::vector<Id>{Id::WeaponInHand, Id::MuzzleFlash, Id::Projectiles, Id::Recoil,
                           Id::KiuHideOffHand}); // Free Hand
@@ -380,8 +387,10 @@ TEST_CASE("Angel's Aim page: presses, Back and B, and what is kept", "[frame_xr]
     CHECK(v.aim_group == -1);
     CHECK_FALSE(AimPageBack(m, v));
     // A group without More has no More page.
-    REQUIRE(AimPagePress(m, v, static_cast<int>(AimGroup::BottomScreen)));
+    REQUIRE(AimPagePress(m, v, static_cast<int>(AimGroup::View)));
     CHECK_FALSE(AimPagePress(m, v, kAimMoreIndex));
+    REQUIRE(AimPageBack(m, v));
+    REQUIRE(AimPagePress(m, v, static_cast<int>(AimGroup::BottomScreen)));
     CHECK(AimBottomPageOpen(m, v));
     // Kept while it can show; the front view once the group has no row, the segment or the tab
     // is left (the menu opens on its Main tab), or another game is open.
