@@ -252,6 +252,12 @@ struct NdsCore::Impl {
         return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
     }
 
+    uint32_t ScreensOn() const {
+        return NdsDepth::OnScreens(
+            opts.depth_on, opts.depth_by_slot,
+            Common::LayerDepth::Get().swapped.load(std::memory_order_relaxed));
+    }
+
     NdsDepth::Depth Depth() const {
         // A turned screen's pixels would move up and down on it
         if (rotation_deg != 0) {
@@ -259,7 +265,7 @@ struct NdsCore::Impl {
         }
         const bool inverted = Common::LayerDepth::Get().inverted.load(std::memory_order_relaxed);
         return NdsDepth::MakeDepth(opts.layer_depth, max_layer_shift, inverted, depth_convergence,
-                                   NdsDepth::MakeScreens(opts.depth_on, depth_on_secondary));
+                                   NdsDepth::MakeScreens(ScreensOn(), depth_on_secondary));
     }
 
     /// Between frames.
@@ -744,7 +750,9 @@ void NdsCore::RunFrame(FrameOutput& out) {
 
     out.primary = {};
     out.secondary = {};
+    out.primary_left = {};
     out.primary_right = {};
+    out.secondary_left = {};
     out.secondary_right = {};
     out.layer_shift = 0.0f;
     out.secondary_shift = 0.0f;
@@ -797,33 +805,40 @@ void NdsCore::RunFrame(FrameOutput& out) {
             out.secondary.max_scale = impl->resolution.Ceiling();
         }
     }
-    // Always one, so that the headset's screens are not made again each time a game has no right
-    // picture.
-    const auto right_picture = [&](int screen, const Vulkan::AltScreenImage& left,
-                                   Vulkan::AltScreenImage& right, float& shift) {
+    // Always two, so that the headset's screens are not made again each time a game has none for
+    // the eyes.
+    const auto eyes_pictures = [&](int screen, const Vulkan::AltScreenImage& own,
+                                   Vulkan::AltScreenImage& left, Vulkan::AltScreenImage& right,
+                                   float& shift) {
+        // By slot the other screen may be next: as many pictures, the same for both eyes. A change
+        // of the layout would put swapped screens back.
         bool& shows = impl->shows_depth[static_cast<std::size_t>(screen)];
-        shows = depth.on && depth.screens[screen] &&
+        shows = depth.on && (depth.screens[screen] || impl->opts.depth_by_slot) &&
                 (shows || screen == 0 ||
                  (hires ? impl->resolution.ShowsDepth(screen)
                         : impl->stereo && impl->stereo->ShowsDepth(screen)));
         if (!shows) {
             return;
         }
-        right = left;
+        left = own;
+        right = own;
+        if (!depth.screens[screen]) {
+            return;
+        }
         int farthest = depth.layers[3];
         if (hires) {
-            if (impl->resolution.GetRight(screen, right)) {
-                farthest = impl->resolution.RightShift();
+            if (impl->resolution.GetEyes(screen, left, right)) {
+                farthest = impl->resolution.EyesShift();
             }
-        } else if (const melonDS::u32* pixels =
-                       impl->stereo ? impl->stereo->Right(screen) : nullptr) {
-            right.pixels = pixels;
-            farthest = impl->stereo->RightShift(screen);
+        } else if (impl->stereo && impl->stereo->Picture(NdsDepth::Eye::Right, screen)) {
+            left.pixels = impl->stereo->Picture(NdsDepth::Eye::Left, screen);
+            right.pixels = impl->stereo->Picture(NdsDepth::Eye::Right, screen);
+            farthest = impl->stereo->Shift(screen);
         }
         shift = NdsDepth::EdgeShift(farthest);
     };
-    right_picture(0, out.primary, out.primary_right, out.layer_shift);
-    right_picture(1, out.secondary, out.secondary_right, out.secondary_shift);
+    eyes_pictures(0, out.primary, out.primary_left, out.primary_right, out.layer_shift);
+    eyes_pictures(1, out.secondary, out.secondary_left, out.secondary_right, out.secondary_shift);
 
     const int max_frames = static_cast<int>(impl->audio_scratch.size() / 2u);
     const int got = impl->nds->SPU.ReadOutput(impl->audio_scratch.data(), max_frames);
@@ -1089,8 +1104,9 @@ void NdsCore::SetDepthConvergence(float w) {
         w > 0.0f ? static_cast<int32_t>(std::min(w, 4095.0f) * NdsDepth::kOneW) : 0;
 }
 
-void NdsCore::SetDepthOn(uint32_t screens) {
+void NdsCore::SetDepthOn(uint32_t screens, bool by_slot) {
     impl->opts.depth_on = screens;
+    impl->opts.depth_by_slot = by_slot;
 }
 
 void NdsCore::SetDepthOnSecondary(bool on) {

@@ -44,6 +44,19 @@ inline bool AltShowsStereo(const AltScreenImage& left, const AltScreenImage& rig
     return right.HasPicture() && right.width == left.width && right.height == left.height;
 }
 
+/// A screen's pictures for the two eyes, beside its own. No right one: both eyes see its own; no
+/// left one: that is its own. `shift`: what they are cut for (AltCutEyes).
+struct AltEyes {
+    AltScreenImage left{};
+    AltScreenImage right{};
+    float shift = 0.0f;
+};
+
+/// The left eye's, where there are two.
+inline const AltScreenImage& AltLeft(const AltScreenImage& own, const AltEyes& eyes) {
+    return AltShowsStereo(own, eyes.right) && AltShowsStereo(own, eyes.left) ? eyes.left : own;
+}
+
 /// The two eyes' pictures of a stereo frame as the headset shows them: without what Layer Depth
 /// leaves out at their edges.
 struct AltEyePictures {
@@ -106,18 +119,15 @@ public:
 
     /// Uploads and submits one frame. `secondary` may have pixels == nullptr when no secondary
     /// screen is active. `overlay` (premultiplied alpha, RGBA) covers the whole Primary Screen as
-    /// it is shown, whatever its size; without a picture nothing is drawn for it. `primary_right`
-    /// (the size of `primary`, the overlay over it too) is the headset's right eye's; without a
-    /// picture both eyes see `primary`. `layer_shift` is what the headset's are cut for
-    /// (AltCutEyes). `secondary_right` and `secondary_shift` are the same for `secondary`. The
-    /// window shows none of them. With `skippable` (fast forward) the window may miss frames its
+    /// it is shown, whatever its size; without a picture nothing is drawn for it. `primary_eyes`
+    /// (the size of `primary`, the overlay over them too) are the headset's, and `secondary_eyes`
+    /// the same for `secondary`. The window shows none of them. With `skippable` (fast forward) the window may miss frames its
     /// display could not show anyway.
     bool Present(const AltScreenImage& primary, const AltScreenImage& secondary,
-                 const AltScreenImage& overlay = {}, const AltScreenImage& primary_right = {},
-                 float layer_shift = 0.0f, const AltScreenImage& secondary_right = {},
-                 float secondary_shift = 0.0f, bool skippable = false);
+                 const AltScreenImage& overlay = {}, const AltEyes& primary_eyes = {},
+                 const AltEyes& secondary_eyes = {}, bool skippable = false);
 
-    /// The headset can show `secondary_right`. False once its images could not be made, until Init.
+    /// The headset can show `secondary_eyes`. False once its images could not be made, until Init.
     bool ShowsSecondaryStereo() const;
 
     bool IsReady() const;

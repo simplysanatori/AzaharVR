@@ -148,7 +148,8 @@ TEST_CASE("Per-Game: every per-game row's key is kept across the read of the gam
                 (id == Id::LayerDepth || id == Id::InvertDepth)) {
                 continue; // a 3DS game has no such row
             }
-            if (group != Settings::ConsoleGroup::DS && id == Id::DepthOn) {
+            if (group != Settings::ConsoleGroup::DS &&
+                (id == Id::DepthOn || id == Id::DepthFollows)) {
                 continue; // the DS's alone
             }
             const std::vector<std::string> keys = FrameXr::PerGame::KeysOf(id);
@@ -850,6 +851,9 @@ TEST_CASE("Per-Game: the DS and GBA rows' values in two games' files", "[frame_x
           std::vector<std::string>{"ds_invert_depth"});
     CHECK(v.ds_depth_on.GetDefault() == 0u); // both screens
     CHECK(FrameXr::PerGame::KeysOf(Id::DepthOn) == std::vector<std::string>{"ds_depth_on"});
+    CHECK_FALSE(v.ds_depth_by_slot.GetDefault()); // the DS's screens
+    CHECK(FrameXr::PerGame::KeysOf(Id::DepthFollows) ==
+          std::vector<std::string>{"ds_depth_by_slot"});
     Settings::SetActiveConsole(Settings::ConsoleGroup::N3DS);
     CHECK(FrameXr::PerGame::KeysOf(Id::SecondScreen) ==
           std::vector<std::string>{"gba_second_screen"});

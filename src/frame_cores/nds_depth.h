@@ -23,6 +23,15 @@ constexpr int kWidth = 256;
 /// screen; nothing comes in front of it. With Invert Depth all are to the left, so everything does.
 using LayerShifts = std::array<int, 4>;
 
+using Common::LayerDepth::Eye;
+using Common::LayerDepth::EyeShift;
+
+/// Where an eye's layers are, of those that a depth has.
+constexpr LayerShifts EyeLayers(const LayerShifts& layers, Eye eye) {
+    return {EyeShift(layers[0], eye), EyeShift(layers[1], eye), EyeShift(layers[2], eye),
+            EyeShift(layers[3], eye)};
+}
+
 /// A background's shift: by the priority in its BGxCNT.
 constexpr int BackgroundShift(uint16_t bgcnt, const LayerShifts& shifts) {
     return shifts[bgcnt & 3];
@@ -148,15 +157,8 @@ constexpr SceneRoom MakeRoom(const LayerShifts& layers, uint32_t dispcnt,
 /// What is moved left would be squeezed against the picture's left edge (ShiftVertexX) instead of
 /// going past it. So the scene is drawn this much further right, where nothing is left of where
 /// the game has it, and its lines are scrolled back by as much.
-constexpr int SceneOffset(const LayerShifts& layers) {
-    return std::max(0, -layers[3]);
-}
-
-constexpr SceneShift Offset(SceneShift scene, int offset) {
-    scene.nearest += offset;
-    scene.farthest += offset;
-    scene.base += offset;
-    return scene;
+constexpr int SceneOffset(const SceneRoom& room, Eye eye) {
+    return std::max({0, -EyeShift(room.nearest, eye), -EyeShift(room.farthest, eye)});
 }
 
 /// The scroll of the scene's lines for BG0's: 9 bits, from 256 on to the left.
@@ -173,6 +175,22 @@ constexpr int ScrollOf(uint16_t scroll) {
 /// `far_shift`, and begins where the game has it.
 constexpr int SceneEdge(int far_shift, int scroll) {
     return std::clamp(std::max(far_shift, far_shift - scroll), 0, kWidth);
+}
+
+/// The columns of a line that what is behind the scene is in, from `begin` to before `end`.
+struct SceneEnds {
+    int begin = 0;
+    int end = kWidth;
+    constexpr bool operator==(const SceneEnds&) const = default;
+};
+
+/// `left_end`: it ends at the left; else at the right, where the scene is moved left (the left
+/// eye's).
+constexpr SceneEnds MakeSceneEnds(int far_shift, int scroll, bool left_end) {
+    if (left_end) {
+        return {SceneEdge(far_shift, scroll), kWidth};
+    }
+    return {0, kWidth - SceneEdge(-far_shift, -scroll)};
 }
 
 /// CLEAR_DEPTH and CLRIMAGE_OFFSET with the picture behind the scene moved right; it wraps.
@@ -454,6 +472,16 @@ enum class DepthOn : uint32_t {
     Bottom,
 };
 
+/// DepthOn for the DS's screens, of one that names the slots (Settings::values.ds_depth_by_slot):
+/// `swapped`, the bottom screen is in the Primary slot.
+constexpr uint32_t OnScreens(uint32_t depth_on, bool by_slot, bool swapped) {
+    if (!by_slot || !swapped || depth_on == static_cast<uint32_t>(DepthOn::Both)) {
+        return depth_on;
+    }
+    return static_cast<uint32_t>(depth_on == static_cast<uint32_t>(DepthOn::Top) ? DepthOn::Bottom
+                                                                                 : DepthOn::Top);
+}
+
 /// The screens that have a right eye's picture; 0 is the top one. The one answer both renderers,
 /// the core and the host's picture take.
 struct Screens {
@@ -612,14 +640,26 @@ constexpr float EdgeShift(int farthest) {
     return kCutsEdge || farthest < 0 ? static_cast<float>(farthest) / kWidth : 0.0f;
 }
 
-/// The shifts to blank the right eye's left edge by.
-constexpr LayerShifts EdgeLayers(const LayerShifts& layers) {
-    return kCutsEdge || layers[3] < 0 ? LayerShifts{} : layers;
+/// The shifts to blank the eye's edge by.
+constexpr LayerShifts EdgeLayers(const LayerShifts& layers, Eye eye) {
+    return kCutsEdge || layers[3] < 0 ? LayerShifts{} : EyeLayers(layers, eye);
 }
 
-/// The columns that are the shift's alone: what the game has in them is beyond its picture.
+/// The columns that are the shift's alone, at the left edge or the right one: what the game has in
+/// them is beyond its picture.
 constexpr bool IsBeyond(int x, int shift) {
-    return x < shift;
+    return shift >= 0 ? x < shift : x >= kWidth + shift;
+}
+
+/// The columns any of them is beyond in, from `begin` to before `end`.
+struct EdgeColumns {
+    int begin = 0;
+    int end = 0;
+    constexpr bool operator==(const EdgeColumns&) const = default;
+};
+
+constexpr EdgeColumns MakeEdgeColumns(const LayerShifts& ends) {
+    return ends[3] >= 0 ? EdgeColumns{0, ends[3]} : EdgeColumns{kWidth + ends[3], kWidth};
 }
 
 /// The shift of what a pixel of the 2D renderer is from: `flags` is its upper byte, of an engine

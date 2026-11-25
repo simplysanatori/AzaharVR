@@ -20,6 +20,7 @@
 #include <utility>
 
 #include <fmt/format.h>
+#include "common/layer_depth.h"
 #include "common/test_hooks.h"
 #include "common/atomic_file.h"
 #include "common/file_util.h"
@@ -412,7 +413,7 @@ struct State {
     /// AzaharFrame fovscale: the gains last logged, with when (hold.py reads them).
     float gains_logged[2]{-1.0f, -1.0f};
     int64_t gains_logged_ms = 0;
-    bool screens_were_live = false;
+    bool game_was_on = false;
     /// AzaharFrame immersive: when `ref` is taken (Layout::RestPose; SteamVR's recenter moves the
     /// LOCAL space at its change time, and a head pose located before it is still in the old
     /// space).
@@ -1292,13 +1293,13 @@ void OnFrame(const FrameInfo& info) {
     TestResolutionHook();
     const bool visible =
         info.state == XR_SESSION_STATE_VISIBLE || info.state == XR_SESSION_STATE_FOCUSED;
-    if (!info.screens_live) {
+    if (!info.game_on) {
         // No game: the next one starts with the bottom screen hidden, as in CitraVR.
         g.bottom_toggled = false;
         g.focus_bottom = false;
         g.rest.Forget();
         g.adjuster.Cancel();
-    } else if (!g.screens_were_live) {
+    } else if (!g.game_was_on) {
         // A game just started: its per-game settings are loaded; read "Hide Bottom Screen" now.
         g.game_start_ms = VideoCore::Immersive::SteadyMs(); // AzaharFrame depth
         // AzaharFrame stereo: another game's 3D is measured afresh and its cap starts from
@@ -1376,7 +1377,7 @@ void OnFrame(const FrameInfo& info) {
                          is_wide ? g.wide_place : g.head_place, is_wide);
         }
     }
-    g.screens_were_live = info.screens_live;
+    g.game_was_on = info.game_on;
     {
         // AzaharFrame vrsize: global (the player's lenses), every frame, so a reset in Configure
         // shows at once. NudgeOffset writes it on this thread.
@@ -2644,6 +2645,7 @@ bool BottomFocused() {
 
 void SetBottomFocused(bool focused) {
     g_focus_bottom.store(focused, std::memory_order_relaxed);
+    Common::LayerDepth::Get().swapped.store(focused, std::memory_order_relaxed);
     if (focused != g.focus_bottom) {
         g.focus_bottom = focused;
         g.adjuster.Cancel();

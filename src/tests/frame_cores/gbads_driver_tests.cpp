@@ -21,19 +21,20 @@
 #include "common/layer_depth.h"
 #include "frame_cores/driver_runner.h"
 #include "frame_cores/frame_driver.h"
-#include "frame_cores/gba_right_eye.h"
+#include "frame_cores/gba_eyes.h"
 #include "frame_cores/gbads_driver.h"
 #include "gbads_game.h"
 #include "gbads_logo.h"
 
 extern "C" {
+#include <mgba/core/core.h>
 #include "emu.h"
 #include "profiles.h"
-#include <mgba/core/core.h>
 }
 
 using namespace FrameCores;
 namespace fs = std::filesystem;
+using Common::LayerDepth::Eye;
 
 namespace {
 
@@ -730,16 +731,16 @@ TEST_CASE("gba-ds's game.c: Layer Depth with the HUD on the other screen", "[fra
     const bool shifted = GENERATE(false, true);
     MadeGame game("AMKE");
     REQUIRE(game.open);
-    GbaRightEye eye;
-    REQUIRE(eye.Attach(game.emu.core));
-    CHECK_FALSE(GbaRightEye{}.Attach(game.emu.core)); // one is there
-    eye.SetDepth(3);
-    eye.SetMaxShift(shifted ? Common::LayerDepth::kNoLimit : Common::LayerDepth::kOnScreen);
+    GbaEyes eyes;
+    REQUIRE(eyes.Attach(game.emu.core));
+    CHECK_FALSE(GbaEyes{}.Attach(game.emu.core)); // one is there
+    eyes.SetDepth(3);
+    eyes.SetMaxShift(shifted ? Common::LayerDepth::kNoLimit : Common::LayerDepth::kOnScreen);
     auto services = game.Services();
-    services.step = [&eye, step = services.step](uint32_t keys) {
-        eye.BeginFrame();
+    services.step = [&eyes, step = services.step](uint32_t keys) {
+        eyes.BeginFrame();
         step(keys);
-        eye.EndFrame();
+        eyes.EndFrame();
     };
     auto driver = GbaDsDriver::Make(services, gbads_game_loop, GbaDsLimits{});
     REQUIRE(driver);
@@ -749,14 +750,16 @@ TEST_CASE("gba-ds's game.c: Layer Depth with the HUD on the other screen", "[fra
         out.primary.width = frame.primary.width;
         out.primary.height = frame.primary.height;
         out.primary.stride_pixels = frame.primary.stride;
-        DriverRunner::SetRightEye(eye.Picture(), eye.GamePicture(), eye.EdgeShift(), out);
+        DriverRunner::SetEyes(eyes.Picture(Eye::Left), eyes.Picture(Eye::Right), eyes.GamePicture(),
+                              eyes.EdgeShift(), out);
         return out;
     };
     for (int i = 0; i < 10; ++i) {
         const DriverFrame frame = Run(*driver);
         const FrameOutput out = both(frame);
-        REQUIRE(std::equal(out.primary.pixels, out.primary.pixels + kPixels,
-                           out.primary_right.pixels));
+        for (const auto* seen : {&out.primary_left, &out.primary_right}) {
+            REQUIRE(std::equal(out.primary.pixels, out.primary.pixels + kPixels, seen->pixels));
+        }
     }
     game.DrawHud();
     game.Write16(0x06003800, 1); // the HUD from the edge on
@@ -766,23 +769,26 @@ TEST_CASE("gba-ds's game.c: Layer Depth with the HUD on the other screen", "[fra
         INFO("frame " << i);
         const DriverFrame frame = game.RunMoving(*driver, 1);
         const FrameOutput out = both(frame);
-        REQUIRE(out.primary_right.HasPicture());
-        own += out.primary_right.pixels != out.primary.pixels;
-        const bool same = std::equal(out.primary.pixels, out.primary.pixels + kPixels,
-                                     out.primary_right.pixels);
-        REQUIRE((shifted || same));
-        deep += !same;
-        if (i >= 10) {
-            REQUIRE(HudMoved(frame));
-            const DriverPicture right{out.primary_right.pixels, GBA_W, GBA_H, GBA_W};
-            REQUIRE(At(right, 40, 3) != kBar); // out of this eye too
-            REQUIRE(At(right, 3, 3) != kBar);  // and of its edge
+        for (const auto* seen : {&out.primary_left, &out.primary_right}) {
+            REQUIRE(seen->HasPicture());
+            own += seen->pixels != out.primary.pixels;
+            const bool same =
+                std::equal(out.primary.pixels, out.primary.pixels + kPixels, seen->pixels);
+            REQUIRE((shifted || same));
+            deep += !same;
+            if (i >= 10) {
+                REQUIRE(HudMoved(frame));
+                const DriverPicture eye{seen->pixels, GBA_W, GBA_H, GBA_W};
+                REQUIRE(At(eye, 40, 3) != kBar); // out of this eye too
+                REQUIRE(At(eye, 3, 3) != kBar);  // and of its edges
+                REQUIRE(At(eye, 237, 3) != kBar);
+            }
         }
     }
-    CHECK(own >= 58);
-    CHECK((deep >= 58) == shifted);
+    CHECK(own >= 116);
+    CHECK((deep >= 116) == shifted);
     driver.reset();
-    eye.Detach();
+    eyes.Detach();
     ++game.scroll;
     emu_frame(&game.emu, 0); // the core goes on without either
 }

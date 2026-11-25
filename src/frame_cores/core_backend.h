@@ -54,6 +54,7 @@ struct CoreBootOptions {
     uint32_t second_screen = 0;    ///< SecondScreen (GBA and Game Boy games)
     uint32_t layer_depth = 0;      ///< 0 off, 1 to 3: how far back the layers go
     uint32_t depth_on = 0;         ///< NdsDepth::DepthOn (DS games)
+    bool depth_by_slot = false;    ///< it names the Primary and Secondary slot
     DriverOverride driver;
     /// Tests: what draws a DS game over 1x (NdsHiresMaker)
     std::function<std::unique_ptr<NdsHiresRenderer>(melonDS::NDS&, std::string&)> ds_renderer;
@@ -68,16 +69,19 @@ struct CheatEntry {
 struct FrameOutput {
     Vulkan::AltScreenImage primary{};
     Vulkan::AltScreenImage secondary{};
-    /// The Primary Screen for the right eye (Layer Depth); none: both eyes see `primary`. The same
-    /// size as `primary`.
+    /// The Primary Screen for the left eye and the right one (Layer Depth); no right one: both eyes
+    /// see `primary`. No left one: that is `primary`. The same size as `primary`.
+    Vulkan::AltScreenImage primary_left{};
     Vulkan::AltScreenImage primary_right{};
-    /// The farthest layer's in `primary_right`, a share of the width (layer_depth.h), below 0 while
-    /// inverted; every layer's is between 0 and it. The same in a frame that has both eyes see
-    /// `primary`: as much is cut off the pictures. 0: nothing is, also where the layers are ones
-    /// that end in `primary_right` as they do in `primary` (LayerDepth::kCutsEdge, NdsDepth's).
+    /// The farthest layer's in `primary_right` against `primary_left`, a share of the width
+    /// (layer_depth.h), below 0 while inverted; every layer's is between 0 and it. The same in a
+    /// frame that has both eyes see `primary`: as much is cut off the pictures. 0: nothing is, also
+    /// where the layers are ones that end in them as they do in `primary` (LayerDepth::kCutsEdge,
+    /// NdsDepth's).
     float layer_shift = 0.0f;
     /// The same for the Secondary Screen, from a core that has one and was told that it can be
     /// shown (SetDepthOnSecondary), while there is something to see in it.
+    Vulkan::AltScreenImage secondary_left{};
     Vulkan::AltScreenImage secondary_right{};
     float secondary_shift = 0.0f;
     Vulkan::AltScreenImage overlay{}; ///< over the whole Primary Screen, alpha premultiplied
@@ -156,8 +160,9 @@ public:
     virtual void SetGraphics(const Vulkan::AltGraphics* /*graphics*/) {}
     /// The pixels of pictures that are the GPU's (AltScreenImage::image) into `frame`.
     virtual void ReadPictures(FrameOutput& /*frame*/) {}
-    /// Which of the DS's screens it is for (NdsDepth::DepthOn), from the next frame.
-    virtual void SetDepthOn(uint32_t /*screens*/) {}
+    /// Which of the DS's screens it is for (NdsDepth::DepthOn), from the next frame. `by_slot`: of
+    /// the screens in the Primary and the Secondary slot (LayerDepth::Shared::swapped).
+    virtual void SetDepthOn(uint32_t /*screens*/, bool /*by_slot*/ = false) {}
     /// What shows the game can show a right eye's picture of the Secondary Screen
     /// (FrameOutput::secondary_right), from the next frame. Off as it starts.
     virtual void SetDepthOnSecondary(bool /*on*/) {}

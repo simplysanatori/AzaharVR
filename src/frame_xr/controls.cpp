@@ -1288,8 +1288,8 @@ void VrUi::ResetPlacement(Runtime& rt) {
     static_cast<void>(rt);
 }
 
-void VrUi::WatchPlacement(bool screens_live) {
-    if (!screens_live) {
+void VrUi::WatchPlacement(bool game_on) {
+    if (!game_on) {
         placement_live = false; // the next game loads its own
         return;
     }
@@ -1543,13 +1543,13 @@ VrUi::ScreenDraw VrUi::ScreenDrawFor(const Immersive::ScreenLayers& shown) const
 }
 
 void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) {
-    if (!info.screens_live) {
+    if (!info.game_on) {
         // No game: the next one starts with the top screen in focus and the bottom screen as its
         // settings say (immersive.cpp forgets its half of the state at the same moment).
         screen_view.Reset();
         Immersive::SetBottomFocused(false);
     }
-    WatchPlacement(info.screens_live); // AzaharFrame move
+    WatchPlacement(info.game_on); // AzaharFrame move
     if (camera_switch.Due(info.display_time)) { // AzaharFrame kiucam
         SwitchCamera(camera_switch.View());
     }

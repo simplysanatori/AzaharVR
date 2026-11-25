@@ -68,6 +68,7 @@ constexpr Rule kRules[] = {
     {Id::PokeDaisyHeader, Need::PokeDaisyGroup},
     {Id::LayerDepth, Need::LayerDepth},
     {Id::DepthOn, Need::DepthPerScreen},
+    {Id::DepthFollows, Need::DepthPerScreen},
     {Id::InvertDepth, Need::LayerDepth},
     {Id::DsTouchEnabled, Need::DsTouch},
     {Id::DsMicBlow, Need::MicBlow},

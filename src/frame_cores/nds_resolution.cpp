@@ -137,14 +137,18 @@ bool NdsResolution::GetScreens(Vulkan::AltScreenImage& top, Vulkan::AltScreenIma
     return true;
 }
 
-bool NdsResolution::GetRight(int screen, Vulkan::AltScreenImage& right) {
-    Vulkan::AltScreenImage image = right;
-    if (!hires || !hires->GetRight(screen, image)) {
+bool NdsResolution::GetEyes(int screen, Vulkan::AltScreenImage& left,
+                            Vulkan::AltScreenImage& right) {
+    std::array images{left, right};
+    if (!hires || !hires->GetEyes(screen, images[0], images[1])) {
         return false;
     }
-    image.scale = scale;
-    image.max_scale = right.max_scale;
-    right = image;
+    for (Vulkan::AltScreenImage& image : images) {
+        image.scale = scale;
+        image.max_scale = std::max(scale, ceiling);
+    }
+    left = images[0];
+    right = images[1];
     return true;
 }
 
@@ -152,8 +156,8 @@ bool NdsResolution::ShowsDepth(int screen) const {
     return hires && hires->ShowsDepth(screen);
 }
 
-int NdsResolution::RightShift() const {
-    return hires ? hires->RightShift() : 0;
+int NdsResolution::EyesShift() const {
+    return hires ? hires->EyesShift() : 0;
 }
 
 void NdsResolution::ReadScreens(Vulkan::AltScreenImage& top, Vulkan::AltScreenImage& bottom) {

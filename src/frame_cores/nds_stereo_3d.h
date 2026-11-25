@@ -34,7 +34,7 @@ private:
 };
 
 /**
- * The right eye's 3D for the software renderer: the game's polygons of the frame, copied with
+ * An eye's 3D for the software renderer: the game's polygons of the frame, copied with
  * their vertices moved, in a GPU3D of ours (it registers nothing and runs no commands; it is the
  * storage and the registers a SoftRenderer3D reads), drawn by a SoftRenderer3D of its own.
  *
@@ -45,13 +45,13 @@ private:
  * thread. The render thread hands out 192 lines a frame by a semaphore: every line is taken or
  * given back before the next frame, and none is asked for that will not come.
  */
-class NdsRight3D final : public melonDS::Renderer3D {
+class NdsEye3D final : public melonDS::Renderer3D {
 public:
     /// `game`: the game's GPU3D, only read.
-    NdsRight3D(melonDS::GPU3D& game, melonDS::SoftRenderer& parent);
+    NdsEye3D(melonDS::GPU3D& game, melonDS::SoftRenderer& parent, NdsDepth::Eye eye);
     /// Only Prepare and Scene, for a renderer of another kind; of the rest, Cut and NoScene.
-    explicit NdsRight3D(melonDS::GPU3D& game);
-    ~NdsRight3D() override;
+    NdsEye3D(melonDS::GPU3D& game, NdsDepth::Eye eye);
+    ~NdsEye3D() override;
 
     /// Copies the frame and draws it, after the left eye's renderer has started on it: that one
     /// brings the texture memory up to date and uses up its dirty bits. The polygons, vertices and
@@ -59,19 +59,24 @@ public:
     /// eye's thread only reads them.
     /// `screen`: the one the scene is for, whose view it follows (NdsDepth::ViewTrack), unless
     /// `depth` has a fixed convergence.
-    void Start(const NdsDepth::Depth& depth, int screen, bool threaded);
-    /// The frame copied, moved as it returns, into Scene. Start does it by itself.
-    NdsDepth::SceneShift Prepare(const NdsDepth::Depth& depth, int screen);
-    /// The right eye's GPU3D.
+    /// `same`: the other eye's, which has started on the same frame. Its view is this one's.
+    void Start(const NdsDepth::Depth& depth, int screen, bool threaded,
+               const NdsEye3D* same = nullptr);
+    /// The frame copied, moved by the eye's part of what it returns, into Scene. Start does it by
+    /// itself.
+    NdsDepth::SceneShift Prepare(const NdsDepth::Depth& depth, int screen,
+                                 const NdsEye3D* same = nullptr);
+    /// The eye's GPU3D.
     melonDS::GPU3D& Scene();
     /// How far right of their places the last one's polygons are (NdsDepth::SceneOffset): its
     /// lines are scrolled by as much.
     int Offset() const {
         return offset;
     }
-    /// How far right what is behind the last one is.
-    int FarShift() const {
-        return far_shift;
+    /// The columns of a line of it that what is behind it is in, scrolled by `scroll`
+    /// (ScrollOf).
+    NdsDepth::SceneEnds Ends(int scroll) const {
+        return NdsDepth::MakeSceneEnds(far_shift, scroll, left_end);
     }
     /// The game's next scene has nothing to do with the last one.
     void Cut();
@@ -111,6 +116,7 @@ private:
 
     void Create(bool threaded);
     NdsDepth::SceneView Measure();
+    NdsDepth::SceneView Follow(const NdsDepth::Depth& depth, int screen);
     melonDS::u32 ClearPixel(int x, int line) const;
     void EndAtEdge(melonDS::u32* row, int line) const;
     NdsDepth::PolygonPlace Place(const melonDS::Polygon& polygon) const;
@@ -119,17 +125,20 @@ private:
                      const NdsDepth::SceneShift& shift);
 
     melonDS::SoftRenderer* owner = nullptr;
+    const NdsDepth::Eye eye;
     std::unique_ptr<melonDS::GPU3D> scene; ///< outlives `soft`, whose thread reads it
     std::unique_ptr<melonDS::SoftRenderer3D> soft;
 
     std::array<NdsDepth::ViewTrack, 2> tracks{}; ///< of the top and the bottom screen
     NdsDepth::DepthLine line{};                  ///< this frame's
+    NdsDepth::SceneView view{};                  ///< and the view it is drawn with
     melonDS::s32 convergence = 0;
 
     bool running = false; ///< a frame was started and not yet waited for
     int taken = kLines;   ///< lines of the frame
     int offset = 0;       ///< how far right of their places they are drawn (NdsDepth::SceneOffset)
     int far_shift = 0;    ///< of what is behind the scene
+    bool left_end = true; ///< where that ends (NdsDepth::MakeSceneEnds)
 
     /// Strips share vertices: each is copied once by its own w and once by its polygon's place
     std::array<std::array<Slot, 2>, kVertices> slots{};

@@ -685,13 +685,13 @@ void Runtime::DropOldScreens(bool all) { // AzaharFrame flash3
             continue;
         }
         const bool has_image = screens[i].handle != XR_NULL_HANDLE && screens[i].has_image;
-        if (!all && !ScreenHandover::DropOld(has_image, screens_live.load(), old_kept[i])) {
+        if (!all && !ScreenHandover::DropOld(has_image, screens_state.Live(), old_kept[i])) {
             old_kept[i]++;
             continue;
         }
         const char* why = has_image             ? "the new one has a picture"
                           : all                 ? "the session ends"
-                          : !screens_live.load() ? "the screens are off"
+                          : !screens_state.Live() ? "the screens are off"
                                                 : "the new one has no picture yet";
         LOG_INFO(Frontend, "xr: swapchain {} {}x{} dropped after {} refreshes ({})", ScreenName(i),
                  old.width, old.height, old_kept[i], why);
@@ -902,8 +902,12 @@ void Runtime::SetScreensLive(bool live) {
             chain.has_image = false;
         }
     }
-    screens_live = live;
+    screens_state.SetLive(live);
     LOG_INFO(Frontend, "xr: game screens {}", live ? "live" : "gone");
+}
+
+void Runtime::SetScreensRemade(bool remade) {
+    screens_state.SetRemade(remade);
 }
 
 void Runtime::NoteLateRelease(VideoCore::XrScreen screen) {

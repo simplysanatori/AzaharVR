@@ -635,18 +635,23 @@ struct AltCoreHost::Impl {
     void Present(bool skippable) {
         if (renderer && renderer->IsReady() && last_frame.primary.HasPicture()) {
             renderer->Present(last_frame.primary, last_frame.secondary, last_frame.overlay,
-                              last_frame.primary_right, last_frame.layer_shift,
-                              last_frame.secondary_right, last_frame.secondary_shift, skippable);
+                              {last_frame.primary_left, last_frame.primary_right,
+                               last_frame.layer_shift},
+                              {last_frame.secondary_left, last_frame.secondary_right,
+                               last_frame.secondary_shift},
+                              skippable);
         }
     }
 
-    /// A paused game's redraw: the right eye's pictures are gone.
-    void DropRight(bool primary, bool secondary) {
+    /// A paused game's redraw: the eyes' pictures are gone.
+    void DropEyes(bool primary, bool secondary) {
         if (primary) {
+            last_frame.primary_left = {};
             last_frame.primary_right = {};
             last_frame.layer_shift = 0.0f;
         }
         if (secondary) {
+            last_frame.secondary_left = {};
             last_frame.secondary_right = {};
             last_frame.secondary_shift = 0.0f;
         }
@@ -1320,17 +1325,20 @@ void AltCoreHost::SetLayerDepth(uint32_t level) {
     if (impl->core) {
         impl->core->SetLayerDepth(level);
     }
-    impl->DropRight(level == 0, level == 0);
+    impl->DropEyes(level == 0, level == 0);
 }
 
-void AltCoreHost::SetDepthOn(uint32_t screens) {
+void AltCoreHost::SetDepthOn(uint32_t screens, bool by_slot) {
     std::lock_guard lock(impl->core_mutex);
     if (impl->core) {
-        impl->core->SetDepthOn(screens);
+        impl->core->SetDepthOn(screens, by_slot);
     }
     if (impl->caps.depth_per_screen) {
-        const NdsDepth::Screens on = NdsDepth::MakeScreens(screens, true);
-        impl->DropRight(!on.top, !on.bottom);
+        const NdsDepth::Screens on = NdsDepth::MakeScreens(
+            NdsDepth::OnScreens(screens, by_slot,
+                                Common::LayerDepth::Get().swapped.load(std::memory_order_relaxed)),
+            true);
+        impl->DropEyes(!on.top, !on.bottom);
     }
 }
 

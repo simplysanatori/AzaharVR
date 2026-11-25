@@ -464,6 +464,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::InvertDepth;
     case Id::DepthOn:
         return MenuSetting::DepthOn;
+    case Id::DepthFollows:
+        return MenuSetting::DepthFollows;
     case Id::AutosaveKeep:
     default: // UseGlobal checks PerGameSetting first
         return MenuSetting::AutosaveKeep;
@@ -1487,6 +1489,7 @@ void MenuPanel::BuildModel(const Host& host) {
         m.layer_depth = static_cast<int>(own.layer_depth.GetValue());
         m.invert_depth = own.invert_depth.GetValue();
         m.depth_on = static_cast<int>(own.depth_on.GetValue());
+        m.depth_by_slot = own.depth_by_slot.GetValue();
         const DsHeld held = GetDsHeld();
         m.ds_lid_closed = held.lid_closed;
         if (!Menu::TabShown(view.tab, m)) {
@@ -2230,6 +2233,13 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         Apply(Settings::Graphics(Common::AltCore::GroupOf(GetCoreCapabilities().kind)).depth_on,
               static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::DepthOn;
+        break;
+    case Id::DepthFollows:
+        r.value = value != 0 ? 1 : 0;
+        Apply(
+            Settings::Graphics(Common::AltCore::GroupOf(GetCoreCapabilities().kind)).depth_by_slot,
+            r.value != 0, per_game);
+        r.setting = MenuSetting::DepthFollows;
         break;
     default:
         return;
@@ -3096,6 +3106,7 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::SecondScreen:
     case Id::MapRefresh:
     case Id::DepthOn:
+    case Id::DepthFollows:
         if (t.index >= 0) {
             // AzaharFrame kiuweap2: Aiming turned on in Kid Icarus: "Angel's Aim Is On", once
             // (a plain new key remembers it).

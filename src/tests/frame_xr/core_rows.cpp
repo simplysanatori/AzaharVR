@@ -18,16 +18,15 @@ using namespace FrameXr::Menu;
 
 namespace {
 
-const std::set<Id> kOthersOnly{Id::CoreHeader,     Id::GbaSolarLevel, Id::DsConsoleMode,
-                               Id::DsTouchEnabled, Id::DsMicBlow,     Id::DsLidToggle,
-                               Id::ImportSave,     Id::DsScreenRotation, Id::SecondScreen,
-                               Id::AllowGameEditing, Id::GbaDsHeader, Id::PokeDaisyHeader,
-                               Id::RotatePages, Id::TurnPage, Id::MapRefresh, Id::AutoRun,
-                               Id::RunIndoors, Id::WildEncounters, Id::ReusableTms,
-                               Id::InstantText, Id::TradeEvolutions, Id::PokeHud,
-                               Id::PokeDarkMode, Id::BattleInfo, Id::BattleHints,
-                               Id::OneTapMoves, Id::BattleStyle, Id::QuickMenuStyle, Id::LayerDepth,
-                               Id::InvertDepth, Id::DepthOn};
+const std::set<Id> kOthersOnly{
+    Id::CoreHeader,      Id::GbaSolarLevel,    Id::DsConsoleMode, Id::DsTouchEnabled,
+    Id::DsMicBlow,       Id::DsLidToggle,      Id::ImportSave,    Id::DsScreenRotation,
+    Id::SecondScreen,    Id::AllowGameEditing, Id::GbaDsHeader,   Id::PokeDaisyHeader,
+    Id::RotatePages,     Id::TurnPage,         Id::MapRefresh,    Id::AutoRun,
+    Id::RunIndoors,      Id::WildEncounters,   Id::ReusableTms,   Id::InstantText,
+    Id::TradeEvolutions, Id::PokeHud,          Id::PokeDarkMode,  Id::BattleInfo,
+    Id::BattleHints,     Id::OneTapMoves,      Id::BattleStyle,   Id::QuickMenuStyle,
+    Id::LayerDepth,      Id::InvertDepth,      Id::DepthOn,       Id::DepthFollows};
 
 /// Every console's.
 const std::set<Id> kCommon{
@@ -836,20 +835,32 @@ TEST_CASE("Core rows: Invert Depth goes with Layer Depth", "[frame_xr][tabmenu]"
 
 TEST_CASE("Core rows: Depth On is the DS's, with Layer Depth", "[frame_xr][tabmenu]") {
     CHECK(LabelFor(Id::DepthOn) == "Depth On");
+    CHECK(LabelFor(Id::DepthFollows) == "Depth Follows");
+    CHECK(DepthOnOptions(false) ==
+          std::vector<std::string>{"Both Screens", "Top Screen", "Bottom Screen"});
+    CHECK(DepthOnOptions(true) ==
+          std::vector<std::string>{"Both Screens", "Primary Screen", "Secondary Screen"});
+    CHECK(OptionsFor(Id::DepthFollows) ==
+          std::vector<std::string>{"DS Screens", "Primary & Secondary"});
     CHECK(PerGameSetting(Id::DepthOn));
+    CHECK(PerGameSetting(Id::DepthFollows));
     CHECK(SectionOf(Id::DepthOn) == SettingsSection::Graphics);
+    CHECK(SectionOf(Id::DepthFollows) == SettingsSection::Graphics);
     for (CoreCaps core : {CoreCaps::ForGBA(), CoreCaps::ForGB(), CoreCaps::ForNDS(),
                           CoreCaps::ForNDS(true), CoreCaps::ForN3DS()}) {
         const bool ds = Common::AltCore::IsDs(core.kind);
         core.layer_depth = !Is3ds(core);
-        CHECK(!RowApplies(Id::DepthOn, core));
-        core.depth_per_screen = ds; // as NdsCore says it
-        CHECK(RowApplies(Id::DepthOn, core) == ds);
-        MenuModel m = Game(core);
-        m.layer_depth = 0;
-        CHECK(!Pressable(m, SettingsView(SettingsSection::Graphics), Id::DepthOn));
-        m.layer_depth = 1;
-        CHECK(Pressable(m, SettingsView(SettingsSection::Graphics), Id::DepthOn) == ds);
+        for (const Id id : {Id::DepthOn, Id::DepthFollows}) {
+            core.depth_per_screen = false;
+            CHECK(!RowApplies(id, core));
+            core.depth_per_screen = ds; // as NdsCore says it
+            CHECK(RowApplies(id, core) == ds);
+            MenuModel m = Game(core);
+            m.layer_depth = 0;
+            CHECK(!Pressable(m, SettingsView(SettingsSection::Graphics), id));
+            m.layer_depth = 1;
+            CHECK(Pressable(m, SettingsView(SettingsSection::Graphics), id) == ds);
+        }
     }
 }
 

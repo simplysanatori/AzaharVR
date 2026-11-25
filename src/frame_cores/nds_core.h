@@ -88,7 +88,7 @@ public:
     void SetConsoleMode(bool dsi) override;
     void SetLayerDepth(uint32_t level) override;
     void SetMaxLayerShift(float share) override;
-    void SetDepthOn(uint32_t screens) override;
+    void SetDepthOn(uint32_t screens, bool by_slot = false) override;
     void SetDepthOnSecondary(bool on) override;
 
     /// Layer Depth: the w of the 3D scene that stands on its layer, for a game that is to have a

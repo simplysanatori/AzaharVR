@@ -680,7 +680,7 @@ void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
     const auto gpu = VideoCore::DynamicResolution::TakeGpuSecond();
     DynamicResolution::Second dr_second{seconds,     frames,     display_period_ns / 1e6,
                                         emu_frames,  gpu.frames, gpu.avg_ms,
-                                        screens_live.load()};
+                                        screens_state.Live()};
     // AzaharFrame bfidr: and Black Frame Insertion's symptoms, while it flashed most of the second.
     dr_second.bfi = frames > 0 && bfi_second.flashing * 2 >= frames;
     dr_second.late_releases = std::max(late[0], late[1]);
@@ -702,7 +702,7 @@ void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
     } else if (DynamicResolution::Drop() != 0) {
         DynamicResolution::Reset();
     }
-    if (screens_live.load()) {
+    if (screens_state.Live()) {
         PerfLine::Window& w = perf_window;
         w.seconds += seconds;
         w.display_frames += frames;
@@ -770,7 +770,7 @@ void Runtime::LogSummary(double seconds, double wait_avg_ms, double wait_max_ms,
              seconds, frames, wait_avg_ms, wait_max_ms, rel[0], rel[1], rel[2], late[0], late[1],
              late[2], spill_shown, spill_replaced, emu_waits, emu_wait_ms,
              unfinished[0], unfinished[1], unfinished[2], skipped, end_errors,
-             StateName(state.load()), screens_live.load() ? "live" : "off", emu, window_presents,
+             StateName(state.load()), screens_state.Live() ? "live" : "off", emu, window_presents,
              queue_wait_ms, emu_submit_ms, emu_submit_wait_ms, window_present_ms, alloc_ms, alloc_mib,
              worst.period_ms,
              PhasesText(worst), eyes_mixed, builds + busy);
@@ -793,7 +793,7 @@ void Runtime::LogFlatSummary(double seconds) {
              "xr: flat {:.1f}s, window presents {} ({:.2f} ms avg, {:.2f} max on the emu thread), "
              "screens {}, {}, SDL pumped {} times{}",
              seconds, presents, presents ? us_sum / 1000.0 / presents : 0.0, us_max / 1000.0,
-             screens_live.load() ? "live" : "off",
+             screens_state.Live() ? "live" : "off",
              ui ? ui->TakeFlatInputSummary() : std::string{"no input"}, pumped,
              lost ? ", OpenXR gone" : "");
 }
@@ -1137,7 +1137,8 @@ void Runtime::FrameLoop() {
                        fs.predictedDisplayPeriod,
                        state.load(),
                        fs.shouldRender == XR_TRUE,
-                       screens_live.load()};
+                       screens_state.Live(),
+                       screens_state.GameOn()};
         const Common::AltCore::Capabilities core_caps = GetCoreCapabilities();
         const bool top_is_stereo = top_stereo.load(std::memory_order_relaxed);
         const bool packed_now = packed_top && top_is_stereo;
@@ -1260,7 +1261,7 @@ void Runtime::FrameLoop() {
         bool screens_swapped = false;
         // AzaharFrame doubling: the two eyes' top images of separate swapchains from different
         // game frames (a release of the set came between); never with set releases or packed.
-        if (!packed_top && top_is_stereo && screens_live) {
+        if (!packed_top && top_is_stereo && screens_state.Live()) {
             const ScreenChain& l = screens[static_cast<std::size_t>(VideoCore::XrScreen::TopLeft)];
             const ScreenChain& r = screens[static_cast<std::size_t>(VideoCore::XrScreen::TopRight)];
             if (l.has_image && r.has_image && l.frame_serial != r.frame_serial) {
@@ -1291,7 +1292,7 @@ void Runtime::FrameLoop() {
         g_top_projected.store(proj_mode, std::memory_order_relaxed);
         const bool proj_also_quads = // AzaharFrame projscreen: a mock check only
             proj_mode && TestSwitches::OnFrom(Common::FrameTestSwitches::Value(Vis::kProjAlsoQuadsSwitch));
-        if (fs.shouldRender && screens_live) {
+        if (fs.shouldRender && screens_state.Live()) {
             ScreenPlacement place;
             {
                 std::scoped_lock lock{placement_mutex};
@@ -1927,8 +1928,9 @@ void Runtime::FrameLoop() {
         if (fs.shouldRender) {
             // A new list when the panels' context changes, the screens' layers change in number,
             // or (projdef) the top screen's path changes (LayerSlots::ContextKey).
-            layer_slots.Begin(LayerSlots::ContextKey(ui ? ui->LayerContext() : 0, screens_live,
-                                                     want_proj, screen_layers));
+            layer_slots.Begin(LayerSlots::ContextKey(ui ? ui->LayerContext() : 0,
+                                                     screens_state.Live(), want_proj,
+                                                     screen_layers));
             // integ13: the HUD's quads have their slots from the start of the list, in their draw
             // order (as slot_add keys them: their group and the HUD's one swapchain), so a toast
             // or a label that first shows mid-game fills its own slot and never moves the Top
@@ -1954,7 +1956,7 @@ void Runtime::FrameLoop() {
             std::scoped_lock lock{quads_mutex};
             std::vector<const Quad*> extra;
             for (const auto& [id, q] : quads) {
-                if (q.visible && q.swapchain && (q.with_game || !screens_live)) {
+                if (q.visible && q.swapchain && (q.with_game || !screens_state.Live())) {
                     extra.push_back(&q);
                 }
             }
@@ -2131,7 +2133,7 @@ void Runtime::FrameLoop() {
         // release came between): with the image lag, the picture on view on the next refresh.
         sent_serial =
             ImageLag::SentAfterEnd(top_carried, fs.shouldRender, XR_SUCCEEDED(r), top_serial);
-        if (sent_serial == 0 && screens_live) { // counted while a game is on view
+        if (sent_serial == 0 && screens_state.Live()) { // counted while a game is on view
             none_sent[static_cast<std::size_t>(
                 ImageLag::WhyNoneSent(fs.shouldRender, XR_SUCCEEDED(r)))]++;
         }
@@ -2148,7 +2150,7 @@ void Runtime::FrameLoop() {
                 }
             }
             pacing.NoteLatch(shown_serial, fs.predictedDisplayPeriod,
-                             fs.shouldRender && screens_live && XR_SUCCEEDED(r));
+                             fs.shouldRender && screens_state.Live() && XR_SUCCEEDED(r));
         }
 
         const auto log_now = Clock::now();

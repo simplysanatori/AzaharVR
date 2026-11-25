@@ -7,22 +7,23 @@
 #include <cstdint>
 #include <memory>
 
+#include "common/layer_depth.h"
 #include "frame_cores/frame_driver.h"
 
 struct mCore;
 
 namespace FrameCores {
 
-/// The right eye's picture of a GBA game (Layer Depth): a second software renderer that draws each
-/// line from what the game's has as it draws it, with the layers moved. It sits below whatever a
-/// driver hooks above it, so a layer or sprite the driver leaves out is left out here too.
-class GbaRightEye {
+/// The two eyes' pictures of a GBA game (Layer Depth): a software renderer for each that draws each
+/// line from what the game's has as it draws it, with the layers moved. They sit below whatever a
+/// driver hooks above them, so a layer or sprite the driver leaves out is left out here too.
+class GbaEyes {
 public:
-    GbaRightEye();
-    ~GbaRightEye();
+    GbaEyes();
+    ~GbaEyes();
 
-    GbaRightEye(const GbaRightEye&) = delete;
-    GbaRightEye& operator=(const GbaRightEye&) = delete;
+    GbaEyes(const GbaEyes&) = delete;
+    GbaEyes& operator=(const GbaEyes&) = delete;
 
     /// Before a driver is made: one that hooks the renderer keeps what it finds there. False: the
     /// game is not drawn by mGBA's software renderer.
@@ -40,10 +41,10 @@ public:
     void EndFrame();
 
     /// Of the last frame, until the next. None while off.
-    DriverPicture Picture() const;
+    DriverPicture Picture(Common::LayerDepth::Eye eye) const;
     /// The game's, as its renderer drew it: without what a driver painted on it since.
     DriverPicture GamePicture() const;
-    /// FrameOutput::layer_shift for Picture.
+    /// FrameOutput::layer_shift for the two.
     float EdgeShift() const;
 
 private:

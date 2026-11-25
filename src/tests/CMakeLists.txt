@@ -5,6 +5,7 @@ add_executable(tests
     frame_xr/input_mapper.cpp # AzaharFrame
     frame_xr/screen_rig.cpp # AzaharFrame vrsize
     frame_xr/screen_view.cpp # AzaharFrame screenswap
+    frame_xr/screens_state.cpp
     frame_xr/touchpad_touch.cpp # AzaharFrame touchpad
     frame_xr/gamepads.cpp # AzaharFrame pads
     frame_xr/mouse.cpp # AzaharFrame padsui

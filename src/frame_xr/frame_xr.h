@@ -115,6 +115,7 @@ struct FrameInfo {
     XrSessionState state;
     bool should_render;
     bool screens_live;     ///< a game is producing images
+    bool game_on;          ///< a game runs, also while its screens are made again
 };
 
 /// Called on the XR thread once per display frame, after xrBeginFrame and the view
@@ -478,6 +479,7 @@ enum class MenuSetting {
     LayerDepth,  ///< `value`: 0 to 3 (layer_depth), per game too
     InvertDepth, ///< `value`: 0 Off, 1 On (invert_depth), per game too
     DepthOn,     ///< `value`: 0 both screens, 1 top, 2 bottom (ds_depth_on), per game too
+    DepthFollows, ///< `value`: 0 the DS's screens, 1 the slots (ds_depth_by_slot), per game too
 };
 struct MenuRequest {
     MenuCommand command = MenuCommand::Continue;

@@ -184,7 +184,8 @@ void ShadowEye::Run(uint32_t keys) {
         FailOnce("the game's state was not taken");
         return;
     }
-    background_shift = BackgroundShift();
+    total_shift = TotalShift();
+    background_shift = Common::LayerDepth::EyeShift(total_shift, eye);
     ShiftLayers();
     core->setKeys(core, keys);
     running = this;
@@ -205,10 +206,10 @@ DriverPicture ShadowEye::Picture() const {
 }
 
 float ShadowEye::EdgeShift() const {
-    return drawn ? Common::LayerDepth::EdgeShift(background_shift, width) : 0.0f;
+    return drawn ? Common::LayerDepth::EdgeShift(total_shift, width) : 0.0f;
 }
 
-int32_t ShadowEye::BackgroundShift() const {
+int32_t ShadowEye::TotalShift() const {
     namespace LayerDepth = Common::LayerDepth;
     return LayerDepth::Directed(
         LayerDepth::LayerShift(depth, kBackgroundSteps, kBackgroundSteps, width, max_shift),
@@ -248,7 +249,7 @@ void ShadowEye::ShiftLayers() {
 
 thread_local ShadowEye* ShadowEye::running = nullptr;
 
-// The second core's renderer, which draws in Run alone.
+// The eye's core's renderer, which draws in Run alone.
 void ShadowEye::Hook(GBVideoRenderer* renderer, int start, int end, int y) {
     if (running) {
         running->DrawLine(renderer, start, end, y);
@@ -260,22 +261,26 @@ void ShadowEye::Hook(GBVideoRenderer* renderer, int start, int end, int y) {
 void ShadowEye::DrawLine(GBVideoRenderer* renderer, int start, int end, int y) const {
     draw_range(renderer, start, end, y);
     auto& software = *reinterpret_cast<GBVideoSoftwareRenderer*>(renderer);
-    const int edge = std::min(Common::LayerDepth::EdgeColumns(background_shift), end);
+    const int columns =
+        Common::LayerDepth::EdgeColumns(total_shift) != 0 ? std::abs(background_shift) : 0;
+    const int from =
+        background_shift >= 0 ? start : std::max(start, GB_VIDEO_HORIZONTAL_PIXELS - columns);
+    const int to = background_shift >= 0 ? std::min(columns, end) : end;
     const bool has_background =
         GBRegisterLCDCIsBgEnable(software.lcdc) || software.model >= GB_MODEL_CGB;
-    if (start >= edge || !has_background || renderer->sgbRenderMode != 0) {
+    if (columns == 0 || from >= to || !has_background || renderer->sgbRenderMode != 0) {
         return;
     }
     renderer->disableBG = true;
-    draw_range(renderer, start, edge, y);
+    draw_range(renderer, from, to, y);
     renderer->disableBG = false;
     software.lastX = end;
 
     const bool window = GBRegisterLCDCIsWindow(software.lcdc) && software.hasWindow;
-    const int window_x = window ? software.wx + software.currentWx - 7 : edge;
+    const int window_x = window ? software.wx + software.currentWx - 7 : to;
     uint32_t* const line =
         software.outputBuffer + static_cast<std::ptrdiff_t>(software.outputBufferStride) * y;
-    for (int x = start; x < std::min(window_x, edge); ++x) {
+    for (int x = from; x < std::min(window_x, to); ++x) {
         if ((software.row[x] & kPaletteMask) < kSpritePalettes) {
             line[x] = Common::LayerDepth::kBeyond;
         }

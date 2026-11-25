@@ -371,13 +371,13 @@ public:
     u64 batch_serial = 1;
 
     State st;
-    State other;              ///< the state not in use (UseState)
-    int state = 0;            ///< which `st` is
-    std::vector<GLuint> made; ///< the names made in state 1, some of them deleted since
+    std::array<State, kStates> kept; ///< those not in use (UseState)
+    int state = 0;                   ///< which `st` is
+    std::vector<GLuint> made;        ///< the names made in the others, some deleted since
     u32 next_name = 1;
 
     u32 NewName() {
-        if (state == 1) {
+        if (state != 0) {
             made.push_back(next_name);
         }
         return next_name++;
@@ -2005,7 +2005,7 @@ public:
 namespace {
 ShaderPatch g_shader_patch = nullptr;
 Context* g_ctx = nullptr; ///< the gl* calls go to it (null: they do nothing)
-}
+} // namespace
 
 void Context::ClearStencilBits() {
     // a triangle over the picture that replaces the masked bits by zero
@@ -2083,7 +2083,8 @@ void Destroy(Context* c) {
 
 void UseState(int state) {
     if (Context* c = g_ctx; c && c->state != state) {
-        std::swap(c->st, c->other);
+        c->kept[static_cast<std::size_t>(c->state)] = std::move(c->st);
+        c->st = std::move(c->kept[static_cast<std::size_t>(state)]);
         c->state = state;
     }
 }
@@ -2117,7 +2118,7 @@ void FreeState() {
         glDeleteProgram(name);
         glDeleteShader(name);
     }
-    c->other = {};
+    c->kept = {};
 }
 
 void Flush(bool wait) {

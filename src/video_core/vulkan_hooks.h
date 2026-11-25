@@ -121,6 +121,9 @@ public:
 
     /// The renderer stopped (true) or started (false) producing game images.
     virtual void SetScreensLive(bool live) = 0;
+    /// The screens are about to be made again (off for a moment) for the same game, until they are
+    /// live again; false: they will not be, it stops.
+    virtual void SetScreensRemade(bool /*remade*/) {}
 
     /// Counts for the once-a-second log line.
     /// A frame found the screen's swapchain image still in use (the GPU had not finished the

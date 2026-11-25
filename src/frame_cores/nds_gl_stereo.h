@@ -17,50 +17,49 @@
 namespace FrameCores {
 
 /**
- * Layer Depth over 1x: melonDS's hi-res renderer, with a second one for the right eye, which is
- * told of everything after the first, with the backgrounds, sprites and 3D moved as nds_depth.h
- * says. The game and the left picture never see it (the state of OpenGL is the first's own,
- * ds_gl_state.h).
+ * Layer Depth over 1x: melonDS's hi-res renderer, with one more for each eye, which are told of
+ * everything after the first, with the backgrounds, sprites and 3D moved as nds_depth.h says. The
+ * game and its own picture never see them (the state of OpenGL is the first's own, ds_gl_state.h).
  *
- * Display capture: the right eye has captures of its own, from its own pictures, and a background
- * or sprite that shows one is not moved, as the depth is in it. Where engine A is not drawn for the
- * right eye (it is on the bottom screen) the left eye's capture is taken over. What the CPU reads
- * of a capture is the left eye's.
+ * Display capture: an eye has captures of its own, from its own pictures, and a background or
+ * sprite that shows one is not moved, as the depth is in it. Where engine A is not drawn for the
+ * eyes (it is on the bottom screen) the game's capture is taken over. What the CPU reads of a
+ * capture is the game's.
  *
- * What is moved right leaves room at the right eye's left edge, which is black, as with the
- * software renderer (NdsDepth::EdgeLayers): its compositor and its 3D's clear plane end there
- * (nds_gl_edge.h).
+ * What is moved leaves room at the right eye's left edge and the left eye's right one, which is
+ * black, as with the software renderer (NdsDepth::EdgeLayers): the compositor and the 3D's clear
+ * plane end there (nds_gl_edge.h).
  *
- * Only an engine whose screen has depth (NdsDepth::Screens, ShownDepth) is drawn for the right eye.
- * A frame without all of its right picture (the first one, or one whose engines changed screens in
- * it) has none.
+ * Only an engine whose screen has depth (NdsDepth::Screens, ShownDepth) is drawn for the eyes. A
+ * frame without all of their pictures (the first one, or one whose engines changed screens in it)
+ * has none.
  */
 class StereoGl : public melonDS::GLRenderer {
 public:
     explicit StereoGl(melonDS::NDS& nds);
     ~StereoGl() override;
 
-    /// Between frames, for the next one. False: there is no second renderer to be had, and there
+    /// Between frames, for the next one. False: the eyes' renderers are not to be had, and there
     /// will be none.
     bool SetDepth(const NdsDepth::Depth& depth);
 
-    /// The last frame's right picture, as GetFramebuffers' of the left one. 0: none, the left one
-    /// is for both eyes.
-    GLuint Right(int screen) const;
+    /// The last frame's picture of an eye, as GetFramebuffers' of the game's own. 0, for either
+    /// eye: none, the game's is for both.
+    GLuint Picture(NdsDepth::Eye eye, int screen) const;
 
-    /// The screen's picture is one for each eye, also in a frame without a right one (ShownDepth).
+    /// The screen's picture is one for each eye, also in a frame without them (ShownDepth).
     bool ShowsDepth(int screen) const {
         return shown_depth[screen];
     }
 
-    /// The farthest layer's shift in it, in pixels: a picture is drawn a frame after SetDepth.
-    int RightShift() const {
+    /// The farthest layer's shift between them, in pixels: they are drawn a frame after SetDepth.
+    int Shift() const {
         return shown_shift;
     }
 
-    /// The second renderer is there
-    bool HasRight() const {
-        return right != nullptr;
+    /// The eyes' renderers are there
+    bool HasEyes() const {
+        return eyes[0].renderer != nullptr;
     }
 
     void Reset() override;
@@ -76,11 +75,11 @@ public:
 
 private:
     struct HasScene;
-    class RightEye;
-    class RightEye2D;
+    class EyeRenderer;
+    class Eye2D;
 
     /// What of the game's memory has changed since a renderer looked. melonDS has this once, and
-    /// whoever looks first takes it: this is the right eye's.
+    /// whoever looks first takes it: this is one eye's.
     struct Unseen {
         std::array<std::array<melonDS::u64, 4>, 9> vram{};
         std::array<melonDS::u16, 32> abg{};
@@ -101,42 +100,56 @@ private:
         void Swap(melonDS::GPU& gpu);
     };
 
-    bool MakeRight();
-    void DropRight();
+    /// How an eye's 3D is moved, and the columns of it that what is behind it is in.
+    struct Drawn {
+        NdsDepth::SceneShift shift{};
+        int offset = 0;
+        int begin = 0;
+        int end = 0;
+        bool operator==(const Drawn&) const = default;
+    };
+
+    struct EyeState {
+        std::unique_ptr<EyeRenderer> renderer; ///< none while off
+        Unseen unseen{};
+        /// Of the 3D that is there, if it is of the game's last frame of 3D
+        std::optional<Drawn> drawn{};
+        int scene_offset = 0; ///< this frame's 3D's
+    };
+
+    bool MakeEyes();
+    void DropEyes();
+    EyeState& Of(NdsDepth::Eye eye) {
+        return eyes[static_cast<std::size_t>(eye)];
+    }
+    NdsEye3D& SceneOf(NdsDepth::Eye eye);
     template <typename F>
-    void WithRight(F&& f);
+    void With(NdsDepth::Eye eye, F&& f);
+    template <typename F>
+    void WithEyes(F&& f);
+    void NoteUnseen();
     void CopyCaptures(const melonDS::GLRenderer& from, melonDS::GLRenderer& to, melonDS::u32 bank,
                       bool wide);
     void Forget();
     void StartScene();
     void BeginFrame();
 
-    std::unique_ptr<RightEye> right; ///< none while off
-    Unseen unseen{};
+    std::array<EyeState, 2> eyes; ///< by Eye
     melonDS::RendererSettings settings{};
     NdsDepth::Depth wanted{};
     NdsDepth::TopWatch watch{};
     ShownDepth shown_depth{};    ///< this frame's
     bool begun = false;          ///< a frame, none of whose lines is drawn yet
     bool a_on_top = false;       ///< engine A, this frame
-    std::array<bool, 2> draws{}; ///< engine A, engine B: for the right eye too, this frame
-    /// The right eye's 3D that is there, if it is of the game's last frame of 3D: how it is moved,
-    /// and where what is behind it ends.
-    struct Drawn {
-        NdsDepth::SceneShift shift{};
-        int edge = 0;
-        bool operator==(const Drawn&) const = default;
-    };
-    std::optional<Drawn> drawn{};
-    int scene_offset = 0;    ///< this frame's 3D's
-    int next_shift = 0;      ///< of this frame's farthest layer
-    int ended_shift = 0;     ///< the one's before
-    int shown_shift = 0;     ///< the last frame's
-    bool next_scene = false; ///< the coming frame's 3D is drawn for the right eye
-    bool scene = false;      ///< this frame's is
-    bool no_scene = false;   ///< a line shows 3D, and it is not
-    int lines = -1;          ///< of the right eye's, this frame; < 0: not all will be
-    /// The frame that ends has all of them, of a screen that has a right picture
+    std::array<bool, 2> draws{}; ///< engine A, engine B: for the eyes too, this frame
+    int next_shift = 0;          ///< of this frame's farthest layer
+    int ended_shift = 0;         ///< the one's before
+    int shown_shift = 0;         ///< the last frame's
+    bool next_scene = false;     ///< the coming frame's 3D is drawn for the eyes
+    bool scene = false;          ///< this frame's is
+    bool no_scene = false;       ///< a line shows 3D, and it is not
+    int lines = -1;              ///< of the eyes', this frame; < 0: not all will be
+    /// The frame that ends has all of them, of a screen that has the eyes' pictures
     std::array<bool, 2> complete{};
     bool saving = false;
     std::array<bool, 2> ready{}; ///< the last frame's

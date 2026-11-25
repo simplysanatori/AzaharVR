@@ -16,12 +16,12 @@ struct mCore;
 
 namespace FrameCores {
 
-/// The right eye's picture of a Game Boy game (Layer Depth): a second core that gets the game's
-/// whole state every frame and draws the same frame with its layers moved. The game's core is only
+/// An eye's picture of a Game Boy game (Layer Depth): another core that gets the game's whole state
+/// every frame and draws the same frame with its layers moved. The game's core is only
 /// read.
 class ShadowEye {
 public:
-    ShadowEye() = default;
+    explicit ShadowEye(Common::LayerDepth::Eye eye_) : eye{eye_} {}
     ~ShadowEye();
 
     ShadowEye(const ShadowEye&) = delete;
@@ -49,7 +49,7 @@ public:
 
     /// The frame of the last Run, until the next. None while off.
     DriverPicture Picture() const;
-    /// FrameOutput::layer_shift for that picture.
+    /// FrameOutput::layer_shift for the eyes' pictures.
     float EdgeShift() const;
 
 private:
@@ -60,9 +60,10 @@ private:
 
     bool CopyGame();
     void ShiftLayers();
-    int32_t BackgroundShift() const;
+    int32_t TotalShift() const;
     void FailOnce(const char* what);
 
+    const Common::LayerDepth::Eye eye;
     mCore* game = nullptr;
     mCore* core = nullptr;
     uint32_t width = 0;
@@ -70,6 +71,7 @@ private:
     uint32_t depth = 0;
     DrawRange draw_range = nullptr; ///< mGBA's
     float max_shift = Common::LayerDepth::kNoLimit;
+    int32_t total_shift = 0;      ///< between the eyes
     int32_t background_shift = 0; ///< in `pixels`
     std::vector<uint32_t> pixels; ///< XBGR8888, alpha set after each frame
     std::vector<uint8_t> state;
