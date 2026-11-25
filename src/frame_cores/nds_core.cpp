@@ -37,6 +37,7 @@
 #include "Savestate.h"
 
 #include "common/logging/log.h"
+#include "frame_cores/nds_stereo_renderer.h"
 #include "frame_cores/rom_info.h"
 
 namespace FrameCores {
@@ -184,6 +185,8 @@ std::string FormatArCodeHex(const std::vector<melonDS::u32>& words) {
 
 struct NdsCore::Impl {
     std::unique_ptr<melonDS::NDS> nds;
+    StereoSoft* stereo = nullptr; ///< `nds`'s renderer, once the game has had Layer Depth
+    float max_layer_shift = Common::LayerDepth::kNoLimit;
     bool is_dsi = false;
     bool loaded = false;
 
@@ -225,6 +228,35 @@ struct NdsCore::Impl {
     static int64_t NowMs() {
         const auto now = std::chrono::steady_clock::now().time_since_epoch();
         return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+    }
+
+    NdsDepth::Depth Depth() const {
+        // A turned screen's pixels would move up and down on it
+        return rotation_deg == 0 ? NdsDepth::MakeDepth(opts.layer_depth, max_layer_shift)
+                                 : NdsDepth::Depth{};
+    }
+
+    /// Between frames.
+    void ApplyDepth() {
+        const NdsDepth::Depth depth = Depth();
+        if (depth.on && !stereo) {
+            auto renderer = std::make_unique<StereoSoft>(*nds);
+            stereo = renderer.get();
+            nds->SetRenderer(std::move(renderer));
+            ApplyRenderSettings();
+        }
+        if (stereo) {
+            stereo->SetDepth(depth);
+        }
+    }
+
+    void ApplyRenderSettings() {
+        melonDS::RendererSettings settings{};
+        settings.ScaleFactor = 1;
+        settings.Threaded = opts.threaded_3d;
+        settings.HiresCoordinates = false;
+        settings.BetterPolygons = false;
+        nds->GetRenderer().SetRenderSettings(settings);
     }
 
     void FlushPendingSaves(bool force) {
@@ -456,6 +488,7 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
                                   opts.use_bios && HasDsiFiles(paths.bios_dir), opts);
     impl->is_dsi = use_dsi;
     impl->caps = Common::AltCore::Capabilities::ForNDS(use_dsi);
+    impl->caps.layer_depth = true;
 
     // Prepare battery save if already on disk
     melonDS::NDSCart::NDSCartArgs cart_args{};
@@ -546,13 +579,8 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
         impl->nds = std::make_unique<melonDS::NDS>(std::move(nds_args), this);
     }
 
-    // Configure threaded software 3D renderer
-    melonDS::RendererSettings rsettings{};
-    rsettings.ScaleFactor = 1;
-    rsettings.Threaded = opts.threaded_3d;
-    rsettings.HiresCoordinates = false;
-    rsettings.BetterPolygons = false;
-    impl->nds->GetRenderer().SetRenderSettings(rsettings);
+    impl->ApplyRenderSettings();
+    impl->ApplyDepth();
 
     impl->nds->SetNDSCart(std::move(cart));
     if (!use_dsi) {
@@ -581,6 +609,7 @@ void NdsCore::Unload() {
     if (impl->nds) {
         impl->nds->Stop(melonDS::Platform::StopReason::External);
         impl->nds.reset();
+        impl->stereo = nullptr;
     }
     impl->microphone.Stop();
     impl->microphone.Close();
@@ -620,6 +649,8 @@ void NdsCore::RunFrame(FrameOutput& out) {
 
     out.primary = {};
     out.secondary = {};
+    out.primary_right = {};
+    out.layer_shift = 0.0f;
     out.audio_pcm.clear();
     out.rumble = 0.0f;
     out.metrics_changed = false;
@@ -641,6 +672,7 @@ void NdsCore::RunFrame(FrameOutput& out) {
         impl->nds->ReleaseScreen();
     }
 
+    impl->ApplyDepth();
     impl->nds->RunFrame();
 
     void* top_fb = nullptr;
@@ -659,6 +691,15 @@ void NdsCore::RunFrame(FrameOutput& out) {
             out.secondary.height = kDsHeight;
             out.secondary.stride_pixels = kDsWidth;
             out.secondary.bgra = true;
+        }
+        if (const NdsDepth::Depth depth = impl->Depth(); depth.on) {
+            // Always one, so that the headset's screens are not made again each time a game has no
+            // right picture
+            out.primary_right = out.primary;
+            if (const melonDS::u32* right = impl->stereo->RightTop()) {
+                out.primary_right.pixels = right;
+            }
+            out.layer_shift = static_cast<float>(depth.layers[3]) / NdsDepth::kWidth;
         }
     }
 
@@ -868,6 +909,18 @@ void NdsCore::SetConsoleMode(bool dsi) {
     opts.force_dsi = dsi;
     opts.force_nds = !dsi;
     Load(rom, paths, opts);
+}
+
+void NdsCore::SetLayerDepth(uint32_t level) {
+    impl->opts.layer_depth = level;
+}
+
+void NdsCore::SetMaxLayerShift(float share) {
+    impl->max_layer_shift = share;
+}
+
+NdsDepth::Lines NdsCore::DepthLines() const {
+    return impl->stereo ? impl->stereo->LastLines() : NdsDepth::Lines{};
 }
 
 void NdsCore::OnSignalStop(int reason) {

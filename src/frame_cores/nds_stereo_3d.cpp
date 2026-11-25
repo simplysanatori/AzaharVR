@@ -86,11 +86,7 @@ u32* NdsRight3D::GetLine(int line) {
     return row;
 }
 
-void NdsRight3D::Start(const NdsDepth::Depth3D& depth, bool threaded) {
-    if (depth.strength == 0) {
-        Stop();
-        return;
-    }
+void NdsRight3D::Start(const NdsDepth::SceneShift& shift, bool threaded) {
     if (soft && soft->IsThreaded() != threaded) {
         Stop();
     }
@@ -98,13 +94,13 @@ void NdsRight3D::Start(const NdsDepth::Depth3D& depth, bool threaded) {
         Create(threaded);
     }
     Drop(); // the thread is idle from here on
-    FillScene(depth);
+    FillScene(shift);
     soft->RenderFrame();
     running = threaded;
     taken = 0;
 }
 
-void NdsRight3D::FillScene(const NdsDepth::Depth3D& depth) {
+void NdsRight3D::FillScene(const NdsDepth::SceneShift& shift) {
     const melonDS::GPU3D& game = GPU3D;
 
     scene->RenderDispCnt = game.RenderDispCnt;
@@ -132,7 +128,7 @@ void NdsRight3D::FillScene(const NdsDepth::Depth3D& depth) {
             continue; // not drawn, and a state load can leave its vertices unset
         }
         melonDS::Polygon& to = scene->PolygonRAM[count];
-        if (CopyPolygon(*from, to, depth)) {
+        if (CopyPolygon(*from, to, shift)) {
             scene->RenderPolygonRAM[count++] = &to;
         }
     }
@@ -140,7 +136,7 @@ void NdsRight3D::FillScene(const NdsDepth::Depth3D& depth) {
 }
 
 bool NdsRight3D::CopyPolygon(const melonDS::Polygon& from, melonDS::Polygon& to,
-                             const NdsDepth::Depth3D& depth) {
+                             const NdsDepth::SceneShift& shift) {
     const std::size_t count = from.NumVertices;
     if (count == 0 || count > kMaxPolygonVertices || from.VTop >= count || from.VBottom >= count) {
         return false;
@@ -167,7 +163,7 @@ bool NdsRight3D::CopyPolygon(const melonDS::Polygon& from, melonDS::Polygon& to,
             copy = *from.Vertices[i];
             if (moves) {
                 copy.FinalPosition[0] = NdsDepth::ShiftVertexX(
-                    copy.FinalPosition[0], NdsDepth::VertexShift(depth, copy.Position[3]));
+                    copy.FinalPosition[0], NdsDepth::VertexShift(shift, copy.Position[3]));
             }
         }
         to.Vertices[i] = &scene->VertexRAM[slot.index];

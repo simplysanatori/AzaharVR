@@ -12,6 +12,7 @@
 #include <string>
 
 #include "frame_cores/core_backend.h"
+#include "frame_cores/nds_depth.h"
 
 namespace FrameCores {
 
@@ -84,6 +85,11 @@ public:
     void SetScreenRotation(int deg) override;
     bool SetGbaSlotRom(const std::string& path) override;
     void SetConsoleMode(bool dsi) override;
+    void SetLayerDepth(uint32_t level) override;
+    void SetMaxLayerShift(float share) override;
+
+    /// Layer Depth's, of the last frame.
+    NdsDepth::Lines DepthLines() const;
 
     // Platform callback entrypoints routed from melonds_platform.cpp via userdata.
     void OnSignalStop(int reason);
