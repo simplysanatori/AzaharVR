@@ -136,7 +136,14 @@ TEST_CASE("Core rows: the table for each other console", "[frame_xr][tabmenu]") 
         touch.has_save_import = false;
         CHECK(!RowApplies(Id::CoreHeader, touch));
     }
-    // A core that draws at a chosen resolution has the row, and Graphics with it.
+    // A core that draws at a chosen resolution has the row in its own sizes, and Graphics with it.
+    CHECK(ResolutionOptions(CoreCaps::ForN3DS()) == OptionsFor(Id::InternalResolution));
+    for (const CoreCaps& ds : {CoreCaps::ForNDS(), CoreCaps::ForNDS(true)}) {
+        const auto sizes = ResolutionOptions(ds);
+        REQUIRE(sizes.size() == static_cast<std::size_t>(kMaxResolution));
+        CHECK(sizes.front() == "1x (256x192)");
+        CHECK(sizes.back() == "8x (2048x1536)");
+    }
     for (CoreCaps own : OtherConsoles()) {
         CHECK(!RowApplies(Id::InternalResolution, own));
         CHECK(!RowApplies(Id::DynamicResolution, own));

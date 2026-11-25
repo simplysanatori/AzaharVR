@@ -350,10 +350,12 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             depth.value = SliderText(Id::Depth3d, static_cast<float>(m.depth_3d));
             rows.push_back(depth);
             // AzaharFrame menuux: the renderer's settings people change most, for VR.
-            Row res = row(Id::InternalResolution, RowKind::MenuButton, m.internal_resolution - 1);
-            if (m.internal_resolution < 1 || m.internal_resolution > kMaxResolution) {
-                res.value = m.internal_resolution < 1 ? "Auto"
-                                                      : std::to_string(m.internal_resolution) + "x";
+            // Set over it in Azahar's window, another console's game is drawn at the highest here.
+            const int factor = Is3ds(m.core) ? m.internal_resolution
+                                             : std::min(m.internal_resolution, kMaxResolution);
+            Row res = row(Id::InternalResolution, RowKind::MenuButton, factor - 1);
+            if (factor < 1 || factor > kMaxResolution) {
+                res.value = factor < 1 ? "Auto" : std::to_string(factor) + "x";
                 res.selected = -1;
             }
             rows.push_back(res);
@@ -1047,6 +1049,19 @@ std::vector<int> SecondScreenHas(const CoreCaps& core) {
     return has;
 }
 } // namespace
+
+std::vector<std::string> ResolutionOptions(const CoreCaps& core) {
+    if (Is3ds(core)) {
+        return OptionsFor(Id::InternalResolution);
+    }
+    const auto own = Common::AltCore::OwnPixels(core.kind);
+    std::vector<std::string> out;
+    for (int n = 1; n <= kMaxResolution; n++) {
+        out.push_back(std::to_string(n) + "x (" + std::to_string(own.width * n) + "x" +
+                      std::to_string(own.height * n) + ")");
+    }
+    return out;
+}
 
 std::vector<std::string> SecondScreenOptions(const CoreCaps& core) {
     const auto& all = OptionsFor(Id::SecondScreen);
@@ -3345,7 +3360,10 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
             break;
         }
         case RowKind::MenuButton: {
-            const auto& opts = OptionsFor(r.id);
+            const std::vector<std::string> own_opts =
+                r.id == Id::InternalResolution ? ResolutionOptions(model.core)
+                                               : std::vector<std::string>();
+            const auto& opts = r.id == Id::InternalResolution ? own_opts : OptionsFor(r.id);
             const Rect mb{std::max(ctl.x0, ctl.x1 - 420.0f), ctl.y0, ctl.x1, ctl.y1};
             const std::size_t sel =
                 std::min(static_cast<std::size_t>(std::max(r.selected, 0)), opts.size() - 1);
@@ -3398,7 +3416,10 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
 void TabMenu::DrawOpenMenu(Kit& kit, const MenuModel& model, const MenuView& view,
                            const Rect& pane, const Rect& open_anchor, int open_selected) {
     if (view.open_menu != Id::None && open_anchor.W() > 0.0f) {
-        const std::vector<std::string>& opts = OptionsFor(view.open_menu);
+        const bool resolution = view.open_menu == Id::InternalResolution;
+        const std::vector<std::string> own_opts =
+            resolution ? ResolutionOptions(model.core) : std::vector<std::string>();
+        const std::vector<std::string>& opts = resolution ? own_opts : OptionsFor(view.open_menu);
         const float item = Kit::MenuItemHeight();
         const float h = item * static_cast<float>(opts.size()) + 16.0f;
         float y0 = open_anchor.y1 + 4.0f;

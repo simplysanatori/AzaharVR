@@ -136,6 +136,26 @@ struct Capabilities {
     }
 };
 
+/// A screen in the console's own pixels, upright (the 3DS's Primary Screen).
+struct ScreenPixels {
+    int width = 0;
+    int height = 0;
+};
+
+constexpr ScreenPixels OwnPixels(CoreKind kind) {
+    switch (kind) {
+    case CoreKind::GBA:
+        return {240, 160};
+    case CoreKind::GB:
+        return {160, 144};
+    case CoreKind::NDS:
+    case CoreKind::DSi:
+        return {256, 192};
+    default:
+        return {400, 240};
+    }
+}
+
 constexpr bool IsDs(CoreKind kind) {
     return kind == CoreKind::NDS || kind == CoreKind::DSi;
 }
