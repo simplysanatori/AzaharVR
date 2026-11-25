@@ -6,6 +6,7 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     cheat_store.h
     core_backend.h
     driver_runner.cpp
+    auto_fire.h
     driver_runner.h
     frame_driver.cpp
     frame_driver.h

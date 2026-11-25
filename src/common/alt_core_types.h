@@ -226,6 +226,10 @@ enum ButtonBit : uint32_t {
     BtnTurnPage = 1u << 14,  ///< Turn Secondary Screen Page
 };
 
+// What BtnX and BtnY are in a GBA or Game Boy game (frame_cores/auto_fire.h).
+inline constexpr const char* kAutoFireALabel = "Auto Fire A";
+inline constexpr const char* kAutoFireBLabel = "Auto Fire B";
+
 // BtnQuickMenu's strings: in the Qt settings, the VR menu and the driver.
 inline constexpr const char* kQuickMenuLabel = "PokeDaisy Quick Menu";
 inline constexpr const char* kQuickMenuTooltip =

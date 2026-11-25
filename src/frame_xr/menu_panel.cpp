@@ -3166,6 +3166,7 @@ void MenuPanel::Worker() {
     bool art_tried = false;
     Vis::HelpBindings bindings_drawn;
     bool face_drawn = true;
+    auto console_drawn = Common::AltCore::CoreKind::N3DS;
     Vis::HelpDiagram diagram;
     bool have_diagram = false;
     menu.SetDiagram([&](Menu::Kit& k, const Menu::Rect& area, int page) {
@@ -3196,9 +3197,14 @@ void MenuPanel::Worker() {
             const bool same = bindings.buttons == bindings_drawn.buttons &&
                               bindings.analogs == bindings_drawn.analogs &&
                               bindings.valid == bindings_drawn.valid;
-            if (!have_diagram || !same || face != face_drawn) {
+            if (!have_diagram || !same || face != face_drawn ||
+                m.core.kind != console_drawn) {
                 diagram = Vis::BuildHelpDiagram(
-                    bindings, {.face_by_position = face, .in_menu = true, .game_running = true});
+                    bindings, {.face_by_position = face,
+                               .in_menu = true,
+                               .game_running = true,
+                               .console = m.core.kind});
+                console_drawn = m.core.kind;
                 bindings_drawn = bindings;
                 face_drawn = face;
                 have_diagram = true;

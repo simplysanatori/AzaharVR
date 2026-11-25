@@ -21,6 +21,49 @@ namespace NB = Settings::NativeButton;
 namespace NA = Settings::NativeAnalog;
 namespace ImNames = ::FrameXr::Immersive::Names; // AzaharFrame kiu
 
+using Common::AltCore::CoreKind;
+
+/// The bindings, and the console they are read for.
+struct Bindings : HelpBindings {
+    CoreKind console = CoreKind::N3DS;
+    bool GameBoy() const {
+        return console == CoreKind::GB;
+    }
+    /// A GBA or Game Boy game.
+    bool Handheld() const {
+        return console == CoreKind::GBA || GameBoy();
+    }
+    std::string Console() const {
+        return GameBoy() ? "Game Boy " : Handheld() ? "GBA " : "3DS ";
+    }
+};
+
+// Whether the game's console does anything with a 3DS button.
+bool Has(const Bindings& b, int button) {
+    if (!b.Handheld()) {
+        return true;
+    }
+    switch (button) {
+    case NB::L:
+    case NB::R:
+        return !b.GameBoy();
+    case NB::ZL:
+    case NB::ZR:
+    case NB::Home:
+    case NB::Power:
+    case NB::Debug:
+    case NB::Gpio14:
+    case NB::MicBlow:
+        return false;
+    default:
+        return true;
+    }
+}
+
+bool IsAutoFire(const Bindings& b, int button) {
+    return b.Handheld() && (button == NB::X || button == NB::Y);
+}
+
 const char* ButtonName(int button) {
     switch (button) {
     case NB::A:
@@ -71,44 +114,56 @@ const char* ButtonName(int button) {
 }
 
 // The 3DS buttons a frame_xr control drives in the profile, in the 3DS's order.
-std::vector<int> BoundTo(const HelpBindings& b, Control control) {
+std::vector<int> BoundTo(const Bindings& b, Control control) {
     std::vector<int> out;
     for (int i = 0; i < NB::NumButtons; i++) {
         const Common::ParamPackage p(b.buttons[static_cast<std::size_t>(i)]);
-        if (p.Get("engine", "") == "frame_xr" && p.Get("button", -1) == static_cast<int>(control)) {
+        if (p.Get("engine", "") == "frame_xr" && p.Get("button", -1) == static_cast<int>(control) &&
+            Has(b, i)) {
             out.push_back(i);
         }
     }
     return out;
 }
 
-std::string Names(const std::vector<int>& buttons) {
+std::string Names(const Bindings& b, const std::vector<int>& buttons) {
     std::string s;
-    for (const int b : buttons) {
+    for (const int button : buttons) {
         if (!s.empty()) {
             s += " + ";
         }
-        s += ButtonName(b);
+        s += !IsAutoFire(b, button) ? ButtonName(button)
+             : button == NB::X      ? Common::AltCore::kAutoFireALabel
+                                    : Common::AltCore::kAutoFireBLabel;
     }
     return s;
 }
 
-// "3DS B", "3DS L + R", or empty for none.
-std::string ThreeDs(const HelpBindings& b, Control control) {
+// "3DS B", "3DS L + R", "GBA B", "Auto Fire A", or empty for none.
+std::string ThreeDs(const Bindings& b, Control control) {
     const std::vector<int> bound = BoundTo(b, control);
-    return bound.empty() ? std::string{} : "3DS " + Names(bound);
+    if (bound.empty()) {
+        return {};
+    }
+    const std::string names = Names(b, bound);
+    return IsAutoFire(b, bound.front()) ? names : b.Console() + names;
 }
 
 // The 3DS stick a frame_xr stick drives ("Circle Pad", "C-Stick"), or empty.
-std::string StickTo(const HelpBindings& b, AnalogControl control) {
+std::string StickTo(const Bindings& b, AnalogControl control) {
     std::string s;
     for (int i = 0; i < NA::NumAnalogs; i++) {
         const Common::ParamPackage p(b.analogs[static_cast<std::size_t>(i)]);
+        if (b.Handheld() && i != NA::CirclePad) {
+            continue;
+        }
         if (p.Get("engine", "") == "frame_xr" && p.Get("analog", -1) == static_cast<int>(control)) {
             if (!s.empty()) {
                 s += " + ";
             }
-            s += i == NA::CirclePad ? "Circle Pad" : "C-Stick";
+            s += b.Handheld()         ? b.Console() + "D-Pad"
+                 : i == NA::CirclePad ? std::string("Circle Pad")
+                                      : std::string("C-Stick");
         }
     }
     return s;
@@ -150,7 +205,7 @@ std::array<Face, 4> Faces(bool by_position) {
 }
 
 // The D-pad drives the 3DS's D-pad, one direction each.
-bool DpadPlain(const HelpBindings& b) {
+bool DpadPlain(const Bindings& b) {
     return BoundTo(b, Control::DpadUp) == std::vector<int>{NB::Up} &&
            BoundTo(b, Control::DpadDown) == std::vector<int>{NB::Down} &&
            BoundTo(b, Control::DpadLeft) == std::vector<int>{NB::Left} &&
@@ -158,12 +213,12 @@ bool DpadPlain(const HelpBindings& b) {
 }
 
 // The 3DS buttons on the grips ("3DS L + R"), or empty.
-std::string Grips(const HelpBindings& b) {
-    std::string grips = Names(BoundTo(b, Control::GripL));
-    if (const std::string r = Names(BoundTo(b, Control::GripR)); !r.empty()) {
+std::string Grips(const Bindings& b) {
+    std::string grips = Names(b, BoundTo(b, Control::GripL));
+    if (const std::string r = Names(b, BoundTo(b, Control::GripR)); !r.empty()) {
         grips += (grips.empty() ? "" : " + ") + r;
     }
-    return grips.empty() ? grips : "3DS " + grips;
+    return grips.empty() ? grips : b.Console() + grips;
 }
 
 std::string Footer(const HelpBindings& given, bool by_position) {
@@ -225,7 +280,7 @@ HelpBindings DefaultHelpBindings() {
 }
 
 HelpPage BuildHelp(const HelpBindings& given, const HelpContext& ctx) {
-    const HelpBindings b = given.valid ? given : DefaultHelpBindings();
+    const Bindings b{given.valid ? given : DefaultHelpBindings(), ctx.console};
     HelpPage page;
 
     // ---- In Game ----
@@ -237,7 +292,7 @@ HelpPage BuildHelp(const HelpBindings& given, const HelpContext& ctx) {
     }
     // The D-pad as one row when it is the 3DS's D-pad, else one row per direction.
     if (DpadPlain(b)) {
-        Row(g, "D-Pad", "3DS D-Pad");
+        Row(g, "D-Pad", b.Console() + "D-Pad");
     } else {
         Row(g, "D-Pad Up", OrNothing(ThreeDs(b, Control::DpadUp)));
         Row(g, "D-Pad Down", OrNothing(ThreeDs(b, Control::DpadDown)));
@@ -305,7 +360,7 @@ HelpPage BuildHelp(const HelpBindings& given, const HelpContext& ctx) {
 }
 
 HelpDiagram BuildHelpDiagram(const HelpBindings& given, const HelpContext& ctx) {
-    const HelpBindings b = given.valid ? given : DefaultHelpBindings();
+    const Bindings b{given.valid ? given : DefaultHelpBindings(), ctx.console};
     const bool pos = ctx.face_by_position;
     HelpDiagram d;
     d.now = HelpDiagramPageFor(ctx);
@@ -336,7 +391,7 @@ HelpDiagram BuildHelpDiagram(const HelpBindings& given, const HelpContext& ctx) 
                 lines.push_back(Sub(d.name, OrNothing(ThreeDs(b, d.control))));
             }
         }
-        lines.insert(lines.begin(), any_plain ? Title("D-Pad", "3DS D-Pad") : SubHeading("D-Pad"));
+        lines.insert(lines.begin(), any_plain ? Title("D-Pad", b.Console() + "D-Pad") : SubHeading("D-Pad"));
         Label(g, kLeft, {CtrlPart::Dpad}, std::move(lines));
     }
     Label(g, kLeft, {CtrlPart::View},

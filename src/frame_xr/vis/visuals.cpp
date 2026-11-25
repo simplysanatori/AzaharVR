@@ -17,6 +17,7 @@
 #include "common/file_util.h"
 #include "common/logging/log.h"
 #include "common/settings.h"
+#include "frame_xr/frame_xr.h"
 #include "frame_xr/input/geometry.h"
 #include "frame_xr/session.h"
 #include "frame_xr/vis/async_overlay.h"
@@ -233,6 +234,7 @@ struct Visuals::Impl {
     struct HelpKey {
         uint64_t bindings_seq = 0;
         bool face = true, in_menu = false, game = false;
+        Common::AltCore::CoreKind console = Common::AltCore::CoreKind::N3DS;
         bool diagram = false; ///< the diagram, else the list
         DiagramPageId page = DiagramPageId::Game;
         bool operator==(const HelpKey&) const = default;
@@ -708,6 +710,7 @@ void Visuals::Frame(Runtime& rt, const FrameInfo& info, Where where, const Windo
             ctx.face_by_position = key.face;
             ctx.in_menu = key.in_menu;
             ctx.game_running = key.game;
+            ctx.console = key.console = GetCoreCapabilities().kind;
             // AzaharFrame ctrldiag: the diagram once its drawings are made (a fraction of a
             // second after VR starts; until then the panel waits, at most 3 s), else the list.
             const HelpArt* art = m.HelpArtReady();

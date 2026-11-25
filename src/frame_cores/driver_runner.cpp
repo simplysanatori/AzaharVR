@@ -137,6 +137,7 @@ void DriverRunner::Start(DriverKind kind, const Known& known, DriverServices ser
         return backed_up;
     };
     driver = MakeDriver(kind, services, info, opts);
+    auto_fire = {};
     driver->SetEditing(editing);
     if (rotate_pages) {
         driver->SetOption(Option::RotatePages, *rotate_pages);
@@ -185,7 +186,7 @@ void DriverRunner::RunFrame(const Common::AltCore::InputState& input, FrameOutpu
     }
 
     DriverInput in;
-    in.keys = input.buttons & 0x3FFu; // ButtonBit 0..9 are the GBA's keys
+    in.keys = auto_fire.Frame(input.buttons) & 0x3FFu; // ButtonBit 0..9 are the GBA's keys
     if (caps.has_touch && input.touching) {
         in.touching = true;
         in.touch_x = input.touch_x;

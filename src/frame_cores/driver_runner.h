@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "common/alt_core_types.h"
+#include "frame_cores/auto_fire.h"
 #include "frame_cores/core_backend.h"
 #include "frame_cores/frame_driver.h"
 #include "frame_cores/rom_info.h"
@@ -77,6 +78,7 @@ private:
     uint64_t missteps = 0;
     bool backed_up = false; ///< this session
     bool editing = false;
+    AutoFire auto_fire;
     std::optional<uint32_t> rotate_pages; ///< as asked, for a driver made later
     std::optional<uint32_t> map_refresh;
 };

@@ -477,6 +477,57 @@ TEST_CASE("DriverRunner: the driver's options are the capabilities'", "[frame_co
     runner.Stop();
 }
 
+TEST_CASE("Auto Fire: two frames on, two off, from the press", "[frame_cores]") {
+    using namespace Common::AltCore;
+    AutoFire fire;
+    for (int i = 0; i < 12; ++i) {
+        INFO("frame " << i);
+        const bool on = i % 4 < 2;
+        CHECK((fire.Frame(BtnX) & BtnA) == (on ? BtnA : 0u));
+    }
+    CHECK(fire.Frame(0) == 0u);
+    CHECK(fire.Frame(BtnX) == (BtnX | BtnA)); // pressed again: at once
+    CHECK(fire.Frame(BtnX) == (BtnX | BtnA));
+    CHECK(fire.Frame(BtnX | BtnY) == (BtnX | BtnY | BtnB)); // each by its own count
+    CHECK(fire.Frame(BtnX | BtnY) == (BtnX | BtnY | BtnB));
+    CHECK(fire.Frame(BtnX | BtnY) == (BtnX | BtnY | BtnA));
+    CHECK(fire.Frame(BtnX | BtnY | BtnB | BtnLeft) == // the button itself stays held
+          (BtnX | BtnY | BtnA | BtnB | BtnLeft));
+
+    int presses = 0;
+    bool before = false;
+    AutoFire second;
+    for (int i = 0; i < 60; ++i) {
+        const bool now = (second.Frame(BtnY) & BtnB) != 0;
+        presses += now && !before ? 1 : 0;
+        before = now;
+    }
+    CHECK(presses == 15);
+}
+
+TEST_CASE("DriverRunner: Auto Fire reaches every driver as keys", "[frame_cores]") {
+    using namespace Common::AltCore;
+    FakeCore core;
+    Script script;
+    Capabilities caps = Capabilities::ForGBA();
+    FrameOutput out;
+    DriverRunner runner;
+    runner.Start(DriverKind::Plain, {}, core.Services(), {}, With(script), {}, caps);
+    InputState in;
+    in.buttons = BtnX | BtnStart;
+    std::vector<uint32_t> keys;
+    for (int i = 0; i < 5; ++i) {
+        runner.RunFrame(in, out, caps);
+        keys.push_back(script.last.keys);
+    }
+    const uint32_t on = BtnStart | BtnA, off = BtnStart;
+    CHECK(keys == std::vector<uint32_t>{on, on, off, off, on});
+    runner.Start(DriverKind::Plain, {}, core.Services(), {}, With(script), {}, caps);
+    runner.RunFrame(in, out, caps);
+    CHECK(script.last.keys == on); // counted anew
+    runner.Stop();
+}
+
 TEST_CASE("The overlay covers the screen it is drawn over", "[frame_cores]") {
     using namespace Vulkan;
     STATIC_REQUIRE(kAltOverlaySlot != 0); // the Primary Screen's
