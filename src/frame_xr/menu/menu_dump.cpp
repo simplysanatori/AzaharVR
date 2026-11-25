@@ -3069,6 +3069,17 @@ int main(int argc, char** argv) {
             ok &= shot("kiu132-vis-" + n + "-5-mods", *gm, mv);
         }
     }
+    { // AzaharVR: Layer Depth's row in a DS game, off and at 2 (--only depth-)
+        MenuModel dm = pg;
+        dm.core = CoreCaps::ForNDS();
+        dm.core.layer_depth = true; // as NdsCore says it
+        dm.game_title = "Mario Kart DS";
+        dm.immersive_mode = 0;
+        dm.layer_depth = 0;
+        ok &= shot("depth-ds-1-off", dm, settings(SettingsSection::General));
+        dm.layer_depth = 2;
+        ok &= shot("depth-ds-2-level-2", dm, settings(SettingsSection::General));
+    }
     { // AzaharFrame docs: the README's pictures (--only readme-)
         MenuModel rm = m;
         rm.mods.cheats = ReadmeCheatsOot3d();
