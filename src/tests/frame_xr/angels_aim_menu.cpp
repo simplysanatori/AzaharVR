@@ -3,7 +3,8 @@
 // Refer to the license.txt file included.
 
 // AzaharFrame kiufix: the menu's part of Angel's Aim's fixes: Aiming's rows on the Controls tab
-// (moved from Settings, General) and the Mods tab's Angel's Aim segment.
+// (moved from Settings, General; AzaharFrame kiuaim: Kid Icarus: Uprising's own on the Angel's Aim
+// page) and the Mods tab's Angel's Aim segment.
 
 #include <algorithm>
 #include <iterator>
@@ -20,12 +21,18 @@ TEST_CASE("Controls tab: Aiming's rows are per game there, and gone from General
     using namespace FrameXr::Menu;
     const auto& rows = ControlsScopeRows();
     for (const Id id : {Id::GyroAim, Id::GyroSensitivity, Id::Recoil, Id::RecoilCharged,
-                        Id::RecoilRapid, Id::WeaponInHand, Id::WeaponSize, Id::WeaponScale,
-                        Id::LaserSight, Id::TurnZone, Id::TurnSpeed, Id::TurnSpeedVertical,
-                        Id::KeepOnScreen, Id::GripFreesAim,
-                        Id::TurnZoneFrom}) { // AzaharFrame kiuaim3, fixa
+                        Id::RecoilRapid, Id::LaserSight, Id::KeepOnScreen, Id::GripFreesAim}) {
         INFO(LabelFor(id));
         CHECK(std::find(rows.begin(), rows.end(), id) != rows.end());
+    }
+    MenuModel kiu;
+    kiu.mods.angels_aim.shown = true;
+    const auto page = AimScopeRows(kiu);
+    for (const Id id : {Id::WeaponInHand, Id::WeaponSize, Id::WeaponScale, Id::TurnZone,
+                        Id::TurnSpeed, Id::TurnSpeedVertical, Id::TurnZoneFrom}) { // kiuaim3, fixa
+        INFO(LabelFor(id));
+        CHECK(std::find(rows.begin(), rows.end(), id) == rows.end());
+        CHECK(std::find(page.begin(), page.end(), id) != page.end());
     }
     for (const Id id : {Id::RecoilCharged, Id::RecoilRapid, Id::WeaponSize, Id::WeaponScale}) {
         CHECK(PerGameSetting(id));

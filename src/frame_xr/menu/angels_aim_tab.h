@@ -3,27 +3,19 @@
 // Refer to the license.txt file included.
 
 // AzaharFrame kiufix: the Mods tab's Angel's Aim segment (Cheats | Mods | Textures | Angel's
-// Aim), shown only while Kid Icarus: Uprising (any region) is open; built like the CTGP-7 segment
-// (ctgp7_tab.h). Material 3, one page that scrolls as a whole:
+// Aim), shown only while Kid Icarus: Uprising (any region) is open. Material 3, a page that never
+// scrolls and a page a group (AimGroup), each with its More:
 //
-//   About Angel's Aim  [Alpha]                                       (title, an assist chip)
-//   Alpha Pre-Release · Very Experimental · Have Fun!                (the owner's words)
-//   Angel's Aim brings the game into VR: ...                         (short paragraphs)
-//   [↗ Report an Issue]
-//   Bug reports and feature ideas welcome.
-//   ─────────────────────────────────────────────────────────────
-//   Settings                                    [Global | Per-Game] ⋮  (AzaharFrame kiu132)
-//   Aiming / View / Bottom Screen / Weapon        (group titles; each Angel's Aim option, the
-//                                                  same Id as its other place: AngelsAimGroups)
-//   Mods & Pack                                                      (group title)
-//   Required for Single-Screen Modes                                 (title)
-//   Not used in the Angel's Aim immersive mode: ...                  (kiu132 note)
-//   Darkshade's C-Stick & Gyro Mod                     Installed / Not Installed
-//   (the catalog's C-Stick & Gyro rows, as Install Mods draws them: Install, its versions)
-//   ─────────────────────────────────────────────────────────────
-//   Suggested                                                        (title)
-//   Kid Icarus: Uprising HD                            Installed / Not Installed
-//   (the catalog's weapons and effects texture pack: installed and on in the game's packs)
+//   Angel's Aim  [Alpha]                        [Global | Per-Game] ⋮
+//   Immersive Mode                              [its menu button]
+//   Aiming / View / HUD / Bottom Screen / Weapon     (their rows: AimPlaces)
+//   Mods & Pack      Required for Single-Screen Modes (the catalog's C-Stick & Gyro rows, as
+//                    Install Mods draws them), Suggested (the weapons and effects texture pack)
+//   About Angel's Aim      the owner's words, Send Report, Report an Issue
+//
+// AzaharFrame kiuaim: the only place of the rows that act in Kid Icarus: Uprising alone. Aiming, Gyro
+// Sensitivity, Recoil and its two, Laser Sight, Keep Reticle on Screen and Grip Frees Aim act in any
+// game: they are on the Controls tab too.
 //
 // The values come from the Qt side (citra_qt/frame_mods.cpp, FrameXr::SetInGameMenuAngelsAim).
 // Report an Issue asks "Open GitHub?" first, then sends OpenUrl with `report_url`: the app's
@@ -32,7 +24,6 @@
 
 #pragma once
 
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -75,7 +66,7 @@ inline constexpr const char* kAngelsAimModNote =
 inline constexpr const char* kCStickModLeftOutToast = "Angel's Aim: C-Stick Mod Not Loaded";
 inline constexpr const char* kCStickModRestartToast =
     "C-Stick Mod Loaded: Restart the Game for Angel's Aim";
-/// AzaharFrame kiu132: the settings' group titles (PROPOSED). "Bottom Screen" is the owner's.
+/// AzaharFrame kiu132: the groups' names (PROPOSED). "Bottom Screen" is the owner's.
 inline constexpr const char* kAngelsAimGroupAiming = "Aiming";
 inline constexpr const char* kAngelsAimGroupView = "View";
 inline constexpr const char* kAngelsAimGroupBottomScreen = "Bottom Screen";
@@ -94,7 +85,6 @@ inline constexpr const char* kAngelsAimHandFound = "Found in Downloads";
 inline constexpr const char* kAngelsAimHandInstall = "Install";
 inline constexpr int kAngelsAimHandFoundIndex = 100;
 inline constexpr const char* kAngelsAimHandToast = "Hand Model Installed";
-inline constexpr const char* kAngelsAimSettings = "Settings";
 inline constexpr const char* kAngelsAimInstalled = "Installed";
 inline constexpr const char* kAngelsAimNotInstalled = "Not Installed";
 /// Send Report's dialog (citra_qt/frame_crash_dialog.cpp, in Azahar's window with the VR keyboard).
@@ -115,8 +105,8 @@ inline constexpr const char* kAngelsIntroBody =
     "Here's what's on. Change any of it under Aiming.";
 inline constexpr const char* kAngelsIntroControls = "Show Aiming";
 inline constexpr const char* kAngelsIntroOk = "OK";
-/// AzaharFrame kiufire: Trigger Layout (the Controls tab's Aiming rows, Kid Icarus only, with
-/// Aiming on; vr_kiu_trigger_layout). Approved by the owner (1.3.0), the tips too.
+/// AzaharFrame kiufire: Trigger Layout (the page's Aiming group, with Aiming on;
+/// vr_kiu_trigger_layout). Approved by the owner (1.3.0), the tips too.
 inline constexpr const char* kTriggerLayoutRow = "Trigger Layout";
 inline constexpr const char* kTriggerLayoutFireAndPower = "Fire and Power";
 inline constexpr const char* kTriggerLayoutOriginal = "Original";
@@ -125,10 +115,9 @@ inline constexpr const char* kTriggerLayoutFireAndPowerTip =
     "pick it.";
 inline constexpr const char* kTriggerLayoutOriginalTip =
     "Both triggers fire and also press the game's own buttons.";
-/// AzaharFrame kiutoggles: Angel's Aim's first-person options, once test switches only (the
-/// Settings tab's Immersive section, under Immersive Mode, while Kid Icarus: Uprising is open and
-/// Immersive Mode is Angel's Aim; vr_kiu_wrist_screen, vr_kiu_talk_panel, vr_kiu_over_shoulder,
-/// vr_kiu_snap_turn). Approved by the owner (1.3.0), the Turning choices too. All of them are here.
+/// AzaharFrame kiutoggles: Angel's Aim's first-person options, once test switches only (while Kid
+/// Icarus: Uprising is open and Immersive Mode is Angel's Aim; vr_kiu_wrist_screen,
+/// vr_kiu_talk_panel, vr_kiu_over_shoulder, vr_kiu_snap_turn). Approved by the owner (1.3.0), the Turning choices too. All of them are here.
 /// AzaharFrame kiu131: Bottom Screen (replaces Secondary Screen on Wrist and Talk Panel), its
 /// size, opacity and place, Reticle Size, and Wrist Side (the Stats tab, every wrist display).
 /// "Bottom Screen" is the owner's own name (a hardware-bound exception, as Bottom Screen
@@ -316,18 +305,9 @@ std::vector<int> AngelsAimModRows(const ModsListModel& m);
 // approved 2026-11-25) ----
 enum class Id : int; // tab_menu.h
 struct MenuModel;
-/// The live switch: on unless "0", "off" or "false" (the page as it was, for an A/B).
-inline constexpr const char* kKiuAimPageSwitch = "AZAHARFRAME_KIU_AIM_PAGE";
-bool AimPageSwitchOn(const std::optional<std::string>& value);
-/// What the menu draws. Off until the app says (controls.cpp, each menu frame, from the switch),
-/// so the page as it was keeps its tests.
-void SetAimPage(bool on);
-bool AimPageOn();
-/// A row's place on the page: Wrist Side (the Stats tab's) and the Aiming Settings link are off
-/// it, Reset Bottom Screen Position shows with Persistent moved, Gyro Sensitivity with Gyro Aim.
+/// A row's place on the page: Reset Bottom Screen Position shows with In View moved, Gyro
+/// Sensitivity with Gyro Aim.
 bool AimPageRowShown(const MenuModel& model, Id id);
-/// `rows` without those, while the page is on.
-void AimPageFilter(const MenuModel& model, std::vector<Id>& rows);
 /// The page's own tooltip for a row whose text is ExplainFor's elsewhere (approved), or null.
 const char* AimPageTip(Id id);
 inline constexpr const char* kAimTipAiming =
@@ -366,6 +346,10 @@ struct AimPage {
 /// View's (from the first-person rows), so nothing is lost: AimPageUnplaced lists them.
 AimPage AimPageRows(const MenuModel& model, AimGroup group);
 std::vector<Id> AimPageUnplaced(const MenuModel& model);
+/// What the page's scope control counts and Use Global Values for All clears (the per-game ones:
+/// GameValueRows): Immersive Mode, the rows there are now, and the rows of Kid Icarus: Uprising's
+/// own that wait for Aiming or their switch (as the Controls tab counts its rows, shown or not).
+std::vector<Id> AimScopeRows(const MenuModel& model);
 /// The groups with a row on the front view, in order: those with rows, Mods & Pack, About.
 std::vector<AimGroup> AimFrontGroups(const MenuModel& model);
 /// "Direct Aim", "First Person \u00B7 Smooth", "In View", "Wrist", "In Hand", "Installed"; "" none.
@@ -380,13 +364,16 @@ struct AimShown {
     bool more = false;
 };
 AimShown AimPageShown(const MenuModel& model, const MenuView& view);
+/// Opens the page from elsewhere in the menu (the Settings tab's link, Show Aiming): its front view
+/// (`group` -1) or a group's page.
+void AimPageOpen(MenuView& view, int group);
 /// A press on one of those targets; true when the view changed (its scroll starts again).
 bool AimPagePress(const MenuModel& model, MenuView& view, int index);
 /// B, or Back: More to its group's page, a group's page to the front view (where the group's
 /// row is). False on the front view: nothing to go back to.
 bool AimPageBack(const MenuModel& model, MenuView& view);
 /// Each frame: the fields are what shows, and the front view once the segment is left (so the
-/// menu opens on it).
+/// menu opens on it). Without the page (another game) the Mods tab leaves its segment.
 void AimPageKeep(const MenuModel& model, MenuView& view);
 /// The Bottom Screen's page is on view: the real one stays where it is meanwhile (phase 4).
 bool AimBottomPageOpen(const MenuModel& model, const MenuView& view);

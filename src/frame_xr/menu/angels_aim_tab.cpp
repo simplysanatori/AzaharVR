@@ -2,13 +2,10 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
-// AzaharFrame kiufix: the Mods tab's Angel's Aim segment (angels_aim_tab.h), drawn as the CTGP-7
-// segment is (ctgp7_tab.cpp): one page that scrolls as a whole; the Required section's catalog
-// rows are Install Mods' own (DrawOfferList).
+// AzaharFrame kiufix: the Mods tab's Angel's Aim segment (angels_aim_tab.h); the Required section's
+// catalog rows are Install Mods' own (DrawOfferList).
 
 #include <algorithm>
-#include <atomic>
-#include <cctype>
 #include <cmath>
 
 #include "frame_xr/immersive_names.h"
@@ -23,7 +20,6 @@ namespace Sym = ::FrameXr::Menu::Icon;
 namespace {
 
 constexpr float kPad = 24.0f;
-constexpr float kTop = 8.0f;
 constexpr float kBody = 16.0f;
 constexpr float kBodyLine = 24.0f;
 constexpr float kSmall = 14.0f;
@@ -117,33 +113,8 @@ std::vector<int> AngelsAimModRows(const ModsListModel& m) {
 }
 
 // ---- AzaharFrame kiuaim ----
-namespace {
-std::atomic<bool> g_aim_page{false};
-} // namespace
-
-bool AimPageSwitchOn(const std::optional<std::string>& value) {
-    if (!value) {
-        return true;
-    }
-    std::string v = *value;
-    std::transform(v.begin(), v.end(), v.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return !(v == "0" || v == "off" || v == "false");
-}
-
-void SetAimPage(bool on) {
-    g_aim_page.store(on, std::memory_order_relaxed);
-}
-
-bool AimPageOn() {
-    return g_aim_page.load(std::memory_order_relaxed);
-}
-
 bool AimPageRowShown(const MenuModel& model, Id id) {
     switch (id) {
-    case Id::WristSide:
-    case Id::AngelsAimSettings:
-        return false;
     case Id::KiuBottomReset:
         return model.kiu_bottom_screen == 1 && model.kiu_bottom_moved;
     case Id::GyroSensitivity:
@@ -151,15 +122,6 @@ bool AimPageRowShown(const MenuModel& model, Id id) {
     default:
         return true;
     }
-}
-
-void AimPageFilter(const MenuModel& model, std::vector<Id>& rows) {
-    if (!AimPageOn()) {
-        return;
-    }
-    rows.erase(std::remove_if(rows.begin(), rows.end(),
-                              [&](Id id) { return !AimPageRowShown(model, id); }),
-               rows.end());
 }
 
 const char* AimPageTip(Id id) {
@@ -344,6 +306,24 @@ std::vector<Id> AimPageUnplaced(const MenuModel& model) {
     return out;
 }
 
+std::vector<Id> AimScopeRows(const MenuModel& model) {
+    std::vector<Id> rows;
+    if (!model.mods.angels_aim.shown) {
+        return rows;
+    }
+    rows.push_back(Id::ImmersiveMode);
+    const auto now = AimRowsNow(model);
+    for (const AimPlace& p : AimPlaces()) {
+        if (In(now.first, p.id) || In(now.second, p.id) || KiuOnlyControlsRow(p.id)) {
+            rows.push_back(p.id);
+        }
+    }
+    for (const Id id : AimPageUnplaced(model)) {
+        rows.push_back(id);
+    }
+    return rows;
+}
+
 std::vector<AimGroup> AimFrontGroups(const MenuModel& model) {
     std::vector<AimGroup> groups;
     if (!model.mods.angels_aim.shown) {
@@ -428,6 +408,16 @@ bool AimPageGo(MenuView& view, int group, bool more) {
 }
 } // namespace
 
+void AimPageOpen(MenuView& view, int group) {
+    view.tab = Tab::Mods;
+    view.page = Page::Tabs;
+    view.mods_segment = ModsSegment::AngelsAim;
+    view.aim_group = group;
+    view.aim_more = false;
+    view.scroll[static_cast<std::size_t>(Tab::Mods)] = 0.0f;
+    view.open_menu = Id::None;
+}
+
 bool AimPagePress(const MenuModel& model, MenuView& view, int index) {
     const AimShown at = AimPageShown(model, view);
     if (index == kAimBackIndex) {
@@ -456,6 +446,9 @@ bool AimPageBack(const MenuModel& model, MenuView& view) {
 }
 
 void AimPageKeep(const MenuModel& model, MenuView& view) {
+    if (!model.mods.angels_aim.shown && view.mods_segment == ModsSegment::AngelsAim) {
+        view.mods_segment = ModsSegment::Cheats;
+    }
     const bool on_view = view.tab == Tab::Mods && view.mods_segment == ModsSegment::AngelsAim;
     const AimShown at = on_view ? AimPageShown(model, view) : AimShown{};
     if (view.aim_group != at.group || view.aim_more != at.more) {
@@ -468,7 +461,7 @@ void AimPageKeep(const MenuModel& model, MenuView& view) {
 }
 
 bool AimBottomPageOpen(const MenuModel& model, const MenuView& view) {
-    return AimPageOn() && view.tab == Tab::Mods && view.mods_segment == ModsSegment::AngelsAim &&
+    return view.tab == Tab::Mods && view.mods_segment == ModsSegment::AngelsAim &&
            !(model.mods.zip.open && model.mods.zip.target == ZipTarget::Hand) &&
            AimPageShown(model, view).group == static_cast<int>(AimGroup::BottomScreen);
 }
@@ -481,8 +474,7 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
         DrawZip(kit, model.mods.zip, view, area, area.y1 - 8.0f);
         return;
     }
-    const bool page = AimPageOn(); // AzaharFrame kiuaim
-    const Rect c{area.x0 + kPad, area.y0 + (page ? 0.0f : kTop), area.x1 - kPad, area.y1 - kPad};
+    const Rect c{area.x0 + kPad, area.y0, area.x1 - kPad, area.y1 - kPad};
     const Rect shown{area.x0, area.y0, area.x1, area.y1 - 8.0f};
     const std::vector<int> rows = AngelsAimModRows(model.mods.mods);
     OfferListOptions opt;
@@ -622,151 +614,123 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
     Rect open_anchor{};
     int open_selected = -1;
 
-    if (page) {
-        // ---- AzaharFrame kiuaim: the front view, or the open group's page ----
-        const AimShown at = AimPageShown(model, view);
-        layout.max_scroll = 0.0f;
-        y = c.y0;
-        // A row to press: its name, a value, a chevron.
-        const auto press_row = [&](float h, const std::string& name, const std::string& value,
-                                   int index, const Rect& clip) {
-            const Rect row{c.x0 - 12.0f, y, c.x1 + 12.0f, y + h};
-            const Target t{Id::AngelsAimGroup, index};
-            kit.StateLayer({row.x0, row.y0 + 2.0f, row.x1, row.y1 - 2.0f}, 16.0f, Tok::kOnSurface,
-                           StateOf(view, t));
-            AddHit(row, t, clip);
-            kit.TextMid(c.x0, row.Cy(), Type::Body, Tok::kOnSurface, name);
-            kit.Icon(c.x1 - 8.0f, row.Cy(), 24.0f, Sym::kChevronRight, false,
-                     Tok::kOnSurfaceVariant);
-            if (!value.empty()) {
-                const float room = c.x1 - 32.0f - (c.x0 + kit.TextWidth(Type::Body, name) + 24.0f);
-                kit.TextMid(c.x1 - 32.0f, row.Cy(), Type::Body, Tok::kOnSurfaceVariant,
-                            kit.Fit(Type::Body, value, room), 2);
-            }
-            y += h;
-        };
-        if (at.group < 0) {
-            // The title with its Alpha chip, and the scope control at its right: the same
-            // toggle as on the Settings, Controls and Position tabs (one scope for the menu).
-            kit.TextMid(c.x0, y + kPageBarH * 0.5f, Type::Title, Tok::kOnSurface, kAimPageTitle);
-            alpha_chip(c.x0 + kit.TextWidth(Type::Title, kAimPageTitle) + 16.0f,
-                       y + kPageBarH * 0.5f);
-            DrawScope(kit, model, view, {c.x0, y, c.x1, y + kPageBarH}, shown, &shown);
-            y += kPageBarH;
-            { // Immersive Mode, a menu button as on the Settings tab, in a front row's height
-                const Id id = Id::ImmersiveMode;
-                const Rect row{c.x0 - 12.0f, y, c.x1 + 12.0f, y + kFrontRowH};
-                const bool enabled = model.locked[static_cast<std::size_t>(id)] == Lock::None;
-                AddHit(row, {id, kLabelIndex}, shown);
-                anchors.push_back({id, c.x0, row.y0 + 6.0f,
-                                   model.locked[static_cast<std::size_t>(id)]});
-                kit.TextMid(c.x0, row.Cy(), Type::Body, Tok::kOnSurface, LabelFor(id), 0,
-                            enabled ? 1.0f : kDisabledContent);
-                const auto& opts = OptionsFor(id);
-                const int sel = std::clamp(
-                    Immersive::Names::ModeIndexOf(static_cast<std::uint32_t>(model.immersive_mode)),
-                    0, static_cast<int>(opts.size()) - 1);
-                const Rect mb{c.x1 - 420.0f, row.Cy() - 20.0f, c.x1, row.Cy() + 20.0f};
-                kit.MenuButton(mb, opts[static_cast<std::size_t>(sel)], view.open_menu == id,
-                               StateOf(view, {id}, enabled), sel == RecommendedModeIndex(model));
-                if (enabled) {
-                    AddHit({mb.x0, row.Cy() - 24.0f, mb.x1, row.Cy() + 24.0f}, {id}, shown);
-                }
-                if (view.open_menu == id) {
-                    open_anchor = mb;
-                    open_selected = sel;
-                }
-                y += kFrontRowH;
-            }
-            // (Single Screen's row comes here with its lane, while the mode is not Angel's Aim.)
-            for (const AimGroup g : AimFrontGroups(model)) {
-                kit.Line(c.x0, y, c.x1, y, 1.0f, Tok::kOutlineVariant);
-                press_row(kFrontRowH, AimGroupName(g), AimGroupValue(model, g),
-                          static_cast<int>(g), shown);
-            }
-        } else {
-            const AimGroup g = static_cast<AimGroup>(at.group);
-            // Back and the page's title.
-            const float bar_cy = y + kBackBarH * 0.5f;
-            const Rect back{c.x0 - 12.0f, bar_cy - 24.0f, c.x0 + 36.0f, bar_cy + 24.0f};
-            const Target bt{Id::AngelsAimGroup, kAimBackIndex};
-            kit.StateLayer(back, 24.0f, Tok::kOnSurfaceVariant, StateOf(view, bt));
-            kit.Icon(back.Cx(), back.Cy(), 24.0f, Sym::kArrowBack, false, Tok::kOnSurface);
-            AddHit(back, bt, back);
-            const std::string name = at.more ? AimMoreTitle(g) : std::string(AimGroupName(g));
-            kit.TextMid(back.x1 + 12.0f, back.Cy(), Type::Title, Tok::kOnSurface, name);
-            if (g == AimGroup::About) {
-                alpha_chip(back.x1 + 12.0f + kit.TextWidth(Type::Title, name) + 16.0f, back.Cy());
-            }
-            const bool is_rows = g != AimGroup::ModsAndPack && g != AimGroup::About;
-            y += is_rows ? kBackBarH : kPageBarH;
-            const float room = area.y1 - kPageEnd - y;
-            // A More page shows whole rows only.
-            const float list_h = !is_rows ? shown.y1 - y
-                                 : at.more ? std::floor(room / kRowH) * kRowH
-                                           : room;
-            const Rect list{area.x0, y, area.x1, y + list_h};
-            const AimPage rows_now = AimPageRows(model, g);
-            const std::vector<Id>& ids = at.more ? rows_now.more : rows_now.rows;
-            const bool more_row = !at.more && !rows_now.more.empty();
-            const float content = g == AimGroup::ModsAndPack ? mods_h
-                                  : g == AimGroup::About     ? about_h
-                                                             : kRowH * static_cast<float>(ids.size()) +
-                                                                   (more_row ? kMoreRowH : 0.0f);
-            // Rows scroll in whole rows (as the Settings tab's), the rest as the page did.
-            const float over = content - list.H();
-            const float max_scroll =
-                over <= 0.0f ? 0.0f : is_rows ? std::ceil(over / kRowH) * kRowH : over;
-            const float scroll =
-                std::clamp(view.scroll[static_cast<std::size_t>(view.tab)], 0.0f, max_scroll);
-            layout.max_scroll = max_scroll;
-            layout.scroll_step = is_rows ? kRowH : 48.0f;
-            kit.Clip(list);
-            y -= scroll;
-            if (g == AimGroup::ModsAndPack) {
-                mods_and_pack();
-            } else if (g == AimGroup::About) {
-                about();
-            } else {
-                const std::size_t first_anchor = anchors.size();
-                y = DrawAimRows(kit, model, view, ids, c, list, y, open_anchor, open_selected);
-                own_tips(first_anchor);
-                if (more_row) {
-                    kit.Line(c.x0, y, c.x1, y, 1.0f, Tok::kOutlineVariant);
-                    press_row(kMoreRowH, kAimMore, {}, kAimMoreIndex, list);
-                }
-            }
-            kit.ClearClip();
-            DrawScrollbar(kit, view, list, area.x1, content, max_scroll, scroll);
+    // ---- AzaharFrame kiuaim: the front view, or the open group's page ----
+    const AimShown at = AimPageShown(model, view);
+    layout.max_scroll = 0.0f;
+    y = c.y0;
+    // A row to press: its name, a value, a chevron.
+    const auto press_row = [&](float h, const std::string& name, const std::string& value,
+                               int index, const Rect& clip) {
+        const Rect row{c.x0 - 12.0f, y, c.x1 + 12.0f, y + h};
+        const Target t{Id::AngelsAimGroup, index};
+        kit.StateLayer({row.x0, row.y0 + 2.0f, row.x1, row.y1 - 2.0f}, 16.0f, Tok::kOnSurface,
+                       StateOf(view, t));
+        AddHit(row, t, clip);
+        kit.TextMid(c.x0, row.Cy(), Type::Body, Tok::kOnSurface, name);
+        kit.Icon(c.x1 - 8.0f, row.Cy(), 24.0f, Sym::kChevronRight, false,
+                 Tok::kOnSurfaceVariant);
+        if (!value.empty()) {
+            const float room = c.x1 - 32.0f - (c.x0 + kit.TextWidth(Type::Body, name) + 24.0f);
+            kit.TextMid(c.x1 - 32.0f, row.Cy(), Type::Body, Tok::kOnSurfaceVariant,
+                        kit.Fit(Type::Body, value, room), 2);
         }
-        DrawOpenMenu(kit, model, view, area, open_anchor, open_selected);
-        DrawScopeMenu(kit, model, view, area);
-        DrawModsDialog(kit, ModsDialogFor(model, view), view);
-        return;
+        y += h;
+    };
+    if (at.group < 0) {
+        // The title with its Alpha chip, and the scope control at its right: the same
+        // toggle as on the Settings, Controls and Position tabs (one scope for the menu).
+        kit.TextMid(c.x0, y + kPageBarH * 0.5f, Type::Title, Tok::kOnSurface, kAimPageTitle);
+        alpha_chip(c.x0 + kit.TextWidth(Type::Title, kAimPageTitle) + 16.0f,
+                   y + kPageBarH * 0.5f);
+        DrawScope(kit, model, view, {c.x0, y, c.x1, y + kPageBarH}, shown, &shown);
+        y += kPageBarH;
+        { // Immersive Mode, a menu button as on the Settings tab, in a front row's height
+            const Id id = Id::ImmersiveMode;
+            const Rect row{c.x0 - 12.0f, y, c.x1 + 12.0f, y + kFrontRowH};
+            const bool enabled = model.locked[static_cast<std::size_t>(id)] == Lock::None;
+            AddHit(row, {id, kLabelIndex}, shown);
+            anchors.push_back({id, c.x0, row.y0 + 6.0f,
+                               model.locked[static_cast<std::size_t>(id)]});
+            kit.TextMid(c.x0, row.Cy(), Type::Body, Tok::kOnSurface, LabelFor(id), 0,
+                        enabled ? 1.0f : kDisabledContent);
+            const auto& opts = OptionsFor(id);
+            const int sel = std::clamp(
+                Immersive::Names::ModeIndexOf(static_cast<std::uint32_t>(model.immersive_mode)),
+                0, static_cast<int>(opts.size()) - 1);
+            const Rect mb{c.x1 - 420.0f, row.Cy() - 20.0f, c.x1, row.Cy() + 20.0f};
+            kit.MenuButton(mb, opts[static_cast<std::size_t>(sel)], view.open_menu == id,
+                           StateOf(view, {id}, enabled), sel == RecommendedModeIndex(model));
+            if (enabled) {
+                AddHit({mb.x0, row.Cy() - 24.0f, mb.x1, row.Cy() + 24.0f}, {id}, shown);
+            }
+            if (view.open_menu == id) {
+                open_anchor = mb;
+                open_selected = sel;
+            }
+            y += kFrontRowH;
+        }
+        // (Single Screen's row comes here with its lane, while the mode is not Angel's Aim.)
+        for (const AimGroup g : AimFrontGroups(model)) {
+            kit.Line(c.x0, y, c.x1, y, 1.0f, Tok::kOutlineVariant);
+            press_row(kFrontRowH, AimGroupName(g), AimGroupValue(model, g),
+                      static_cast<int>(g), shown);
+        }
+    } else {
+        const AimGroup g = static_cast<AimGroup>(at.group);
+        // Back and the page's title.
+        const float bar_cy = y + kBackBarH * 0.5f;
+        const Rect back{c.x0 - 12.0f, bar_cy - 24.0f, c.x0 + 36.0f, bar_cy + 24.0f};
+        const Target bt{Id::AngelsAimGroup, kAimBackIndex};
+        kit.StateLayer(back, 24.0f, Tok::kOnSurfaceVariant, StateOf(view, bt));
+        kit.Icon(back.Cx(), back.Cy(), 24.0f, Sym::kArrowBack, false, Tok::kOnSurface);
+        AddHit(back, bt, back);
+        const std::string name = at.more ? AimMoreTitle(g) : std::string(AimGroupName(g));
+        kit.TextMid(back.x1 + 12.0f, back.Cy(), Type::Title, Tok::kOnSurface, name);
+        if (g == AimGroup::About) {
+            alpha_chip(back.x1 + 12.0f + kit.TextWidth(Type::Title, name) + 16.0f, back.Cy());
+        }
+        const bool is_rows = g != AimGroup::ModsAndPack && g != AimGroup::About;
+        y += is_rows ? kBackBarH : kPageBarH;
+        const float room = area.y1 - kPageEnd - y;
+        // A More page shows whole rows only.
+        const float list_h = !is_rows ? shown.y1 - y
+                             : at.more ? std::floor(room / kRowH) * kRowH
+                                       : room;
+        const Rect list{area.x0, y, area.x1, y + list_h};
+        const AimPage rows_now = AimPageRows(model, g);
+        const std::vector<Id>& ids = at.more ? rows_now.more : rows_now.rows;
+        const bool more_row = !at.more && !rows_now.more.empty();
+        const float content = g == AimGroup::ModsAndPack ? mods_h
+                              : g == AimGroup::About     ? about_h
+                                                         : kRowH * static_cast<float>(ids.size()) +
+                                                               (more_row ? kMoreRowH : 0.0f);
+        // Rows scroll in whole rows (as the Settings tab's), the rest as the page did.
+        const float over = content - list.H();
+        const float max_scroll =
+            over <= 0.0f ? 0.0f : is_rows ? std::ceil(over / kRowH) * kRowH : over;
+        const float scroll =
+            std::clamp(view.scroll[static_cast<std::size_t>(view.tab)], 0.0f, max_scroll);
+        layout.max_scroll = max_scroll;
+        layout.scroll_step = is_rows ? kRowH : 48.0f;
+        kit.Clip(list);
+        y -= scroll;
+        if (g == AimGroup::ModsAndPack) {
+            mods_and_pack();
+        } else if (g == AimGroup::About) {
+            about();
+        } else {
+            const std::size_t first_anchor = anchors.size();
+            y = DrawAimRows(kit, model, view, ids, c, list, y, open_anchor, open_selected);
+            own_tips(first_anchor);
+            if (more_row) {
+                kit.Line(c.x0, y, c.x1, y, 1.0f, Tok::kOutlineVariant);
+                press_row(kMoreRowH, kAimMore, {}, kAimMoreIndex, list);
+            }
+        }
+        kit.ClearClip();
+        DrawScrollbar(kit, view, list, area.x1, content, max_scroll, scroll);
     }
-
-    // ---- The page as it was: one list that scrolls as a whole ----
-    const float content = kTitleH + about_h + kDividerH + AngelsAimSettingsHeight(model) + mods_h;
-    const float max_scroll = std::max(0.0f, content - (shown.y1 - c.y0));
-    const float scroll =
-        std::clamp(view.scroll[static_cast<std::size_t>(view.tab)], 0.0f, max_scroll);
-    layout.max_scroll = max_scroll;
-    layout.scroll_step = 48.0f;
-    y = c.y0 - scroll;
-    kit.Clip(shown);
-    // About Angel's Aim, its Alpha chip
-    kit.TextMid(c.x0, y + 16.0f, Type::Title, Tok::kOnSurface, kAngelsAimTitle);
-    alpha_chip(c.x0 + kit.TextWidth(Type::Title, kAngelsAimTitle) + 16.0f, y + 16.0f);
-    y += kTitleH;
-    about();
-    divider();
-    // AzaharFrame kiu132: the settings, one list in groups (the same rows as their other
-    // places), then Mods & Pack's title
-    y = DrawAngelsAimSettings(kit, model, view, c, shown, y, open_anchor, open_selected);
-    mods_and_pack();
-    kit.ClearClip();
-    DrawScrollbar(kit, view, shown, area.x1, content, max_scroll, scroll);
-    DrawOpenMenu(kit, model, view, area, open_anchor, open_selected); // kiu132: Immersive Mode's
+    DrawOpenMenu(kit, model, view, area, open_anchor, open_selected);
     DrawScopeMenu(kit, model, view, area);
     DrawModsDialog(kit, ModsDialogFor(model, view), view);
 }

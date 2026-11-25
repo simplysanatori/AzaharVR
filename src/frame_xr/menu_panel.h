@@ -138,7 +138,6 @@ private:
     std::vector<std::pair<std::string, std::string>> stats;
     int scope = 0;
     int controls_page = 0;
-    bool scroll_to_aiming = false; ///< AzaharFrame kiufix: Angel's Aim's Aiming Settings
     std::array<bool, 2> trigger_down{};
     bool a_down = false, b_down = false;
     int active_hand = 1;

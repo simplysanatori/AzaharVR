@@ -270,7 +270,7 @@ enum class Id : int {
     CalibrateAimReset, ///< its Reset (the game's Check Aim map goes)
     AimingDivider,     ///< the Controls tab's divider above Aiming (no action)
     // AzaharFrame kiufix: the Mods tab's Angel's Aim segment (angels_aim_tab.h)
-    AngelsAimSettings, ///< Aiming Settings: the Controls tab at Aiming
+    AngelsAimLink,     ///< AzaharFrame kiuaim: Settings, Immersive: opens the Angel's Aim page
     AngelsAimReport,   ///< Report an Issue ("Open GitHub?" first)
     AngelsAimSend,     ///< AzaharFrame kiumenus: Send Report (Azahar's window, its own dialog)
     // AzaharFrame kiuaim3: Direct Aim's rows (the Controls tab, with Direct Aim)
@@ -288,9 +288,9 @@ enum class Id : int {
     HudSpacingY,
     // AzaharFrame kiufire
     TriggerLayout, ///< index: 0 Original, 1 Fire and Power (vr_kiu_trigger_layout), Kid Icarus only
-    // AzaharFrame kiutoggles: Angel's Aim's first-person options, per game, in the Settings tab's
-    // Immersive section under Immersive Mode, shown only while Kid Icarus: Uprising is open and
-    // Immersive Mode is Angel's Aim (AngelsAimRowsShown)
+    // AzaharFrame kiutoggles: Angel's Aim's first-person options, per game, on the Angel's Aim page,
+    // shown only while Kid Icarus: Uprising is open and Immersive Mode is Angel's Aim
+    // (AngelsAimRowsShown)
     // AzaharFrame kiu131: Bottom Screen replaces Secondary Screen on Wrist and Talk Panel
     KiuBottomScreen, ///< index: Bottom Screen's Off, Persistent, Wrist (vr_kiu_bottom_screen)
     KiuBottomSize,   ///< a slider, 50 to 200 (percent), with Bottom Screen not Off
@@ -329,8 +329,7 @@ enum class Id : int {
     KiuPowerMenuAcross, ///< a slider, -40 to 40 degrees, on the HUD (vr_kiu_power_menu_across)
     KiuPowerMenuHeight, ///< a slider, -40 to 40 degrees, on the HUD (vr_kiu_power_menu_height)
     KiuPowerMenuOpacity, ///< AzaharFrame kiuaim: a slider, 20 to 100 percent, while not Off
-    /// AzaharFrame kiu132: a group's title in the Angel's Aim segment's settings (no action;
-    /// index: AngelsAimGroupKind)
+    /// AzaharFrame kiuaim: the Angel's Aim page's group rows, Back and More (angels_aim_tab.h)
     AngelsAimGroup,
     Count
 };
@@ -433,10 +432,6 @@ constexpr bool AngelsAimRowsShown(bool kiu_open, int immersive_mode) {
 constexpr bool HudSpacingRowsShown(bool angels_aim, int kiu_hud) {
     return !angels_aim || kiu_hud == 0;
 }
-
-/// AzaharFrame kiu132: the Angel's Aim segment's settings come in these groups, in this order
-/// (Mods & Pack, the segment's own catalogue rows, is drawn after them).
-enum class AngelsAimGroupKind : int { Aiming, View, BottomScreen, Weapon, ModsAndPack, Count };
 
 /// AzaharFrame kiuweap2: Aiming turned on: from Off (`stored_before`, vr_gyro_aim's 0) to Direct
 /// Aim or Gyro Aim (`index_after`, the shown index 1 or 2), while Kid Icarus: Uprising is open
@@ -594,7 +589,7 @@ struct MenuModel {
 
 /// AzaharFrame kiuweap2: the "Angel's Aim Is On" prompt (MenuView::angels_intro): a notice with
 /// the states of Weapon in Hand, Muzzle Flash, Projectiles, Recoil and Laser Sight, and its
-/// buttons Controls (DialogExtra) and OK (DialogConfirm).
+/// buttons Show Aiming (DialogExtra) and OK (DialogConfirm).
 ModsDialog AngelsIntroDialog(const MenuModel& model);
 
 enum class Page { Tabs, SaveSlots, LoadSlots };
@@ -626,33 +621,19 @@ constexpr bool TabHasScope(Tab tab) {
 /// The Controls tab's per-game rows (in the order they show; At Edge and Reticle Speed only show
 /// while the reticle is on, but are counted and cleared all the same).
 const std::vector<Id>& ControlsScopeRows();
-/// AzaharFrame kiurows: whether a Controls row does something only in Kid Icarus: Uprising (it
-/// reads that game's memory or feeds Angel's Aim alone): shown while the game is Kid Icarus:
-/// Uprising (MenuModel::mods.angels_aim.shown), hidden in every other game and in the global
-/// scope, with its saved value untouched.
+/// AzaharFrame kiurows: whether an Aiming row does something only in Kid Icarus: Uprising (it reads
+/// that game's memory or feeds Angel's Aim alone): on the Angel's Aim page only, never on the
+/// Controls tab, with its saved value untouched.
 bool KiuOnlyControlsRow(Id id);
-/// ControlsScopeRows without the Kid Icarus: Uprising rows when `kiu` is false.
-std::vector<Id> ControlsScopeRows(bool kiu);
-/// AzaharFrame kiu132: the Controls tab's Aiming rows as they show now (Aiming, then what its
-/// value and switches bring), the Kid Icarus: Uprising ones only while it is the game. The
-/// Controls tab and the Angel's Aim segment draw the same list.
+/// AzaharFrame kiu132: every Aiming row as it shows now (Aiming, then what its value and switches
+/// bring), the Kid Icarus: Uprising ones only while it is the game: the Angel's Aim page's.
 std::vector<Id> AimingRows(const MenuModel& model);
-/// AzaharFrame kiu132: Angel's Aim's first-person rows as they show now (the Settings tab's
-/// Immersive section under Immersive Mode, and the Angel's Aim segment): only while the European
-/// Kid Icarus: Uprising is the game (MenuModel::mods.angels_aim.recommended, the one copy Angel's
-/// Aim is mapped for) and Immersive Mode is Angel's Aim.
+/// AzaharFrame kiuaim: the Controls tab's: those that act in any game.
+std::vector<Id> ControlsAimingRows(const MenuModel& model);
+/// AzaharFrame kiu132: Angel's Aim's first-person rows as they show now (the Angel's Aim page's):
+/// only while a Kid Icarus: Uprising copy Angel's Aim is mapped for is the game
+/// (MenuModel::mods.angels_aim.mapped) and Immersive Mode is Angel's Aim.
 std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& model);
-/// AzaharFrame kiu132: the Angel's Aim segment's settings, one list in groups: each option that
-/// is Kid Icarus: Uprising's or Angel's Aim's, wherever else it is (the same setting, the same
-/// Id, so a change in one place is the other's at once, at the menu's scope). Empty groups are
-/// left out; nothing while Kid Icarus: Uprising is not the game.
-struct AngelsAimRowGroup {
-    AngelsAimGroupKind kind;
-    std::vector<Id> rows;
-};
-std::vector<AngelsAimRowGroup> AngelsAimGroups(const MenuModel& model);
-/// The group's title.
-const char* AngelsAimGroupName(AngelsAimGroupKind kind);
 /// AzaharFrame kiurec: the Immersive Mode choice that carries the Recommended badge (name_chip.h):
 /// Angel's Aim (index 3) while Kid Icarus: Uprising is the game and the menu is on its Per-Game
 /// scope (MenuModel::mods.angels_aim.shown, scope 1); -1 in every other game and in Global.
@@ -696,7 +677,7 @@ struct MenuView {
     /// AzaharFrame ctgp7: "Requires CTGP-7" shows (an Install Mods row of a CTGP-7 mod was pressed)
     bool requires_ctgp7 = false;
     /// AzaharFrame kiuweap2: the "Angel's Aim Is On" prompt is open (AngelsIntroDialog): OK
-    /// closes it, Controls closes it and shows the Controls tab at Aiming
+    /// closes it, Show Aiming closes it and opens the Angel's Aim page's Aiming group
     bool angels_intro = false;
     /// AzaharFrame kiuaim: the Angel's Aim page's open group (AimGroup; -1 the front view), and
     /// its More rows in place of its own (angels_aim_tab.h)
@@ -760,10 +741,8 @@ struct MenuLayout {
     /// and whether a dialog over the list holds it still (its scroll is kept for after).
     Scrolling::Bar bar;
     bool scroll_locked = false;
-    /// AzaharFrame kiufix: the Controls tab's scroll that brings Aiming to the top (`controls`:
-    /// this layout is the Controls tab's page).
+    /// AzaharFrame kiufix: the Controls tab's scroll that brings Aiming to the top.
     float aiming_scroll = 0.0f;
-    bool controls = false;
 
     /// What is at (x, y) dp.
     Target HitTest(float x, float y) const;
@@ -871,13 +850,6 @@ private:
                        float control_x0, Rect& open_anchor, int& open_selected);
     void DrawOpenMenu(Kit& kit, const MenuModel& model, const MenuView& view, const Rect& pane,
                       const Rect& open_anchor, int open_selected);
-    /// AzaharFrame kiu132: the Angel's Aim segment's settings (AngelsAimGroups) from `y`: its
-    /// title with the scope control, then each group's title and rows; returns where they end.
-    /// AngelsAimSettingsHeight is how tall they are.
-    float DrawAngelsAimSettings(Kit& kit, const MenuModel& model, const MenuView& view,
-                                const Rect& c, const Rect& list, float y, Rect& open_anchor,
-                                int& open_selected);
-    static float AngelsAimSettingsHeight(const MenuModel& model);
     /// AzaharFrame kiuaim: `ids` as rows from `y` (the Angel's Aim page's); returns their end.
     float DrawAimRows(Kit& kit, const MenuModel& model, const MenuView& view,
                       const std::vector<Id>& ids, const Rect& c, const Rect& list, float y,
