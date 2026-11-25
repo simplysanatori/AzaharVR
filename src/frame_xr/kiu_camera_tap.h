@@ -51,7 +51,7 @@ inline void SetGameUi(bool paused, bool menu) {
 /// The fade round the jump: to black, the camera switched, black for as long as the game takes to
 /// draw from the new place and show it, and back. Only where the projection layer draws the
 /// picture (a factor in a shader that runs anyway: no layer comes, goes or changes).
-inline constexpr int64_t kFadeNs = 100'000'000, kBlackNs = 120'000'000;
+inline constexpr int64_t kFadeNs = 50'000'000, kBlackNs = 130'000'000;
 /// How bright the picture is, 0 to 1, this long after the tap.
 constexpr float Brightness(int64_t since_ns) {
     if (since_ns < 0 || since_ns >= 2 * kFadeNs + kBlackNs) {

@@ -43,10 +43,11 @@ TEST_CASE("Kid Icarus camera tap: the fade", "[frame_xr][kiucam]") {
     constexpr int64_t kMs = 1'000'000, kStart = 5'000 * kMs;
     CHECK(Brightness(-1) == 1.0f);
     CHECK(Brightness(0) == 1.0f);
-    CHECK(Brightness(50 * kMs) == 0.5f);
+    CHECK(Brightness(25 * kMs) == 0.5f);
     CHECK(Brightness(kFadeNs) == 0.0f);
     CHECK(Brightness(kFadeNs + kBlackNs) == 0.0f);
     CHECK(Brightness(2 * kFadeNs + kBlackNs) == 1.0f);
+    CHECK(2 * kFadeNs + kBlackNs <= 250 * kMs); // quick enough for play
     CHECK(Brightness(int64_t{1} << 60) == 1.0f);
 
     Switch s;
@@ -54,15 +55,16 @@ TEST_CASE("Kid Icarus camera tap: the fade", "[frame_xr][kiucam]") {
     CHECK(s.Brightness(kStart) == 1.0f);
     REQUIRE(s.Begin(1, kStart, true));
     CHECK_FALSE(s.Due(kStart)); // switched once it is dark
-    CHECK_FALSE(s.Begin(0, kStart + 50 * kMs, true));
-    CHECK_FALSE(s.Due(kStart + 99 * kMs));
-    CHECK(s.Due(kStart + 100 * kMs));
+    CHECK_FALSE(s.Begin(0, kStart + 25 * kMs, true));
+    CHECK_FALSE(s.Due(kStart + 49 * kMs));
+    CHECK(s.Due(kStart + 50 * kMs));
+    CHECK(s.Brightness(kStart + 50 * kMs) == 0.0f); // never switched in view
     CHECK(s.View() == 1);
-    CHECK_FALSE(s.Due(kStart + 108 * kMs)); // once
-    CHECK(s.Brightness(kStart + 108 * kMs) == 0.0f);
-    CHECK_FALSE(s.Begin(0, kStart + 150 * kMs, true)); // still dark
+    CHECK_FALSE(s.Due(kStart + 58 * kMs)); // once
+    CHECK(s.Brightness(kStart + 58 * kMs) == 0.0f);
+    CHECK_FALSE(s.Begin(0, kStart + 170 * kMs, true)); // still dark
     CHECK(s.Begin(0, kStart + 400 * kMs, true));
-    CHECK(s.Due(kStart + 500 * kMs));
+    CHECK(s.Due(kStart + 450 * kMs));
     CHECK(s.View() == 0);
     CHECK(s.Brightness(kStart + 1000 * kMs) == 1.0f);
 
