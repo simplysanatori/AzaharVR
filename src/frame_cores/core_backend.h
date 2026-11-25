@@ -16,7 +16,13 @@
 #include "frame_cores/microphone.h"
 #include "video_core/renderer_vulkan/alt_xr_renderer.h"
 
+namespace melonDS {
+class NDS;
+}
+
 namespace FrameCores {
+
+class NdsHiresRenderer;
 
 struct CorePaths {
     std::string data_dir;  ///< Root user data folder
@@ -44,6 +50,8 @@ struct CoreBootOptions {
     bool rumble_pak = false;       ///< Insert DS Rumble Pak in Slot-2 when no GBA ROM
     uint32_t second_screen = 0;    ///< SecondScreen (GBA and Game Boy games)
     DriverOverride driver;
+    /// Tests: what draws a DS game over 1x (NdsHiresMaker)
+    std::function<std::unique_ptr<NdsHiresRenderer>(melonDS::NDS&, std::string&)> ds_renderer;
 };
 
 struct CheatEntry {
@@ -61,6 +69,7 @@ struct FrameOutput {
     bool held = false;              ///< No frame ran: the driver holds the game (DriverFrame)
     bool metrics_changed = false;
     Common::AltCore::ScreenMetrics updated_metrics{};
+    bool caps_changed = false; ///< GetCapabilities gives others than before the frame
 };
 
 /// Internal emulation backend interface implemented by GbaCore, GbCore, and NdsCore.
@@ -111,6 +120,9 @@ public:
     virtual void SetSolarLevel(int /*level*/) {}
     /// Allow Game Editing (GBA and Game Boy games).
     virtual void SetEditing(bool /*on*/) {}
+    /// Internal Resolution from the next frame on, and the highest it may become by Dynamic
+    /// Resolution (has_internal_resolution).
+    virtual void SetResolution(uint32_t /*factor*/, uint32_t /*ceiling*/) {}
     /// The Secondary Screen's next page (GBA games), from the next frame.
     virtual void TurnPage() {}
     virtual void SetMicBlow(bool /*on*/) {}

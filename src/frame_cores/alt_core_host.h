@@ -64,12 +64,20 @@ struct HostCallbacks {
     std::function<void(const HostStats&)> on_stats;
 };
 
+/// Internal Resolution: what to draw at, and the most Dynamic Resolution may raise it to.
+struct HostResolution {
+    uint32_t factor = 1;
+    uint32_t ceiling = 1;
+};
+
 /// What the window gives a game: where it is drawn while no headset shows it, and its controls.
 struct HostFrontend {
     Frontend::EmuWindow* window = nullptr; ///< both outlive the game
     Frontend::EmuWindow* secondary_window = nullptr;
     /// The controls profile's state, once a frame (emulation thread).
     std::function<Common::AltCore::InputState()> input;
+    /// Internal Resolution, once a frame (emulation thread); none: 1x.
+    std::function<HostResolution()> resolution;
     MicrophoneFactory microphone;
     /// The size of a screen changed, or a Secondary Screen came (emulation thread).
     std::function<void(const Layout::AltScreens&)> on_screens;

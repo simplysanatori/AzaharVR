@@ -19,6 +19,8 @@ struct AltScreenImage {
     uint32_t height = 0;
     uint32_t stride_pixels = 0;       ///< 0 means tightly packed (= width)
     bool bgra = false;                ///< True for melonDS BGRA8888 buffers
+    uint32_t scale = 1;               ///< Pixels for one of the console's
+    uint32_t max_scale = 1;           ///< What `scale` may become (Dynamic Resolution's ceiling)
 
     bool HasPicture() const {
         return pixels != nullptr && width > 0 && height > 0;

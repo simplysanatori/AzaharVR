@@ -296,13 +296,17 @@ struct AltCoreHost::Impl {
         if (!screen.pixels || screen.width == 0 || screen.height == 0) {
             return {};
         }
-        width = screen.width;
-        height = screen.height;
-        const std::size_t stride = screen.stride_pixels ? screen.stride_pixels : width;
+        // In the console's own pixels, whatever the game is drawn at
+        const std::size_t scale = std::max(screen.scale, 1u);
+        width = std::max<u32>(static_cast<u32>(screen.width / scale), 1);
+        height = std::max<u32>(static_cast<u32>(screen.height / scale), 1);
+        const std::size_t stride = screen.stride_pixels ? screen.stride_pixels : screen.width;
         std::vector<u8> out(static_cast<std::size_t>(width) * height * 4);
         for (std::size_t y = 0; y < height; ++y) {
-            std::memcpy(out.data() + y * width * 4, screen.pixels + y * stride,
-                        static_cast<std::size_t>(width) * 4);
+            const u32* const from = screen.pixels + (y * scale + scale / 2) * stride;
+            for (std::size_t x = 0; x < width; ++x) {
+                std::memcpy(out.data() + (y * width + x) * 4, from + x * scale + scale / 2, 4);
+            }
         }
         if (!screen.bgra) {
             for (std::size_t i = 0; i < out.size(); i += 4) {
@@ -591,12 +595,14 @@ struct AltCoreHost::Impl {
     void NoteScreens() {
         Layout::AltScreens now = screens;
         if (last_frame.primary.pixels) {
-            now.top_width = last_frame.primary.width;
-            now.top_height = last_frame.primary.height;
+            now.top_width = last_frame.primary.width / std::max(last_frame.primary.scale, 1u);
+            now.top_height = last_frame.primary.height / std::max(last_frame.primary.scale, 1u);
         }
         if (last_frame.secondary.pixels) {
-            now.bottom_width = last_frame.secondary.width;
-            now.bottom_height = last_frame.secondary.height;
+            now.bottom_width =
+                last_frame.secondary.width / std::max(last_frame.secondary.scale, 1u);
+            now.bottom_height =
+                last_frame.secondary.height / std::max(last_frame.secondary.scale, 1u);
         }
         if (now != screens) {
             screens = now;
@@ -624,10 +630,20 @@ struct AltCoreHost::Impl {
         }
         page_before = page;
 
+        if (caps.has_internal_resolution && frontend.resolution) {
+            const HostResolution resolution = frontend.resolution();
+            core->SetResolution(resolution.factor, resolution.ceiling);
+        }
         core->SetInput(in);
         core->RunFrame(last_frame);
         holding.store(last_frame.held, std::memory_order_relaxed);
 
+        if (last_frame.caps_changed) {
+            caps = core->GetCapabilities();
+            if (callbacks.on_capabilities) {
+                callbacks.on_capabilities(caps);
+            }
+        }
         if (last_frame.metrics_changed) {
             caps.screens = last_frame.updated_metrics;
             if (callbacks.on_screen_metrics) {

@@ -84,6 +84,7 @@ public:
     void SetScreenRotation(int deg) override;
     bool SetGbaSlotRom(const std::string& path) override;
     void SetConsoleMode(bool dsi) override;
+    void SetResolution(uint32_t factor, uint32_t ceiling) override;
 
     // Platform callback entrypoints routed from melonds_platform.cpp via userdata.
     void OnSignalStop(int reason);

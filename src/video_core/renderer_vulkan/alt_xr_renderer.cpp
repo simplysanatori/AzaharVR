@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstring>
 #include <exception>
+#include <initializer_list>
 #include <memory>
 
 #include "common/assert.h"
@@ -60,13 +61,9 @@ constexpr u32 kDummySwapchainExtent = 16;
 /// for the display, which would hold the game back).
 constexpr auto kSkippableInterval = std::chrono::milliseconds{12};
 
-vk::Extent2D TargetSwapchainExtent(u32 width, u32 height) {
-    constexpr u32 kMaxW = 1600;
-    constexpr u32 kMaxH = 960;
-    const u32 safe_w = std::max<u32>(width, 1);
-    const u32 safe_h = std::max<u32>(height, 1);
-    const u32 scale = std::clamp<u32>(std::min(kMaxW / safe_w, kMaxH / safe_h), 1, 4);
-    return vk::Extent2D{safe_w * scale, safe_h * scale};
+vk::Extent2D TargetExtent(const AltScreenImage& image) {
+    const auto size = AltTargetSize(image.width, image.height, image.scale, image.max_scale);
+    return vk::Extent2D{size[0], size[1]};
 }
 
 struct ScreenTexture {
@@ -91,10 +88,12 @@ struct AltXrRenderer::Impl {
     vk::UniquePipelineLayout present_pipeline_layout;
     vk::ShaderModule present_vertex_shader{};
     std::array<vk::Sampler, 2> samplers{};
+    u64 upload_size = kUploadBufferSize;
     ScreenTexture primary_tex{};
     ScreenTexture secondary_tex{};
     ScreenTexture overlay_tex{};
     ScreenTexture dummy_tex{};
+    vk::Extent2D secondary_extent{kDummySwapchainExtent, kDummySwapchainExtent}; ///< the last's
     std::unique_ptr<XrPresentTarget> xr_target;
     u64 xr_target_generation = 0;
     vk::ShaderModule overlay_shader{}; ///< both made for xr_target with the first overlay
@@ -114,9 +113,10 @@ struct AltXrRenderer::Impl {
 
     /// Both screens' newest pictures, for the present shader. A screen that has none is black; one
     /// that stops being sent keeps its last. `overlay`: the overlay is at kAltOverlaySlot, always
-    /// smooth (its pixels are no multiple of the screen's).
-    vk::DescriptorSet CommitScreens(vk::ImageView secondary_view, bool overlay) {
-        const vk::Sampler sampler = samplers[!Settings::values.filter_mode.GetValue()];
+    /// smooth (its pixels are no multiple of the screen's). `uneven`: so are the screens'.
+    vk::DescriptorSet CommitScreens(vk::ImageView secondary_view, bool overlay,
+                                    bool uneven = false) {
+        const vk::Sampler sampler = samplers[!uneven && !Settings::values.filter_mode.GetValue()];
         const vk::DescriptorSet set = present_heap->Commit();
         const std::array views = {primary_tex.view, primary_tex.view, secondary_view};
         for (u32 i = 0; i < views.size(); i++) {
@@ -240,13 +240,31 @@ struct AltXrRenderer::Impl {
         return true;
     }
 
+    /// Room for three frames of these pictures, so that none waits for the GPU to take the last.
+    void EnsureUploads(std::initializer_list<const AltScreenImage*> images) {
+        u64 frame = 0;
+        for (const AltScreenImage* image : images) {
+            frame += u64{image->width} * image->height * sizeof(u32);
+        }
+        if (frame * 3 <= upload_size) {
+            return;
+        }
+        scheduler->Finish();
+        upload_buffer.reset();
+        upload_size = frame * 3;
+        upload_buffer =
+            std::make_unique<StreamBuffer>(*instance, *scheduler,
+                                           vk::BufferUsageFlagBits::eTransferSrc, upload_size,
+                                           BufferType::Upload);
+    }
+
     /// `see_through`: with the picture's own alpha (RGBA), else opaque.
     bool UploadImage(ScreenTexture& tex, const AltScreenImage& img, bool see_through = false) {
         if (!EnsureTexture(tex, img.width, img.height)) {
             return false;
         }
         const u32 byte_size = img.width * img.height * sizeof(u32);
-        if (byte_size > kUploadBufferSize) {
+        if (byte_size > upload_size) {
             LOG_ERROR(Render_Vulkan, "alt_xr: frame {}x{} exceeds staging buffer", img.width,
                       img.height);
             return false;
@@ -475,6 +493,8 @@ struct AltXrRenderer::Impl {
         present_heap.reset();
         update_queue.reset();
         upload_buffer.reset();
+        upload_size = kUploadBufferSize;
+        secondary_extent = vk::Extent2D{kDummySwapchainExtent, kDummySwapchainExtent};
         vertex_buffer.reset();
         if (sink) {
             sink->SetTopStereo(true);
@@ -626,6 +646,7 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
     if (!impl || !impl->ready || !primary.pixels || primary.width == 0 || primary.height == 0) {
         return false;
     }
+    impl->EnsureUploads({&primary, &secondary, &overlay});
     impl->presented_vr = impl->XrShowsScreens();
     if (!impl->presented_vr) {
         if (!impl->window_target) {
@@ -656,18 +677,18 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
 
     const bool has_secondary =
         secondary.pixels != nullptr && secondary.width > 0 && secondary.height > 0;
-    vk::Extent2D bottom_size{kDummySwapchainExtent, kDummySwapchainExtent};
     if (has_secondary) {
-        bottom_size = TargetSwapchainExtent(secondary.width, secondary.height);
-    } else if (impl->secondary_tex.image) { // hidden (the GBA map in a menu): its size stays
-        bottom_size =
-            TargetSwapchainExtent(impl->secondary_tex.width, impl->secondary_tex.height);
-    }
+        impl->secondary_extent = TargetExtent(secondary);
+    } // else hidden (the GBA map in a menu): its size stays
+    const vk::Extent2D top_size = TargetExtent(primary);
+    const vk::Extent2D bottom_size = impl->secondary_extent;
     const std::array<vk::Extent2D, XrPresentTarget::kScreens> sizes = {
-        TargetSwapchainExtent(primary.width, primary.height),
+        top_size,
         vk::Extent2D{kDummySwapchainExtent, kDummySwapchainExtent},
         bottom_size,
     };
+    const bool uneven =
+        !AltTargetEven(primary.width, primary.height, top_size.width, top_size.height);
     if (!impl->xr_target->Prepare(sizes)) {
         return false;
     }
@@ -683,7 +704,7 @@ bool AltXrRenderer::Present(const AltScreenImage& primary, const AltScreenImage&
     const vk::Pipeline plain = impl->xr_target->Pipeline();
     const vk::Pipeline top = has_overlay ? impl->OverlayPipeline() : plain;
     const vk::DescriptorSet present_set = impl->CommitScreens(
-        has_secondary ? impl->secondary_tex.view : vk::ImageView{}, has_overlay);
+        has_secondary ? impl->secondary_tex.view : vk::ImageView{}, has_overlay, uneven);
 
     Common::XrPacer::Get().game_swaps.fetch_add(1, std::memory_order_relaxed);
 

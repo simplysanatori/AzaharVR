@@ -37,6 +37,7 @@
 #include "Savestate.h"
 
 #include "common/logging/log.h"
+#include "frame_cores/nds_resolution.h"
 #include "frame_cores/rom_info.h"
 
 namespace FrameCores {
@@ -184,6 +185,7 @@ std::string FormatArCodeHex(const std::vector<melonDS::u32>& words) {
 
 struct NdsCore::Impl {
     std::unique_ptr<melonDS::NDS> nds;
+    NdsResolution resolution;
     bool is_dsi = false;
     bool loaded = false;
 
@@ -225,6 +227,20 @@ struct NdsCore::Impl {
     static int64_t NowMs() {
         const auto now = std::chrono::steady_clock::now().time_since_epoch();
         return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+    }
+
+    void ApplyRenderSettings() {
+        melonDS::RendererSettings settings{};
+        settings.ScaleFactor = 1;
+        settings.Threaded = opts.threaded_3d;
+        settings.HiresCoordinates = false;
+        settings.BetterPolygons = false;
+        nds->GetRenderer().SetRenderSettings(settings);
+    }
+
+    void SetResolutionCaps() {
+        caps.has_internal_resolution = resolution.Available();
+        caps.has_dynamic_resolution = resolution.Available();
     }
 
     void FlushPendingSaves(bool force) {
@@ -456,6 +472,8 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
                                   opts.use_bios && HasDsiFiles(paths.bios_dir), opts);
     impl->is_dsi = use_dsi;
     impl->caps = Common::AltCore::Capabilities::ForNDS(use_dsi);
+    impl->resolution = NdsResolution(opts.ds_renderer ? opts.ds_renderer : DefaultNdsHires());
+    impl->SetResolutionCaps();
 
     // Prepare battery save if already on disk
     melonDS::NDSCart::NDSCartArgs cart_args{};
@@ -546,13 +564,7 @@ bool NdsCore::Load(const std::string& rom_path, const CorePaths& paths,
         impl->nds = std::make_unique<melonDS::NDS>(std::move(nds_args), this);
     }
 
-    // Configure threaded software 3D renderer
-    melonDS::RendererSettings rsettings{};
-    rsettings.ScaleFactor = 1;
-    rsettings.Threaded = opts.threaded_3d;
-    rsettings.HiresCoordinates = false;
-    rsettings.BetterPolygons = false;
-    impl->nds->GetRenderer().SetRenderSettings(rsettings);
+    impl->ApplyRenderSettings();
 
     impl->nds->SetNDSCart(std::move(cart));
     if (!use_dsi) {
@@ -581,6 +593,7 @@ void NdsCore::Unload() {
     if (impl->nds) {
         impl->nds->Stop(melonDS::Platform::StopReason::External);
         impl->nds.reset();
+        impl->resolution.Detach();
     }
     impl->microphone.Stop();
     impl->microphone.Close();
@@ -614,6 +627,7 @@ void NdsCore::RunFrame(FrameOutput& out) {
         out.audio_pcm.clear();
         out.rumble = 0.0f;
         out.metrics_changed = false;
+        out.caps_changed = false;
         impl->FlushPendingSaves(false);
         return;
     }
@@ -623,6 +637,7 @@ void NdsCore::RunFrame(FrameOutput& out) {
     out.audio_pcm.clear();
     out.rumble = 0.0f;
     out.metrics_changed = false;
+    out.caps_changed = false;
 
     if (!impl->loaded || !impl->nds) {
         return;
@@ -641,17 +656,22 @@ void NdsCore::RunFrame(FrameOutput& out) {
         impl->nds->ReleaseScreen();
     }
 
+    impl->resolution.Apply(*impl->nds, impl->opts.threaded_3d);
     impl->nds->RunFrame();
 
     void* top_fb = nullptr;
     void* bot_fb = nullptr;
-    if (impl->nds->GPU.GetFramebuffers(&top_fb, &bot_fb)) {
+    if (impl->resolution.GetScreens(out.primary, out.secondary)) {
+        // over 1x
+    } else if (impl->nds->GPU.GetFramebuffers(&top_fb, &bot_fb)) {
         if (top_fb) {
             out.primary.pixels = static_cast<const uint32_t*>(top_fb);
             out.primary.width = kDsWidth;
             out.primary.height = kDsHeight;
             out.primary.stride_pixels = kDsWidth;
             out.primary.bgra = true;
+            out.primary.scale = 1;
+            out.primary.max_scale = impl->resolution.Ceiling();
         }
         if (bot_fb) {
             out.secondary.pixels = static_cast<const uint32_t*>(bot_fb);
@@ -659,6 +679,8 @@ void NdsCore::RunFrame(FrameOutput& out) {
             out.secondary.height = kDsHeight;
             out.secondary.stride_pixels = kDsWidth;
             out.secondary.bgra = true;
+            out.secondary.scale = 1;
+            out.secondary.max_scale = impl->resolution.Ceiling();
         }
     }
 
@@ -674,6 +696,11 @@ void NdsCore::RunFrame(FrameOutput& out) {
         out.rumble = 1.0f;
     } else if (until > 0) {
         impl->rumble_until_ms.store(0, std::memory_order_relaxed);
+    }
+
+    if (impl->caps.has_internal_resolution != impl->resolution.Available()) {
+        impl->SetResolutionCaps();
+        out.caps_changed = true;
     }
 
     if (impl->metrics_dirty) {
@@ -868,6 +895,10 @@ void NdsCore::SetConsoleMode(bool dsi) {
     opts.force_dsi = dsi;
     opts.force_nds = !dsi;
     Load(rom, paths, opts);
+}
+
+void NdsCore::SetResolution(uint32_t factor, uint32_t ceiling) {
+    impl->resolution.SetFactor(factor, ceiling);
 }
 
 void NdsCore::OnSignalStop(int reason) {

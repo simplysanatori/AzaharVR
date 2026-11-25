@@ -192,6 +192,11 @@ if (TARGET frame_cores)
         frame_cores/second_screen_tests.cpp frame_cores/frame_driver_tests.cpp
         frame_cores/pokedaisy_driver_tests.cpp)
     target_link_libraries(tests PRIVATE frame_cores)
+    # An object of its own: the tests have no melonDS headers
+    add_library(nds_resolution_tests OBJECT EXCLUDE_FROM_ALL frame_cores/nds_resolution_tests.cpp)
+    target_link_libraries(nds_resolution_tests PRIVATE frame_cores melonds_core citra_common catch2
+        Threads::Threads)
+    target_sources(tests PRIVATE $<TARGET_OBJECTS:nds_resolution_tests>)
 endif()
 if (TARGET gbads_game)
     # An object of its own: gba-ds's header names (config.h, emu.h, ui.h) stay out of the others
