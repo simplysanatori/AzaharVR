@@ -16,8 +16,12 @@
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
+#include "common/layer_depth.h"
+#include "frame_cores/driver_runner.h"
 #include "frame_cores/frame_driver.h"
+#include "frame_cores/gba_right_eye.h"
 #include "frame_cores/gbads_driver.h"
 #include "gbads_game.h"
 #include "gbads_logo.h"
@@ -720,6 +724,65 @@ TEST_CASE("gba-ds's game.c: a HUD game", "[frame_cores]") {
         }
         CHECK((game.emu.fb[3 * GBA_W + 40] | 0xFF000000u) == kBar);
     }
+}
+
+TEST_CASE("gba-ds's game.c: Layer Depth with the HUD on the other screen", "[frame_cores]") {
+    const bool shifted = GENERATE(false, true);
+    MadeGame game("AMKE");
+    REQUIRE(game.open);
+    GbaRightEye eye;
+    REQUIRE(eye.Attach(game.emu.core));
+    CHECK_FALSE(GbaRightEye{}.Attach(game.emu.core)); // one is there
+    eye.SetDepth(3);
+    eye.SetMaxShift(shifted ? Common::LayerDepth::kNoLimit : Common::LayerDepth::kOnScreen);
+    auto services = game.Services();
+    services.step = [&eye, step = services.step](uint32_t keys) {
+        eye.BeginFrame();
+        step(keys);
+        eye.EndFrame();
+    };
+    auto driver = GbaDsDriver::Make(services, gbads_game_loop, GbaDsLimits{});
+    REQUIRE(driver);
+    const auto both = [&](const DriverFrame& frame) {
+        FrameOutput out;
+        out.primary.pixels = frame.primary.pixels;
+        out.primary.width = frame.primary.width;
+        out.primary.height = frame.primary.height;
+        out.primary.stride_pixels = frame.primary.stride;
+        DriverRunner::SetRightEye(eye.Picture(), eye.GamePicture(), eye.FarthestShift(), out);
+        return out;
+    };
+    for (int i = 0; i < 10; ++i) {
+        const DriverFrame frame = Run(*driver);
+        const FrameOutput out = both(frame);
+        REQUIRE(std::equal(out.primary.pixels, out.primary.pixels + kPixels,
+                           out.primary_right.pixels));
+    }
+    game.DrawHud();
+    int own = 0;
+    int deep = 0;
+    for (int i = 0; i < 60; ++i) {
+        INFO("frame " << i);
+        const DriverFrame frame = game.RunMoving(*driver, 1);
+        const FrameOutput out = both(frame);
+        REQUIRE(out.primary_right.HasPicture());
+        own += out.primary_right.pixels != out.primary.pixels;
+        const bool same = std::equal(out.primary.pixels, out.primary.pixels + kPixels,
+                                     out.primary_right.pixels);
+        REQUIRE((shifted || same));
+        deep += !same;
+        if (i >= 10) {
+            REQUIRE(HudMoved(frame));
+            const DriverPicture right{out.primary_right.pixels, GBA_W, GBA_H, GBA_W};
+            REQUIRE(At(right, 40, 3) != kBar); // out of this eye too
+        }
+    }
+    CHECK(own >= 58);
+    CHECK((deep >= 58) == shifted);
+    driver.reset();
+    eye.Detach();
+    ++game.scroll;
+    emu_frame(&game.emu, 0); // the core goes on without either
 }
 
 TEST_CASE("gba-ds's game.c: frames drawn again are not the game's", "[frame_cores]") {

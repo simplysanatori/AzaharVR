@@ -378,6 +378,8 @@ enum class Id : int {
     GamesHeader, ///< the Settings tab's Games rows, with a Games tab only
     DownloadGameCovers, ///< a switch: covers by themselves
     DownloadThumbnails, ///< for the games the Games tab shows
+    LayerDepth,       ///< a slider, 0 to 3 (layer_depth)
+    InvertDepth,      ///< a switch (invert_depth), greyed while Layer Depth is off
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -406,6 +408,7 @@ enum class Lock : uint8_t {
     EditingOff,    ///< AzaharVR: what edits the game while Allow Game Editing is off
     NoGameValues,  ///< AzaharFrame reticle: the scope's ⋮ while nothing on the tab is per game
     NoGame,        ///< AzaharFrame reticle: the scope with no game that can have its own values
+    LayerDepthOff, ///< Invert Depth while Layer Depth is off
 };
 
 struct SaveSlot {
@@ -642,6 +645,8 @@ struct MenuModel {
     bool gba_allow_editing = false;
     bool gba_rotate_pages = false;
     int gba_map_refresh = 1; ///< index of kMapRefreshFrames
+    int layer_depth = 0;          ///< 0..3
+    bool invert_depth = false;
     bool ds_touch_enabled = true; ///< DS touch input switch
     int ds_screen_rotation = 0;   ///< 0 = 0°, 1 = 90°, 2 = 270°
     bool ds_lid_closed = false;   ///< DS lid closed toggle

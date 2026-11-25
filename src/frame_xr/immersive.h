@@ -178,6 +178,9 @@ bool NudgeOffset(int right_steps, int up_steps);
 /// Settings::values.vr_last_ipd_mm (the caller has the config saved). XR thread.
 bool TakeIpdSaved();
 
+/// The headset's IPD in metres (ipd_smoother.h). XR thread.
+float IpdM();
+
 /// AzaharFrame widerview: grip + D-pad up (+1) or down (-1) while a grip holds the immersive
 /// screen (Full modes): one Render Margin step (Settings::values.vr_immersive_wider_view_level, set
 /// for this game; the default size grows with it, so the picture keeps its scale) and the

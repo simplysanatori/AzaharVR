@@ -25,7 +25,8 @@ const std::set<Id> kOthersOnly{Id::CoreHeader,     Id::GbaSolarLevel, Id::DsCons
                                Id::RunIndoors, Id::WildEncounters, Id::ReusableTms,
                                Id::InstantText, Id::TradeEvolutions, Id::PokeHud,
                                Id::PokeDarkMode, Id::BattleInfo, Id::BattleHints,
-                               Id::OneTapMoves, Id::BattleStyle, Id::QuickMenuStyle};
+                               Id::OneTapMoves, Id::BattleStyle, Id::QuickMenuStyle, Id::LayerDepth,
+                               Id::InvertDepth};
 
 /// Every console's.
 const std::set<Id> kCommon{
@@ -731,6 +732,54 @@ TEST_CASE("Core rows: Screen Gap", "[frame_xr][tabmenu]") {
     CHECK(PerGameSetting(Id::ScreenGap));
     CHECK(LabelFor(Id::ScreenGap) == "Screen Gap");
     CHECK(SliderFor(Id::ScreenGap).max == 20.0f);
+}
+
+TEST_CASE("Core rows: Layer Depth", "[frame_xr][tabmenu]") {
+    for (CoreCaps core : {CoreCaps::ForGBA(), CoreCaps::ForGB(), CoreCaps::ForNDS(),
+                          CoreCaps::ForNDS(true), CoreCaps::ForN3DS()}) {
+        CHECK(!core.layer_depth);
+        CHECK(!RowApplies(Id::LayerDepth, core));
+        CHECK(!RowApplies(Id::InvertDepth, core));
+        core.layer_depth = true;
+        CHECK(RowApplies(Id::LayerDepth, core) == !Is3ds(core));
+        CHECK(RowApplies(Id::InvertDepth, core) == !Is3ds(core));
+    }
+    CoreCaps gba = CoreCaps::ForGBA();
+    CHECK(!Drawn(Game(gba), SettingsView(SettingsSection::Graphics)).contains(Id::LayerDepth));
+    gba.layer_depth = true;
+    CHECK(Drawn(Game(gba), SettingsView(SettingsSection::Graphics)).contains(Id::LayerDepth));
+    // Under the Experimental subheader; a DS game has a Graphics section for it
+    CHECK(SectionOf(Id::LayerDepth) == SettingsSection::Graphics);
+    CHECK(SectionOf(Id::InvertDepth) == SettingsSection::Graphics);
+    CHECK(Drawn(Game(gba), SettingsView(SettingsSection::Graphics))
+              .contains(Id::ExperimentalHeader));
+    CoreCaps ds = CoreCaps::ForNDS();
+    ds.layer_depth = true;
+    CHECK(SectionShown(SettingsSection::Graphics, Game(ds)));
+    CHECK(LabelFor(Id::LayerDepth) == "Layer Depth");
+    CHECK(ExplainFor(Id::LayerDepth).empty());
+    CHECK(PerGameSetting(Id::LayerDepth));
+    const SliderRange range = SliderFor(Id::LayerDepth);
+    CHECK(range.min == 0.0f);
+    CHECK(range.max == 3.0f);
+    CHECK(range.step == 1.0f);
+}
+
+TEST_CASE("Core rows: Invert Depth goes with Layer Depth", "[frame_xr][tabmenu]") {
+    CHECK(LabelFor(Id::InvertDepth) == "Invert Depth");
+    CHECK(PerGameSetting(Id::InvertDepth));
+    CHECK(!ExplainLock(Lock::LayerDepthOff).empty());
+    for (CoreCaps core : {CoreCaps::ForGBA(), CoreCaps::ForGB(), CoreCaps::ForNDS()}) {
+        const auto pressable = [&core](int level) { // a locked row has no target
+            MenuModel m = Game(core);
+            m.layer_depth = level;
+            return Pressable(m, SettingsView(SettingsSection::Graphics), Id::InvertDepth);
+        };
+        CHECK(!pressable(2));
+        core.layer_depth = true;
+        CHECK(!pressable(0));
+        CHECK(pressable(1));
+    }
 }
 
 // The notice shown the first time Allow Game Editing is turned on.

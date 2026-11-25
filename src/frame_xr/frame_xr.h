@@ -454,6 +454,8 @@ enum class MenuSetting {
     RotatePages, ///< `value`: 0 Off, 1 On (gba_rotate_pages), per game too, as the next
     MapRefresh,  ///< `value`: an index of Common::AltCore::kMapRefreshFrames (gba_map_refresh)
     ScreenGap,   ///< `value`: degrees, 0 to 20 (vr_screen_gap), per game too
+    LayerDepth,  ///< `value`: 0 to 3 (layer_depth), per game too
+    InvertDepth, ///< `value`: 0 Off, 1 On (invert_depth), per game too
 };
 struct MenuRequest {
     MenuCommand command = MenuCommand::Continue;

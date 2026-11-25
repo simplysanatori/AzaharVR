@@ -124,6 +124,7 @@ add_executable(tests
     common/file_util.cpp
     common/param_package.cpp
     common/slot_vector.cpp
+    common/layer_depth.cpp
     common/xr_pacer.cpp # AzaharFrame pacing
     ../citra_qt/update_version.cpp # AzaharVR updatecheck
     citra_qt/update_version.cpp # AzaharVR updatecheck
@@ -215,6 +216,7 @@ target_link_libraries(tests PRIVATE citra_common citra_core video_core audio_cor
 if (TARGET frame_cores)
     target_sources(tests PRIVATE frame_cores/alt_cores_tests.cpp frame_cores/microphone_tests.cpp
         frame_cores/second_screen_tests.cpp frame_cores/frame_driver_tests.cpp
+        frame_cores/nds_stereo_tests.cpp
         frame_cores/pokedaisy_driver_tests.cpp frame_cores/cheat_db_tests.cpp)
     target_link_libraries(tests PRIVATE frame_cores)
 endif()

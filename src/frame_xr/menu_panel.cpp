@@ -12,6 +12,7 @@
 #include <utility>
 
 #include <fmt/format.h>
+#include "common/layer_depth.h"
 #include "common/logging/log.h"
 #include "common/param_package.h"
 #include "common/settings.h"
@@ -444,6 +445,10 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::RotatePages;
     case Id::MapRefresh:
         return MenuSetting::MapRefresh;
+    case Id::LayerDepth:
+        return MenuSetting::LayerDepth;
+    case Id::InvertDepth:
+        return MenuSetting::InvertDepth;
     case Id::AutosaveKeep:
     default: // UseGlobal checks PerGameSetting first
         return MenuSetting::AutosaveKeep;
@@ -1456,6 +1461,8 @@ void MenuPanel::BuildModel(const Host& host) {
         m.gba_allow_editing = v.gba_allow_editing.GetValue();
         m.gba_rotate_pages = v.gba_rotate_pages.GetValue();
         m.gba_map_refresh = static_cast<int>(v.gba_map_refresh.GetValue());
+        m.layer_depth = static_cast<int>(v.layer_depth.GetValue());
+        m.invert_depth = v.invert_depth.GetValue();
         const DsHeld held = GetDsHeld();
         m.ds_lid_closed = held.lid_closed;
         if (!Menu::TabShown(view.tab, m)) {
@@ -2156,6 +2163,16 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = std::clamp(value, 0, 3);
         Apply(v.gba_map_refresh, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::MapRefresh;
+        break;
+    case Id::LayerDepth:
+        r.value = std::clamp(value, 0, static_cast<int>(Common::LayerDepth::kMaxLevel));
+        Apply(v.layer_depth, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::LayerDepth;
+        break;
+    case Id::InvertDepth:
+        r.value = value != 0 ? 1 : 0;
+        Apply(v.invert_depth, r.value != 0, per_game);
+        r.setting = MenuSetting::InvertDepth;
         break;
     default:
         return;
@@ -3047,6 +3064,9 @@ void MenuPanel::Click(Target t, Host& host) {
         break;
     case Id::AllowGameEditing:
         SetSetting(Id::AllowGameEditing, model.gba_allow_editing ? 0 : 1, host);
+        break;
+    case Id::InvertDepth:
+        SetSetting(Id::InvertDepth, model.invert_depth ? 0 : 1, host);
         break;
     case Id::RotatePages:
         SetSetting(Id::RotatePages, model.gba_rotate_pages ? 0 : 1, host);

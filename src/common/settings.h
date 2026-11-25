@@ -1251,6 +1251,9 @@ struct Values {
     // GBA DS's, as Common::AltCore::DriverOption
     SwitchableSetting<bool> gba_rotate_pages{false, "gba_rotate_pages"};
     SwitchableSetting<u32, true> gba_map_refresh{1, 0, 3, "gba_map_refresh"};
+    // Layer Depth: 0 off, 1 to 3: how far back the background layers go in the headset.
+    SwitchableSetting<u32, true> layer_depth{0, 0, 3, "layer_depth"};
+    SwitchableSetting<bool> invert_depth{false, "invert_depth"};
 };
 
 extern Values values;

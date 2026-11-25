@@ -26,7 +26,28 @@ Vulkan::AltScreenImage ToImage(const DriverPicture& picture) {
     return image;
 }
 
-std::unique_ptr<FrameDriver> MakeDriver(DriverKind kind, const DriverServices& services,
+/// The same colours, whatever the alpha.
+bool Shows(const Vulkan::AltScreenImage& image, const DriverPicture& picture) {
+    if (!picture.pixels || image.width != picture.width || image.height != picture.height) {
+        return false;
+    }
+    const uint32_t stride = image.stride_pixels ? image.stride_pixels : image.width;
+    for (uint32_t y = 0; y < image.height; ++y) {
+        const uint32_t* a = image.pixels + static_cast<std::size_t>(y) * stride;
+        const uint32_t* b = picture.pixels + static_cast<std::size_t>(y) * picture.stride;
+        uint32_t different = 0;
+        for (uint32_t x = 0; x < image.width; ++x) {
+            different |= a[x] ^ b[x];
+        }
+        if ((different & 0x00FFFFFFu) != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// `kind` becomes what was made.
+std::unique_ptr<FrameDriver> MakeDriver(DriverKind& kind, const DriverServices& services,
                                         const RomInfo& info, const CoreBootOptions& opts) {
     if (opts.driver.make) {
         if (auto driver = opts.driver.make(services)) {
@@ -50,7 +71,7 @@ std::unique_ptr<FrameDriver> MakeDriver(DriverKind kind, const DriverServices& s
                   services.rom_path);
     }
 #endif
-    (void)kind;
+    kind = DriverKind::Plain;
     return MakePlainDriver(services, info);
 }
 
@@ -170,6 +191,8 @@ void DriverRunner::Stop() {
 void DriverRunner::RunFrame(const Common::AltCore::InputState& input, FrameOutput& out,
                             Common::AltCore::Capabilities& caps) {
     out.primary = {};
+    out.primary_right = {};
+    out.layer_shift = 0.0f;
     out.secondary = {};
     out.overlay = {};
     out.held = false;
@@ -274,6 +297,19 @@ bool DriverRunner::UpdateOptions(Common::AltCore::Capabilities& caps) {
     caps.driver_options = has;
     caps.driver_options_on = on;
     return true;
+}
+
+void DriverRunner::SetRightEye(const DriverPicture& right, const DriverPicture& game, float shift,
+                               FrameOutput& out) {
+    if (!right.pixels || !out.primary.HasPicture()) {
+        return;
+    }
+    if (right.width == game.width && right.height == game.height && Shows(out.primary, game)) {
+        out.primary_right = ToImage(right);
+        out.layer_shift = shift;
+    } else {
+        out.primary_right = out.primary;
+    }
 }
 
 bool DriverRunner::UpdateSecondary(Common::AltCore::Capabilities& caps) {

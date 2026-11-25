@@ -9,6 +9,7 @@
 #include <cstdio>
 
 #include "common/cover_strings.h"
+#include "common/layer_depth.h"
 #include "frame_xr/immersive_names.h" // AzaharFrame kiu
 #include "frame_xr/menu/ds_drawing.h"
 #include "frame_xr/menu/md3_fonts.h"
@@ -158,6 +159,9 @@ std::string SliderText(Id id, float value) {
     }
     if (id == Id::KiuSubtitleSize) { // AzaharFrame kiu140
         return Format("%.0f%%", value);
+    }
+    if (id == Id::LayerDepth && value < 0.5f) {
+        return "Off";
     }
     if (id == Id::AutosaveEvery) { // AzaharFrame autosave: the stop's minutes
         const int i = std::clamp(static_cast<int>(std::lround(value)), 0,
@@ -526,7 +530,19 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             rows.push_back(row(Id::AccurateImageCopies, RowKind::Segmented, // accxfer, xfergpu
                                m.accurate_image_copies));
             rows.push_back(row(Id::ExperimentalHeader, RowKind::Header));
-            // AzaharVR: Layer Depth's place (DS, GBA and Game Boy games), first under the header.
+            // AzaharVR: DS, GBA and Game Boy games
+            Row layers = row(Id::LayerDepth, RowKind::Slider);
+            const SliderRange lr = SliderFor(Id::LayerDepth);
+            const float lv = std::clamp(static_cast<float>(m.layer_depth), lr.min, lr.max);
+            layers.t = (lv - lr.min) / (lr.max - lr.min);
+            layers.stops = 3;
+            layers.value = SliderText(Id::LayerDepth, lv);
+            rows.push_back(layers);
+            Row invert = row(Id::InvertDepth, RowKind::Switch, 0, m.invert_depth);
+            if (invert.lock == Lock::None && m.layer_depth == 0) {
+                invert.lock = Lock::LayerDepthOff;
+            }
+            rows.push_back(invert);
             // AzaharFrame fixa: Motion Clarity in the Off and Wide modes (vr_motion_clarity_normal),
             // never locked: in the Full modes it does nothing (Immersive has their own row).
             {
@@ -718,6 +734,8 @@ SettingsSection SectionOf(Id id) {
     case Id::InternalResolution:
     case Id::DynamicResolution:
     case Id::TextureFilter:
+    case Id::LayerDepth: // AzaharVR
+    case Id::InvertDepth:
     case Id::AccurateImageCopies: // AzaharFrame accxfer
     case Id::AsyncShaders:
     case Id::MotionClarityNormal: // AzaharFrame fixa
@@ -891,6 +909,8 @@ bool PerGameSetting(Id id) {
     case Id::RotatePages:
     case Id::MapRefresh:
     case Id::ScreenGap:
+    case Id::LayerDepth:
+    case Id::InvertDepth:
         return true;
     default:
         return false;
@@ -1894,6 +1914,10 @@ std::string LabelFor(Id id) {
         return "Battle Style";
     case Id::QuickMenuStyle:
         return "Quick Menu";
+    case Id::LayerDepth:
+        return "Layer Depth";
+    case Id::InvertDepth:
+        return "Invert Depth";
     case Id::DsTouchEnabled:
         return "Touch Screen Input";
     case Id::DsMicBlow:
@@ -2272,6 +2296,8 @@ std::string ExplainLock(Lock lock) {
         return "Nothing on this tab is set for this game.";
     case Lock::NoGame:
         return "Per-Game values need a running game.";
+    case Lock::LayerDepthOff:
+        return "Turn on Layer Depth to change it.";
     default:
         return {};
     }
@@ -2406,6 +2432,9 @@ SliderRange SliderFor(Id id) {
     }
     if (id == Id::ScreenGap) {
         return {0.0f, 20.0f, 1.0f};
+    }
+    if (id == Id::LayerDepth) {
+        return {0.0f, static_cast<float>(Common::LayerDepth::kMaxLevel), 1.0f};
     }
     return {};
 }

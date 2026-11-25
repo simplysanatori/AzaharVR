@@ -685,6 +685,10 @@ TEST_CASE("Per-Game: the DS and GBA rows' values in two games' files", "[frame_x
     CHECK(v.gba_solar_level.GetDefault() == 6u);
     CHECK(v.gba_second_screen.GetDefault() == 0u); // PokeDaisy
     CHECK(!v.gba_allow_editing.GetDefault());
+    CHECK(v.layer_depth.GetDefault() == 0u);
+    CHECK(FrameXr::PerGame::KeysOf(Id::LayerDepth) == std::vector<std::string>{"layer_depth"});
+    CHECK(!v.invert_depth.GetDefault());
+    CHECK(FrameXr::PerGame::KeysOf(Id::InvertDepth) == std::vector<std::string>{"invert_depth"});
     CHECK(FrameXr::PerGame::KeysOf(Id::SecondScreen) ==
           std::vector<std::string>{"gba_second_screen"});
     CHECK(FrameXr::PerGame::KeysOf(Id::AllowGameEditing) ==
@@ -730,6 +734,8 @@ TEST_CASE("Per-Game: the DS and GBA rows' values in two games' files", "[frame_x
     own(v.gba_allow_editing, true);
     own(v.gba_rotate_pages, true);
     own(v.gba_map_refresh, 3u);
+    own(v.layer_depth, 2u);
+    own(v.invert_depth, true);
     write(first);
     FrameXr::PerGame::ForEachMenuKey([](auto& s) { s.SetGlobal(true); });
     own(v.gba_solar_level, 10u);
@@ -745,6 +751,10 @@ TEST_CASE("Per-Game: the DS and GBA rows' values in two games' files", "[frame_x
     CHECK(v.gba_allow_editing.GetValue());
     CHECK(v.gba_rotate_pages.GetValue());
     CHECK(v.gba_map_refresh.GetValue() == 3u);
+    CHECK(v.layer_depth.GetValue() == 2u);
+    CHECK(v.layer_depth.GetValue(true) == 0u);
+    CHECK(v.invert_depth.GetValue());
+    CHECK(!v.invert_depth.GetValue(true));
     CHECK(v.gba_second_screen.GetValue(true) == 0u); // the global values are untouched
     CHECK(!v.gba_allow_editing.GetValue(true));
     CHECK(v.ds_console_mode.GetValue(true) == 0u); // the global values are untouched
@@ -758,6 +768,9 @@ TEST_CASE("Per-Game: the DS and GBA rows' values in two games' files", "[frame_x
     CHECK(v.gba_solar_level.GetValue() == 10u);
     CHECK(v.gba_second_screen.UsingGlobal());
     CHECK(!v.gba_allow_editing.GetValue());
+    CHECK(v.layer_depth.UsingGlobal());
+    CHECK(v.invert_depth.UsingGlobal());
+    CHECK(!v.invert_depth.GetValue());
 
     // Use Global Value, then the save and the next start
     boot(first);
@@ -786,6 +799,7 @@ TEST_CASE("Per-Game: a stopped game's DS and GBA values go", "[frame_xr][altcore
     own(v.gba_allow_editing, true);
     own(v.gba_rotate_pages, true);
     own(v.gba_map_refresh, 0u);
+    own(v.layer_depth, 3u);
     Settings::RestoreGlobalState(false);
     CHECK(v.ds_console_mode.GetValue() == 0u);
     CHECK(v.ds_touch_enabled.GetValue());
@@ -795,4 +809,5 @@ TEST_CASE("Per-Game: a stopped game's DS and GBA values go", "[frame_xr][altcore
     CHECK(!v.gba_allow_editing.GetValue());
     CHECK(!v.gba_rotate_pages.GetValue());
     CHECK(v.gba_map_refresh.GetValue() == 1u);
+    CHECK(v.layer_depth.GetValue() == 0u);
 }

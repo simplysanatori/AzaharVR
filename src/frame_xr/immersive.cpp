@@ -2638,6 +2638,10 @@ bool NudgeOffset(int right_steps, int up_steps) {
     return true;
 }
 
+float IpdM() {
+    return g.ipd.Value();
+}
+
 bool TakeIpdSaved() { // AzaharFrame ipd
     return std::exchange(g.ipd_saved_now, false);
 }

@@ -40,6 +40,7 @@ enum class Need {
     EditGame,
     GbaDsGroup,
     PokeDaisyGroup,
+    LayerDepth,
 };
 
 struct Rule {
@@ -64,6 +65,8 @@ constexpr Rule kRules[] = {
     {Id::AllowGameEditing, Need::EditGame},
     {Id::GbaDsHeader, Need::GbaDsGroup},
     {Id::PokeDaisyHeader, Need::PokeDaisyGroup},
+    {Id::LayerDepth, Need::LayerDepth},
+    {Id::InvertDepth, Need::LayerDepth},
     {Id::DsTouchEnabled, Need::DsTouch},
     {Id::DsMicBlow, Need::MicBlow},
     {Id::DsLidToggle, Need::Lid},
@@ -165,6 +168,8 @@ bool Has(Need need, const CoreCaps& core) {
         return core.driver == DriverName::GbaDs && core.driver_options != 0;
     case Need::PokeDaisyGroup:
         return core.driver == DriverName::PokeDaisy && core.driver_options != 0;
+    case Need::LayerDepth:
+        return core.layer_depth;
     }
     return false;
 }
