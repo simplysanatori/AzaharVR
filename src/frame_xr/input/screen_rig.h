@@ -90,11 +90,16 @@ const char* LayoutName(uint32_t layout);
 std::string LayoutToast(uint32_t layout);
 /// The other layout (two of them: the cycle is a switch).
 uint32_t NextLayout(uint32_t layout);
+/// Screen Gap (Settings::values.vr_screen_gap, per game): the linked second screen turned
+/// further from the main one about the viewer, by this many degrees at most; 0 is its own place.
+inline constexpr uint32_t kMaxScreenGapDeg = 20;
+
 /// The second slot's pose for the main slot's pose, scale and width and the second screen's
-/// width (and their heights, as BottomOffset).
+/// width (and their heights, as BottomOffset), `gap_deg` (Screen Gap) further away: down about
+/// the viewer when stacked, to the right when side by side. It keeps its distance and its tilt.
 Posef SecondFromMain(const Posef& main, float scale, float main_width, float second_width,
                      uint32_t layout, float main_height = 2.0f * kTopHalfHeight,
-                     float second_height = kBottomHeight);
+                     float second_height = kBottomHeight, float gap_deg = 0.0f);
 /// The second screen's scale while it follows the main one (`equal`: ScreenMetrics::equal_screens).
 float LinkedScale(bool equal, uint32_t layout);
 

@@ -51,6 +51,7 @@ constexpr Rule kRules[] = {
     // Position
     {Id::HideBottomScreen, Need::Bottom},
     {Id::ScreenLayout, Need::Bottom},
+    {Id::ScreenGap, Need::Bottom},
     {Id::MoveScreens, Need::Bottom},
     {Id::SwapScreens, Need::Bottom},
     {Id::ScreenCurve, Need::Any},

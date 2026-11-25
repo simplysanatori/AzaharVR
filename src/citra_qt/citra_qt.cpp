@@ -6231,6 +6231,9 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::GbaSolarLevel:
         set(v.gba_solar_level, std::min<u32>(u, 10));
         break;
+    case S::ScreenGap:
+        set(v.vr_screen_gap, std::min<u32>(u, 20));
+        break;
     case S::SecondScreen: // from the next start (BootAltGame)
         set(v.gba_second_screen, std::min<u32>(u, 2));
         break;

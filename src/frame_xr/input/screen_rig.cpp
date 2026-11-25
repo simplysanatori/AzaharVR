@@ -116,13 +116,25 @@ uint32_t NextLayout(uint32_t layout) {
 }
 
 Posef SecondFromMain(const Posef& main, float scale, float main_width, float second_width,
-                     uint32_t layout, float main_height, float second_height) {
+                     uint32_t layout, float main_height, float second_height, float gap_deg) {
+    const float gap = std::clamp(std::isfinite(gap_deg) ? gap_deg : 0.0f, 0.0f,
+                                 static_cast<float>(kMaxScreenGapDeg)) *
+                      kDegToRad;
     if (layout != kLayoutSideBySide) {
-        return BottomFromTop(main, scale, main_height, second_height);
+        const Posef below = BottomFromTop(main, scale, main_height, second_height);
+        if (gap <= 0.0f) {
+            return below;
+        }
+        // Down about the viewer (the LOCAL origin), about the main screen's own sideways axis.
+        const Vec3f axis = Normalized(Rotate(main.orientation, Vec3f{1.0f, 0.0f, 0.0f}));
+        const float h = -gap * 0.5f;
+        const Quatf turn{axis.x * std::sin(h), axis.y * std::sin(h), axis.z * std::sin(h),
+                         std::cos(h)};
+        return Posef{Normalized(Multiply(turn, below.orientation)), Rotate(turn, below.position)};
     }
     const float horizontal = std::max(std::hypot(main.position.x, main.position.z), 0.1f);
     // The arc between the two middles, on the circle at the main screen's horizontal distance.
-    const float angle = (main_width * 0.5f + kSideGap + second_width * 0.5f) / horizontal;
+    const float angle = (main_width * 0.5f + kSideGap + second_width * 0.5f) / horizontal + gap;
     // Turned to the right about +Y: a negative angle (right-handed, Y up, -Z ahead).
     const Quatf turn{0.0f, std::sin(-angle / 2), 0.0f, std::cos(-angle / 2)};
     Posef s;

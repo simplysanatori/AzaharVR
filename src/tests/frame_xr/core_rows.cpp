@@ -40,7 +40,7 @@ std::set<Id> With(std::set<Id> ids, const std::set<Id>& more) {
 }
 
 const std::set<Id> kTwoScreens{Id::HideBottomScreen, Id::ScreenLayout, Id::MoveScreens,
-                               Id::SwapScreens};
+                               Id::SwapScreens, Id::ScreenGap};
 const std::set<Id> kSaves{Id::SavesHeader, Id::Autosave, Id::AutosaveEvery, Id::AutosaveKeep,
                           Id::AutosaveCard};
 
@@ -243,7 +243,7 @@ TEST_CASE("Core rows: Use Global Values counts only the console's rows", "[frame
         }
     }
     CHECK(GameValueRows(m, Tab::Position) ==
-          std::vector<Id>{Id::HideBottomScreen, Id::DsScreenRotation});
+          std::vector<Id>{Id::HideBottomScreen, Id::ScreenGap, Id::DsScreenRotation});
 }
 
 TEST_CASE("Core rows: the text", "[frame_xr][tabmenu]") {
@@ -405,6 +405,21 @@ TEST_CASE("Core rows: the Secondary Screen driver's options", "[frame_xr][tabmen
         CHECK(!ExplainFor(id).empty());
         CHECK(PerGameSetting(id) == (id == Id::RotatePages || id == Id::MapRefresh));
     }
+}
+
+TEST_CASE("Core rows: Screen Gap", "[frame_xr][tabmenu]") {
+    MenuView position;
+    position.tab = Tab::Position;
+    for (const CoreCaps& core : {CoreCaps::ForN3DS(), CoreCaps::ForNDS(), CoreCaps::ForGBA()}) {
+        INFO("console " << static_cast<int>(core.kind));
+        MenuModel m = Game(core);
+        CHECK(Drawn(m, position).contains(Id::ScreenGap) == core.screens.has_bottom);
+        m.second_free = true; // moved on its own: it no longer follows the main one
+        CHECK(!Drawn(m, position).contains(Id::ScreenGap));
+    }
+    CHECK(PerGameSetting(Id::ScreenGap));
+    CHECK(LabelFor(Id::ScreenGap) == "Screen Gap");
+    CHECK(SliderFor(Id::ScreenGap).max == 20.0f);
 }
 
 // The notice shown the first time Allow Game Editing is turned on.

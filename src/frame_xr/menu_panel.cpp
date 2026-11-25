@@ -250,6 +250,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::HideBottomScreen;
     case Id::ScreenShape:
         return MenuSetting::ScreenShape;
+    case Id::ScreenGap:
+        return MenuSetting::ScreenGap;
     case Id::ImmersiveMode:
         return MenuSetting::ImmersiveMode;
     case Id::MarginX: // AzaharFrame fovaxis
@@ -963,6 +965,8 @@ void MenuPanel::BuildModel(const Host& host) {
     m.screen_shape = static_cast<int>(std::min<u32>(v.vr_top_aspect.GetValue(), 6)); // fixes7
     m.screen_curve = NearestStep(kCurveSteps, v.vr_screen_curve.GetValue());
     m.screen_layout = static_cast<int>(std::min<u32>(v.vr_screen_layout.GetValue(), 1));
+    m.screen_gap = static_cast<int>(std::min<u32>(v.vr_screen_gap.GetValue(), 20));
+    m.second_free = host.second_free;
     m.move_screens = static_cast<int>(std::min<u32>(v.vr_move_screens.GetValue(), 2)); // menu
     m.touchpad_touch = v.vr_touchpad_touch.GetValue() == 2 ? 1 : 0; // AzaharFrame menuux
     m.bottom_screen_reticle = // AzaharFrame mouse
@@ -1405,6 +1409,10 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
     case Id::ScreenLayout: // AzaharFrame layout, global
         Apply(v.vr_screen_layout, std::min<u32>(u, 1), false);
         r.setting = MenuSetting::ScreenLayout;
+        break;
+    case Id::ScreenGap:
+        Apply(v.vr_screen_gap, std::min<u32>(u, 20), per_game);
+        r.setting = MenuSetting::ScreenGap;
         break;
     case Id::MoveScreens: // AzaharFrame menu, global
         Apply(v.vr_move_screens, std::min<u32>(u, 2), false);
@@ -2916,6 +2924,13 @@ void MenuPanel::Frame(const FrameInfo& info, const Input::InputFrame& in, bool h
             const float t = layout.SliderAt(view.dragging, x);
             if (t >= 0.0f) {
                 view.drag_t = t;
+                if (view.dragging == Id::ScreenGap) { // the screen moves while it is dragged
+                    const int at = static_cast<int>(std::lround(t * 20.0f));
+                    if (at != model.screen_gap) {
+                        SetSetting(Id::ScreenGap, at, host);
+                        model.screen_gap = at;
+                    }
+                }
             }
         } else if (can_scroll && p == press_hand && hit[p].on_plane) {
             // Dragged past the slop: the list follows the beam and nothing is clicked.

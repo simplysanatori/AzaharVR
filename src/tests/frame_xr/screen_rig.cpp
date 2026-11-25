@@ -240,7 +240,7 @@ TEST_CASE("FrameXr screen rig: a DS game's screens do not overlap as the player 
                     continue; // turned screens are never bent (VrUi::CurveFor)
                 }
                 for (const uint32_t layout : {kLayoutStacked, kLayoutSideBySide}) {
-                    {
+                    for (const float gap : {0.0f, 10.0f, static_cast<float>(kMaxScreenGapDeg)}) {
                         const float f = LinkedScale(true, layout);
                         // As WithSecondSlot (app.cpp): the sizes as the screens stand
                         float mw = kW * at.scale, mh = at.scale, sw = kW * f, sh = f;
@@ -249,11 +249,11 @@ TEST_CASE("FrameXr screen rig: a DS game's screens do not overlap as the player 
                             std::swap(sw, sh);
                         }
                         const Posef pose = SecondFromMain(main, at.scale, mw, sw, layout,
-                                                          mh / at.scale, sh);
+                                                          mh / at.scale, sh, gap);
                         const PanelQuad m = MainQuad(main, mw, mh, curve);
                         INFO("main at " << at.at.y << ", " << at.at.z << " scale " << at.scale
                                         << (turned ? " turned" : "") << " curve " << curve
-                                        << " layout " << layout);
+                                        << " layout " << layout << " gap " << gap);
                         for (const Vec3f& eye : eyes) {
                             INFO("eye " << eye.x << ", " << eye.y);
                             REQUIRE_FALSE(Overlaps(m, pose, sw, sh, eye, kApart));
@@ -275,6 +275,46 @@ TEST_CASE("FrameXr screen rig: a DS game's screens do not overlap as the player 
             const Posef old = BottomFromTop(main, at.scale);
             REQUIRE(Overlaps(MainQuad(main, kW * at.scale, at.scale, 0), old, kW, 1.0f, {}, 0.0f));
         }
+    }
+}
+
+TEST_CASE("FrameXr screen rig: Screen Gap turns the linked second screen away about the viewer",
+          "[frame_xr]") {
+    constexpr float kW = 4.0f / 3.0f;
+    const Posef main = Ahead(2.0f);
+    const float f = LinkedScale(true, kLayoutStacked);
+    SECTION("0 is the place it has without it, for every game") {
+        for (const bool equal : {false, true}) {
+            for (const uint32_t layout : {kLayoutStacked, kLayoutSideBySide}) {
+                const float sw = equal ? kW * f : 320.0f / 240.0f * 0.5625f;
+                const float sh = equal ? f : kBottomHeight;
+                const Posef a = SecondFromMain(main, 1.0f, kW, sw, layout, 1.0f, sh);
+                const Posef b = SecondFromMain(main, 1.0f, kW, sw, layout, 1.0f, sh, 0.0f);
+                REQUIRE(Length(a.position - b.position) < 1e-6f);
+            }
+        }
+    }
+    SECTION("stacked: lower by the gap, as far away, as tilted") {
+        const Posef p0 = SecondFromMain(main, 1.0f, kW, kW * f, kLayoutStacked, 1.0f, f);
+        const Posef p = SecondFromMain(main, 1.0f, kW, kW * f, kLayoutStacked, 1.0f, f, 10.0f);
+        REQUIRE(Elevation(p.position) == Approx(Elevation(p0.position) - 10.0f).margin(0.01f));
+        REQUIRE(Length(p.position) == Approx(Length(p0.position)));
+        REQUIRE(Azimuth(p.position) == Approx(0.0f).margin(1e-3f));
+        const Seen a = SeenFrom(p0, kW * f, f), b = SeenFrom(p, kW * f, f);
+        REQUIRE(a.top - b.top == Approx(10.0f).margin(0.05f));
+        REQUIRE(b.width == Approx(a.width).epsilon(0.001));
+    }
+    SECTION("side by side: further right by the gap") {
+        const Posef p0 = SecondFromMain(main, 1.0f, kW, kW, kLayoutSideBySide);
+        const Posef p = SecondFromMain(main, 1.0f, kW, kW, kLayoutSideBySide, 1.0f, 1.0f, 20.0f);
+        REQUIRE(Azimuth(p.position) == Approx(Azimuth(p0.position) + 20.0f).margin(0.01f));
+        REQUIRE(Length(p.position) == Approx(2.0f));
+    }
+    SECTION("no further than the maximum") {
+        const Posef a = SecondFromMain(main, 1.0f, kW, kW * f, kLayoutStacked, 1.0f, f, 90.0f);
+        const Posef b = SecondFromMain(main, 1.0f, kW, kW * f, kLayoutStacked, 1.0f, f,
+                                       static_cast<float>(kMaxScreenGapDeg));
+        REQUIRE(Length(a.position - b.position) < 1e-6f);
     }
 }
 

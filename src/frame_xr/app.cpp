@@ -248,7 +248,8 @@ ScreenPlacement WithSecondSlot(ScreenPlacement place) {
                            {t.position.x, t.position.y, t.position.z}};
     const Input::Posef b = Input::ScreenRig::SecondFromMain(
         top, place.top_scale, main.width, second.width, layout,
-        main.height / Input::ScreenRig::ClampScale(place.top_scale), second.height);
+        main.height / Input::ScreenRig::ClampScale(place.top_scale), second.height,
+        static_cast<float>(Settings::values.vr_screen_gap.GetValue()));
     place.bottom_pose = {{b.orientation.x, b.orientation.y, b.orientation.z, b.orientation.w},
                          {b.position.x, b.position.y, b.position.z}};
     return place;

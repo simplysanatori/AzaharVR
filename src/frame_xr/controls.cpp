@@ -1150,6 +1150,9 @@ void VrUi::TabMenuFrame(Runtime& rt, const FrameInfo& info, const Input::InputFr
     MenuPanel::Host host;
     host.curve_ok = cylinder_ok;
     host.passthrough_ok = PassthroughSupported();
+    host.second_free =
+        GetScreenPlacement().second_free &&
+        Rig::ClampDetach(Settings::values.vr_move_screens.GetValue()) != Rig::kDetachOff;
     host.request = [this](const MenuRequest& r) {
         std::scoped_lock lock{hooks_mutex};
         if (hooks.menu_request) {

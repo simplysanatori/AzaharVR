@@ -305,6 +305,7 @@ void RestoreGlobalState(bool is_powered_on) {
     values.vr_immersive_eye_per_far.SetGlobal(true);
     values.vr_hide_bottom_screen.SetGlobal(true);
     values.vr_top_aspect.SetGlobal(true);
+    values.vr_screen_gap.SetGlobal(true);
     values.vr_immersive_game_fov.SetGlobal(true);
     values.vr_immersive_match_camera.SetGlobal(true); // AzaharFrame depth
     values.vr_immersive_match_camera_mode.SetGlobal(true); // AzaharFrame fovonce

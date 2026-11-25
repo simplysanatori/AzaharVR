@@ -81,7 +81,7 @@ std::string Format(const char* f, double v) {
 }
 
 std::string SliderText(Id id, float value) {
-    if (id == Id::GameFov) {
+    if (id == Id::GameFov || id == Id::ScreenGap) {
         return Format("%.0f\u00b0", value);
     }
     if (id == Id::Depth3d) {
@@ -290,6 +290,14 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
     if (tab == Tab::Position) {
         rows.push_back(row(Id::HideBottomScreen, RowKind::Switch, 0, m.hide_bottom_screen));
         rows.push_back(row(Id::ScreenLayout, RowKind::Segmented, m.screen_layout));
+        if (!m.second_free) { // it follows the main one
+            Row gap = row(Id::ScreenGap, RowKind::Slider);
+            const SliderRange gr = SliderFor(Id::ScreenGap);
+            const float at = std::clamp(static_cast<float>(m.screen_gap), gr.min, gr.max);
+            gap.t = (at - gr.min) / (gr.max - gr.min);
+            gap.value = SliderText(Id::ScreenGap, at);
+            rows.push_back(gap);
+        }
         rows.push_back(row(Id::MoveScreens, RowKind::Segmented, m.move_screens)); // AzaharFrame menu
         rows.push_back(row(Id::ScreenShape, RowKind::MenuButton, m.screen_shape));
         rows.push_back(row(Id::ScreenCurve, RowKind::MenuButton, m.screen_curve));
@@ -646,6 +654,7 @@ bool PerGameSetting(Id id) {
     case Id::AllowGameEditing:
     case Id::RotatePages:
     case Id::MapRefresh:
+    case Id::ScreenGap:
         return true;
     default:
         return false;
@@ -1150,6 +1159,8 @@ std::string LabelFor(Id id) {
         return "Screen Curve";
     case Id::ScreenLayout:
         return "Screen Layout";
+    case Id::ScreenGap:
+        return "Screen Gap";
     case Id::MoveScreens:
         return "Detach Screens";
     case Id::TouchpadTouch: // AzaharFrame menuux
@@ -1575,6 +1586,8 @@ std::string ExplainFor(Id id) {
         return "Bends the Primary Screen so its sides come toward you.";
     case Id::ScreenLayout:
         return "The Secondary Screen below the Primary Screen, or to its right.";
+    case Id::ScreenGap:
+        return "Moves the Secondary Screen further from the Primary Screen.";
     case Id::ImmersiveOffset:
         return "Moves the immersive screen to fit your lenses, in every game.";
     case Id::ShowStats:
@@ -1880,6 +1893,9 @@ SliderRange SliderFor(Id id) {
     }
     if (id == Id::GbaSolarLevel) {
         return {0.0f, 10.0f, 1.0f};
+    }
+    if (id == Id::ScreenGap) {
+        return {0.0f, 20.0f, 1.0f};
     }
     return {};
 }

@@ -1022,6 +1022,10 @@ struct Values {
     // the main one, tilted back), 1 Side by Side (to its right, facing you). Left stick click held
     // 1 s switches it. Read every frame (frame_xr/input/screen_rig.h SecondFromMain).
     SwitchableSetting<u32, true> vr_screen_layout{0, 0, 1, "vr_screen_layout"};
+    // AzaharVR: Screen Gap, per game too: how many degrees (0 to 20) the linked Secondary Screen
+    // is turned further from the main one about you, down or to the right. Read every frame
+    // (frame_xr/input/screen_rig.h SecondFromMain).
+    SwitchableSetting<u32, true> vr_screen_gap{0, 0, 20, "vr_screen_gap"};
     // AzaharFrame menu: Detach Screens, global: 0 Off (both screens move as one), 1 Secondary (the
     // Secondary Screen moves freely), 2 Both (each screen moves on its own). Normal VR screens only.
     SwitchableSetting<u32, true> vr_move_screens{0, 0, 2, "vr_move_screens"};
