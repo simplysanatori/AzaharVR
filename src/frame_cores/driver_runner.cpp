@@ -163,6 +163,7 @@ void DriverRunner::RunFrame(const Common::AltCore::InputState& input, FrameOutpu
                             Common::AltCore::Capabilities& caps) {
     out.primary = {};
     out.primary_right = {};
+    out.layer_shift = 0.0f;
     out.secondary = {};
     out.overlay = {};
     out.held = false;
@@ -238,10 +239,12 @@ void DriverRunner::TurnPage() {
     }
 }
 
-void DriverRunner::SetRightEye(const DriverPicture& picture, FrameOutput& out) const {
+void DriverRunner::SetRightEye(const DriverPicture& picture, float shift,
+                               FrameOutput& out) const {
     if (primary_is_game && picture.pixels && out.primary.HasPicture() &&
         picture.width == out.primary.width && picture.height == out.primary.height) {
         out.primary_right = ToImage(picture);
+        out.layer_shift = shift;
     }
 }
 

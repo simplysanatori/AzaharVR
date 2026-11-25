@@ -152,8 +152,15 @@ struct GbCore::Impl {
         info.kind = Common::AltCore::CoreKind::GB;
         driver.Start(kind, known, std::move(services), info, opts, save_path, caps);
 
+        caps.layer_depth = driver.PrimaryIsGame() && ShadowEye::Fits(core);
+        ApplyLayerDepth();
+    }
+
+    void ApplyLayerDepth() {
         shadow.SetDepth(opts.layer_depth);
-        if (opts.layer_depth > 0 && driver.PrimaryIsGame()) {
+        if (opts.layer_depth == 0 || !caps.layer_depth) {
+            shadow.Stop();
+        } else if (!shadow.Started()) {
             shadow.Start(core, width, height);
         }
     }
@@ -383,7 +390,7 @@ void GbCore::SetInput(const Common::AltCore::InputState& input) {
 
 void GbCore::RunFrame(FrameOutput& out) {
     impl->driver.RunFrame(impl->input, out, impl->caps);
-    impl->driver.SetRightEye(impl->shadow.Picture(), out);
+    impl->driver.SetRightEye(impl->shadow.Picture(), impl->shadow.FarthestShift(), out);
 }
 
 uint32_t GbCore::AudioSampleRate() const {
@@ -462,6 +469,17 @@ void GbCore::AfterStateLoad() {
 
 void GbCore::SetEditing(bool on) {
     impl->driver.SetEditing(on);
+}
+
+void GbCore::SetLayerDepth(uint32_t level) {
+    if (impl->opts.layer_depth != level) {
+        impl->opts.layer_depth = level;
+        impl->ApplyLayerDepth();
+    }
+}
+
+void GbCore::SetMaxLayerShift(float share) {
+    impl->shadow.SetMaxShift(share);
 }
 
 void GbCore::TurnPage() {

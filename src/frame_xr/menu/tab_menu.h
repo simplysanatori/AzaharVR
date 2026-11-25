@@ -317,6 +317,7 @@ enum class Id : int {
     ImportSave,
     SecondScreen,     ///< GBA and Game Boy games: index of SecondScreenOptions (gba_second_screen)
     AllowGameEditing, ///< GBA and Game Boy games: a switch (gba_allow_editing)
+    LayerDepth,       ///< a slider, 0 to 3 (layer_depth)
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -546,6 +547,7 @@ struct MenuModel {
     int ds_console_mode = 0;      ///< 0 Automatic, 1 DS, 2 DSi
     int gba_second_screen = 0;    ///< 0 PokeDaisy, 1 GBA DS, 2 Off
     bool gba_allow_editing = false;
+    int layer_depth = 0;          ///< 0..3
     bool ds_touch_enabled = true; ///< DS touch input switch
     int ds_screen_rotation = 0;   ///< 0 = 0°, 1 = 90°, 2 = 270°
     bool ds_lid_closed = false;   ///< DS lid closed toggle

@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 
+#include "common/layer_depth.h"
 #include "frame_xr/immersive_names.h" // AzaharFrame kiu
 #include "frame_xr/menu/ds_drawing.h"
 #include "frame_xr/menu/md3_fonts.h"
@@ -299,6 +300,13 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             rows.push_back(row(Id::SecondScreen, RowKind::Segmented,
                                SecondScreenIndex(m.core, m.gba_second_screen)));
             rows.push_back(row(Id::AllowGameEditing, RowKind::Switch, 0, m.gba_allow_editing));
+            Row layers = row(Id::LayerDepth, RowKind::Slider);
+            const SliderRange lr = SliderFor(Id::LayerDepth);
+            const float lv = std::clamp(static_cast<float>(m.layer_depth), lr.min, lr.max);
+            layers.t = (lv - lr.min) / (lr.max - lr.min);
+            layers.stops = 3;
+            layers.value = SliderText(Id::LayerDepth, lv);
+            rows.push_back(layers);
             rows.push_back(row(Id::DsTouchEnabled, RowKind::Switch, 0, m.ds_touch_enabled));
             rows.push_back(row(Id::DsMicBlow, RowKind::Switch, 0, m.ds_mic_active));
             rows.push_back(row(Id::DsLidToggle, RowKind::Switch, 0, m.ds_lid_closed));
@@ -618,6 +626,7 @@ bool PerGameSetting(Id id) {
     case Id::GbaSolarLevel:
     case Id::SecondScreen:
     case Id::AllowGameEditing:
+    case Id::LayerDepth:
         return true;
     default:
         return false;
@@ -1396,6 +1405,8 @@ std::string LabelFor(Id id) {
         return "Second Screen";
     case Id::AllowGameEditing:
         return "Allow Game Editing";
+    case Id::LayerDepth:
+        return "Layer Depth";
     case Id::DsTouchEnabled:
         return "Touch Screen Input";
     case Id::DsMicBlow:
@@ -1770,6 +1781,9 @@ SliderRange SliderFor(Id id) {
     }
     if (id == Id::GbaSolarLevel) {
         return {0.0f, 10.0f, 1.0f};
+    }
+    if (id == Id::LayerDepth) {
+        return {0.0f, static_cast<float>(Common::LayerDepth::kMaxLevel), 1.0f};
     }
     return {};
 }
@@ -2677,7 +2691,8 @@ constexpr float kScopeEditGap = 40.0f;
 constexpr float kRowChipH = 32.0f, kRowChipPad = 12.0f, kRowChipGap = 12.0f;
 const char* RowChip(Id id) {
     return id == Id::MotionClarity || id == Id::MotionClarityNormal || id == Id::ScreenAsPanel ||
-                   id == Id::HudSpacingX || id == Id::HudSpacingY // AzaharFrame hudmove
+                   id == Id::HudSpacingX || id == Id::HudSpacingY || // AzaharFrame hudmove
+                   id == Id::LayerDepth
                ? Immersive::Names::kExperimental
                : nullptr;
 }

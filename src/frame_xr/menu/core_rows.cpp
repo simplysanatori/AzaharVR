@@ -35,6 +35,7 @@ enum class Need {
     SaveImport,
     SecondScreen, ///< two choices or more
     EditGame,
+    LayerDepth,
 };
 
 struct Rule {
@@ -56,6 +57,7 @@ constexpr Rule kRules[] = {
     {Id::DsConsoleMode, Need::ConsoleMode},
     {Id::SecondScreen, Need::SecondScreen},
     {Id::AllowGameEditing, Need::EditGame},
+    {Id::LayerDepth, Need::LayerDepth},
     {Id::DsTouchEnabled, Need::DsTouch},
     {Id::DsMicBlow, Need::MicBlow},
     {Id::DsLidToggle, Need::Lid},
@@ -130,7 +132,7 @@ bool Has(Need need, const CoreCaps& core) {
     case Need::ConsoleGroup:
         return core.has_solar_sensor || core.has_dsi_mode || Has(Need::DsTouch, core) ||
                core.has_mic_blow || core.has_lid_close || core.has_save_import ||
-               Has(Need::SecondScreen, core) || core.can_edit_game;
+               Has(Need::SecondScreen, core) || core.can_edit_game || core.layer_depth;
     case Need::SolarSensor:
         return core.has_solar_sensor;
     case Need::ConsoleMode:
@@ -147,6 +149,8 @@ bool Has(Need need, const CoreCaps& core) {
         return std::popcount(core.second_screen_choices) >= 2;
     case Need::EditGame:
         return core.can_edit_game;
+    case Need::LayerDepth:
+        return core.layer_depth;
     }
     return false;
 }

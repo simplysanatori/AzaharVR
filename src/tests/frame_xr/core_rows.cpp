@@ -19,7 +19,7 @@ namespace {
 const std::set<Id> kOthersOnly{Id::CoreHeader,     Id::GbaSolarLevel, Id::DsConsoleMode,
                                Id::DsTouchEnabled, Id::DsMicBlow,     Id::DsLidToggle,
                                Id::ImportSave,     Id::DsScreenRotation, Id::SecondScreen,
-                               Id::AllowGameEditing};
+                               Id::AllowGameEditing, Id::LayerDepth};
 
 /// Every console's.
 const std::set<Id> kCommon{
@@ -324,6 +324,28 @@ TEST_CASE("Core rows: Second Screen and Allow Game Editing", "[frame_xr][tabmenu
     CHECK(LabelFor(Id::AllowGameEditing) == "Allow Game Editing");
     CHECK(PerGameSetting(Id::SecondScreen));
     CHECK(PerGameSetting(Id::AllowGameEditing));
+}
+
+TEST_CASE("Core rows: Layer Depth", "[frame_xr][tabmenu]") {
+    for (CoreCaps core : {CoreCaps::ForGBA(), CoreCaps::ForGB(), CoreCaps::ForNDS(),
+                          CoreCaps::ForNDS(true), CoreCaps::ForN3DS()}) {
+        CHECK(!core.layer_depth);
+        CHECK(!RowApplies(Id::LayerDepth, core));
+        core.layer_depth = true;
+        CHECK(RowApplies(Id::LayerDepth, core) == !Is3ds(core));
+        CHECK(RowApplies(Id::CoreHeader, core) == !Is3ds(core));
+    }
+    CoreCaps gba = CoreCaps::ForGBA();
+    CHECK(!Drawn(Game(gba), SettingsView(SettingsSection::General)).contains(Id::LayerDepth));
+    gba.layer_depth = true;
+    CHECK(Drawn(Game(gba), SettingsView(SettingsSection::General)).contains(Id::LayerDepth));
+    CHECK(LabelFor(Id::LayerDepth) == "Layer Depth");
+    CHECK(ExplainFor(Id::LayerDepth).empty());
+    CHECK(PerGameSetting(Id::LayerDepth));
+    const SliderRange range = SliderFor(Id::LayerDepth);
+    CHECK(range.min == 0.0f);
+    CHECK(range.max == 3.0f);
+    CHECK(range.step == 1.0f);
 }
 
 // The notice shown the first time Allow Game Editing is turned on.
