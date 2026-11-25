@@ -120,6 +120,13 @@ struct Catalog {
 /// are dropped with a note in `warnings`. nullopt when the text is not a catalog.
 std::optional<Catalog> ParseCatalog(std::string_view json, std::string* error = nullptr,
                                     std::vector<std::string>* warnings = nullptr);
+/// The list's one request a run: for the player's Download Packs (`player`; again after one that
+/// failed), or when the Textures segment shows for a game with a pack of the list (`pack_here`).
+enum class ListFetch : u8 { None, Running, Read, Failed };
+constexpr bool ShouldFetchList(ListFetch state, bool player, bool pack_here) {
+    return state == ListFetch::None ? player || pack_here : state == ListFetch::Failed && player;
+}
+
 const char* DefaultCatalogJson();
 Catalog DefaultCatalog();
 /// AzaharFrame fixes7: the catalog a Downloader was last given (the fetched one), else the default.

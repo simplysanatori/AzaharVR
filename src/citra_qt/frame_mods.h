@@ -55,6 +55,7 @@ struct Job;
 namespace CustomTex::Download {
 class Downloader;
 struct PackInfo;
+enum class ListFetch : u8;
 } // namespace CustomTex::Download
 namespace FrameXr {
 struct MenuRequest;
@@ -193,6 +194,9 @@ private:
     std::map<std::string, std::shared_ptr<const std::vector<uint8_t>>> part_previews;
     int parts_serial = 0; ///< the page opened last (a scan of an older one is dropped)
     void LoadPackDownloads();
+    /// The list's latest copy, off the GUI thread: the one public file, nothing of the game in the
+    /// request. Read only: it never starts a download.
+    void FetchPackList(bool player);
     void ListPackDownloads();
     /// A download, or an update (core/custom_tex/update.h) of the installed pack: only the player's
     /// own Download or Update comes here.
@@ -292,7 +296,9 @@ private:
     Pending pending;                    ///< what the dialog's Replace / Remove does
     Pending pack_pending;               ///< what the Textures dialog's Download / Delete does
     std::shared_ptr<CustomTex::Download::Downloader> downloader; ///< one for the session
-    bool catalog_fetched = false;       ///< the texture catalog's one request a run
+    /// The texture list's one request a run (CustomTex::Download::ListFetch)
+    CustomTex::Download::ListFetch pack_list{};
+    bool pack_of_list = false; ///< the game has an installed pack of the list (SetOffers)
     u64 mods_network_title = ~0ULL;     ///< AzaharFrame stall: the title the mod list's requests ran for
     bool mods_network_running = false;  ///< AzaharFrame stall: they run now
     /// The packs (by id) with Delete, from RefreshPacks

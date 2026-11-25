@@ -123,6 +123,19 @@ TEST_CASE("texdl: the compiled-in catalog parses cleanly", "[texdl]") {
     CHECK(xy->size == 1834769856ULL);
 }
 
+TEST_CASE("texdl: the list is asked for once a run", "[texdl]") {
+    using F = ListFetch;
+    CHECK(ShouldFetchList(F::None, true, false));
+    CHECK(ShouldFetchList(F::None, false, true));
+    CHECK_FALSE(ShouldFetchList(F::None, false, false)); // no pack of the list: not asked
+    for (const F f : {F::Running, F::Read}) {
+        CHECK_FALSE(ShouldFetchList(f, true, true));
+        CHECK_FALSE(ShouldFetchList(f, false, true));
+    }
+    CHECK_FALSE(ShouldFetchList(F::Failed, false, true)); // offline: not again by itself
+    CHECK(ShouldFetchList(F::Failed, true, false));
+}
+
 // AzaharFrame modcat2: the GameBanana source (the newest clean file of a mod).
 TEST_CASE("texdl: the gamebanana source parses, and bad ones are dropped", "[texdl]") {
     std::vector<std::string> warnings;

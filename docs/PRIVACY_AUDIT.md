@@ -53,7 +53,7 @@ The emulator makes no network connection of its own (web service, telemetry, upd
 | `drive.google.com`, `drive.usercontent.google.com` | As for texture packs below: the folder's public page and the file's download address | A mod its author shares as a public Google Drive file or folder |
 | any one exact host a catalog entry names (`https` source) | `GET` of the mod's archive | A mod its author hosts on a plain https link. No wildcards, no plain `http` |
 
-Texture packs (VR menu, Textures segment, "Download Packs", `src/core/custom_tex/download.*`). Only when the player taps Download on a pack, never in the background; the catalog list itself is read with the one catalog request above (`catalog/textures.json`, same host) or from the copy compiled in:
+Texture packs (VR menu, Textures segment, "Download Packs", `src/core/custom_tex/download.*`). Only when the player taps Download or Update on a pack, never in the background; the catalog list itself is read with one request a run like the one above (`catalog/textures.json`, same host; again only when the player opens Download Packs after one that failed) or from the copy compiled in. That request runs when the player opens Download Packs, or opens the Textures segment for a game with an installed pack of the list, to show Update Available. It is the same public file for everyone and says nothing of the game: no title ID, no pack. It only reads the list and starts no download:
 
 | Host | Request | Why |
 |---|---|---|

@@ -276,6 +276,7 @@ void FrameMods::Open(u64 title_id_, int run_) {
         deletable.clear();
         updates.clear();
         update_folders.clear();
+        pack_of_list = false;
         PublishMods();
         PublishTextures();
         PublishZip();
@@ -420,6 +421,7 @@ void FrameMods::Command(const FrameXr::MenuRequest& r) {
         textures.shown = true;
         NoteUpdates();
         PublishTextures();
+        FetchPackList(false); // is there an update
         return;
     case C::LoadPackDownloads:
         textures.update_name.clear(); // answered
@@ -1601,10 +1603,15 @@ void FrameMods::LoadPackDownloads() {
         downloader = std::make_shared<CustomTex::Download::Downloader>();
     }
     ListPackDownloads();
-    if (catalog_fetched) {
+    FetchPackList(true);
+}
+
+void FrameMods::FetchPackList(bool player) {
+    namespace D = CustomTex::Download;
+    if (!downloader || !D::ShouldFetchList(pack_list, player, pack_of_list)) {
         return;
     }
-    catalog_fetched = true;
+    pack_list = D::ListFetch::Running;
     // The catalog's latest copy: one request a run, the compiled-in copy without it.
     const auto dl = downloader;
     OffThread(
@@ -1625,6 +1632,7 @@ void FrameMods::LoadPackDownloads() {
             return true;
         },
         [this](bool updated) {
+            pack_list = updated ? D::ListFetch::Read : D::ListFetch::Failed;
             if (updated) {
                 ListPackDownloads();
             }
@@ -1656,6 +1664,7 @@ void FrameMods::SetOffers(const std::vector<CustomTex::Download::PackInfo>& list
     std::set<std::string> recommended_now;
     std::set<std::string> update_now;
     updates.clear();
+    pack_of_list = false;
     for (const CustomTex::Download::PackInfo& p : list) {
         offer_sizes[p.id] = p.size;
         for (const std::string& f : p.folders) {
@@ -1672,6 +1681,7 @@ void FrameMods::SetOffers(const std::vector<CustomTex::Download::PackInfo>& list
         if (p.update) {
             updates[p.id] = p.name;
         }
+        pack_of_list |= p.installed;
         Menu::PackOffer o;
         o.id = p.id;
         o.name = p.name;
@@ -1723,6 +1733,9 @@ void FrameMods::SetOffers(const std::vector<CustomTex::Download::PackInfo>& list
     }
     NoteUpdates();
     PublishTextures();
+    if (textures.shown) {
+        FetchPackList(false);
+    }
 }
 
 void FrameMods::NoteUpdates() {
