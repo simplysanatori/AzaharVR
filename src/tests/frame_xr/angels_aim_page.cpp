@@ -631,7 +631,7 @@ TEST_CASE("Angel's Aim page: Power Menu", "[frame_xr][kiuaim]") {
     }
     CHECK(LabelFor(Id::KiuPowerMenu) == "Power Menu");
     CHECK(LabelFor(Id::KiuPowerMenuOpacity) == "Power Menu Opacity");
-    CHECK(ExplainFor(Id::KiuPowerMenu) == "Shows your powers when you pick one. Choose where.");
+    CHECK(ExplainFor(Id::KiuPowerMenu) == "Off Hand: when you pick one. Elsewhere: always in battles.");
     CHECK(OptionsFor(Id::KiuPowerMenu) ==
           std::vector<std::string>{"Off", "Off Hand", "Health Bar", "Middle", "Score"}); // stored order
     CHECK(LabelFor(Id::KiuPowerMenuAcross) == "Power Menu Left/Right");

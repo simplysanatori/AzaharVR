@@ -22,7 +22,7 @@
 //   (the catalog's C-Stick & Gyro rows, as Install Mods draws them: Install, its versions)
 //   ─────────────────────────────────────────────────────────────
 //   Suggested                                                        (title)
-//   Kid Icarus Uprising Weapons HD                     Installed / Not Installed
+//   Kid Icarus: Uprising HD                            Installed / Not Installed
 //   (the catalog's weapons and effects texture pack: installed and on in the game's packs)
 //
 // The values come from the Qt side (citra_qt/frame_mods.cpp, FrameXr::SetInGameMenuAngelsAim).
@@ -84,7 +84,7 @@ inline constexpr const char* kAngelsAimGroupModsAndPack = "Mods & Pack";
 inline constexpr const char* kAngelsAimModName = "Darkshade's C-Stick & Gyro Mod";
 inline constexpr const char* kAngelsAimSuggested = "Suggested";
 /// One row for the weapons and effects textures, named as the catalog names the pack.
-inline constexpr const char* kAngelsAimTexturesPack = "Kid Icarus Uprising Weapons HD";
+inline constexpr const char* kAngelsAimTexturesPack = "Kid Icarus: Uprising HD";
 /// AzaharFrame kiu140: the row that takes a hand model from a zip, and its toast (approved
 /// 2026-11-24).
 inline constexpr const char* kAngelsAimHandModel = "Pit's Hand Model";
@@ -220,7 +220,7 @@ inline constexpr const char* kKiuPowerMenuHealthBar = "Health Bar";
 inline constexpr const char* kKiuPowerMenuMiddle = "Middle";
 inline constexpr const char* kKiuPowerMenuScore = "Score";
 inline constexpr const char* kKiuPowerMenuTip =
-    "Shows your powers when you pick one. Choose where.";
+    "Off Hand: when you pick one. Elsewhere: always in battles.";
 inline constexpr const char* kKiuPowerMenuAcrossRow = "Power Menu Left/Right";
 inline constexpr const char* kKiuPowerMenuAcrossTip =
     "How far left or right the power menu is. 0\u00B0 is straight ahead.";
