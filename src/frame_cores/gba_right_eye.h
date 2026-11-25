@@ -1,0 +1,54 @@
+// Copyright 2026 AzaharVR contributors
+// Licensed under GPLv3 or any later version
+// Refer to the license.txt file included.
+
+#pragma once
+
+#include <cstdint>
+#include <memory>
+
+#include "frame_cores/frame_driver.h"
+
+struct mCore;
+
+namespace FrameCores {
+
+/// The right eye's picture of a GBA game (Layer Depth): a second software renderer that draws each
+/// line from what the game's has as it draws it, with the layers moved. It sits below whatever a
+/// driver hooks above it, so a layer or sprite the driver leaves out is left out here too.
+class GbaRightEye {
+public:
+    GbaRightEye();
+    ~GbaRightEye();
+
+    GbaRightEye(const GbaRightEye&) = delete;
+    GbaRightEye& operator=(const GbaRightEye&) = delete;
+
+    /// Before a driver is made: one that hooks the renderer keeps what it finds there. False: the
+    /// game is not drawn by mGBA's software renderer.
+    bool Attach(mCore* game);
+    /// After the driver is gone, before the core is.
+    void Detach();
+
+    /// 0: nothing is drawn. Up to 3.
+    void SetDepth(uint32_t level);
+    /// Common::LayerDepth::MaxShift; 0: nothing is drawn.
+    void SetMaxShift(float share);
+
+    /// Around the game's own frame. Frames a driver runs to draw one again are not drawn here.
+    void BeginFrame();
+    void EndFrame();
+
+    /// Of the last frame, until the next. None while off.
+    DriverPicture Picture() const;
+    /// The game's, as its renderer drew it: without what a driver painted on it since.
+    DriverPicture GamePicture() const;
+    /// Of Picture's farthest layer, a share of its width.
+    float FarthestShift() const;
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl;
+};
+
+} // namespace FrameCores

@@ -38,6 +38,13 @@ constexpr uint32_t LayerShift(uint32_t level, uint32_t step, uint32_t farthest, 
     return per_step > 0.0f ? static_cast<uint32_t>(per_step * static_cast<float>(step)) : 0;
 }
 
+/// Invert Depth: the layers move to the left instead, so the order is the other way round and the
+/// farthest comes nearest. What stays on the screen is the same either way.
+constexpr int32_t Directed(uint32_t shift, bool inverted) {
+    const auto pixels = static_cast<int32_t>(shift);
+    return inverted ? -pixels : pixels;
+}
+
 /// How far both eyes' pictures move, the same way, so that the farthest layer's two are half the
 /// shift to each side of where a game without depth has it. Metres, to the right.
 constexpr float Recentre(float farthest_shift, float width_m) {
@@ -48,7 +55,10 @@ constexpr float Recentre(float farthest_shift, float width_m) {
 struct Shared {
     /// XR thread: MaxShift of the Primary Screen on view.
     std::atomic<float> max_shift{kOnScreen};
-    /// Emulation thread: the farthest layer's shift, a share of the width; 0: no right picture.
+    /// The frontend: Invert Depth. The cores read it every frame.
+    std::atomic<bool> inverted{false};
+    /// Emulation thread: the farthest layer's shift, a share of the width, below 0 while inverted;
+    /// 0: no right picture.
     std::atomic<float> farthest_shift{0.0f};
 };
 

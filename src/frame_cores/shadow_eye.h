@@ -15,9 +15,9 @@ struct mCore;
 
 namespace FrameCores {
 
-/// The right eye's picture of a GBA or Game Boy game (Layer Depth): a second core that gets the
-/// game's whole state every frame and draws the same frame with its layers moved. The game's core
-/// is only read.
+/// The right eye's picture of a Game Boy game (Layer Depth): a second core that gets the game's
+/// whole state every frame and draws the same frame with its layers moved. The game's core is only
+/// read.
 class ShadowEye {
 public:
     ShadowEye() = default;
@@ -54,8 +54,7 @@ public:
 private:
     bool CopyGame();
     void ShiftLayers();
-    uint32_t Farthest() const; ///< steps back, of the farthest layer
-    int32_t Shift(uint32_t step) const;
+    int32_t BackgroundShift() const;
     void FailOnce(const char* what);
 
     mCore* game = nullptr;

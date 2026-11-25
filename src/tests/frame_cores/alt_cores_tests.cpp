@@ -190,8 +190,12 @@ std::vector<uint8_t> MakeBatteryGbRom() {
 /// A GBA ROM with two text backgrounds of `priority0` and `priority1`, drawn `right0` and
 /// `right1` pixels to the right of where they scroll. They scroll every frame and change in the
 /// middle of it; sound channel 1 plays.
-std::vector<uint8_t> MakeLayersGbaRom(uint32_t priority0, uint32_t priority1, uint32_t right0 = 0,
-                                      uint32_t right1 = 0) {
+std::vector<uint8_t> MakeLayersGbaRom(uint32_t priority0, uint32_t priority1, int right0 = 0,
+                                      int right1 = 0) {
+    const auto sub = [](uint32_t reg, int value) { // sub r1, reg, #value
+        return (value < 0 ? 0xE2801000u : 0xE2401000u) | reg << 16 |
+               static_cast<uint32_t>(std::abs(value));
+    };
     std::vector<uint8_t> rom = MakeHomebrewGbaRom();
     const uint32_t code[] = {
         0xE3A00301u,          // mov r0, #0x04000000
@@ -241,9 +245,9 @@ std::vector<uint8_t> MakeLayersGbaRom(uint32_t priority0, uint32_t priority1, ui
         0x1AFFFFFCu,          // bne -2
         0xE2888001u,          // add r8, r8, #1
         0xE1A070A8u,          // lsr r7, r8, #1
-        0xE2481000u | right0, // sub r1, r8, #right0
+        sub(8, right0),
         0xE1C011B0u,          // strh r1, [r0, #0x10]     BG0HOFS
-        0xE2471000u | right1, // sub r1, r7, #right1
+        sub(7, right1),
         0xE1C011B4u,          // strh r1, [r0, #0x14]     BG1HOFS
         0xE1C071B2u,          // strh r7, [r0, #0x12]     BG0VOFS
         0xE20810FFu,          // and r1, r8, #0xFF
@@ -274,7 +278,7 @@ std::vector<uint8_t> MakeLayersGbaRom(uint32_t priority0, uint32_t priority1, ui
 
 /// A Game Boy ROM whose background scrolls and changes its colours every frame, drawn `right`
 /// pixels to the right of where it scrolls; `window`: the window covers it. Sound channel 1 plays.
-std::vector<uint8_t> MakeLayersGbRom(bool window, uint8_t right = 0) {
+std::vector<uint8_t> MakeLayersGbRom(bool window, int right = 0) {
     std::vector<uint8_t> rom = MakeHomebrewGbRom();
     const uint8_t lcdc = window ? 0xF1 : 0x91;
     const uint8_t code[] = {
@@ -291,7 +295,7 @@ std::vector<uint8_t> MakeLayersGbRom(bool window, uint8_t right = 0) {
         // loop (0x18E):
         0xF0, 0x44, 0xFE, 0x90, 0x20, 0xFA,             // until line 144
         0x14, 0x7A, 0xE0, 0x47, 0xE0, 0x42, 0xE0, 0x13, // inc d: the palette, SCY, the note
-        0xD6, right, 0xE0, 0x43, 0x3E, 0x87, 0xE0, 0x14, // SCX
+        0xD6, static_cast<uint8_t>(right), 0xE0, 0x43, 0x3E, 0x87, 0xE0, 0x14, // SCX
         0xF0, 0x44, 0xFE, 0x90, 0x28, 0xFA,             // until the next line
         0xC3, 0x8E, 0x01,                               // jp loop
     };
@@ -351,6 +355,19 @@ struct DepthGame {
     }
     Pixels Right() const {
         return Copy(out.primary_right);
+    }
+};
+
+/// The setting, for a test.
+struct InvertDepth {
+    explicit InvertDepth(bool on) {
+        Set(on);
+    }
+    ~InvertDepth() {
+        Set(false);
+    }
+    void Set(bool on) {
+        Common::LayerDepth::Get().inverted = on;
     }
 };
 
@@ -552,6 +569,7 @@ struct Job {
     int loads = 0;
     int pages = 0;
     bool held = false;
+    int paint = -1; ///< a pixel of the Primary Screen the driver paints over
     FrameCores::DriverPicture picture;
 };
 
@@ -573,6 +591,9 @@ public:
                 pixels[y * job.picture.width + x] =
                     job.picture.pixels[y * job.picture.stride + x] | 0xFF000000u;
             }
+        }
+        if (job.paint >= 0) {
+            pixels[static_cast<size_t>(job.paint)] ^= 0x00FFFFFFu;
         }
         out.primary = {pixels.data(), job.picture.width, job.picture.height, job.picture.width};
         if (job.frames > 0) {
@@ -1844,8 +1865,8 @@ TEST_CASE("Layer Depth: no shift on a screen too wide for one", "[frame_cores]")
 
 TEST_CASE("Layer Depth: lines mGBA left undrawn at the start", "[frame_cores]") {
     // At line 0 forced blank goes off and no register was ever set to anything but 0. mGBA takes
-    // the lines of its first, short frame as unchanged and leaves them blank; the right eye's
-    // are drawn afresh after the copy. It ends with the first register the game sets.
+    // the lines of its first, short frame as unchanged and leaves them blank, in both eyes. It ends
+    // with the first register the game sets.
     std::vector<uint8_t> rom = MakeHomebrewGbaRom();
     const uint32_t code[] = {
         0xE3A00301u, // mov r0, #0x04000000
@@ -1860,27 +1881,35 @@ TEST_CASE("Layer Depth: lines mGBA left undrawn at the start", "[frame_cores]") 
         PutLE32(rom, pc, word);
         pc += 4;
     }
-    DepthGame game(true, rom, 1);
-    game.Run();
-    CHECK((game.Right() == game.Left()));
-    for (int i = 0; i < 3; ++i) {
-        game.Run();
-    }
-    const Pixels left = game.Left();
-    const Pixels right = game.Right();
-    constexpr size_t kFirst = 126 * 240; // VCOUNT at the start
-    CHECK(std::equal(left.begin(), left.begin() + kFirst, right.begin()));
-    CHECK(std::all_of(right.begin(), right.end(), [](uint32_t p) { return p == 0xFF000000u; }));
-    CHECK(std::none_of(left.begin() + kFirst, left.end(),
-                       [](uint32_t p) { return p == 0xFF000000u; }));
+    DepthGame game(true, rom, 3);
+    const auto same = [&game] {
+        for (int i = 0; i < 10; ++i) {
+            INFO("frame " << i);
+            game.Run();
+            REQUIRE(game.out.primary_right.HasPicture());
+            REQUIRE((game.Right() == game.Left()));
+        }
+        const Pixels left = game.Left();
+        constexpr size_t kFirst = 126 * 240; // VCOUNT at the start
+        CHECK(std::all_of(left.begin(), left.begin() + kFirst,
+                          [](uint32_t p) { return p == 0xFF000000u; }));
+        CHECK(std::none_of(left.begin() + kFirst, left.end(),
+                           [](uint32_t p) { return p == 0xFF000000u; }));
+    };
+    same();
+    game.core->Reset();
+    same();
 }
 
 TEST_CASE("Layer Depth: each layer moves by its priority", "[frame_cores]") {
     const uint32_t level = GENERATE(1u, 2u, 3u);
     const bool gba = GENERATE(true, false);
+    const bool inverted = GENERATE(false, true);
+    const InvertDepth invert{inverted};
     // The expected right eye: the same game with its layers drawn there
-    const auto moved = gba ? MakeLayersGbaRom(1, 3, level, level * 3)
-                           : MakeLayersGbRom(false, static_cast<uint8_t>(level * 2));
+    const int step = inverted ? -static_cast<int>(level) : static_cast<int>(level);
+    const auto moved =
+        gba ? MakeLayersGbaRom(1, 3, step, step * 3) : MakeLayersGbRom(false, step * 2);
     DepthGame game(gba, MakeDeepRom(gba), level);
     DepthGame expected(gba, moved, 0);
     int different = 0;
@@ -1892,6 +1921,8 @@ TEST_CASE("Layer Depth: each layer moves by its priority", "[frame_cores]") {
             continue; // until the game has scrolled
         }
         REQUIRE((game.Right() == expected.Left()));
+        REQUIRE(game.out.layer_shift ==
+                Catch::Approx(gba ? step * 3 / 240.0 : step * 2 / 160.0));
         different += game.Right() != game.Left();
     }
     CHECK(different >= 98); // the Game Boy's palette is all one colour now and then
@@ -1904,8 +1935,9 @@ TEST_CASE("Layer Depth: the limit moves the layers less", "[frame_cores]") {
     const uint32_t most = GENERATE(1u, 2u, 4u, 5u);
     const float limit = (static_cast<float>(most) + 0.5f) / static_cast<float>(width);
     const uint32_t nearer = Common::LayerDepth::LayerShift(3, 1, 3, 240, limit);
-    const auto moved = gba ? MakeLayersGbaRom(1, 3, nearer, most)
-                           : MakeLayersGbRom(false, static_cast<uint8_t>(most));
+    const auto moved =
+        gba ? MakeLayersGbaRom(1, 3, static_cast<int>(nearer), static_cast<int>(most))
+            : MakeLayersGbRom(false, static_cast<int>(most));
     DepthGame game(gba, MakeDeepRom(gba), 3);
     game.core->SetMaxLayerShift(limit);
     DepthGame expected(gba, moved, 0);
@@ -1918,6 +1950,46 @@ TEST_CASE("Layer Depth: the limit moves the layers less", "[frame_cores]") {
         if (i >= 20) {
             REQUIRE((game.Right() == expected.Left()));
         }
+    }
+}
+
+TEST_CASE("Layer Depth: inverted while the game runs", "[frame_cores]") {
+    const bool gba = GENERATE(true, false);
+    InvertDepth invert{false};
+    DepthGame game(gba, MakeDeepRom(gba), 2);
+    DepthGame plain(gba, MakeDeepRom(gba), 0);
+    DepthGame same(gba, MakeDeepRom(gba), 2);
+    DepthGame other(gba, MakeDeepRom(gba), 2);
+    for (int i = 0; i < 120; ++i) {
+        INFO("frame " << i);
+        const bool on = i / 20 % 2 != 0;
+        invert.Set(on);
+        game.Run();
+        plain.Run();
+        invert.Set(false);
+        same.Run();
+        invert.Set(true);
+        other.Run();
+        REQUIRE((game.Right() == (on ? other : same).Right()));
+        REQUIRE(game.out.layer_shift == (on ? other : same).out.layer_shift);
+        REQUIRE((game.Left() == plain.Left())); // the game's own picture is never touched
+        REQUIRE((plain.Right().empty()));       // level 0: none, either way
+        REQUIRE(plain.out.layer_shift == 0.0f);
+    }
+}
+
+TEST_CASE("Layer Depth: inverted, with nothing moved both eyes see the same", "[frame_cores]") {
+    const bool gba = GENERATE(true, false);
+    const bool on_screen = GENERATE(true, false);
+    const InvertDepth invert{true};
+    DepthGame game(gba, on_screen ? MakeDeepRom(gba) : MakeFlatRom(gba), 3);
+    if (on_screen) {
+        game.core->SetMaxLayerShift(Common::LayerDepth::kOnScreen);
+    }
+    for (int i = 0; i < 120; ++i) {
+        INFO("frame " << i);
+        game.Run();
+        REQUIRE((game.Left() == game.Right()));
     }
 }
 
@@ -2034,20 +2106,45 @@ TEST_CASE("Layer Depth goes by the driver", "[frame_cores]") {
         game.Run();
         CHECK((game.Right() != right));
     }
-    {
-        auto opts = WithJob(job);
-        opts.driver.kind = DriverKind::GbaDs;
-        DepthGame game(true, MakeDeepRom(true), 2, opts);
-        for (int i = 0; i < 30; ++i) {
+    for (const auto kind : {DriverKind::PokeDaisy, DriverKind::GbaDs}) {
+        for (const bool gba : {true, false}) {
+            if (!gba && kind == DriverKind::GbaDs) {
+                continue;
+            }
+            INFO("driver " << static_cast<int>(kind) << " gba " << gba);
+            auto opts = WithJob(job);
+            opts.driver.kind = kind;
+            DepthGame game(gba, MakeDeepRom(gba), 2, opts);
+            DepthGame plain(gba, MakeDeepRom(gba), 2);
+            CHECK(game.core->GetCapabilities().layer_depth);
+            for (int i = 0; i < 30; ++i) {
+                game.Run();
+                plain.Run();
+                REQUIRE((game.Left() == plain.Left()));
+                REQUIRE((game.Right() == plain.Right()));
+                REQUIRE(game.out.layer_shift == plain.out.layer_shift);
+            }
+            CHECK((game.Right() != game.Left()));
+            // Something of the driver's on the game's picture: both eyes see the same
+            job.paint = 5;
+            for (int i = 0; i < 3; ++i) {
+                game.Run();
+                plain.Run();
+                CHECK((game.Left() != plain.Left()));
+                CHECK((game.Right() == game.Left()));
+                CHECK(game.out.layer_shift == 0.0f);
+            }
+            job.paint = -1;
             game.Run();
+            plain.Run();
+            CHECK((game.Right() == plain.Right()));
+            CHECK(game.out.layer_shift == plain.out.layer_shift);
         }
-        CHECK(game.out.primary.HasPicture());
-        CHECK(!game.out.primary_right.HasPicture());
     }
 
-    // The runner: the step stays one a frame, the picture goes out only where it belongs
+    // The runner: one step a frame, and the picture only where it belongs
     uint32_t steps = 0;
-    const Pixels pixels(16 * 8, 0xFF112233u);
+    Pixels pixels(16 * 8, 0x00112233u);
     FrameCores::DriverServices services;
     services.step = [&steps](uint32_t) { ++steps; };
     services.picture = [&pixels] {
@@ -2056,28 +2153,34 @@ TEST_CASE("Layer Depth goes by the driver", "[frame_cores]") {
     auto caps = Common::AltCore::Capabilities::ForGBA();
     FrameCores::DriverRunner runner;
     FrameCores::FrameOutput out;
-    CHECK(!runner.PrimaryIsGame());
-    for (const auto kind : {DriverKind::Plain, DriverKind::PokeDaisy, DriverKind::GbaDs}) {
-        const bool plain = kind == DriverKind::Plain;
-        steps = 0;
-        runner.Start(kind, {}, services, {}, WithJob(job), {}, caps);
-        CHECK(runner.PrimaryIsGame() == plain);
-        for (int i = 0; i < 5; ++i) {
-            runner.RunFrame({}, out, caps);
-            CHECK(!out.primary_right.HasPicture());
-            CHECK(out.layer_shift == 0.0f);
-            runner.SetRightEye({pixels.data(), 16, 8, 16}, 0.5f, out);
-            CHECK(out.primary_right.HasPicture() == plain);
-            CHECK(out.layer_shift == (plain ? 0.5f : 0.0f));
-        }
+    const Pixels moved(16 * 8, 0xFF332211u);
+    const FrameCores::DriverPicture right{moved.data(), 16, 8, 16};
+    const FrameCores::DriverPicture game{pixels.data(), 16, 8, 16};
+    runner.Start(DriverKind::PokeDaisy, {}, services, {}, WithJob(job), {}, caps);
+    const auto frame = [&] {
         runner.RunFrame({}, out, caps);
-        runner.SetRightEye({pixels.data(), 8, 8, 16}, 0.5f, out); // another size
         CHECK(!out.primary_right.HasPicture());
-        runner.SetRightEye({}, 0.0f, out);
-        CHECK(!out.primary_right.HasPicture());
-        CHECK(steps == 6);
-        CHECK(runner.Missteps() == 0);
-        runner.Stop();
-        CHECK(!runner.PrimaryIsGame());
-    }
+        CHECK(out.layer_shift == 0.0f);
+    };
+    frame();
+    runner.SetRightEye(right, game, 0.5f, out); // its alpha is none of the picture's
+    CHECK(out.primary_right.pixels == moved.data());
+    CHECK(out.layer_shift == 0.5f);
+    frame();
+    pixels.back() ^= 1; // the driver shows another picture
+    runner.SetRightEye(right, game, 0.5f, out);
+    CHECK(out.primary_right.pixels == out.primary.pixels);
+    CHECK(out.layer_shift == 0.0f);
+    frame();
+    runner.SetRightEye({moved.data(), 8, 8, 16}, game, 0.5f, out); // another size
+    CHECK(out.primary_right.pixels == out.primary.pixels);
+    frame();
+    runner.SetRightEye(right, {}, 0.5f, out);
+    CHECK(out.primary_right.pixels == out.primary.pixels);
+    frame();
+    runner.SetRightEye({}, game, 0.5f, out);
+    CHECK(!out.primary_right.HasPicture());
+    CHECK(steps == 5);
+    CHECK(runner.Missteps() == 0);
+    runner.Stop();
 }

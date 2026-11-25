@@ -16,8 +16,8 @@
 #include "common/logging/log.h"
 #include "frame_cores/cheat_store.h"
 #include "frame_cores/driver_runner.h"
+#include "frame_cores/gba_right_eye.h"
 #include "frame_cores/second_screen.h"
-#include "frame_cores/shadow_eye.h"
 
 extern "C" {
 #include "cheats.h"
@@ -87,7 +87,7 @@ struct GbaCore::Impl {
 
     Common::AltCore::InputState input{};
     DriverRunner driver;
-    ShadowEye shadow;
+    GbaRightEye right_eye;
 
     // Cheats state (gba-ds .cht loader + runtime user-added cheats)
     Cheats cheats{};
@@ -101,8 +101,9 @@ struct GbaCore::Impl {
         services.core = emu.core;
         services.emu = &emu;
         services.step = [this](uint32_t keys) {
-            shadow.Run(keys & 0x3FFu);
+            right_eye.BeginFrame();
             emu_frame(&emu, keys & 0x3FFu);
+            right_eye.EndFrame();
         };
         services.drain_audio = [this](int16_t* out, std::size_t max_frames) -> std::size_t {
             return emu_audio_read(&emu, out, max_frames);
@@ -119,20 +120,10 @@ struct GbaCore::Impl {
         info.game_code = emu.gameCode;
         const bool gbads_known = opts.enable_mapcap && HasTwoScreens(info.kind, info.game_code);
         const auto known = DriverRunner::WhatKnows(rom_path, gbads_known);
+        caps.layer_depth = right_eye.Attach(emu.core);
+        right_eye.SetDepth(opts.layer_depth);
         driver.Start(DriverRunner::Choose(opts, known), known, std::move(services), info, opts,
                      save_path, caps);
-
-        caps.layer_depth = driver.PrimaryIsGame() && ShadowEye::Fits(emu.core);
-        ApplyLayerDepth();
-    }
-
-    void ApplyLayerDepth() {
-        shadow.SetDepth(opts.layer_depth);
-        if (opts.layer_depth == 0 || !caps.layer_depth) {
-            shadow.Stop();
-        } else if (!shadow.Started()) {
-            shadow.Start(emu.core, kGbaWidth, kGbaHeight);
-        }
     }
 
     void ApplyAllCheats() {
@@ -236,8 +227,8 @@ void GbaCore::Unload() {
     if (!impl) {
         return;
     }
-    impl->shadow.Stop();
     impl->driver.Stop();
+    impl->right_eye.Detach();
 
     cheats_free(&impl->cheats);
     impl->custom_cheats.clear();
@@ -263,7 +254,8 @@ void GbaCore::SetInput(const Common::AltCore::InputState& input) {
 
 void GbaCore::RunFrame(FrameOutput& out) {
     impl->driver.RunFrame(impl->input, out, impl->caps);
-    impl->driver.SetRightEye(impl->shadow.Picture(), impl->shadow.FarthestShift(), out);
+    impl->driver.SetRightEye(impl->right_eye.Picture(), impl->right_eye.GamePicture(),
+                             impl->right_eye.FarthestShift(), out);
 }
 
 uint32_t GbaCore::AudioSampleRate() const {
@@ -328,14 +320,12 @@ void GbaCore::SetEditing(bool on) {
 }
 
 void GbaCore::SetLayerDepth(uint32_t level) {
-    if (impl->opts.layer_depth != level) {
-        impl->opts.layer_depth = level;
-        impl->ApplyLayerDepth();
-    }
+    impl->opts.layer_depth = level;
+    impl->right_eye.SetDepth(level);
 }
 
 void GbaCore::SetMaxLayerShift(float share) {
-    impl->shadow.SetMaxShift(share);
+    impl->right_eye.SetMaxShift(share);
 }
 
 void GbaCore::TurnPage() {

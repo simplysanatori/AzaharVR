@@ -392,6 +392,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::AllowGameEditing;
     case Id::LayerDepth:
         return MenuSetting::LayerDepth;
+    case Id::InvertDepth:
+        return MenuSetting::InvertDepth;
     case Id::AutosaveKeep:
     default: // UseGlobal checks PerGameSetting first
         return MenuSetting::AutosaveKeep;
@@ -1335,6 +1337,7 @@ void MenuPanel::BuildModel(const Host& host) {
         m.gba_second_screen = static_cast<int>(v.gba_second_screen.GetValue());
         m.gba_allow_editing = v.gba_allow_editing.GetValue();
         m.layer_depth = static_cast<int>(v.layer_depth.GetValue());
+        m.invert_depth = v.invert_depth.GetValue();
         const DsHeld held = GetDsHeld();
         m.ds_lid_closed = held.lid_closed;
         m.ds_mic_active = held.mic_blow;
@@ -1904,6 +1907,11 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = std::clamp(value, 0, static_cast<int>(Common::LayerDepth::kMaxLevel));
         Apply(v.layer_depth, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::LayerDepth;
+        break;
+    case Id::InvertDepth:
+        r.value = value != 0 ? 1 : 0;
+        Apply(v.invert_depth, r.value != 0, per_game);
+        r.setting = MenuSetting::InvertDepth;
         break;
     default:
         return;
@@ -2760,6 +2768,9 @@ void MenuPanel::Click(Target t, Host& host) {
         break;
     case Id::AllowGameEditing:
         SetSetting(Id::AllowGameEditing, model.gba_allow_editing ? 0 : 1, host);
+        break;
+    case Id::InvertDepth:
+        SetSetting(Id::InvertDepth, model.invert_depth ? 0 : 1, host);
         break;
     case Id::DsMicBlow: {
         DsHeld held = GetDsHeld();

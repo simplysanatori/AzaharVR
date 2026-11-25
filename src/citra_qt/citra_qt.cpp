@@ -3737,6 +3737,7 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     options.force_dsi = console == Common::AltCore::DsConsoleDSi;
     options.second_screen = Settings::values.gba_second_screen.GetValue();
     options.layer_depth = Settings::values.layer_depth.GetValue();
+    Common::LayerDepth::Get().inverted = Settings::values.invert_depth.GetValue();
     if (!AltWindowOpen(info) ||
         !alt_core_host->Boot(path, data_dir, /*headless_for_test=*/false, options)) {
         LOG_CRITICAL(Frontend, "Failed to load application!");
@@ -3856,6 +3857,7 @@ void GMainWindow::ApplyAltSettings() {
         alt_core_host->SetEditing(v.gba_allow_editing.GetValue());
     }
     if (caps.layer_depth) {
+        Common::LayerDepth::Get().inverted = v.invert_depth.GetValue();
         alt_core_host->SetLayerDepth(v.layer_depth.GetValue());
     }
 }
@@ -6247,6 +6249,9 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         break;
     case S::LayerDepth:
         set(v.layer_depth, std::min<u32>(u, Common::LayerDepth::kMaxLevel));
+        break;
+    case S::InvertDepth:
+        set(v.invert_depth, r.value != 0);
         break;
     }
 #ifdef ENABLE_ALT_CORES

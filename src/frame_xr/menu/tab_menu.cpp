@@ -110,6 +110,9 @@ std::string SliderText(Id id, float value) {
         id == Id::KiuPitOpacity) { // AzaharFrame kiugyro: "10%" (kiufix: the strengths, the scale; kiuopacity: the opacities; kiuweap2: the flash's size)
         return Format("%.0f%%", value);
     }
+    if (id == Id::LayerDepth && value < 0.5f) {
+        return "Off";
+    }
     if (id == Id::AutosaveEvery) { // AzaharFrame autosave: the stop's minutes
         const int i = std::clamp(static_cast<int>(std::lround(value)), 0,
                                  static_cast<int>(kAutosaveEvery.size()) - 1);
@@ -307,6 +310,11 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             layers.stops = 3;
             layers.value = SliderText(Id::LayerDepth, lv);
             rows.push_back(layers);
+            Row invert = row(Id::InvertDepth, RowKind::Switch, 0, m.invert_depth);
+            if (invert.lock == Lock::None && m.layer_depth == 0) {
+                invert.lock = Lock::LayerDepthOff;
+            }
+            rows.push_back(invert);
             rows.push_back(row(Id::DsTouchEnabled, RowKind::Switch, 0, m.ds_touch_enabled));
             rows.push_back(row(Id::DsMicBlow, RowKind::Switch, 0, m.ds_mic_active));
             rows.push_back(row(Id::DsLidToggle, RowKind::Switch, 0, m.ds_lid_closed));
@@ -627,6 +635,7 @@ bool PerGameSetting(Id id) {
     case Id::SecondScreen:
     case Id::AllowGameEditing:
     case Id::LayerDepth:
+    case Id::InvertDepth:
         return true;
     default:
         return false;
@@ -1407,6 +1416,8 @@ std::string LabelFor(Id id) {
         return "Allow Game Editing";
     case Id::LayerDepth:
         return "Layer Depth";
+    case Id::InvertDepth:
+        return "Invert Depth";
     case Id::DsTouchEnabled:
         return "Touch Screen Input";
     case Id::DsMicBlow:
@@ -1690,6 +1701,8 @@ std::string ExplainLock(Lock lock) {
         return "Nothing on this tab is set for this game.";
     case Lock::NoGame:
         return "Per-Game values need a running game.";
+    case Lock::LayerDepthOff:
+        return "Turn on Layer Depth to change it.";
     default:
         return {};
     }

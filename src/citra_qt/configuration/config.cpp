@@ -654,6 +654,7 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.gba_second_screen);
     ReadGlobalSetting(Settings::values.gba_allow_editing);
     ReadGlobalSetting(Settings::values.layer_depth);
+    ReadGlobalSetting(Settings::values.invert_depth);
     // AzaharFrame reticle: the Controls tab's rows, a global value and a game's own (Per-Game)
     ReadGlobalSetting(Settings::values.vr_touchpad_touch);
     ReadGlobalSetting(Settings::values.vr_bottom_screen_reticle);
@@ -1418,6 +1419,7 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.gba_second_screen);
     WriteGlobalSetting(Settings::values.gba_allow_editing);
     WriteGlobalSetting(Settings::values.layer_depth);
+    WriteGlobalSetting(Settings::values.invert_depth);
     // AzaharFrame reticle: the Controls tab's rows, a global value and a game's own (Per-Game)
     WriteGlobalSetting(Settings::values.vr_touchpad_touch);
     WriteGlobalSetting(Settings::values.vr_bottom_screen_reticle);

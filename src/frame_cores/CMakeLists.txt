@@ -13,6 +13,8 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     gb_core.h
     gba_core.cpp
     gba_core.h
+    gba_right_eye.cpp
+    gba_right_eye.h
     melonds_platform.cpp
     nds_core.cpp
     nds_core.h

@@ -55,13 +55,11 @@ public:
     void SetEditing(bool on);
     void TurnPage();
 
-    /// The Primary Screen is the game's own picture, always (the Plain driver).
-    bool PrimaryIsGame() const {
-        return primary_is_game;
-    }
-    /// After RunFrame: `picture` (ShadowEye's, its farthest layer moved by `shift`) for the right
-    /// eye, where `out` has the game's picture at the same size.
-    void SetRightEye(const DriverPicture& picture, float shift, FrameOutput& out) const;
+    /// After RunFrame: `right` (its farthest layer moved by `shift`) for the right eye where the
+    /// Primary Screen shows `game`, the game's own picture, and nothing of the driver's on it. Else
+    /// the right eye gets what the left has. Without `right`, none.
+    static void SetRightEye(const DriverPicture& right, const DriverPicture& game, float shift,
+                            FrameOutput& out);
 
     /// Calls of RunFrame that did not step exactly once, or in a held frame did (a step outside
     /// RunFrame is one too).
@@ -80,7 +78,6 @@ private:
     uint64_t missteps = 0;
     bool backed_up = false; ///< this session
     bool editing = false;
-    bool primary_is_game = false;
 };
 
 } // namespace FrameCores
