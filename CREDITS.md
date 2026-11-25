@@ -29,7 +29,7 @@ AzaharVR builds on Azahar and Citra and bundles the following additional emulati
   - Based on PokeDaisy by Lidor Itzhari - https://github.com/lidor30/pokedaisy
   - License text: [externals/pokedaisy/LICENSE](externals/pokedaisy/LICENSE), [externals/pokedaisy/NOTICE](externals/pokedaisy/NOTICE)
 
-## Downloaded cheats
+## Downloaded cheats and mods
 
 - **libretro-database** — cheat files for Nintendo DS, Game Boy Advance, Game Boy and Game Boy Color games, fetched one file at a time when the Cheats tab's Download is used (never bundled)
   - Authors: the libretro community and the contributors of its cheat files
@@ -37,6 +37,12 @@ AzaharVR builds on Azahar and Citra and bundles the following additional emulati
   - License: Creative Commons Attribution-ShareAlike 4.0 International (`CC-BY-SA-4.0`)
   - Credit line shown with the cheats: "Cheats: libretro-database, CC-BY-SA-4.0"
   - Changes: each cheat's code is converted to the form the emulator reads; nothing else is altered. Which file belongs to a game is listed in https://github.com/simplysanatori/ds-gba-game-fixes
+
+- **TWiLight Menu++** — widescreen hacks for Nintendo DS games, fetched one file at a time when the Mods tab's widescreen mod is installed (never bundled)
+  - Authors: RadDude McCoolguy, fintogive, KazoWAR, Vague Rant, gamemasterplc, Rocket Robz, ChampionLeake, DeadSkullzJr, spellboundtriangle, LedyBacer, CheatFreak47, deisuke1234, icup321
+  - Upstream: https://github.com/DS-Homebrew/TWiLightMenu
+  - License: GPL-3.0
+  - Credit line shown with the mod: "TWiLight Menu++ Contributors"
 
 ## Additional Third-Party Notices
 

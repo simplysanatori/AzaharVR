@@ -1643,7 +1643,9 @@ void TabMenu::DrawModsList(Kit& kit, const MenuModel& model, const MenuView& vie
         AddHit(back, {Id::ModsBack}, area);
         kit.TextMid(back.x1 + 12.0f, back.Cy(), Type::Title, Tok::kOnSurface,
                     LabelFor(Id::InstallMods));
-        DrawZipButton(kit, view, area, ZipTarget::Mods, !m.busy); // AzaharFrame zipinstall
+        if (Is3ds(model.core)) {
+            DrawZipButton(kit, view, area, ZipTarget::Mods, !m.busy); // AzaharFrame zipinstall
+        }
         const float top = c.y0 + kBarH + 8.0f;
         const Rect list{area.x0, top, area.x1, bottom};
         if (m.catalog == CatalogState::Failed) { // AzaharFrame jsoncrash: no list; Retry asks again

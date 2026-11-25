@@ -587,6 +587,7 @@ std::optional<RomInfo> ProbeRomUncached(const std::string& path) {
         }
         const std::string hdr_title = CleanAsciiField(head.data() + 0x00, 12);
         info.game_code = CleanAsciiField(head.data() + 0x0C, 4);
+        info.header_crc16 = static_cast<uint16_t>(head[0x15E] | head[0x15F] << 8);
         const uint8_t unit_code = head[0x12];
         info.dsi_enhanced = (unit_code & 0x02) != 0;
 

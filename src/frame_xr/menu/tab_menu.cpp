@@ -2518,7 +2518,7 @@ void TabMenu::DrawRail(Kit& kit, const MenuModel& model, const MenuView& view) {
         const Rect r{0.0f, y, kRailW, y + item_h};
         const Target t{Id::TabButton, i};
         const bool active = static_cast<int>(view.tab) == i;
-        const char* label = static_cast<Tab>(i) == Tab::Mods && !Is3ds(model.core)
+        const char* label = static_cast<Tab>(i) == Tab::Mods && !model.core.has_mods
                                 ? "Cheats"
                                 : kTabs[static_cast<std::size_t>(i)].label;
         kit.RailItem(r, kTabs[static_cast<std::size_t>(i)].icon, label, active, StateOf(view, t));
