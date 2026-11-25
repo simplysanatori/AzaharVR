@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #include "citra_qt/frame_mods.h"
+#include "citra_qt/frame_open_link.h" // AzaharVR
 
 #include <algorithm>
 #include <cstdlib>
@@ -16,7 +17,6 @@
 #include <utility>
 
 #include <QApplication>
-#include <QDesktopServices>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -26,7 +26,6 @@
 #include <QStandardPaths>
 #include <QWidget>
 #include <QPointer>
-#include <QProcess>
 #include <QTimer>
 #include <QUrl>
 #include <fmt/format.h>
@@ -53,7 +52,6 @@
 #include "frame_xr/menu/angels_aim_tab.h"
 #include "frame_xr/menu/cheat_entry.h" // AzaharFrame ui2
 #include "frame_xr/menu/ctgp7_tab.h"   // AzaharFrame ctgp7
-#include "frame_xr/mem_guard.h" // AzaharFrame modfix
 
 namespace Menu = FrameXr::Menu;
 
@@ -108,29 +106,6 @@ std::string PhaseText(Mods::State::Phase phase) {
     default:
         return {};
     }
-}
-
-/// Whether Steam runs: ~/.steam/steam.pid names a live process.
-bool SteamRunning() {
-    const char* home = std::getenv("HOME");
-    if (!home) {
-        return false;
-    }
-    std::ifstream pid_file(std::string(home) + "/.steam/steam.pid");
-    long pid = 0;
-    if (!(pid_file >> pid) || pid <= 0) {
-        return false;
-    }
-    std::error_code ec;
-    return std::filesystem::exists("/proc/" + std::to_string(pid), ec);
-}
-
-/// AzaharFrame modfix: memory and swap nearly used up (see frame_xr/mem_guard.h).
-bool LowMemory() {
-    std::ifstream in("/proc/meminfo");
-    std::stringstream text;
-    text << in.rdbuf();
-    return FrameXr::BrowserWouldRunOutOfMemory(text.str());
 }
 
 /// The author's repository from the catalog entry ("https://github.com/owner/repo"), else from
@@ -582,22 +557,10 @@ void FrameMods::Command(const FrameXr::MenuRequest& r) {
         }
         if (known && !Menu::LinkText(r.text).empty()) {
             // Steam's own browser, as other apps on the Frame show pages in the headset; the
-            // desktop's browser only when Steam is not running.
-            const QString url = QString::fromStdString(r.text);
-            // AzaharFrame modfix: the browser's start can exhaust the Frame's memory and get the
-            // game killed by the kernel (exit 137); with little room left, don't open it.
-            if (LowMemory()) {
-                LOG_WARNING(Frontend, "xr: mods: not opening {}: little memory left", r.text);
+            // desktop's browser only when Steam is not running; nothing with little memory
+            // left (AzaharFrame modfix), see citra_qt/frame_open_link.h.
+            if (OpenLink::Open(QString::fromStdString(r.text)) == OpenLink::Result::LowMemory) {
                 FrameXr::ShowToastText("Link Not Opened: Low Memory", FrameXr::ToastTime::Long);
-                return;
-            }
-            if (SteamRunning() &&
-                QProcess::startDetached(QStringLiteral("steam"),
-                                        {QStringLiteral("steam://openurl/") + url})) {
-                LOG_INFO(Frontend, "xr: mods: opening {} in Steam", r.text);
-            } else {
-                LOG_INFO(Frontend, "xr: mods: opening {} in the browser", r.text);
-                QDesktopServices::openUrl(QUrl(url));
             }
         }
         return;
