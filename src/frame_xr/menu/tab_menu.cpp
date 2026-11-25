@@ -538,11 +538,9 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             layers.stops = 3;
             layers.value = SliderText(Id::LayerDepth, lv);
             rows.push_back(layers);
-            Row invert = row(Id::InvertDepth, RowKind::Switch, 0, m.invert_depth);
-            if (invert.lock == Lock::None && m.layer_depth == 0) {
-                invert.lock = Lock::LayerDepthOff;
+            if (m.layer_depth > 0) { // drops down under it, as Match Bottom Screen's
+                rows.push_back(row(Id::InvertDepth, RowKind::Switch, 0, m.invert_depth));
             }
-            rows.push_back(invert);
             // AzaharFrame fixa: Motion Clarity in the Off and Wide modes (vr_motion_clarity_normal),
             // never locked: in the Full modes it does nothing (Immersive has their own row).
             {
@@ -2296,8 +2294,6 @@ std::string ExplainLock(Lock lock) {
         return "Nothing on this tab is set for this game.";
     case Lock::NoGame:
         return "Per-Game values need a running game.";
-    case Lock::LayerDepthOff:
-        return "Turn on Layer Depth to change it.";
     default:
         return {};
     }

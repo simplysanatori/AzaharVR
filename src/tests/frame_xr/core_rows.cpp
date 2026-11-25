@@ -776,9 +776,8 @@ TEST_CASE("Core rows: Layer Depth", "[frame_xr][tabmenu]") {
 TEST_CASE("Core rows: Invert Depth goes with Layer Depth", "[frame_xr][tabmenu]") {
     CHECK(LabelFor(Id::InvertDepth) == "Invert Depth");
     CHECK(PerGameSetting(Id::InvertDepth));
-    CHECK(!ExplainLock(Lock::LayerDepthOff).empty());
     for (CoreCaps core : {CoreCaps::ForGBA(), CoreCaps::ForGB(), CoreCaps::ForNDS()}) {
-        const auto pressable = [&core](int level) { // a locked row has no target
+        const auto pressable = [&core](int level) { // there only with Layer Depth on
             MenuModel m = Game(core);
             m.layer_depth = level;
             return Pressable(m, SettingsView(SettingsSection::Graphics), Id::InvertDepth);
