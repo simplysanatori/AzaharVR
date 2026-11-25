@@ -3,7 +3,7 @@
 // Refer to the license.txt file included.
 
 // AzaharFrame kiutalk: Kid Icarus: Uprising's talk portraits and illustrations alone, with nothing
-// behind them (Talk Portraits; AZAHARFRAME_KIU_TALK_CUTOUT=0: the card cut from the Secondary
+// behind them (Character Portraits; AZAHARFRAME_KIU_TALK_CUTOUT=0: the card cut from the Secondary
 // Screen's picture instead). The game draws them on its bottom screen with the battle UI's 2D batch
 // (kiu_hud.h Batch). Each draw of the bottom pass is looked at (renderer_vulkan/vk_kiu_talk.h), the
 // portraits and the illustration's pieces are kept, and after the bottom screen's picture they are

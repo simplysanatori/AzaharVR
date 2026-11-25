@@ -95,7 +95,7 @@ whatever Aiming is).
 |---|---|---|
 | `AZAHARFRAME_KIU_WRIST_SCREEN` | Secondary Screen on Wrist | Shows the Secondary Screen on your free hand's wrist. Turn your wrist up to see it, and point at it to touch. |
 | `AZAHARFRAME_KIU_FP_TALK` | Talk Panel | Shows the Secondary Screen, where the characters talk, as a small panel below your view. |
-| `AZAHARFRAME_KIU_SHOULDER` | Over the Shoulder | Moves your view behind and above Pit, so you can see him. |
+| `AZAHARFRAME_KIU_SHOULDER` | Third Person | Moves your view behind and above Pit, so you can see him. |
 | `AZAHARFRAME_KIU_SNAP_TURN` | Turning | How the right stick turns you: smoothly, or in steps of the chosen angle. |
 | none | Smooth (Turning's first choice) | none |
 | none | 30°, 45°, 60°, 90° (Turning's other choices) | none |
@@ -123,7 +123,7 @@ Unit tests to run at integration: `[kiutoggles]`, `[kiuview]`, `[kiuturn]`, `[ki
 3. Secondary Screen on Wrist on: turn the off hand's wrist up; the screen shows, a trigger on it
    touches without a shot. Off: it never shows.
 4. Talk Panel on: in a chapter's talk, the panel below the view. Off: none.
-5. Over the Shoulder on: the eye behind and above Pit, Pit solid. Shots still go along the hand.
+5. Third Person on: the eye behind and above Pit, Pit solid. Shots still go along the hand.
 6. Turning 45°: a right-stick flick turns 45 degrees on land. Smooth: as before.
 7. Per-Game and Global: change one in Per-Game, restart the game: kept. Use Global Value clears it.
 8. A switch still wins: `AZAHARFRAME_KIU_WRIST_SCREEN=0` with the setting on: no wrist screen;
@@ -137,4 +137,4 @@ Unit tests to run at integration: `[kiutoggles]`, `[kiuview]`, `[kiuturn]`, `[ki
 - Maybe Field and Soft Edge as comfort settings, after the owner sees them on the headset.
 - Angel's Aim's report (frame_mods.cpp) lists some Angel's Aim settings; these four (and Trigger
   Layout) are not in it.
-- Over the Shoulder is one fixed place; a distance choice would need its own row.
+- Third Person is one fixed place; a distance choice would need its own row.
