@@ -11,6 +11,7 @@
 #include <tuple>
 #include <vector>
 #include <catch2/catch_test_macros.hpp>
+#include "frame_xr/immersive_names.h"
 #include "frame_xr/menu/angels_aim_tab.h"
 #include "frame_xr/menu/tab_menu.h"
 
