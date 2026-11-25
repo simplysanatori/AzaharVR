@@ -55,6 +55,8 @@ struct Capabilities {
     uint32_t second_screen_choices = 0;
     bool can_edit_game = false; ///< Allow Game Editing means something for this game
     bool has_quick_menu = false; ///< BtnQuickMenu opens PokeDaisy's quick menu
+    /// Layer Depth: the Primary Screen can have a right eye's picture of its own.
+    bool layer_depth = false;
     bool has_pages = false;      ///< a GBA game whose Secondary Screen BtnTurnPage may turn
     ScreenMetrics screens{};
     bool operator==(const Capabilities&) const = default;

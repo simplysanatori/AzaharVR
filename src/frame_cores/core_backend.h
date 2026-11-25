@@ -59,6 +59,7 @@ struct FrameOutput {
     /// The Primary Screen for the right eye (Layer Depth); none: both eyes see `primary`. The same
     /// size as `primary`.
     Vulkan::AltScreenImage primary_right{};
+    float layer_shift = 0.0f; ///< its farthest layer's, a share of the width (layer_depth.h)
     Vulkan::AltScreenImage overlay{}; ///< over the whole Primary Screen, alpha premultiplied
     std::vector<int16_t> audio_pcm; ///< Interleaved stereo PCM16 (L, R, L, R, ...)
     float rumble = 0.0f;            ///< Haptic motor intensity [0.0, 1.0]
@@ -115,6 +116,10 @@ public:
     virtual void SetSolarLevel(int /*level*/) {}
     /// Allow Game Editing (GBA and Game Boy games).
     virtual void SetEditing(bool /*on*/) {}
+    /// Layer Depth (0 to 3), from the next frame.
+    virtual void SetLayerDepth(uint32_t /*level*/) {}
+    /// The farthest a layer may move from the next frame on (layer_depth.h). 0: no right picture.
+    virtual void SetMaxLayerShift(float /*share*/) {}
     /// The Secondary Screen's next page (GBA games), from the next frame.
     virtual void TurnPage() {}
     virtual void SetMicBlow(bool /*on*/) {}

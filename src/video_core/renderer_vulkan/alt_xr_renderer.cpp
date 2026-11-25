@@ -763,4 +763,8 @@ bool AltXrRenderer::IsReady() const {
     return impl && impl->ready;
 }
 
+bool AltXrRenderer::ShowsInVr() const {
+    return IsReady() && impl->XrShowsScreens();
+}
+
 } // namespace Vulkan

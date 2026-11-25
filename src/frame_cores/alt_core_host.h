@@ -215,6 +215,8 @@ public:
 
     void SetSolarLevel(int level);
     void SetEditing(bool on);
+    /// Layer Depth (0 to 3), for a game that has it (Capabilities::layer_depth).
+    void SetLayerDepth(uint32_t level);
     /// The Secondary Screen's next page, from the next frame. BtnTurnPage does it too.
     void TurnPage();
     void SetMicBlow(bool on);

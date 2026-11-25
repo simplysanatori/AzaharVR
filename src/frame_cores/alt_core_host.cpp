@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "common/layer_depth.h"
 #include "common/logging/log.h"
 #include "common/scm_rev.h"
 #include "common/settings.h"
@@ -613,6 +614,17 @@ struct AltCoreHost::Impl {
         }
     }
 
+    /// The window never shows a right eye's picture: none is drawn for it.
+    float MaxLayerShift() const {
+        namespace LayerDepth = Common::LayerDepth;
+        if (!renderer) {
+            return LayerDepth::kNoLimit;
+        }
+        return renderer->ShowsInVr()
+                   ? LayerDepth::Get().max_shift.load(std::memory_order_relaxed)
+                   : 0.0f;
+    }
+
     void ExecuteSingleFrameLocked(double& frame_time_ms_out) {
         const Common::AltCore::InputState in = ReadInput();
 
@@ -625,7 +637,10 @@ struct AltCoreHost::Impl {
         page_before = page;
 
         core->SetInput(in);
+        core->SetMaxLayerShift(MaxLayerShift());
         core->RunFrame(last_frame);
+        Common::LayerDepth::Get().farthest_shift.store(last_frame.layer_shift,
+                                                       std::memory_order_relaxed);
         holding.store(last_frame.held, std::memory_order_relaxed);
 
         if (last_frame.metrics_changed) {
@@ -967,6 +982,7 @@ void AltCoreHost::Stop() {
     }
 
     impl->caps = Common::AltCore::Capabilities::ForN3DS();
+    Common::LayerDepth::Get().farthest_shift.store(0.0f, std::memory_order_relaxed);
     SetPacerEmuFrameUs(Common::XrPacer::Get(), Common::XrPacer::kEmuFrameUs);
 }
 
@@ -1213,6 +1229,13 @@ void AltCoreHost::SetEditing(bool on) {
     std::lock_guard lock(impl->core_mutex);
     if (impl->core) {
         impl->core->SetEditing(on);
+    }
+}
+
+void AltCoreHost::SetLayerDepth(uint32_t level) {
+    std::lock_guard lock(impl->core_mutex);
+    if (impl->core) {
+        impl->core->SetLayerDepth(level);
     }
 }
 

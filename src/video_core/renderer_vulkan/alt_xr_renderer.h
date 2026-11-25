@@ -71,6 +71,9 @@ public:
 
     bool IsReady() const;
 
+    /// The headset shows the screens now, not the window.
+    bool ShowsInVr() const;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl;
