@@ -150,3 +150,12 @@ TEST_CASE("LayerDepth: what is left of the pictures is a window where the neares
         }
     }
 }
+
+TEST_CASE("LayerDepth: the pictures are cut, or their layers end; never both",
+          "[common][layer_depth]") {
+    for (int32_t shift = -9; shift <= 9; ++shift) {
+        const bool cut = kCutsEdge || shift < 0;
+        CHECK(EdgeShift(shift, 240) == (cut ? Approx(shift / 240.0) : Approx(0.0)));
+        CHECK(EdgeColumns(shift) == (cut ? 0 : shift));
+    }
+}

@@ -36,6 +36,12 @@ constexpr uint32_t kOpaque = 0xFF000000u;
 constexpr uint32_t kPriorities = 4;
 constexpr uint32_t kFarthest = kPriorities - 1;
 constexpr uint32_t kObjPriority = 1; ///< the sprites are one layer, at this priority's depth
+constexpr int kShown = 4;            ///< of a background's `enabled`: mGBA's ENABLED_MAX
+
+using Backgrounds = std::array<GBAVideoSoftwareBackground, 4>;
+
+/// The backgrounds a video mode has, a bit each.
+constexpr std::array<uint32_t, 8> kModeBackgrounds{0b1111, 0b0111, 0b1100, 0b0100, 0b0100, 0b0100};
 
 using DrawLine = void (*)(GBAVideoRenderer*, int);
 
@@ -96,6 +102,7 @@ struct GbaRightEye::Impl {
     GBAVideoSoftwareRenderer right{};
     std::array<uint32_t, kWidth * kHeight> right_pixels{}; ///< XBGR8888
     std::array<uint32_t, kWidth * kHeight> game_pixels{};
+    std::array<uint32_t, kWidth> within{}; ///< DrawWithin's line
     std::bitset<kHeight> redraw; ///< lines the right eye has not, or not with these shifts
     std::array<int32_t, kPriorities> shifts{};
     uint32_t depth = 0;
@@ -154,7 +161,82 @@ struct GbaRightEye::Impl {
             bg.offsetX = shifts[bg.priority];
         }
         right.objOffsetX = static_cast<int16_t>(shifts[kObjPriority]);
+        const Backgrounds before = std::to_array(right.bg);
         SoftwareLine()(&right.d, y);
+        EndLayers(game, before, y);
+    }
+
+    /// The columns each of a line's layers leaves at the edge (0: the layer is not there).
+    struct Edges {
+        std::array<int32_t, 4> backgrounds{};
+        int32_t sprites = 0;
+        int32_t backdrop = 0; ///< nothing moves it: it ends with the farthest background
+    };
+
+    /// Of the line just drawn. `before`: its backgrounds as they were then.
+    Edges LineEdges(const Backgrounds& before) const {
+        Edges edges;
+        for (std::size_t i = 0; i < before.size(); ++i) {
+            if ((kModeBackgrounds[right.dispcnt & 7u] >> i & 1u) != 0 &&
+                before[i].enabled == kShown && right.bg[i].enabled == kShown &&
+                !right.d.disableBG[i]) {
+                edges.backgrounds[i] = Common::LayerDepth::EdgeColumns(shifts[before[i].priority]);
+                edges.backdrop = std::max(edges.backdrop, edges.backgrounds[i]);
+            }
+        }
+        if (GBARegisterDISPCNTIsObjEnable(right.dispcnt) && !right.d.disableOBJ) {
+            edges.sprites = Common::LayerDepth::EdgeColumns(shifts[kObjPriority]);
+        }
+        return edges;
+    }
+
+    /// Each layer of the line just drawn ends where it ends in the game's own picture: the columns
+    /// beyond are drawn again without it.
+    void EndLayers(const GBAVideoSoftwareRenderer& game, const Backgrounds& before, int y) {
+        if (Common::LayerDepth::EdgeColumns(shifts[kFarthest]) == 0 ||
+            GBARegisterDISPCNTIsForcedBlank(right.dispcnt)) {
+            return;
+        }
+        const Edges edges = LineEdges(before);
+        for (int32_t x = 0; x < std::max(edges.backdrop, edges.sprites);) {
+            int32_t end = std::max(edges.backdrop, edges.sprites);
+            for (const int32_t edge : {edges.backgrounds[0], edges.backgrounds[1],
+                                       edges.backgrounds[2], edges.backgrounds[3], edges.sprites}) {
+                if (edge > x) {
+                    end = std::min(end, edge);
+                }
+            }
+            DrawWithin(game, before, edges, y, x, end);
+            x = end;
+        }
+    }
+
+    /// Columns `x` to `end` of the line, with the layers that have something there.
+    void DrawWithin(const GBAVideoSoftwareRenderer& game, const Backgrounds& before,
+                    const Edges& edges, int y, int32_t x, int32_t end) {
+        std::ranges::copy(before, right.bg);
+        // What a layer that is beyond would have been blended with is blended with nothing instead
+        bool blends = game.target2Bd != 0;
+        for (std::size_t i = 0; i < before.size(); ++i) {
+            const bool beyond = x < edges.backgrounds[i];
+            right.d.disableBG[i] = game.d.disableBG[i] || beyond;
+            blends |= beyond && before[i].target2;
+        }
+        const bool no_sprites = x < edges.sprites;
+        right.d.disableOBJ = game.d.disableOBJ || no_sprites;
+        const bool no_backdrop = x < edges.backdrop;
+        right.normalPalette[0] = no_backdrop ? 0 : game.normalPalette[0];
+        right.target1Bd = no_backdrop ? 0 : game.target1Bd;
+        right.target2Bd = no_backdrop ? blends : game.target2Bd;
+        right.outputBuffer = within.data();
+        right.outputBufferStride = 0;
+        right.scanlineDirty[y >> 5] |= 1u << (y & 31);
+        SoftwareLine()(&right.d, y);
+        uint32_t* const line = right_pixels.data() + static_cast<std::size_t>(y) * kWidth;
+        for (; x < end; ++x) {
+            const bool beyond = no_backdrop && (right.row[x] & FLAG_UNWRITTEN) == FLAG_UNWRITTEN;
+            line[x] = beyond ? Common::LayerDepth::kBeyond : within[x];
+        }
     }
 
     void UpdateShifts() {
@@ -274,9 +356,8 @@ DriverPicture GbaRightEye::GamePicture() const {
                     : DriverPicture{};
 }
 
-float GbaRightEye::FarthestShift() const {
-    return impl->on ? static_cast<float>(impl->shifts[kFarthest]) / static_cast<float>(kWidth)
-                    : 0.0f;
+float GbaRightEye::EdgeShift() const {
+    return impl->on ? Common::LayerDepth::EdgeShift(impl->shifts[kFarthest], kWidth) : 0.0f;
 }
 
 } // namespace FrameCores

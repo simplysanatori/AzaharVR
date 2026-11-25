@@ -45,6 +45,27 @@ constexpr int32_t Directed(uint32_t shift, bool inverted) {
     return inverted ? -pixels : pixels;
 }
 
+/// The right eye's left edge, where a layer moved to the right leaves room. False: nothing is there
+/// (kBeyond): every layer ends where it ends in the left eye's picture, which stays whole. The edge
+/// the eyes see is the layer's own, at its depth, and a HUD on the screen is whole in both. True:
+/// both eyes' pictures are cut (Cut), with what the HUD has there. Layers moved to the left
+/// (Directed) are cut either way: they stand in front of the screen's edges.
+constexpr bool kCutsEdge = false;
+
+/// What a picture shows where there is no layer left.
+constexpr uint32_t kBeyond = 0xFF000000u;
+
+/// The columns a layer moved this far leaves at the picture's left edge.
+constexpr int32_t EdgeColumns(int32_t shift) {
+    return kCutsEdge ? 0 : std::max(shift, 0);
+}
+
+/// FrameOutput::layer_shift of a picture whose farthest layer is moved this far.
+constexpr float EdgeShift(int32_t farthest, uint32_t width_px) {
+    return kCutsEdge || farthest < 0 ? static_cast<float>(farthest) / static_cast<float>(width_px)
+                                     : 0.0f;
+}
+
 /// How much of each eye's picture is left out. A layer the right eye has moved brings what is
 /// beyond the game's picture in at one edge, and what the other eye has there is in neither: each
 /// eye loses as much as the farthest layer moves, which leaves a window that stands where the

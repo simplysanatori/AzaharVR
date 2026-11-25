@@ -113,7 +113,7 @@ struct GbaCore::Impl {
         services.picture = [this] {
             return DriverPicture{emu.fb, kGbaWidth, kGbaHeight, kGbaWidth}; // XBGR8888
         };
-        services.layer_shift = [this] { return right_eye.FarthestShift(); };
+        services.layer_shift = [this] { return right_eye.EdgeShift(); };
         services.rom_path = rom_path;
         services.game_dir = paths.game_dir;
 
@@ -257,7 +257,7 @@ void GbaCore::SetInput(const Common::AltCore::InputState& input) {
 void GbaCore::RunFrame(FrameOutput& out) {
     impl->driver.RunFrame(impl->input, out, impl->caps);
     impl->driver.SetRightEye(impl->right_eye.Picture(), impl->right_eye.GamePicture(),
-                             impl->right_eye.FarthestShift(), out);
+                             impl->right_eye.EdgeShift(), out);
 }
 
 uint32_t GbaCore::AudioSampleRate() const {

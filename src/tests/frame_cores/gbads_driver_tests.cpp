@@ -749,7 +749,7 @@ TEST_CASE("gba-ds's game.c: Layer Depth with the HUD on the other screen", "[fra
         out.primary.width = frame.primary.width;
         out.primary.height = frame.primary.height;
         out.primary.stride_pixels = frame.primary.stride;
-        DriverRunner::SetRightEye(eye.Picture(), eye.GamePicture(), eye.FarthestShift(), out);
+        DriverRunner::SetRightEye(eye.Picture(), eye.GamePicture(), eye.EdgeShift(), out);
         return out;
     };
     for (int i = 0; i < 10; ++i) {
@@ -759,6 +759,7 @@ TEST_CASE("gba-ds's game.c: Layer Depth with the HUD on the other screen", "[fra
                            out.primary_right.pixels));
     }
     game.DrawHud();
+    game.Write16(0x06003800, 1); // the HUD from the edge on
     int own = 0;
     int deep = 0;
     for (int i = 0; i < 60; ++i) {
@@ -775,6 +776,7 @@ TEST_CASE("gba-ds's game.c: Layer Depth with the HUD on the other screen", "[fra
             REQUIRE(HudMoved(frame));
             const DriverPicture right{out.primary_right.pixels, GBA_W, GBA_H, GBA_W};
             REQUIRE(At(right, 40, 3) != kBar); // out of this eye too
+            REQUIRE(At(right, 3, 3) != kBar);  // and of its edge
         }
     }
     CHECK(own >= 58);

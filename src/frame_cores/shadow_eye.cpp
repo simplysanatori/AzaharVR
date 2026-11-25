@@ -18,6 +18,7 @@ extern "C" {
 #include <mgba/core/core.h>
 #include <mgba/gb/interface.h>
 #include <mgba/internal/gb/gb.h>
+#include <mgba/internal/gb/renderers/software.h>
 }
 
 namespace FrameCores {
@@ -27,6 +28,9 @@ constexpr uint32_t kOpaque = 0xFF000000u;
 /// The Game Boy has no priorities: its background is as far back, for its width, as the GBA's
 /// farthest (3 of 240, 2 of 160).
 constexpr uint32_t kBackgroundSteps = 2;
+/// Of a pixel of mGBA's line: its palette entry, the sprites' after the background's.
+constexpr uint32_t kPaletteMask = 0xFFu;
+constexpr uint32_t kSpritePalettes = 0x20;
 constexpr std::size_t kMaxRom = 32u * 1024 * 1024;
 
 GB* Gb(mCore* core) {
@@ -121,6 +125,9 @@ bool ShadowEye::Start(mCore* game_, uint32_t width_, uint32_t height_) {
         bios->close(bios);
     }
     core->reset(core); // with the renderer; no save file
+    GBVideoRenderer* const renderer = Gb(core)->video.renderer;
+    draw_range = renderer->drawRange;
+    renderer->drawRange = &ShadowEye::Hook;
 
     const std::size_t size = game->stateSize(game);
     if (size == 0 || size != core->stateSize(core)) {
@@ -177,10 +184,12 @@ void ShadowEye::Run(uint32_t keys) {
         FailOnce("the game's state was not taken");
         return;
     }
+    background_shift = BackgroundShift();
     ShiftLayers();
-    farthest_shift = static_cast<float>(BackgroundShift()) / static_cast<float>(width);
     core->setKeys(core, keys);
+    running = this;
     core->runFrame(core);
+    running = nullptr;
     if (mAudioBuffer* sound = core->getAudioBuffer(core)) {
         mAudioBufferClear(sound);
     }
@@ -195,8 +204,8 @@ DriverPicture ShadowEye::Picture() const {
     return drawn ? DriverPicture{pixels.data(), width, height, width} : DriverPicture{};
 }
 
-float ShadowEye::FarthestShift() const {
-    return drawn ? farthest_shift : 0.0f;
+float ShadowEye::EdgeShift() const {
+    return drawn ? Common::LayerDepth::EdgeShift(background_shift, width) : 0.0f;
 }
 
 int32_t ShadowEye::BackgroundShift() const {
@@ -234,7 +243,43 @@ bool ShadowEye::CopyGame() {
 
 // To the right is farther than the screen. Loading a state put every offset back to 0.
 void ShadowEye::ShiftLayers() {
-    core->adjustVideoLayer(core, GB_LAYER_BACKGROUND, BackgroundShift(), 0);
+    core->adjustVideoLayer(core, GB_LAYER_BACKGROUND, background_shift, 0);
+}
+
+thread_local ShadowEye* ShadowEye::running = nullptr;
+
+// The second core's renderer, which draws in Run alone.
+void ShadowEye::Hook(GBVideoRenderer* renderer, int start, int end, int y) {
+    if (running) {
+        running->DrawLine(renderer, start, end, y);
+    }
+}
+
+// The background ends where it ends in the game's own picture: the columns beyond are drawn again
+// without it.
+void ShadowEye::DrawLine(GBVideoRenderer* renderer, int start, int end, int y) const {
+    draw_range(renderer, start, end, y);
+    auto& software = *reinterpret_cast<GBVideoSoftwareRenderer*>(renderer);
+    const int edge = std::min(Common::LayerDepth::EdgeColumns(background_shift), end);
+    const bool has_background =
+        GBRegisterLCDCIsBgEnable(software.lcdc) || software.model >= GB_MODEL_CGB;
+    if (start >= edge || !has_background || renderer->sgbRenderMode != 0) {
+        return;
+    }
+    renderer->disableBG = true;
+    draw_range(renderer, start, edge, y);
+    renderer->disableBG = false;
+    software.lastX = end;
+
+    const bool window = GBRegisterLCDCIsWindow(software.lcdc) && software.hasWindow;
+    const int window_x = window ? software.wx + software.currentWx - 7 : edge;
+    uint32_t* const line =
+        software.outputBuffer + static_cast<std::ptrdiff_t>(software.outputBufferStride) * y;
+    for (int x = start; x < std::min(window_x, edge); ++x) {
+        if ((software.row[x] & kPaletteMask) < kSpritePalettes) {
+            line[x] = Common::LayerDepth::kBeyond;
+        }
+    }
 }
 
 void ShadowEye::FailOnce(const char* what) {

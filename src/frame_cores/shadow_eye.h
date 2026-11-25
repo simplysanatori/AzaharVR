@@ -11,6 +11,7 @@
 #include "common/layer_depth.h"
 #include "frame_cores/frame_driver.h"
 
+struct GBVideoRenderer;
 struct mCore;
 
 namespace FrameCores {
@@ -48,10 +49,15 @@ public:
 
     /// The frame of the last Run, until the next. None while off.
     DriverPicture Picture() const;
-    /// Of that picture's farthest layer, a share of its width.
-    float FarthestShift() const;
+    /// FrameOutput::layer_shift for that picture.
+    float EdgeShift() const;
 
 private:
+    using DrawRange = void (*)(GBVideoRenderer*, int, int, int);
+    static thread_local ShadowEye* running;
+    static void Hook(GBVideoRenderer* renderer, int start, int end, int y);
+    void DrawLine(GBVideoRenderer* renderer, int start, int end, int y) const;
+
     bool CopyGame();
     void ShiftLayers();
     int32_t BackgroundShift() const;
@@ -62,8 +68,9 @@ private:
     uint32_t width = 0;
     uint32_t height = 0;
     uint32_t depth = 0;
+    DrawRange draw_range = nullptr; ///< mGBA's
     float max_shift = Common::LayerDepth::kNoLimit;
-    float farthest_shift = 0.0f; ///< in `pixels`
+    int32_t background_shift = 0; ///< in `pixels`
     std::vector<uint32_t> pixels; ///< XBGR8888, alpha set after each frame
     std::vector<uint8_t> state;
     bool drawn = false;
