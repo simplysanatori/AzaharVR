@@ -120,7 +120,6 @@ struct Capabilities {
         c.has_3ds_cheats = false;
         c.has_alt_cheats = true;
         c.has_bfi = false;
-        c.has_internal_resolution = false;
         c.has_dynamic_resolution = false;
         c.has_render_margin = false;
         c.has_solar_sensor = true;

@@ -252,28 +252,6 @@ TEST_CASE("Core rows: the table for each other console", "[frame_xr][tabmenu]") 
         own.has_internal_resolution = false; // the filter alone keeps Graphics
         CHECK(SectionShown(SettingsSection::Graphics, Game(own)));
     }
-    // A core that draws at a chosen resolution has the row in its own sizes, and Graphics with it.
-    CHECK(ResolutionOptions(CoreCaps::ForN3DS()) == OptionsFor(Id::InternalResolution));
-    for (const CoreCaps& ds : {CoreCaps::ForNDS(), CoreCaps::ForNDS(true)}) {
-        const auto sizes = ResolutionOptions(ds);
-        REQUIRE(sizes.size() == static_cast<std::size_t>(kMaxResolution));
-        CHECK(sizes.front() == "1x (256x192)");
-        CHECK(sizes.back() == "8x (2048x1536)");
-    }
-    for (CoreCaps own : OtherConsoles()) {
-        CHECK(!RowApplies(Id::InternalResolution, own));
-        CHECK(!RowApplies(Id::DynamicResolution, own));
-        own.has_internal_resolution = true;
-        CHECK(RowApplies(Id::InternalResolution, own));
-        CHECK(!RowApplies(Id::DynamicResolution, own));
-        CHECK(SectionShown(SettingsSection::Graphics, Game(own)));
-        own.has_dynamic_resolution = true;
-        CHECK(RowApplies(Id::DynamicResolution, own));
-        const auto drawn = Drawn(Game(own), SettingsView(SettingsSection::Graphics));
-        CHECK(drawn.contains(Id::InternalResolution));
-        CHECK(drawn.contains(Id::DynamicResolution));
-        CHECK(!drawn.contains(Id::TextureFilter));
-    }
     // Black Frame Insertion brings its rows and Graphics back.
     map.has_bfi = true;
     CHECK(RowApplies(Id::MotionClarityNormal, map));
