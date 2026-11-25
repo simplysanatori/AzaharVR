@@ -102,6 +102,11 @@ public:
         });
     }
 
+    /// Nothing is queued or being worked on.
+    bool Idle() const noexcept {
+        return work_done >= work_scheduled;
+    }
+
     const std::size_t NumWorkers() const noexcept {
         return threads.size();
     }

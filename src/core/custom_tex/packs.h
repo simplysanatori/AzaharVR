@@ -7,8 +7,9 @@
 //
 // What Azahar loads is the folder <user>/load/textures/<TITLEID>. This module treats it as a
 // pointer: Activate() repoints it (a symlink) at one of the game's packs, Deactivate() removes the
-// pointer. No function here deletes or rewrites pack data; a real folder found at the pointer's
-// place is moved (renamed) into the managed library first.
+// pointer. No function here deletes or rewrites pack data (delete.h does, after the player's
+// confirmation); a real folder found at the pointer's place is moved (renamed) into the managed
+// library first.
 //
 // Where packs are looked for (see ListPacks):
 //   managed   <load>/texture-packs/<TITLEID>/<folder>/            one pack per folder
@@ -69,10 +70,15 @@ struct Pack {
 struct Paths {
     std::string load_dir;                 // <user>/load (FileUtil's LoadDir)
     std::vector<std::string> extra_roots; // see the header comment
+    /// Another Azahar's <load>/textures: its packs are listed only when load/textures/<TITLEID>
+    /// here points at them
+    std::vector<std::string> link_roots{};
+    /// The player's home folder: no pack outside <load> is deleted elsewhere (delete.h); "" none is
+    std::string home{};
 };
 
 /// LoadDir, plus the extra roots from ReadExtraRoots(), plus (when it exists) the folders
-/// ~/.local/share/azahar-emu/load/textures-* of a desktop Azahar.
+/// ~/.local/share/azahar-emu/load/textures-* of a desktop Azahar (its load/textures: link_roots).
 Paths DefaultPaths();
 
 /// The extra roots saved in <load>/texture-packs/roots.txt (one path per line, '#' comments) and
@@ -118,6 +124,7 @@ std::optional<u64> ComputeSize(const std::string& path, const std::atomic_bool* 
 
 /// Forgets cached sizes (all, or one folder).
 void ForgetSizes();
+void ForgetSize(const std::string& path);
 
 // --- pure parts (tested without a game) ---
 
@@ -133,6 +140,13 @@ std::string DeriveName(const std::string& parent_folder, const std::string& fold
                        const std::string& title_folder);
 /// "4K", "1080p", "2K" found in the names ("" when none).
 std::string ResolutionHint(const std::string& parent_folder, const std::string& folder);
+
+/// The folder name is the title's: "0004000000033500" or "0004000000033500-astc4x4" (a '-' or '_'
+/// after the ID, any case).
+bool IsTitleFolder(const std::string& name, const std::string& title_folder);
+
+/// The extra roots' folders, the '*' of their last part expanded.
+std::vector<std::string> ExtraRootFolders(const Paths& paths);
 
 /// Detects the format from the file extensions in a bounded walk of the folder.
 Format DetectFormat(const std::string& folder);

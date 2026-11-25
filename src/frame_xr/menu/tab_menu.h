@@ -205,7 +205,7 @@ enum class Id : int {
     PackDownload,  ///< index: mods.textures.downloads (Download / Try Again)
     PackCancel,    ///< index: mods.textures.downloads
     PackLink,      ///< index: mods.textures.downloads ("Created by <author>")
-    PackDelete,    ///< index: mods.textures.packs (a downloaded pack)
+    PackDelete,    ///< index: mods.textures.packs (one with can_delete)
     // AzaharFrame zipinstall: Install from Zip (mods_segments.h ZipModel)
     InstallFromZip, ///< index: ZipTarget (on Download Packs and Install Mods)
     ZipBack,        ///< the page's back button
@@ -253,6 +253,7 @@ enum class Id : int {
     OptimizeStop,   ///< Stop while it converts
     UseOriginal,    ///< back to the PNG pack (from the next start)
     OptimizeNudge,  ///< the "Optimize <Pack> for Frame?" snackbar's Optimize: the pack's page
+    UpdateNote,     ///< the "Update Available: <Pack>" snackbar's Update: opens Download Packs
     RemoveOriginal, ///< AzaharFrame ui3: the optimized pack's original, deleted after a dialog
     DialogExtra,    ///< AzaharFrame memwarn: a notice's third button (ModsDialog::extra), first
     Scrollbar,      ///< AzaharFrame scroll: a long list's scrollbar (MenuLayout::bar)

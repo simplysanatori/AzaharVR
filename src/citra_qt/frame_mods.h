@@ -14,7 +14,7 @@
 // Every change applies from the next start of the game (the snackbar's Restart).
 //
 // Download Packs (core/custom_tex/download.h): one Downloader for the session; a download over
-// 1 GB asks "Download 2.1 GB?" first, and Delete (downloaded packs only) asks too. Finished packs
+// 1 GB asks "Download 2.1 GB?" first. Delete on a pack (core/custom_tex/delete.h) asks too. Finished packs
 // show up in the pack list.
 //
 // Install from Zip (core/mods/zip_install.h; AzaharFrame zipinstall): in VR the menu's own file
@@ -38,6 +38,7 @@
 #include <QObject>
 
 #include "common/common_types.h"
+#include "core/custom_tex/delete.h"
 #include "core/custom_tex/layers.h" // AzaharFrame texlayers
 #include "core/custom_tex/packs.h"
 #include "core/custom_tex/parts.h" // AzaharFrame texparts
@@ -54,6 +55,7 @@ struct Job;
 namespace CustomTex::Download {
 class Downloader;
 struct PackInfo;
+enum class ListFetch : u8;
 } // namespace CustomTex::Download
 namespace FrameXr {
 struct MenuRequest;
@@ -128,7 +130,9 @@ private:
                           RemoveOriginal /* AzaharFrame ui3: the optimized copy's path */ };
         Kind kind = Kind::None;
         std::string id;
-        std::string other; ///< AzaharFrame texrow: Delete: the pair's other folder ("" none)
+        std::vector<std::string> packs; ///< Delete: the packs' ids (AzaharFrame texrow: a pair's two)
+        bool shared = false;            ///< Delete: the dialog said another game uses it
+        bool outside = false;           ///< Delete: the dialog said where the packs are
     };
 
     void AllowAnyway(const std::string& id, int value); // AzaharFrame compat
@@ -190,10 +194,27 @@ private:
     std::map<std::string, std::shared_ptr<const std::vector<uint8_t>>> part_previews;
     int parts_serial = 0; ///< the page opened last (a scan of an older one is dropped)
     void LoadPackDownloads();
+    /// The list's latest copy, off the GUI thread: the one public file, nothing of the game in the
+    /// request. Read only: it never starts a download.
+    void FetchPackList(bool player);
     void ListPackDownloads();
+    /// A download, or an update (core/custom_tex/update.h) of the installed pack: only the player's
+    /// own Download or Update comes here.
     void StartDownload(const std::string& id);
-    /// Deletes the folder (and `other`, AzaharFrame texrow: the pair's other copy, "" none).
-    void DeletePack(const std::string& folder, const std::string& other = {});
+    /// The update in `folder` of the open game's library is here: put in place at once, or when the
+    /// running game, which reads the pack, stops ("Restart the Game to Apply").
+    void PackUpdated(const std::string& folder);
+    /// Puts the waiting updates in place (`title` 0: every title's), and deletes the old versions off
+    /// the GUI thread. While no game reads them.
+    bool ApplyUpdates(u64 title = 0, const std::string& folder = {});
+    void NoteUpdates(); ///< "Update Available: <Pack>" for the packs not yet said
+    /// Delete on a pack's row: "Delete <Pack>?" (pack_pending); nothing is deleted before its answer.
+    void DeletePackAsk(const std::string& pack_id);
+    /// The dialog's Delete (core/custom_tex/delete.h, off the GUI thread).
+    void DeletePacks(const Pending& p);
+    /// One of the packs is in use by a download, Install from Zip, the converter or a texture load.
+    bool PacksBusy(const std::vector<std::string>& ids) const;
+    FrameXr::Menu::PackOrigin PackOriginOf(const std::string& pack_id) const;
     void PollDownload();
     void SetOffers(const std::vector<CustomTex::Download::PackInfo>& list);
     FrameXr::Menu::PackOffer* PackOffer(const std::string& id);
@@ -278,13 +299,20 @@ private:
     Pending pending;                    ///< what the dialog's Replace / Remove does
     Pending pack_pending;               ///< what the Textures dialog's Download / Delete does
     std::shared_ptr<CustomTex::Download::Downloader> downloader; ///< one for the session
-    bool catalog_fetched = false;       ///< the texture catalog's one request a run
+    /// The texture list's one request a run (CustomTex::Download::ListFetch)
+    CustomTex::Download::ListFetch pack_list{};
+    bool pack_of_list = false; ///< the game has an installed pack of the list (SetOffers)
     u64 mods_network_title = ~0ULL;     ///< AzaharFrame stall: the title the mod list's requests ran for
     bool mods_network_running = false;  ///< AzaharFrame stall: they run now
-    std::set<std::string> downloaded;   ///< folder names Download Packs installed (for Delete)
+    /// The packs (by id) with Delete, from RefreshPacks
+    std::map<std::string, CustomTex::Deletion::Target> deletable;
+    std::set<std::string> deleting;     ///< the packs (ids) being deleted now
     /// AzaharFrame fixd: folder names of installed packs whose catalog entry is verified (the chip)
     std::set<std::string> verified_folders;
     std::set<std::string> recommended_folders; ///< the installed packs' Recommended chip
+    std::set<std::string> update_folders;      ///< the installed packs' Update Available chip
+    std::map<std::string, std::string> updates; ///< catalog ids with an update, and their names
+    std::set<std::string> updates_noted;       ///< the ones the snackbar named this run
     std::map<std::string, u64> offer_sizes; ///< the offers' sizes in bytes (0 unknown)
     std::string pack_failed, pack_error; ///< the pack whose last download failed, and why
     u64 download_title = 0;             ///< the title the running download is for
@@ -300,5 +328,4 @@ private:
     ZipQuestion zip_question = ZipQuestion::None;
     std::string zip_mod_id;                  ///< ReplaceOther, Blocked: the mod in the library
     std::string zip_folder;                  ///< the folder browsed last (this session)
-    std::set<std::string> zip_packs;         ///< pack folders Install from Zip made (for Delete)
 };

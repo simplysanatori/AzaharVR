@@ -31,6 +31,7 @@
 #include "core/custom_tex/optimize.h"
 #include "core/custom_tex/packs.h"
 #include "core/custom_tex/download.h" // AzaharFrame fixes7
+#include "core/custom_tex/update.h"
 #include "core/mods/library.h" // AzaharFrame fixes7
 #include "frame_xr/frame_xr.h"
 
@@ -134,6 +135,9 @@ void FrameMods::OptimizeAsk(const std::string& pack_id) {
         return;
     }
     const std::string png = Canon(pair.png);
+    if (deleting.count(png) != 0) {
+        return;
+    }
     optimize_checking = png;
     UpdateOptimizeRow();
     PublishTextures();
@@ -162,6 +166,7 @@ void FrameMods::OptimizeAsk(const std::string& pack_id) {
                 pack_pending = {Pending::Kind::Optimize, png};
                 textures.dialog = {Menu::ModsDialogKind::Optimize, Menu::CountWithCommas(e.estimate->textures),
                                    "About " + Menu::SizeText(e.estimate->total_bytes)};
+                textures.dialog.replaces = Opt::IsStale(Opt::OptimizedPath(png));
             }
             UpdateOptimizeRow();
             PublishTextures();
@@ -169,7 +174,7 @@ void FrameMods::OptimizeAsk(const std::string& pack_id) {
 }
 
 void FrameMods::OptimizeStart(const std::string& png) {
-    if (optimize_converter) {
+    if (optimize_converter || deleting.count(png) != 0) {
         return;
     }
     optimize_png = png;
@@ -393,6 +398,59 @@ void FrameMods::ApplyPendingPack() {
             LOG_WARNING(Frontend, "xr: optimize: {} is gone; the pack stays as it was", s.path);
         }
     }
+    ApplyUpdates();
+}
+
+bool FrameMods::ApplyUpdates(u64 title, const std::string& folder) {
+    if (!deleting.empty()) {
+        return false; // the next time
+    }
+    namespace U = CustomTex::Update;
+    const CustomTex::Paths paths = CustomTex::DefaultPaths();
+    bool applied = false;
+    std::vector<u64> titles;
+    for (const u64 tid : U::Waiting(paths)) {
+        if (title != 0 && tid != title) {
+            continue;
+        }
+        const U::Applied out = U::Apply(paths, tid, folder);
+        applied |= !out.packs.empty();
+        if (!out.stale.empty()) { // Optimize for Frame is offered again (the nudge)
+            nudge_candidates.insert(out.packs.begin(), out.packs.end());
+        }
+        titles.push_back(tid);
+    }
+    if (!titles.empty()) {
+        std::thread([paths, titles] { // a big pack's folder takes a while
+            for (const u64 tid : titles) {
+                U::Finish(paths, tid);
+            }
+        }).detach();
+    }
+    return applied;
+}
+
+void FrameMods::PackUpdated(const std::string& folder) {
+    bool reads = false;
+    if (game_running_source && game_running_source()) {
+        // What the running game reads now, or may: on in its list (its pair's copy too), waiting for
+        // the next start, or changed since it started
+        std::string id;
+        for (const CustomTex::Pack& p : packs) {
+            const Opt::Pair pair = Opt::PairOf(p.path, p.format == CustomTex::Format::Png);
+            for (const std::string& path : {p.path, pair.png}) {
+                if (p.managed && !path.empty() &&
+                    std::filesystem::path(path).filename().string() == folder) {
+                    reads |= p.active || PendingFor(title_id, p.id) != nullptr;
+                }
+            }
+        }
+        reads |= !layers || textures.busy || textures.needs_restart;
+    }
+    if (reads || !ApplyUpdates(title_id, folder)) {
+        LOG_INFO(Frontend, "xr: texture packs: the update of {} waits for the next start", folder);
+        textures.needs_restart = true;
+    }
 }
 
 void FrameMods::UpdateOptimizeRow() {
@@ -459,6 +517,7 @@ void FrameMods::UpdateOptimizeRow() {
         return; // an optimized copy whose original is gone, not chosen: nothing to switch to
     }
     row.size_text = size_of(png);
+    row.stale = !copy.empty() && layers && layers->stale.count(copy) != 0;
 }
 
 std::string FrameMods::PackSizeText(const std::string& path) const {
@@ -586,8 +645,11 @@ void FrameMods::CheckNudge() {
         }
         nudge_candidates.erase(p.id);
         nudge_candidates.erase(folder);
-        if (*p.size_bytes < Opt::kNudgeBytes || Opt::AskedBefore(load, p.id) ||
-            !Opt::PairOf(p.path, true).optimized.empty()) {
+        // A stale copy (an update): asked about again, it was optimized before
+        const bool stale = layers && layers->stale.count(Canon(Opt::OptimizedPath(p.path))) != 0;
+        if (*p.size_bytes < Opt::kNudgeBytes ||
+            (!stale && (Opt::AskedBefore(load, p.id) ||
+                        !Opt::PairOf(p.path, true).optimized.empty()))) {
             continue;
         }
         Opt::MarkAsked(load, p.id);

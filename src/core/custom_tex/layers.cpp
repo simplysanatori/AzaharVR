@@ -267,7 +267,8 @@ void UndoSwitch(State& state, const Switch& s) {
 
 std::vector<PackRow> PackRows(const std::vector<Pack>& packs, const State& list,
                               const std::map<std::string, std::string>& partners,
-                              const std::set<std::string>& copies) {
+                              const std::set<std::string>& copies,
+                              const std::set<std::string>& stale) {
     std::map<std::string, std::size_t, std::less<>> index;
     for (std::size_t i = 0; i < packs.size(); i++) {
         index.emplace(packs[i].id, i);
@@ -289,7 +290,8 @@ std::vector<PackRow> PackRows(const std::vector<Pack>& packs, const State& list,
                 const bool j_on = Has(list, packs[j].id);
                 // The copy in the list; neither: the optimized copy (the one turned on)
                 const bool show_j = j_on ? !r.on || copies.count(packs[j].id) != 0
-                                         : !r.on && copies.count(packs[j].id) != 0;
+                                         : !r.on && (copies.count(packs[j].id) != 0 ||
+                                                     stale.count(packs[i].id) != 0);
                 r.other = show_j ? i : j;
                 r.shown = show_j ? j : i;
                 r.on = r.on || j_on;
@@ -704,7 +706,7 @@ Game Game::Load(const Paths& paths, u64 title_id, const std::atomic_bool* cancel
     }
     for (const Pack& p : g.packs) { // AzaharFrame texrow: the Optimize for Frame pairs
         if (Optimize::IsOptimized(p.path)) {
-            g.copies.insert(p.id);
+            (Optimize::IsStale(p.path) ? g.stale : g.copies).insert(p.id);
         }
         const std::string other = Partner(p.path);
         if (!other.empty() && other != p.id && g.data.count(other) != 0) {
@@ -794,7 +796,7 @@ void Game::Wait(const Switch& s) {
 }
 
 std::vector<PackRow> Game::PackRows() const {
-    return Layers::PackRows(packs, list, partners, copies);
+    return Layers::PackRows(packs, list, partners, copies, stale);
 }
 
 bool Game::Move(std::size_t index, int delta) {

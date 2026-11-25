@@ -688,19 +688,24 @@ std::string OptimizeNudgeText(const std::string& pack) {
     return "Optimize " + pack + " for Frame?";
 }
 
+std::string UpdateNoteText(const std::string& pack) {
+    return std::string(kUpdateChip) + ": " + pack;
+}
+
 OptimizeRowText OptimizeText(const PackOptimize& o) {
     OptimizeRowText t;
+    const char* line = o.stale ? kOptimizeStale : kOptimizeLine;
     const std::string size = o.size_text.empty() ? std::string{} : " \u00b7 " + o.size_text;
     t.title = "PNG" + size;
     switch (o.state) {
     case OptimizeState::None:
         return {};
     case OptimizeState::Png:
-        t.line = kOptimizeLine;
+        t.line = line;
         t.button = 1;
         break;
     case OptimizeState::Checking:
-        t.line = kOptimizeLine;
+        t.line = line;
         t.ring = true;
         break;
     case OptimizeState::Converting:
@@ -750,10 +755,63 @@ std::string RemoveOriginalBody(const std::string& size, bool catalog) {
            (catalog ? "download" : "add") + " it again.";
 }
 
-std::string DeletePackBody(bool both, bool zip) { // AzaharFrame texrow
-    const std::string again = zip ? "You can install it again from its zip."
-                                  : "You can download it again.";
-    return both ? "Deletes the optimized pack and the original PNG pack. " + again : again;
+namespace {
+// Delete's sentences
+constexpr const char* kDeleteBoth = "Deletes the optimized pack and the original PNG pack.";
+constexpr const char* kDeleteOtherAzahar =
+    "It's in another Azahar's folder, and that Azahar uses it too.";
+constexpr const char* kDeleteShared = "Another game uses it too.";
+constexpr const char* kDeleteDownload = "You can download it again.";
+constexpr const char* kDeleteZip = "You can install it again from its zip.";
+constexpr const char* kDeleteOwn = "You'd need your own copy to install it again.";
+} // namespace
+
+std::string DeletePackBody(const DeletePackText& text) {
+    std::string body;
+    const auto add = [&body](bool shown, const char* sentence) {
+        if (shown) {
+            body += (body.empty() ? "" : " ") + std::string(sentence);
+        }
+    };
+    add(text.both, kDeleteBoth); // AzaharFrame texrow
+    add(text.other_azahar, kDeleteOtherAzahar);
+    add(text.shared, kDeleteShared);
+    add(text.origin == PackOrigin::Download, kDeleteDownload);
+    add(text.origin == PackOrigin::Zip, kDeleteZip);
+    add(text.origin == PackOrigin::Own, kDeleteOwn);
+    return body;
+}
+
+std::string ShortenMiddle(const std::string& text,
+                          const std::function<bool(const std::string&)>& fits) {
+    if (fits(text)) {
+        return text;
+    }
+    std::vector<std::string> chars; // code points
+    for (std::size_t i = 0; i < text.size();) {
+        std::size_t end = i + 1;
+        while (end < text.size() && (static_cast<unsigned char>(text[end]) & 0xC0) == 0x80) {
+            end++;
+        }
+        chars.push_back(text.substr(i, end - i));
+        i = end;
+    }
+    // A bit more of the end is kept: the folder's own name
+    for (std::size_t keep = chars.empty() ? 0 : chars.size() - 1; keep > 1; keep--) {
+        const std::size_t head = keep * 2 / 5;
+        std::string s;
+        for (std::size_t i = 0; i < head; i++) {
+            s += chars[i];
+        }
+        s += "\u2026";
+        for (std::size_t i = chars.size() - (keep - head); i < chars.size(); i++) {
+            s += chars[i];
+        }
+        if (fits(s)) {
+            return s;
+        }
+    }
+    return "\u2026";
 }
 
 std::string ModVersionText(const std::string& version) { // AzaharFrame ui3
@@ -791,7 +849,8 @@ std::vector<std::string> PackOfferParts(const PackOffer& offer) {
     if (offer.state == PackOfferState::Failed || offer.state == PackOfferState::Downloading) {
         return {offer.note};
     }
-    if (!offer.resume.empty() && offer.state == PackOfferState::Download) { // AzaharFrame fixes7
+    if (!offer.resume.empty() && (offer.state == PackOfferState::Download ||
+                                  offer.state == PackOfferState::Update)) { // AzaharFrame fixes7
         return {offer.resume};
     }
     return {offer.downloads, offer.updated};
@@ -829,7 +888,9 @@ std::string PackButtonLabel(const PackOffer& offer) { // AzaharFrame fixes7
     if (offer.state == PackOfferState::Failed) {
         return "Try Again";
     }
-    return !offer.resume.empty() ? std::string(kResumeLabel) : LabelFor(Id::PackDownload);
+    return !offer.resume.empty()                     ? std::string(kResumeLabel)
+           : offer.state == PackOfferState::Update ? LabelFor(Id::UpdateNote)
+                                                   : LabelFor(Id::PackDownload);
 }
 
 std::string BylineText(const std::string& author, const std::vector<std::string>& parts,
@@ -890,6 +951,7 @@ float PackTextRight(const Kit& kit, const PackOffer& o, float x1) {
     float right = x1;
     switch (o.state) {
     case PackOfferState::Download:
+    case PackOfferState::Update:
     case PackOfferState::Failed:
         right = x1 - ButtonWidth(kit, PackButtonLabel(o), false, 24.0f); // AzaharFrame fixes7
         break;
@@ -1162,6 +1224,9 @@ void TabMenu::DrawModsDialog(Kit& kit, const ModsDialog& d, const MenuView& view
     case ModsDialogKind::Optimize: // AzaharFrame ui3
         headline = "Optimize Texture Pack?";
         body = kOptimizeBody;
+        if (d.replaces) {
+            body += std::string(" ") + kOptimizeReplaces;
+        }
         confirm = "Optimize";
         break;
     case ModsDialogKind::RemoveOriginal: // AzaharFrame ui3
@@ -1210,7 +1275,9 @@ void TabMenu::DrawModsDialog(Kit& kit, const ModsDialog& d, const MenuView& view
     // AzaharFrame ctgp7: a checkbox row under the supporting text (Material's list item with a
     // leading checkbox, 48 dp)
     const float check_h = d.check.empty() ? 0.0f : 8.0f + 48.0f;
-    const float h = kP + head_lh * static_cast<float>(head_lines.size()) + 16.0f +
+    const float places_h =
+        d.places.empty() ? 0.0f : body_lh * static_cast<float>(d.places.size()) + 8.0f;
+    const float h = kP + head_lh * static_cast<float>(head_lines.size()) + 16.0f + places_h +
                     body_lh * static_cast<float>(body_lines.size()) + numbers_h + rows_h + check_h +
                     24.0f + kButtonH + kP;
     const Rect box{(kPanelW - kW) * 0.5f, (kPanelH - h) * 0.5f, (kPanelW + kW) * 0.5f,
@@ -1223,6 +1290,17 @@ void TabMenu::DrawModsDialog(Kit& kit, const ModsDialog& d, const MenuView& view
         y += head_lh;
     }
     y += 16.0f;
+    for (const std::string& place : d.places) {
+        const std::string text = ShortenMiddle(place, [&](const std::string& s) {
+            return kit.TextWidthSized(kSmall, true, s) <= tw;
+        });
+        kit.TextSized(box.x0 + kP, y + body_lh * 0.5f + kit.CapHeightSized(kSmall, true) * 0.5f,
+                      kSmall, true, Tok::kOnSurface, text);
+        y += body_lh;
+    }
+    if (!d.places.empty()) {
+        y += 8.0f;
+    }
     for (const std::string& l : body_lines) {
         kit.TextSized(box.x0 + kP, y + body_lh * 0.5f + kit.CapHeightSized(kBody, false) * 0.5f,
                       kBody, false, Tok::kOnSurfaceVariant, l);
@@ -1285,10 +1363,10 @@ void TabMenu::DrawModsDialog(Kit& kit, const ModsDialog& d, const MenuView& view
     // The actions: text buttons at the end, the confirming one last.
     float right = box.x1 - kP + 12.0f; // a text button's own padding lines its label up
     const float by = box.y1 - kP - kButtonH;
-    const auto action = [&](Id id, const std::string& label) {
-        const float w = ButtonWidth(kit, label, false, 12.0f);
+    const auto action = [&](Id id, const std::string& label, bool tonal = false) {
+        const float w = ButtonWidth(kit, label, false, tonal ? 24.0f : 12.0f);
         const Rect b{right - w, by, right, by + kButtonH};
-        kit.Button(b, ButtonStyle::Text, 0, label, StateOf(view, {id}));
+        kit.Button(b, tonal ? ButtonStyle::Tonal : ButtonStyle::Text, 0, label, StateOf(view, {id}));
         // AzaharFrame kiuweap2: a short label ("OK") still gets a 48 dp target.
         const float grow = std::max(0.0f, (48.0f - b.W()) * 0.5f);
         AddHit({b.x0 - grow, b.Cy() - 24.0f, b.x1 + grow, b.Cy() + 24.0f}, {id}, panel);
@@ -1306,7 +1384,7 @@ void TabMenu::DrawModsDialog(Kit& kit, const ModsDialog& d, const MenuView& view
         }
     } else {
         action(Id::DialogConfirm, confirm);
-        action(Id::DialogCancel, "Cancel");
+        action(Id::DialogCancel, "Cancel", !d.places.empty());
     }
 }
 
@@ -1699,6 +1777,11 @@ void TabMenu::DrawTextures(Kit& kit, const MenuModel& model, const MenuView& vie
     if (!m.nudge_pack.empty() && view.textures_page == TexturesPage::Packs) {
         bottom = DrawActionSnackbar(kit, view, area, OptimizeNudgeText(m.nudge_name), Id::OptimizeNudge,
                                     bottom);
+    } else if (!m.update_name.empty() && !m.needs_restart && turned_off.empty() &&
+               view.textures_page == TexturesPage::Packs) {
+        // One at a time: this one last
+        bottom = DrawActionSnackbar(kit, view, area, UpdateNoteText(m.update_name), Id::UpdateNote,
+                                    bottom);
     }
     // AzaharFrame ui2: Install from Zip is on Download Packs, as it is on Install Mods.
     if (view.textures_page == TexturesPage::Download && model.mods.zip.open &&
@@ -1870,8 +1953,7 @@ void TabMenu::DrawTextures(Kit& kit, const MenuModel& model, const MenuView& vie
         {
             float right = c.x1;
             float trail = c.x1; // AzaharFrame texparts: where the next button ends
-            if (p.downloaded) {
-                // Delete, for the packs Download Packs brought (they can come again).
+            if (p.can_delete) {
                 const std::string label = LabelFor(Id::PackDelete);
                 const float w = ButtonWidth(kit, label, false, 12.0f);
                 const Rect b{c.x1 - w, cy - kButtonH * 0.5f, c.x1, cy + kButtonH * 0.5f}; // integ
@@ -1896,7 +1978,9 @@ void TabMenu::DrawTextures(Kit& kit, const MenuModel& model, const MenuView& vie
                 }
                 right = b.x0 + 12.0f - kNameGap;
             }
-            RowText(kit, tx, right, cy, p.name, ChipFor(p.verified, p.recommended), p.detail, false, op); // AzaharFrame fixd
+            RowText(kit, tx, right, cy, p.name,
+                    p.update ? NameChip::Update : ChipFor(p.verified, p.recommended), p.detail, false,
+                    op); // AzaharFrame fixd
         }
     }
     kit.ClearClip();
@@ -1954,6 +2038,7 @@ void TabMenu::DrawPackDownloads(Kit& kit, const TexturesModel& m, const MenuView
         float right = c.x1;
         switch (o.state) {
         case PackOfferState::Download:
+        case PackOfferState::Update:
         case PackOfferState::Failed: {
             const std::string label = PackButtonLabel(o); // AzaharFrame fixes7: or Resume
             const float w = ButtonWidth(kit, label, false, 24.0f);

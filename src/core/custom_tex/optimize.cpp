@@ -5,6 +5,7 @@
 // AzaharFrame ui3: see optimize.h.
 
 #include "core/custom_tex/optimize.h"
+#include "common/atomic_file.h"
 #include "common/folder_link.h" // AzaharVR: junctions on Windows
 
 #include <charconv>
@@ -72,6 +73,29 @@ std::optional<std::string> SourceOf(const std::string& optimized) {
     } catch (const std::exception&) {
         return std::nullopt;
     }
+}
+
+bool IsStale(const std::string& optimized) {
+    const auto j = nlohmann::json::parse(ReadFile(fs::path(optimized) / kMarker), nullptr, false);
+    if (!j.is_object()) {
+        return false;
+    }
+    const auto it = j.find("stale");
+    return it != j.end() && it->is_boolean() && it->get<bool>();
+}
+
+bool MarkStale(const std::string& optimized, bool stale) {
+    const fs::path marker = fs::path(optimized) / kMarker;
+    auto j = nlohmann::json::parse(ReadFile(marker), nullptr, false);
+    if (!j.is_object()) {
+        return false;
+    }
+    if (stale) {
+        j["stale"] = true;
+    } else {
+        j.erase("stale");
+    }
+    return Common::WriteFileAtomic(marker.string(), j.dump(2));
 }
 
 Pair PairOf(const std::string& pack, bool is_png) {

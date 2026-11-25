@@ -29,7 +29,10 @@ inline constexpr float kNameChipH = 32.0f, kNameChipPad = 12.0f, kNameChipGap = 
 /// A name keeps at least this much room; under it the chip is left out.
 inline constexpr float kNameChipMinName = 40.0f;
 
-enum class NameChip { None, Verified, Recommended };
+/// Download Packs has a newer version of the installed pack.
+inline constexpr const char* kUpdateChip = "Update Available";
+
+enum class NameChip { None, Verified, Recommended, Update };
 
 /// The chip an entry gets: Recommended over Verified.
 constexpr NameChip ChipFor(bool verified, bool recommended = false) {
@@ -37,7 +40,9 @@ constexpr NameChip ChipFor(bool verified, bool recommended = false) {
 }
 
 inline const char* ChipText(NameChip chip) {
-    return chip == NameChip::Recommended ? kRecommendedChip : kVerifiedChip;
+    return chip == NameChip::Update        ? kUpdateChip
+           : chip == NameChip::Recommended ? kRecommendedChip
+                                           : kVerifiedChip;
 }
 
 /// The room the chip takes after a name (its gap and itself).

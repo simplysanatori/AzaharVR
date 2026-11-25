@@ -78,6 +78,10 @@ public:
     PreloadResult PreloadTextures(const std::atomic_bool& stop_run,
                                   const VideoCore::DiskResourceLoadCallback& callback);
 
+    /// The pack's files are read now: FindCustomTextures, PreloadTextures, or textures queued for
+    /// the workers. Any thread once the game has booted
+    bool Loading() const;
+
     /// AzaharFrame memguard: the memory a preload of the loaded pack would hold, in bytes (0 when
     /// no pack is loaded). Worked out once; any thread once the game has booted
     u64 PreloadEstimate();
@@ -170,6 +174,7 @@ private:
     std::unique_ptr<Common::ThreadWorker> workers;
     // AzaharFrame memguard: atomic, PreloadEstimate reads it on the GUI thread
     std::atomic_bool textures_loaded{false};
+    std::atomic<int> loading{0}; ///< FindCustomTextures and PreloadTextures running now
     bool async_custom_loading{true};
     /// AzaharFrame memguard: a preload finished; uploads drop the DDS/KTX copies
     bool preloaded{false};

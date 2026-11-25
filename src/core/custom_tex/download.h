@@ -98,6 +98,7 @@ struct Entry {
     std::string notes;
     std::string updated;   // AzaharFrame zipinstall: "YYYY-MM-DD", the pack's last update ("" unknown);
                            // catalog3: the catalog's own value may be "YYYY-MM"
+    std::string live_updated; // the source's own date, when it gave one at the download ("" none)
     bool verified = false; // AzaharFrame zipinstall: known to work (AzaharFrame fixd: the Verified chip, listed first)
     bool recommended = false; // AzaharFrame fixes7: "recommended": listed first (after verified), with
                               // the Recommended chip instead of Verified; only the owner sets it
@@ -119,6 +120,19 @@ struct Catalog {
 /// are dropped with a note in `warnings`. nullopt when the text is not a catalog.
 std::optional<Catalog> ParseCatalog(std::string_view json, std::string* error = nullptr,
                                     std::vector<std::string>* warnings = nullptr);
+/// The list read last, kept in the load folder's texture-packs for the next run. `built_in`: the
+/// compiled-in copy. Kept returns it only when the same compiled-in copy kept it (one that comes
+/// with a newer version of the app wins), and it is whole and valid as a list just read must be.
+void KeepList(const std::string& load_dir, const std::string& list, const std::string& built_in);
+std::optional<Catalog> KeptList(const std::string& load_dir, const std::string& built_in);
+
+/// The list's one request a run: for the player's Download Packs (`player`; again after one that
+/// failed), or when the Textures segment shows for a game with a pack of the list (`pack_here`).
+enum class ListFetch : u8 { None, Running, Read, Failed };
+constexpr bool ShouldFetchList(ListFetch state, bool player, bool pack_here) {
+    return state == ListFetch::None ? player || pack_here : state == ListFetch::Failed && player;
+}
+
 const char* DefaultCatalogJson();
 Catalog DefaultCatalog();
 /// AzaharFrame fixes7: the catalog a Downloader was last given (the fetched one), else the default.
@@ -213,6 +227,8 @@ struct PackInfo {
     u64 size = 0;
     std::string size_text;          // "1.8 GB", "" unknown
     bool installed = false;         // a folder from this entry is in the library
+    bool update = false;            // the catalog has a newer version of it (update.h)
+    bool staged = false;            // an update is here and waits for the next start (update.h)
     std::vector<std::string> folders; // installed folders (names) for Delete
     bool partial = false;           // a kept partial download exists
     std::string updated;            // AzaharFrame zipinstall: "YYYY-MM-DD": the installed copy's
@@ -245,6 +261,7 @@ struct State {
     std::string error;   // Failed only
     bool unscanned = false; // AzaharFrame catalog3: the file met was not scanned by GameBanana yet
     std::vector<std::string> installed; // Done: the folder names
+    bool update = false; // Done: an update of the installed[0] folder, which waits beside it (update.h)
     bool Busy() const {
         return phase == Phase::Resolving || phase == Phase::Downloading || phase == Phase::Verifying ||
                phase == Phase::Extracting;
@@ -300,8 +317,10 @@ public:
     /// This File Yet" and State::unscanned / PackInfo::unscanned say why. Other non-clean results: refused.
     /// AzaharFrame compat: `other_version` starts a pack made for another region or release of the
     /// game (Download Anyway); it installs for `title_id`.
+    /// `update`: an update of the installed pack (update.h): it is unpacked beside it, which stays as
+    /// it is until Update::Apply.
     bool Start(const std::string& pack_id, u64 title_id, bool allow_unscanned = false,
-               bool other_version = false);
+               bool other_version = false, bool update = false);
     State GetState() const;
     void Cancel();
     void DiscardPartial(const std::string& pack_id);
@@ -319,7 +338,7 @@ public:
     std::string LoadDir() const { return load_dir_; }
 
 private:
-    void Run(Entry entry, u64 title_id);
+    void Run(Entry entry, u64 title_id, const std::string& update_folder);
     std::string FetchSource(const Entry& entry, const Source& source, const std::string& part);
     void SetState(State::Phase phase, const std::string& text);
     void Fail(const std::string& error);
@@ -351,11 +370,13 @@ private:
 // Installing a finished archive (exposed for tests).
 
 /// Unpacks `archive_path` (zip, 7z or rar, kind from the file's first bytes), finds the textures and
-/// moves each pack folder to <load_dir>/texture-packs/<TITLEID>/<name>. `installed` gets the folder
+/// moves each pack folder to <load_dir>/texture-packs/<TITLEID>/<name>, or with `update_folder` (the
+/// installed pack's) to Update::StagedPath beside it. `installed` gets the folder
 /// names. "" on success, else the error ("No textures found in the download", "Cancelled", ...).
 std::string InstallArchive(const std::string& archive_path, const Entry& entry, u64 title_id,
                            const std::string& load_dir, const std::atomic_bool* cancel,
-                           std::vector<std::string>* installed, const std::string& tool_override = {});
+                           std::vector<std::string>* installed, const std::string& tool_override = {},
+                           const std::string& update_folder = {});
 
 // AzaharFrame zipinstall: the steps of InstallArchive that Install from Zip (core/mods/zip_install.h)
 // shares.
@@ -375,7 +396,26 @@ std::vector<std::string> ListFiles(const std::string& root);
 bool IsTextureFileName(std::string_view base);
 /// The id in a pack folder's download marker; nullopt when the folder has none (the player's own).
 std::optional<std::string> MarkerId(const std::string& folder);
-/// Writes the marker (`source`: "github", "gdrive", "https", "zip"), which makes the folder deletable.
+/// The whole marker: what the pack was downloaded as ("" or 0 what is not known).
+struct Marker {
+    std::string id;      ///< the catalog id, "zip:<folder>" for Install from Zip
+    std::string source;  ///< SourceName, "zip"
+    std::string updated; ///< as written: the source's own date, else the catalog's (also "YYYY-MM")
+    std::string aspect;
+    // Written since updates are looked for (update.h); older markers have none of them
+    std::string catalog_updated; ///< the catalog's date at the download
+    std::string sha256;          ///< of the file, which was checked
+    std::string file_id;         ///< Google Drive's
+    u64 size = 0;                ///< the catalog's
+    bool operator==(const Marker&) const = default;
+};
+std::optional<Marker> ReadMarker(const std::string& folder);
+bool WriteMarker(const std::string& folder, const Marker& marker);
+/// The marker of a download of the entry.
+Marker MarkerFor(const Entry& entry);
+/// "github", "gdrive", "gdrive_folder", "gamebanana", "https".
+std::string SourceName(Source::Type type);
+/// Writes the marker (`source`: "github", "gdrive", "https", "zip").
 /// `updated`: the source's date of the download ("YYYY-MM-DD", "" unknown), for Download Packs.
 /// AzaharFrame fixes7: `aspect` the catalog's "aspect" ("" none), read back by MarkerAspect.
 bool WriteMarker(const std::string& folder, const std::string& id, const std::string& source,

@@ -24,6 +24,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility> // AzaharFrame memguard
@@ -112,6 +113,12 @@ inline bool ShouldAskCatalog(CatalogState state, bool install_page_shown, long l
     return last_ask_ms < 0 || now_ms - last_ask_ms >= retry_ms;
 }
 
+/// The same for telling the Qt side that the Textures segment shows.
+inline bool ShouldTellTextures(bool told, long long now_ms, long long last_ms,
+                               long long retry_ms = 1500) {
+    return !told && (last_ms < 0 || now_ms - last_ms >= retry_ms);
+}
+
 /// The question over the panel, when there is one.
 enum class ModsDialogKind : uint8_t {
     None,
@@ -151,6 +158,10 @@ struct ModsDialog {
     /// AzaharFrame ctgp7: a checkbox under the supporting text with this label ("" none), off when
     /// the dialog opens (MenuView::dialog_check; Id::DialogCheck)
     std::string check;
+    /// DeletePack: where the packs are, when that is outside Azahar's own folders; each on a line of
+    /// its own over the body, shortened in the middle. Cancel is then the emphasized button.
+    std::vector<std::string> places;
+    bool replaces = false; ///< Optimize: a stale optimized copy is replaced (kOptimizeReplaces)
     bool operator==(const ModsDialog&) const = default;
 };
 
@@ -192,10 +203,11 @@ struct TexturePackItem {
     std::string name;   ///< "4K", "1080p", "4K (PNG)" or the pack.json name
     std::string detail; ///< one line: "Henriko Magnifico · 6.0.0 · ASTC/KTX · 2.1 GB" ("" = none)
     bool active = false;     ///< on (AzaharFrame texlayers: any number of them)
-    bool downloaded = false; ///< from Download Packs: it has Delete
+    bool can_delete = false; ///< it has Delete (CustomTex::Deletion::Check)
     bool customize = false;  ///< AzaharFrame texparts: two or more parts: the Customize button
     bool verified = false;   ///< AzaharFrame fixd: from a verified catalog entry: the Verified chip
     bool recommended = false; ///< from a recommended catalog entry: the Recommended chip
+    bool update = false;      ///< a newer version is on Download Packs: the Update Available chip
     bool operator==(const TexturePackItem&) const = default;
 };
 
@@ -251,6 +263,8 @@ struct PackOptimize {
     /// AzaharFrame fixes7: Converting: the optimized copy's bytes written of its estimated size
     /// (the Optimize dialog's "About 6.1 GB"); the percent follows them. 0 not known
     uint64_t done_bytes = 0, total_bytes = 0;
+    /// The optimized copy is of the version before an update (CustomTex::Optimize::IsStale)
+    bool stale = false;
     bool operator==(const PackOptimize&) const = default;
 };
 
@@ -286,6 +300,7 @@ enum class PackOfferState : uint8_t {
                  ///< "Preparing" until the file's bytes start; then "1.2 of 3.4 GB")
     Installed,   ///< in the pack list
     Failed,      ///< `note` is the error, the button is Try Again
+    Update,      ///< installed, and the catalog has a newer version: the Update button
 };
 
 /// One pack of Download Packs (CustomTex::Download::PackInfo).
@@ -340,6 +355,9 @@ struct TexturesModel {
     /// a PNG pack over 1 GB turned on or downloaded. "" none.
     std::string nudge_pack; ///< its id
     std::string nudge_name;
+    /// "Update Available: <Pack>" with Update (opens Download Packs), once a run and pack. "" none.
+    std::string update_name;
+    bool shown = false; ///< the Qt side knows that the Textures segment shows (TexturesShown)
     bool operator==(const TexturesModel&) const = default;
 };
 
@@ -448,15 +466,33 @@ inline constexpr const char* kOptimizeLine =
 inline constexpr const char* kOptimizeBody =
     "Converts the pack to a format the GPU reads directly, so HD textures show sooner and use "
     "less memory. The original is kept.";
+/// Added to it when the optimized copy there is of a previous version.
+inline constexpr const char* kOptimizeReplaces =
+    "Replaces the optimized copy made from the previous version.";
+/// The line in kOptimizeLine's place then.
+inline constexpr const char* kOptimizeStale = "Optimized From a Previous Version";
+/// "Update Available: Kid Icarus HD" (the snackbar)
+std::string UpdateNoteText(const std::string& pack);
 inline constexpr const char* kOptimizeStopped = "Stopped. Optimize Again to Carry On.";
 /// AzaharFrame ui3: Remove Original's dialog.
 inline constexpr const char* kRemoveOriginalTitle = "Remove the Original Pack?";
 /// "Frees 4.7 GB. The optimized pack keeps working. To go back to the original, you'd need to
 /// download it again." (`catalog`; else "add it again"); no size known: no first sentence.
 std::string RemoveOriginalBody(const std::string& size, bool catalog);
-/// AzaharFrame texrow: Delete's supporting text. `both`: the row is an Optimize for Frame pair and
-/// both copies go; `zip`: the pack came from a zip (install it again), else from a download.
-std::string DeletePackBody(bool both, bool zip);
+/// Where a pack came from: Download Packs, Install from Zip, or the player put it there.
+enum class PackOrigin : uint8_t { Download, Zip, Own };
+/// Delete's supporting text. AzaharFrame texrow: `both`: the row is an Optimize for Frame pair and
+/// both copies go. `shared`: another game has it on. `other_azahar`: it is another Azahar's.
+struct DeletePackText {
+    PackOrigin origin = PackOrigin::Download;
+    bool both = false;
+    bool shared = false;
+    bool other_azahar = false;
+};
+std::string DeletePackBody(const DeletePackText& text);
+/// `text` with as little as needed cut out of its middle ("~/.local/.../00040000") for `fits`.
+std::string ShortenMiddle(const std::string& text,
+                          const std::function<bool(const std::string&)>& fits);
 /// "Optimize 4K (PNG) for Frame?"
 std::string OptimizeNudgeText(const std::string& pack);
 /// "2,308"

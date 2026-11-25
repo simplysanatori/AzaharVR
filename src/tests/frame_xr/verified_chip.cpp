@@ -285,6 +285,7 @@ TEST_CASE("Recommended chip over Verified", "[frame_xr][verified_chip]") {
     CHECK(ChipFor(false, true) == NameChip::Recommended);
     CHECK(std::string(ChipText(NameChip::Recommended)) == "Recommended");
     CHECK(std::string(ChipText(NameChip::Verified)) == "Verified");
+    CHECK(std::string(ChipText(NameChip::Update)) == "Update Available");
     // Recommended is the check-mark badge again (the owner): narrower than the Verified chip.
     CHECK(kRecommendedBadgeGap + kRecommendedBadge < kNameChipGap + kNameChipPad * 2.0f + 20.0f);
 }

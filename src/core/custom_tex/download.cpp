@@ -29,10 +29,12 @@
 #include "common/file_util.h"
 #include "common/logging/log.h"
 #include "core/cheats/online.h"
+#include "core/custom_tex/delete.h"
 #include "core/custom_tex/download.h"
 #include "core/custom_tex/layers.h" // AzaharFrame texlayers
 #include "core/custom_tex/packs.h"
 #include "core/custom_tex/parts.h" // AzaharFrame texparts
+#include "core/custom_tex/update.h"
 #include "core/mods/archive.h"
 #include "core/mods/catalog.h"
 #include "core/mods/catalog_schema.h" // AzaharFrame harden
@@ -1075,21 +1077,88 @@ std::optional<std::string> MarkerId(const std::string& folder) {
 
 bool WriteMarker(const std::string& folder, const std::string& id, const std::string& source,
                  const std::string& updated, const std::string& aspect) {
+    return WriteMarker(folder, Marker{id, source, updated, aspect});
+}
+
+bool WriteMarker(const std::string& folder, const Marker& marker) {
     nlohmann::json m;
-    m["id"] = id;
-    m["source"] = source;
-    if (!updated.empty()) {
-        m["updated"] = updated;
-    }
-    if (!aspect.empty()) {
-        m["aspect"] = aspect; // AzaharFrame fixes7
+    m["id"] = marker.id;
+    m["source"] = marker.source;
+    const auto add = [&m](const char* key, const std::string& value) {
+        if (!value.empty()) {
+            m[key] = value;
+        }
+    };
+    add("updated", marker.updated);
+    add("aspect", marker.aspect); // AzaharFrame fixes7
+    add("catalog_updated", marker.catalog_updated);
+    add("sha256", marker.sha256);
+    add("file_id", marker.file_id);
+    if (marker.size > 0) {
+        m["size"] = marker.size;
     }
     return Common::WriteFileAtomic((fs::path(folder) / kMarker).string(), m.dump()); // AzaharFrame harden
 }
 
+std::optional<Marker> ReadMarker(const std::string& folder) {
+    std::ifstream in(fs::path(folder) / kMarker);
+    if (!in) {
+        return std::nullopt;
+    }
+    const auto j = nlohmann::json::parse(in, nullptr, false);
+    if (!j.is_object()) {
+        return std::nullopt;
+    }
+    const auto get = [&j](const char* key) {
+        const auto it = j.find(key);
+        return it != j.end() && it->is_string() ? it->get<std::string>() : std::string{};
+    };
+    Marker m;
+    m.id = get("id");
+    m.source = get("source");
+    m.updated = get("updated");
+    m.aspect = get("aspect");
+    m.catalog_updated = get("catalog_updated");
+    m.sha256 = Lower(get("sha256"));
+    m.file_id = get("file_id");
+    if (const auto it = j.find("size"); it != j.end() && it->is_number_unsigned()) {
+        m.size = it->get<u64>();
+    }
+    return m;
+}
+
+std::string SourceName(Source::Type type) {
+    switch (type) {
+    case Source::Type::GithubRelease:
+        return "github";
+    case Source::Type::Gdrive:
+        return "gdrive";
+    case Source::Type::GdriveFolder:
+        return "gdrive_folder";
+    case Source::Type::Gamebanana:
+        return "gamebanana";
+    default:
+        return "https";
+    }
+}
+
+Marker MarkerFor(const Entry& entry) {
+    Marker m;
+    m.id = entry.id;
+    m.source = SourceName(entry.source.type);
+    m.updated = entry.live_updated.empty() ? entry.updated : entry.live_updated;
+    m.aspect = entry.aspect;
+    m.catalog_updated = entry.updated;
+    m.sha256 = entry.sha256;
+    m.file_id = entry.source.file_id;
+    m.size = entry.size;
+    return m;
+}
+
 std::string InstallArchive(const std::string& archive_path, const Entry& entry, u64 title_id,
                            const std::string& load_dir, const std::atomic_bool* cancel,
-                           std::vector<std::string>* installed, const std::string& tool_override) {
+                           std::vector<std::string>* installed, const std::string& tool_override,
+                           const std::string& update_folder) {
     // AzaharFrame zipinstall: the unpack step is UnpackArchive (Install from Zip shares it).
     const fs::path work = fs::path(load_dir) / "texture-downloads" / (entry.id + ".x");
     struct Cleanup {
@@ -1116,13 +1185,24 @@ std::string InstallArchive(const std::string& archive_path, const Entry& entry, 
     if (ec) {
         return "Cannot make the pack library folder";
     }
+    const bool staged = !update_folder.empty();
+    if (staged && folders.size() != 1) {
+        return "The download is more than one pack";
+    }
     std::vector<std::string> made;
     for (const auto& pf : folders) {
         const std::string base = pf.name.empty() ? entry.folder : entry.folder + " - " + pf.name;
         const std::string name = SanitizeFolderName(base);
         fs::path dst = root / name;
         std::string other_id;
-        if (fs::exists(dst, ec)) {
+        if (staged) {
+            // Beside the old one; what an update that did not finish left there goes
+            dst = Update::StagedPath((root / update_folder).string());
+            fs::remove_all(dst, ec);
+            if (cancel != nullptr && cancel->load()) {
+                return "Cancelled";
+            }
+        } else if (fs::exists(dst, ec)) {
             if (HasMarker(dst, &other_id) && other_id == entry.id) {
                 fs::remove_all(dst, ec); // downloaded again: replace our own copy
             } else {
@@ -1132,16 +1212,17 @@ std::string InstallArchive(const std::string& archive_path, const Entry& entry, 
             }
         }
         const fs::path src = pf.dir.empty() ? out_root : out_root / pf.dir;
+        if (staged) {
+            // An archive's dates can be older than an optimized copy of the version before, which
+            // then looks up to date to the converter
+            for (const std::string& f : ListFiles(src.string())) {
+                fs::last_write_time(src / f, fs::file_time_type::clock::now(), ec);
+            }
+        }
         fs::rename(src, dst, ec);
         if (ec) {
             return "Cannot move the pack into the library";
         }
-        WriteMarker(dst.string(), entry.id,
-                    entry.source.type == Source::Type::GithubRelease ? "github"
-                    : entry.source.type == Source::Type::Gdrive      ? "gdrive"
-                    : entry.source.type == Source::Type::Gamebanana  ? "gamebanana"
-                                                                     : "https",
-                    entry.updated, entry.aspect);
         if (!fs::exists(dst / "pack.json", ec)) {
             nlohmann::json pj;
             pj["name"] = pf.name.empty() ? entry.name : entry.name + " - " + pf.name;
@@ -1151,7 +1232,11 @@ std::string InstallArchive(const std::string& archive_path, const Entry& entry, 
         if (!entry.customize.Empty()) {
             Parts::WriteHints(dst.string(), entry.customize); // AzaharFrame texparts
         }
-        made.push_back(dst.filename().string());
+        // Last: a folder with its marker is complete (update.h)
+        if (!WriteMarker(dst.string(), MarkerFor(entry)) && staged) {
+            return "Cannot move the pack into the library";
+        }
+        made.push_back(staged ? update_folder : dst.filename().string());
         if (pf.dir.empty()) {
             break; // the whole extraction folder moved
         }
@@ -1321,6 +1406,58 @@ std::string HexSha256(const std::string& path, const std::atomic_bool* cancel, b
 
 } // namespace
 
+namespace {
+
+std::string TextSha256(const std::string& text) {
+    CryptoPP::SHA256 hash;
+    hash.Update(reinterpret_cast<const CryptoPP::byte*>(text.data()), text.size());
+    CryptoPP::byte digest[CryptoPP::SHA256::DIGESTSIZE];
+    hash.Final(digest);
+    std::string out;
+    for (const auto b : digest) {
+        out += fmt::format("{:02x}", b);
+    }
+    return out;
+}
+
+fs::path KeptPath(const std::string& load_dir) {
+    return fs::path(load_dir) / "texture-packs" / ".azaharvr-list.json";
+}
+
+} // namespace
+
+void KeepList(const std::string& load_dir, const std::string& list, const std::string& built_in) {
+    std::error_code ec;
+    fs::create_directories(KeptPath(load_dir).parent_path(), ec);
+    nlohmann::json j;
+    j["built_in"] = TextSha256(built_in);
+    j["sha256"] = TextSha256(list);
+    j["list"] = list;
+    Common::WriteFileAtomic(KeptPath(load_dir).string(),
+                            j.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
+}
+
+std::optional<Catalog> KeptList(const std::string& load_dir, const std::string& built_in) {
+    std::error_code ec;
+    const auto size = fs::file_size(KeptPath(load_dir), ec);
+    if (ec || size > 2 * kMaxCatalogBytes) {
+        return std::nullopt;
+    }
+    std::ifstream in(KeptPath(load_dir), std::ios::binary);
+    const auto j = nlohmann::json::parse(in, nullptr, false);
+    const auto get = [&j](const char* key) {
+        const auto it = j.is_object() ? j.find(key) : j.end();
+        return j.is_object() && it != j.end() && it->is_string() ? it->get<std::string>()
+                                                                : std::string{};
+    };
+    const std::string list = get("list");
+    if (list.empty() || get("built_in") != TextSha256(built_in) || get("sha256") != TextSha256(list)) {
+        return std::nullopt;
+    }
+    auto catalog = ParseCatalog(list);
+    return catalog && !catalog->packs.empty() ? std::move(catalog) : std::nullopt;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Downloader
 
@@ -1458,16 +1595,35 @@ std::vector<PackInfo> Downloader::ListForTitle(u64 title_id, const Mods::Compat:
             info.unscanned = unscanned_ids_.count(e.id) != 0;
         }
         std::string installed_date; // AzaharFrame zipinstall: the date the source had at download
+        std::vector<Marker> markers;
         for (fs::directory_iterator it(PacksRoot(load_dir_, title_id), ec), end; !ec && it != end; it.increment(ec)) {
             std::string id;
+            const std::string name = it->path().filename().string();
+            if (name.starts_with('.')) {
+                // not a pack: an update that waits is one of them (update.h)
+                const auto m = Update::IsStagedName(name) ? ReadMarker(it->path().string()) : std::nullopt;
+                if (m && m->id == e.id) {
+                    info.staged = true;
+                    markers.push_back(*m);
+                }
+                continue;
+            }
             if (it->is_directory(ec) && HasMarker(it->path(), &id) && id == e.id) {
                 info.installed = true;
-                info.folders.push_back(it->path().filename().string());
+                info.folders.push_back(name);
                 const std::string date = MarkerUpdated(it->path());
                 installed_date = std::max(installed_date, date);
+                if (const auto m = ReadMarker(it->path().string())) {
+                    markers.push_back(*m);
+                }
             }
         }
-        if (!installed_date.empty()) {
+        if (info.installed && Update::NewerThanAll(markers, e)) {
+            Paths paths;
+            paths.load_dir = load_dir_;
+            info.update = !Update::TargetFolder(paths, title_id, e.id).empty();
+        }
+        if (!installed_date.empty() && !info.update) {
             info.updated = installed_date;
         }
         std::sort(info.folders.begin(), info.folders.end());
@@ -1545,11 +1701,21 @@ void Downloader::DiscardPartial(const std::string& pack_id) {
     }
     std::error_code ec;
     fs::remove(fs::path(load_dir_) / "texture-downloads" / (pack_id + ".part"), ec);
+    fs::remove(fs::path(load_dir_) / "texture-downloads" / (pack_id + ".part.version"), ec);
 }
 
 bool Downloader::Start(const std::string& pack_id, u64 title_id, bool allow_unscanned,
-                       bool other_version) {
+                       bool other_version, bool update) {
     Entry entry;
+    std::string update_folder;
+    if (update) {
+        Paths paths;
+        paths.load_dir = load_dir_;
+        update_folder = Update::TargetFolder(paths, title_id, pack_id);
+        if (update_folder.empty()) {
+            return false; // nothing here that may be replaced
+        }
+    }
     {
         std::lock_guard lock{mutex_};
         if (state_.Busy()) {
@@ -1560,6 +1726,12 @@ bool Downloader::Start(const std::string& pack_id, u64 title_id, bool allow_unsc
             return false;
         }
         entry = *e;
+        if (update) {
+            const auto installed = ReadMarker((fs::path(PacksRoot(load_dir_, title_id)) / update_folder).string());
+            if (installed && !Update::Newer(*installed, entry)) {
+                return false;
+            }
+        }
         state_ = State{};
         state_.phase = State::Phase::Resolving;
         state_.pack_id = pack_id;
@@ -1575,7 +1747,9 @@ bool Downloader::Start(const std::string& pack_id, u64 title_id, bool allow_unsc
     hit_unscanned_ = false;
     done_ = 0;
     total_ = entry.size;
-    worker_ = std::thread([this, entry = std::move(entry), title_id] { Run(entry, title_id); });
+    worker_ = std::thread([this, entry = std::move(entry), title_id, update_folder] {
+        Run(entry, title_id, update_folder);
+    });
     return true;
 }
 
@@ -1858,7 +2032,7 @@ std::string Downloader::FetchSource(const Entry& entry, const Source& source, co
     return "Too many redirects";
 }
 
-void Downloader::Run(Entry entry, u64 title_id) {
+void Downloader::Run(Entry entry, u64 title_id, const std::string& update_folder) {
     Mods::Multipart::LowerThisThreadPriority(); // AzaharFrame catalog3: nice 19, idle I/O; bsdtar inherits
     std::error_code ec;
     live_updated_.clear();
@@ -1868,6 +2042,20 @@ void Downloader::Run(Entry entry, u64 title_id) {
         return Fail("Cannot make the download folder");
     }
     const std::string part = (dl_dir / (entry.id + ".part")).string();
+    if (!update_folder.empty()) {
+        // A kept partial file of the version before is not continued with the new one's bytes
+        const std::string key = fmt::format("{} {} {} {}", entry.updated, entry.sha256,
+                                            entry.source.file_id, entry.size);
+        const fs::path key_file = dl_dir / (entry.id + ".part.version");
+        std::string before;
+        if (std::ifstream in(key_file); in) {
+            std::getline(in, before);
+        }
+        if (before != key) {
+            fs::remove(part, ec);
+            Common::WriteFileAtomic(key_file.string(), key);
+        }
+    }
 
     // 1. The file, from the first source that gives it.
     std::string error;
@@ -1959,11 +2147,9 @@ void Downloader::Run(Entry entry, u64 title_id) {
         }
     }
     SetState(State::Phase::Extracting, "Unpacking");
-    if (!live_updated_.empty()) {
-        entry.updated = live_updated_; // AzaharFrame zipinstall: the source's own date, in the marker
-    }
+    entry.live_updated = live_updated_; // AzaharFrame zipinstall: the source's own date, in the marker
     std::vector<std::string> installed;
-    error = InstallArchive(part, entry, title_id, load_dir_, &cancel_, &installed);
+    error = InstallArchive(part, entry, title_id, load_dir_, &cancel_, &installed, {}, update_folder);
     if (!error.empty()) {
         if (error != "Cancelled") {
             fs::remove(part, ec);
@@ -1971,10 +2157,12 @@ void Downloader::Run(Entry entry, u64 title_id) {
         return Fail(error);
     }
     fs::remove(part, ec);
+    fs::remove(part + ".version", ec);
     std::lock_guard lock{mutex_};
     state_.phase = State::Phase::Done;
     state_.text = "Installed";
     state_.installed = installed;
+    state_.update = !update_folder.empty();
 }
 
 Result Downloader::Delete(u64 title_id, const std::string& folder) {
@@ -1994,20 +2182,12 @@ Result Downloader::Delete(u64 title_id, const std::string& folder) {
         result.error = "Not a downloaded pack";
         return result;
     }
-    CustomTex::Paths paths;
+    Paths paths;
     paths.load_dir = load_dir_;
-    // AzaharFrame texlayers: out of the game's list (the link moves to the next pack, if any)
     const std::string id = fs::weakly_canonical(dir, ec).generic_string();
-    if (const auto r = CustomTex::Layers::TurnOff(paths, title_id, id); !r.ok) {
-        result.error = r.error;
-        return result;
-    }
-    fs::remove_all(dir, ec);
-    if (ec) {
-        result.error = "Cannot remove the folder";
-        return result;
-    }
-    result.ok = true;
+    const Deletion::Result r = Deletion::Delete(paths, title_id, {id}, {.shared = true});
+    result.ok = r.ok;
+    result.error = r.error;
     return result;
 }
 

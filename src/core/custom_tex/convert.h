@@ -135,6 +135,9 @@ private:
     bool none_left_ = false; ///< every texture has been taken
 };
 
+/// A conversion in this process reads `folder` or writes it now (its pack or its copy).
+bool IsRunning(const std::string& folder);
+
 /// Makes the folder Azahar reads (load/textures/<TitleID>) use `out_dir`, the copy of the pack it
 /// holds: a link is repointed; a real folder is renamed <name>-original and a link takes its
 /// place. The Customize choices go over to the copy. False with `error`.

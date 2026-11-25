@@ -15,6 +15,10 @@
 class QDialog;
 class QWidget;
 
+/// The running game's custom textures are being read from their files now: the pack's list, a
+/// preload, or textures that load as needed. GUI thread, as FramePreloadConfirmText.
+bool FrameTexturesLoading();
+
 /// The question's text with the numbers of this moment. GUI thread (the running game's pack is
 /// read from the emulator, which only the GUI thread stops).
 VideoCore::PreloadBudget::ConfirmText FramePreloadConfirmText();

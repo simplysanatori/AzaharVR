@@ -2354,7 +2354,14 @@ int main(int argc, char** argv) {
             om.mods.textures.dialog = {ModsDialogKind::Optimize, "2,308", "About 4.7 GB"};
             ov.hover = {Id::DialogConfirm};
             ok &= shot("optimize-confirm", om, ov);
+            // after an update: the optimized copy is of the version before
+            pp.optimize.stale = true;
+            om.mods.textures.dialog.replaces = true;
+            ok &= shot("optimize-stale-confirm", om, ov);
             om.mods.textures.dialog = {};
+            ov.hover = {Id::OptimizePack};
+            ok &= shot("optimize-stale", om, ov);
+            pp.optimize.stale = false;
             pp.optimize.state = OptimizeState::Converting;
             pp.optimize.done = 1234;
             pp.optimize.total = 2308;
@@ -2559,6 +2566,85 @@ int main(int argc, char** argv) {
         dp.mods.textures.dialog = {ModsDialogKind::DeletePack, "Pokemon X and Y HD", ""};
         v.hover = {Id::DialogConfirm};
         ok &= shot("textures-delete", dp, v);
+        { // Download Packs has a newer version
+            MenuModel up = dp;
+            up.game_title = "Kid Icarus: Uprising";
+            up.mods.textures.dialog = {};
+            up.mods.textures.packs = {
+                {"/load/texture-packs/0004000000030200/Kid Icarus Uprising 4x", "Kid Icarus: Uprising HD",
+                 "PNG \u00b7 2.7 GB \u00b7 6 of 7 Parts", true, true},
+                {"/load/texture-packs/0004000000030200/UI", "Uprising Redux", "PNG \u00b7 59 MB", true,
+                 true}};
+            up.mods.textures.packs[0].customize = true;
+            up.mods.textures.packs[0].recommended = true;
+            up.mods.textures.packs[0].update = true;
+            up.mods.textures.packs[1].recommended = true;
+            v.hover = {};
+            ok &= shot("textures-update", up, v);
+            up.mods.textures.update_name = "Kid Icarus: Uprising HD";
+            v.hover = {Id::UpdateNote};
+            ok &= shot("textures-update-note", up, v);
+            PackOffer o;
+            o.id = "kiu-weapons-hd-4x";
+            o.name = "Kid Icarus: Uprising HD";
+            o.author = "Example Author";
+            o.url = "https://example.com/kid-icarus";
+            o.size_text = "2.7 GB";
+            o.updated = "Updated Nov 2026";
+            o.recommended = true;
+            o.state = PackOfferState::Update;
+            PackOffer o2 = o;
+            o2.id = "other";
+            o2.name = "Uprising Redux";
+            o2.state = PackOfferState::Installed;
+            up.mods.textures.update_name.clear();
+            up.mods.textures.downloads = {o, o2};
+            MenuView uv = v;
+            uv.textures_page = TexturesPage::Download;
+            uv.hover = {Id::PackDownload, 0};
+            ok &= shot("download-update", up, uv);
+            PackOffer& row = up.mods.textures.downloads[0];
+            row.resume = ResumeText((12ull << 30) / 10, (27ull << 30) / 10);
+            ok &= shot("download-update-resume", up, uv);
+            row.resume.clear();
+            row.state = PackOfferState::Downloading;
+            row.percent = 42;
+            row.note = ProgressSizeText((11ull << 30) / 10, (27ull << 30) / 10);
+            up.mods.textures.downloading = true;
+            uv.hover = {Id::PackCancel, 0};
+            ok &= shot("download-update-progress", up, uv);
+        }
+        { // the player's own packs: Delete, and what the dialog says
+            MenuModel own = dp;
+            own.mods.textures.dialog = {};
+            own.mods.textures.packs = {
+                {"/load/texture-packs/0004000000055D00/Original-astc4x4", "Original",
+                 "ASTC/KTX · 415 MB", true, true},
+                {"/load/textures/0004000000055D00", "Default (PNG)", "PNG · 59 MB", false, true}};
+            own.mods.textures.packs[0].customize = true;
+            v.hover = {Id::PackDelete, 1};
+            ok &= shot("textures-own", own, v);
+            v.hover = {Id::DialogCancel};
+            own.mods.textures.dialog = {
+                ModsDialogKind::DeletePack, "Default (PNG)",
+                DeletePackBody({.origin = PackOrigin::Own})};
+            ok &= shot("textures-own-delete", own, v);
+            own.mods.textures.dialog = {
+                ModsDialogKind::DeletePack, "Original",
+                DeletePackBody({.origin = PackOrigin::Own, .both = true, .shared = true})};
+            ok &= shot("textures-own-delete-pair", own, v);
+            ModsDialog& out = own.mods.textures.dialog; // in another Azahar's folder
+            out = {ModsDialogKind::DeletePack, "4K",
+                   DeletePackBody({.origin = PackOrigin::Own, .other_azahar = true})};
+            out.places = {"~/.local/share/azahar-emu/load/textures-4k/0004000000055D00"};
+            v.hover = {};
+            ok &= shot("textures-outside-delete", own, v);
+            out = {ModsDialogKind::DeletePack, "4K",
+                   DeletePackBody({.origin = PackOrigin::Own, .both = true, .other_azahar = true})};
+            out.places = {"~/.local/share/azahar-emu/load/textures-4k/0004000000055D00-astc4x4",
+                          "~/.local/share/azahar-emu/load/textures-4k/0004000000055D00"};
+            ok &= shot("textures-outside-delete-pair", own, v);
+        }
         // AzaharFrame memguard: Preload Textures? with this machine's memory now (run the dump
         // inside the launcher's scope to see Azahar's Limit): OoT3D 4K as ASTC (6034295947
         // bytes) and a 0.9 GB pack, or AZAHARFRAME_DUMP_PRELOAD_BIG / _SMALL bytes

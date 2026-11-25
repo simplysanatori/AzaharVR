@@ -683,9 +683,9 @@ TEST_CASE("Tab menu: Download Packs", "[frame_xr][tabmenu]") {
     d.Draw(m, v);
     CHECK(HasHit(d, Id::DownloadPacks, -1));
 
-    // A downloaded pack has Delete; one added by hand has not.
+    // A pack that may be deleted has Delete.
     m.mods.textures = Packs(2);
-    m.mods.textures.packs[1].downloaded = true;
+    m.mods.textures.packs[1].can_delete = true;
     d.Draw(m, v);
     CHECK(HasHit(d, Id::DownloadPacks, -1));
     CHECK(!HasHit(d, Id::PackDelete, 0));
@@ -1081,12 +1081,151 @@ TEST_CASE("Mods segments: supporting lines", "[frame_xr][tabmenu]") {
 }
 
 TEST_CASE("texrow: Delete's text for a pack and an Optimize for Frame pair", "[texrow]") {
-    CHECK(DeletePackBody(false, false) == "You can download it again.");
-    CHECK(DeletePackBody(false, true) == "You can install it again from its zip.");
-    CHECK(DeletePackBody(true, false) ==
-          "Deletes the optimized pack and the original PNG pack. You can download it again.");
-    CHECK(DeletePackBody(true, true) ==
-          "Deletes the optimized pack and the original PNG pack. You can install it again from its zip.");
+    using O = PackOrigin;
+    const std::string both = "Deletes the optimized pack and the original PNG pack. ";
+    CHECK(DeletePackBody({}) == "You can download it again.");
+    CHECK(DeletePackBody({O::Zip}) == "You can install it again from its zip.");
+    CHECK(DeletePackBody({O::Own}) == "You'd need your own copy to install it again.");
+    CHECK(DeletePackBody({O::Download, true}) == both + "You can download it again.");
+    CHECK(DeletePackBody({O::Zip, true}) == both + "You can install it again from its zip.");
+    CHECK(DeletePackBody({O::Own, true}) == both + "You'd need your own copy to install it again.");
+    CHECK(DeletePackBody({O::Own, false, true}) ==
+          "Another game uses it too. You'd need your own copy to install it again.");
+    CHECK(DeletePackBody({O::Own, false, false, true}) ==
+          "It's in another Azahar's folder, and that Azahar uses it too. You'd need your own copy to "
+          "install it again.");
+    CHECK(DeletePackBody({O::Own, true, true}) ==
+          both + "Another game uses it too. You'd need your own copy to install it again.");
+}
+
+TEST_CASE("Delete's dialog for a pack outside the app's folders", "[frame_xr][tabmenu]") {
+    Drawn d;
+    MenuModel m = Sample();
+    MenuView v;
+    v.tab = kModsTab;
+    v.mods_segment = ModsSegment::Textures;
+    m.mods.textures = Packs(2);
+    m.mods.textures.packs[1].can_delete = true;
+    d.Draw(m, v);
+    REQUIRE(FindHit(d, Id::PackDelete, 1));
+    const auto del = FindHit(d, Id::PackDelete, 1)->r;
+    const auto drawn = [&](std::vector<std::string> places) {
+        m.mods.textures.dialog = {ModsDialogKind::DeletePack, "4K",
+                                  DeletePackBody({PackOrigin::Own, false, false, true})};
+        m.mods.textures.dialog.places = std::move(places);
+        d.Draw(m, v);
+        REQUIRE(FindHit(d, Id::DialogConfirm, -1));
+        REQUIRE(FindHit(d, Id::DialogCancel, -1));
+        const auto yes = FindHit(d, Id::DialogConfirm, -1)->r;
+        const auto no = FindHit(d, Id::DialogCancel, -1)->r;
+        CHECK(no.x1 <= yes.x0 + 0.01f);
+        CHECK(yes.H() >= 48.0f);
+        CHECK(no.H() >= 48.0f);
+        // never under the pointer that pressed the row's Delete
+        CHECK(d.menu.HitTest(del.Cx(), del.Cy()).id != Id::DialogConfirm);
+        CheckTargets(d);
+        return no.W();
+    };
+    const float plain = drawn({});
+    const std::string place = "~/.local/share/azahar-emu/load/textures-4k/0004000000033500";
+    CHECK(drawn({place}) > plain); // Cancel is the emphasized one
+    drawn({place + "-astc4x4", place});
+
+    const auto upto = [](std::size_t n) {
+        return [n](const std::string& s) { return s.size() <= n; };
+    };
+    CHECK(ShortenMiddle(place, upto(200)) == place);
+    const std::string cut = ShortenMiddle(place, upto(40));
+    CHECK(cut.size() <= 40);
+    CHECK(cut.rfind("~/.local", 0) == 0);
+    CHECK(cut.find("\u2026") != std::string::npos);
+    CHECK(cut.substr(cut.size() - 16) == "0004000000033500");
+    CHECK(ShortenMiddle("", upto(0)).empty());
+    CHECK(ShortenMiddle("ab", upto(0)) == "\u2026");
+    // whole characters only
+    const std::string letters = ShortenMiddle("\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9", upto(11));
+    CHECK(letters == "\u00e9\u2026\u00e9\u00e9\u00e9");
+}
+
+// A newer version of an installed pack: the row's chip, the snackbar (the last of them, one at a
+// time), Update on Download Packs, and the stale optimized copy's line.
+TEST_CASE("Tab menu: an update of a texture pack", "[frame_xr][tabmenu]") {
+    Drawn d;
+    MenuModel m = Sample();
+    MenuView v;
+    v.tab = kModsTab;
+    v.mods_segment = ModsSegment::Textures;
+    m.mods.textures = Packs(2);
+    m.mods.textures.packs[0].update = true;
+    d.Draw(m, v);
+    CHECK_FALSE(FindHit(d, Id::UpdateNote, -1));
+    CheckTargets(d);
+    m.mods.textures.update_name = "Kid Icarus HD";
+    d.Draw(m, v);
+    REQUIRE(FindHit(d, Id::UpdateNote, -1));
+    CheckTargets(d);
+    CHECK(UpdateNoteText("Kid Icarus HD") == "Update Available: Kid Icarus HD");
+    CHECK(LabelFor(Id::UpdateNote) == "Update");
+    CHECK(ShouldTellTextures(false, 100, -1));
+    CHECK_FALSE(ShouldTellTextures(false, 1000, 100));
+    CHECK(ShouldTellTextures(false, 1700, 100));
+    CHECK_FALSE(ShouldTellTextures(true, 9999, -1));
+    SECTION("under the other snackbars") {
+        m.mods.textures.needs_restart = true;
+        d.Draw(m, v);
+        CHECK_FALSE(FindHit(d, Id::UpdateNote, -1));
+        CHECK(FindHit(d, Id::RestartGame, -1));
+        m.mods.textures.needs_restart = false;
+        m.mods.textures.nudge_pack = "a";
+        m.mods.textures.nudge_name = "A";
+        d.Draw(m, v);
+        CHECK_FALSE(FindHit(d, Id::UpdateNote, -1));
+        CHECK(FindHit(d, Id::OptimizeNudge, -1));
+        m.mods.textures.nudge_pack.clear();
+        m.mods.mods.turned_off = {"No Bloom"};
+        d.Draw(m, v);
+        CHECK_FALSE(FindHit(d, Id::UpdateNote, -1));
+    }
+    SECTION("Download Packs") {
+        PackOffer o;
+        o.id = "kid-icarus-hd";
+        o.name = "Kid Icarus HD";
+        o.state = PackOfferState::Update;
+        o.updated = "Updated Nov 2026";
+        CHECK(PackButtonLabel(o) == "Update");
+        CHECK(PackOfferParts(o) == std::vector<std::string>{"", "Updated Nov 2026"});
+        PackOffer done = o;
+        done.id = "other";
+        done.state = PackOfferState::Installed;
+        m.mods.textures.downloads = {o, done};
+        v.textures_page = TexturesPage::Download;
+        d.Draw(m, v);
+        CHECK_FALSE(FindHit(d, Id::UpdateNote, -1)); // it is here
+        CHECK(FindHit(d, Id::PackDownload, 0));
+        CHECK_FALSE(FindHit(d, Id::PackDownload, 1));
+        m.mods.textures.downloading = true; // another one runs
+        d.Draw(m, v);
+        CHECK_FALSE(FindHit(d, Id::PackDownload, 0));
+        o.resume = "1.2 of 3.4 GB Downloaded";
+        CHECK(PackButtonLabel(o) == "Resume");
+        CHECK(PackOfferParts(o) == std::vector<std::string>{"1.2 of 3.4 GB Downloaded"});
+        o.state = PackOfferState::Failed;
+        o.note = "No connection";
+        CHECK(PackButtonLabel(o) == "Try Again");
+    }
+    SECTION("the optimized copy of the version before") {
+        PackOptimize o;
+        o.state = OptimizeState::Png;
+        o.stale = true;
+        CHECK(OptimizeText(o).line == "Optimized From a Previous Version");
+        CHECK(OptimizeText(o).button == 1);
+        o.state = OptimizeState::Stopped;
+        CHECK(OptimizeText(o).line == kOptimizeStopped);
+        // It fits on one line at the smallest text width of any page: the dialog's
+        Kit kit{1.0f};
+        CHECK(kit.TextWidthSized(14.0f, false, kOptimizeStale) > 100.0f);
+        CHECK(kit.TextWidthSized(14.0f, false, kOptimizeStale) < 392.0f);
+    }
 }
 
 // AzaharFrame menuux: Switch to Flat, the Settings tab's renderer rows, the Touchpad row's line,
@@ -2346,7 +2485,7 @@ TEST_CASE("Tab menu: texture pack parts", "[frame_xr][tabmenu]") {
     m.mods.textures = Packs(3);
     m.mods.textures.packs[1].customize = true;
     m.mods.textures.packs[2].customize = true;
-    m.mods.textures.packs[2].downloaded = true;
+    m.mods.textures.packs[2].can_delete = true;
     d.Draw(m, v);
     CHECK(!HasHit(d, Id::PackCustomize, 0));
     REQUIRE(HasHit(d, Id::PackCustomize, 1));

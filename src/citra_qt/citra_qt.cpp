@@ -5870,6 +5870,7 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case C::RemoveMod:
     case C::ModsDialog:
     case C::OpenUrl:
+    case C::TexturesShown:
     case C::LoadPackDownloads:
     case C::DownloadPack:
     case C::CancelPackDownload:

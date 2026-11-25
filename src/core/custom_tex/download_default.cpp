@@ -181,7 +181,8 @@ const char* DefaultCatalogJson() {
       "licence": "Not stated; free for emulators, credit the author",
       "notes": "Textures only; the pack's ReShade files are not used. Version 3.0b. USA and Europe only.",
       "updated": "2026-01-05",
-      "verified": true
+      "verified": true,
+      "recommended": true
     },
     {
       "id": "mm3d-1080p-henriko",
@@ -205,7 +206,8 @@ const char* DefaultCatalogJson() {
       "licence": "Not stated; free for emulators, credit the author",
       "notes": "Textures only; the pack's ReShade files are not used. Version 3.0b, for 1080p screens. USA and Europe only.",
       "updated": "2026-01-05",
-      "verified": true
+      "verified": true,
+      "recommended": true
     },
     {
       "id": "sm3dl-4k-henriko",
@@ -229,7 +231,8 @@ const char* DefaultCatalogJson() {
       "licence": "Not stated; free for emulators, credit the author",
       "notes": "Textures only; the pack's ReShade files are not used. Version 1.2.0b.",
       "updated": "2025-03-10",
-      "verified": true
+      "verified": true,
+      "recommended": true
     },
     {
       "id": "sm3dl-1080p-henriko",
@@ -253,7 +256,8 @@ const char* DefaultCatalogJson() {
       "licence": "Not stated; free for emulators, credit the author",
       "notes": "Textures only; the pack's ReShade files are not used. Version 1.2.0b, for 1080p screens.",
       "updated": "2025-03-10",
-      "verified": true
+      "verified": true,
+      "recommended": true
     },
     {
       "id": "albw-4k-henriko",
@@ -3357,25 +3361,26 @@ const char* DefaultCatalogJson() {
     },
     {
       "id": "kiu-weapons-hd-4x",
-      "name": "Kid Icarus Uprising Weapons HD",
+      "name": "Kid Icarus: Uprising HD",
       "title": "Kid Icarus: Uprising",
       "title_ids": [
+        "0004000000030100",
         "0004000000030200"
       ],
-      "author": "simplysanatori",
+      "author": "simplysanatori, Darkshade",
       "author_url": "https://github.com/simplysanatori",
-      "updated": "2026-11",
+      "updated": "2026-11-25",
       "source": {
         "type": "gdrive",
-        "file_id": "1VJmYZdP38-lo_e6wGDj_XfCVIuQD6wLg"
+        "file_id": "1MXvVcxroJM_p4XEDFPs5L7Dy_VUI1jhN"
       },
-      "size": 84613857,
-      "sha256": "290cb743f7c3e969b180911cadc209af026d4e821032665fbc813d50ef48bc4c",
+      "size": 2901358456,
+      "sha256": "173e157d39420a8037ea8946e38c567e202d718ad64980e732e7ccae7eb42ca9",
       "format": "zip",
       "layout": "single",
       "folder": "Kid Icarus Uprising Weapons HD",
       "licence": "Free for emulators; credit the author",
-      "notes": "The weapon textures upscaled 4x: decompressed with DXTDecompressor, then upscaled with the 4x-UltraSharp model by Kim2091. Version 0.1.0, an early release. Made on the USA version.",
+      "notes": "The whole game's textures upscaled 4x: decompressed with DXTDecompressor, then upscaled with the 4x-AnimeSharp model by Kim2091; stages and weapons with the 4x-UltraSharp model by Kim2091. Boss name cards and other text redrawn in Barlow Condensed and C059. Food, item and gallery pictures replaced with official artwork, most of them in the game's own colours. Stage grain removed, clouds and skies softened. Characters' eyes in the game's own colours. Version 1.4.1. Made on the European version; works on the USA version too, where 20 text pictures stay original. Contributors: Darkshade.",
       "verified": true,
       "recommended": true
     }

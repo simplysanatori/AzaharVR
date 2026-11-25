@@ -107,10 +107,12 @@ struct PackRow {
     bool operator==(const PackRow&) const = default;
 };
 /// One row a pack (a pair: one row, where its first copy is). `list` with the waiting switches
-/// applied; `partners`: the pairs, both ways; `copies`: the optimized copies.
+/// applied; `partners`: the pairs, both ways; `copies`: the optimized copies; `stale`: those made
+/// from a previous version of their originals (a pair that is off shows the original).
 std::vector<PackRow> PackRows(const std::vector<Pack>& packs, const State& list,
                               const std::map<std::string, std::string>& partners,
-                              const std::set<std::string>& copies);
+                              const std::set<std::string>& copies,
+                              const std::set<std::string>& stale = {});
 
 /// Up (-1) or down (+1) one entry. False when it cannot.
 bool Move(State& state, std::size_t index, int delta);
@@ -206,7 +208,8 @@ struct Game {
     std::set<std::string> dirty;          ///< packs whose Customize state changed
     /// AzaharFrame texrow: the Optimize for Frame pairs, both ways, and the optimized copies (Load)
     std::map<std::string, std::string> partners;
-    std::set<std::string> copies;
+    std::set<std::string> copies; ///< not the stale ones
+    std::set<std::string> stale;  ///< optimized copies of a previous version (Optimize::IsStale)
     std::vector<Switch> waiting; ///< switches for the next start: in `list`, not on disk yet
 
     static Game Load(const Paths& paths, u64 title_id, const std::atomic_bool* cancel = nullptr);

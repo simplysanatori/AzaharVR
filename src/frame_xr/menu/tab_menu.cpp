@@ -1634,6 +1634,8 @@ std::string LabelFor(Id id) {
         return "Remove Original";
     case Id::OptimizeNudge:
         return "Optimize";
+    case Id::UpdateNote:
+        return "Update";
     case Id::AddCheat: // AzaharFrame ui2
         return "Add Cheat";
     case Id::CheatsOtherVersion: // AzaharFrame scroll

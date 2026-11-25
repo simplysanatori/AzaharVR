@@ -253,6 +253,20 @@ const Mods::Compat::Game& FrameMods::GameInfo() {
     return *game_info;
 }
 
+namespace {
+
+/// With the list read last, until the run's own request
+std::shared_ptr<CustomTex::Download::Downloader> MakeDownloader() {
+    namespace D = CustomTex::Download;
+    auto downloader = std::make_shared<D::Downloader>();
+    if (auto kept = D::KeptList(CustomTex::DefaultPaths().load_dir, D::DefaultCatalogJson())) {
+        downloader->SetCatalog(std::move(*kept));
+    }
+    return downloader;
+}
+
+} // namespace
+
 void FrameMods::Open(u64 title_id_, int run_) {
     if (title_id_ != title_id || run_ != run) {
         // Another game, or the same one started again: what waited for a restart has applied.
@@ -275,13 +289,18 @@ void FrameMods::Open(u64 title_id_, int run_) {
         ZipCloseJob(); // AzaharFrame zipinstall: a question of another game's goes
         zip = {};
         zip_question = ZipQuestion::None;
-        zip_packs.clear();
+        deletable.clear();
+        updates.clear();
+        update_folders.clear();
+        pack_of_list = false;
         PublishMods();
         PublishTextures();
         PublishZip();
         angels_aim_report_url.clear(); // AzaharFrame kiufix: the segment goes with its game
         FrameXr::SetInGameMenuAngelsAim({});
     }
+    textures.shown = false;
+    textures.update_name.clear(); // said once
     if (title_id == 0) {
         return;
     }
@@ -304,7 +323,7 @@ void FrameMods::Open(u64 title_id_, int run_) {
     RefreshPacks();
     RefreshAngelsAim(); // AzaharFrame kiufix
     if (!downloader) {
-        downloader = std::make_shared<CustomTex::Download::Downloader>();
+        downloader = MakeDownloader();
     }
     ListPackDownloads(); // which packs it brought (Delete), and a download that still runs
     if (mods.catalog == Menu::CatalogState::Ready) {
@@ -414,7 +433,14 @@ void FrameMods::Command(const FrameXr::MenuRequest& r) {
         }
         return;
     }
+    case C::TexturesShown:
+        textures.shown = true;
+        NoteUpdates();
+        PublishTextures();
+        FetchPackList(false); // is there an update
+        return;
     case C::LoadPackDownloads:
+        textures.update_name.clear(); // answered
         LoadPackDownloads();
         return;
     // AzaharFrame texparts: a pack's Customize page
@@ -464,32 +490,9 @@ void FrameMods::Command(const FrameXr::MenuRequest& r) {
             downloader->Cancel();
         }
         return;
-    case C::DeletePack: {
-        const auto it = std::find_if(packs.begin(), packs.end(),
-                                     [&r](const CustomTex::Pack& p) { return p.id == r.text; });
-        if (it == packs.end() || textures.busy || textures.downloading) {
-            return;
-        }
-        const std::string folder = std::filesystem::path(it->path).filename().string();
-        // AzaharFrame texrow: the row is the pair: its other copy goes too, when it can
-        std::string other;
-        if (layers) {
-            if (const auto o = layers->partners.find(it->id); o != layers->partners.end()) {
-                const CustomTex::Pack* op = layers->Find(o->second);
-                const std::string of =
-                    op ? std::filesystem::path(op->path).filename().string() : std::string{};
-                if (op && op->managed && (downloaded.count(of) != 0 || zip_packs.count(of) != 0)) {
-                    other = of;
-                }
-            }
-        }
-        pack_pending = {Pending::Kind::Delete, folder, other};
-        // AzaharFrame zipinstall: a zip's pack comes again from the zip, not a download
-        textures.dialog = {Menu::ModsDialogKind::DeletePack, it->name,
-                           Menu::DeletePackBody(!other.empty(), zip_packs.count(folder) != 0)};
-        PublishTextures();
+    case C::DeletePack:
+        DeletePackAsk(r.text);
         return;
-    }
     case C::AskPreload: { // AzaharFrame memguard: this moment's numbers (frame_preload_confirm.h)
         if (textures.dialog.kind != Menu::ModsDialogKind::None) {
             return; // another question is open
@@ -521,7 +524,7 @@ void FrameMods::Command(const FrameXr::MenuRequest& r) {
         } else if (p.kind == Pending::Kind::Download) {
             StartDownload(p.id);
         } else if (p.kind == Pending::Kind::Delete) {
-            DeletePack(p.id, p.other);
+            DeletePacks(p);
         } else if (p.kind == Pending::Kind::Optimize) { // AzaharFrame ui3
             OptimizeStart(p.id);
         } else if (p.kind == Pending::Kind::RemoveOriginal) {
@@ -1138,16 +1141,15 @@ void FrameMods::RefreshPacks() {
         this,
         [tid] {
             // AzaharFrame texlayers: the packs, their parts and the game's list, read once
+            const CustomTex::Paths paths = CustomTex::DefaultPaths();
             auto game = std::make_shared<CustomTex::Layers::Game>(
-                CustomTex::Layers::Game::Load(CustomTex::DefaultPaths(), tid));
-            // AzaharFrame zipinstall: the packs Install from Zip made can be deleted too
-            std::set<std::string> zipped;
+                CustomTex::Layers::Game::Load(paths, tid));
+            std::map<std::string, CustomTex::Deletion::Target> removable; // the packs with Delete
             // AzaharFrame texparts: which packs have Customize, and "6 of 7 Parts"
             std::map<std::string, PackParts> parts;
             for (const CustomTex::Pack& p : game->packs) {
-                const auto id = p.managed ? CustomTex::Download::MarkerId(p.path) : std::nullopt;
-                if (id && id->rfind("zip:", 0) == 0) {
-                    zipped.insert(std::filesystem::path(p.path).filename().string());
+                if (auto t = CustomTex::Deletion::Check(paths, tid, game->packs, p.id); t.Ok()) {
+                    removable.emplace(p.id, std::move(t));
                 }
                 namespace P = CustomTex::Parts;
                 const CustomTex::Layers::PackData& d = game->data[p.id];
@@ -1161,15 +1163,16 @@ void FrameMods::RefreshPacks() {
                                    CustomTex::Optimize::IsOptimized(p.path)};
 #endif
             }
-            return std::make_tuple(std::move(game), std::move(zipped), std::move(parts));
+            return std::make_tuple(std::move(game), std::move(removable), std::move(parts));
         },
-        [this, tid](const std::tuple<std::shared_ptr<CustomTex::Layers::Game>, std::set<std::string>,
+        [this, tid](const std::tuple<std::shared_ptr<CustomTex::Layers::Game>,
+                                     std::map<std::string, CustomTex::Deletion::Target>,
                                      std::map<std::string, PackParts>>& result) {
             if (tid != title_id) {
                 return;
             }
             layers = std::get<0>(result);
-            zip_packs = std::get<1>(result);
+            deletable = std::get<1>(result);
             pack_parts = std::get<2>(result);
             // AzaharFrame ui3, texrow: the switches waiting for the next start show as chosen, in
             // the pack rows and in Enabled Textures (the disk keeps what the game reads now)
@@ -1221,14 +1224,14 @@ void FrameMods::FillPackRows() {
         return;
     }
     for (const CustomTex::Layers::PackRow& r :
-         CustomTex::Layers::PackRows(packs, layers->list, layers->partners, layers->copies)) {
+         CustomTex::Layers::PackRows(packs, layers->list, layers->partners, layers->copies,
+                                     layers->stale)) {
         const CustomTex::Pack& p = packs[r.shown];
         const std::string folder = std::filesystem::path(p.path).filename().string();
-        const bool mine =
-            p.managed && (downloaded.count(folder) != 0 || zip_packs.count(folder) != 0);
-        Menu::TexturePackItem item{p.id, p.name, PackDetail(p), r.on, mine};
+        Menu::TexturePackItem item{p.id, p.name, PackDetail(p), r.on, deletable.count(p.id) != 0};
         item.verified = p.managed && verified_folders.count(folder) != 0; // AzaharFrame fixd
         item.recommended = p.managed && recommended_folders.count(folder) != 0;
+        item.update = p.managed && update_folders.count(folder) != 0;
         if (const auto it = pack_parts.find(p.id); it != pack_parts.end()) {
             // AzaharFrame texparts; ui3: a PNG or optimized pack has its page too
             item.customize = it->second.count >= 2 || it->second.optimizable;
@@ -1624,13 +1627,18 @@ void FrameMods::PartsChanged() {
 
 void FrameMods::LoadPackDownloads() {
     if (!downloader) {
-        downloader = std::make_shared<CustomTex::Download::Downloader>();
+        downloader = MakeDownloader();
     }
     ListPackDownloads();
-    if (catalog_fetched) {
+    FetchPackList(true);
+}
+
+void FrameMods::FetchPackList(bool player) {
+    namespace D = CustomTex::Download;
+    if (!downloader || !D::ShouldFetchList(pack_list, player, pack_of_list)) {
         return;
     }
-    catalog_fetched = true;
+    pack_list = D::ListFetch::Running;
     // The catalog's latest copy: one request a run, the compiled-in copy without it.
     const auto dl = downloader;
     OffThread(
@@ -1647,10 +1655,12 @@ void FrameMods::LoadPackDownloads() {
             if (!parsed || parsed->packs.empty()) {
                 return false;
             }
+            D::KeepList(CustomTex::DefaultPaths().load_dir, r.body, D::DefaultCatalogJson());
             dl->SetCatalog(std::move(*parsed));
             return true;
         },
         [this](bool updated) {
+            pack_list = updated ? D::ListFetch::Read : D::ListFetch::Failed;
             if (updated) {
                 ListPackDownloads();
             }
@@ -1677,21 +1687,29 @@ void FrameMods::SetOffers(const std::vector<CustomTex::Download::PackInfo>& list
     const CustomTex::Download::State st = downloader->GetState();
     const bool running = st.Busy() && download_title == title_id;
     std::vector<Menu::PackOffer> offers;
-    bool new_folders = false;
     offer_sizes.clear();
     std::set<std::string> verified_now; // AzaharFrame fixd: the installed packs' chip
     std::set<std::string> recommended_now;
+    std::set<std::string> update_now;
+    updates.clear();
+    pack_of_list = false;
     for (const CustomTex::Download::PackInfo& p : list) {
         offer_sizes[p.id] = p.size;
         for (const std::string& f : p.folders) {
-            new_folders |= downloaded.insert(f).second;
             if (p.verified) {
                 verified_now.insert(f);
             }
             if (p.recommended) {
                 recommended_now.insert(f);
             }
+            if (p.update) {
+                update_now.insert(f);
+            }
         }
+        if (p.update) {
+            updates[p.id] = p.name;
+        }
+        pack_of_list |= p.installed;
         Menu::PackOffer o;
         o.id = p.id;
         o.name = p.name;
@@ -1712,13 +1730,16 @@ void FrameMods::SetOffers(const std::vector<CustomTex::Download::PackInfo>& list
         }
         if (running && st.pack_id == p.id) {
             o.state = Menu::PackOfferState::Downloading;
-        } else if (p.installed) {
+        } else if (p.installed && !p.update) {
             o.state = Menu::PackOfferState::Installed;
         } else if (p.id == pack_failed) {
             o.state = Menu::PackOfferState::Failed;
             o.note = pack_error;
+        } else if (p.update) {
+            o.state = Menu::PackOfferState::Update;
         }
-        if (o.state == Menu::PackOfferState::Download && p.partial) {
+        if ((o.state == Menu::PackOfferState::Download || o.state == Menu::PackOfferState::Update) &&
+            p.partial) {
             // AzaharFrame fixes7: a cancelled download (or one the app was closed in) goes on: Resume
             o.resume = Menu::ResumeText(p.partial_bytes, p.size);
         }
@@ -1730,15 +1751,30 @@ void FrameMods::SetOffers(const std::vector<CustomTex::Download::PackInfo>& list
         PollDownload(); // the percent at once
     }
     const bool verified_changed =
-        verified_now != verified_folders || recommended_now != recommended_folders;
+        verified_now != verified_folders || recommended_now != recommended_folders ||
+        update_now != update_folders;
     verified_folders = std::move(verified_now);
     recommended_folders = std::move(recommended_now);
-    if (verified_changed && !new_folders) {
+    update_folders = std::move(update_now);
+    if (verified_changed) {
         FillPackRows(); // AzaharFrame fixd: the installed packs' Verified chip
     }
+    NoteUpdates();
     PublishTextures();
-    if (new_folders) {
-        RefreshPacks(); // Delete on the packs it brought
+    if (textures.shown) {
+        FetchPackList(false);
+    }
+}
+
+void FrameMods::NoteUpdates() {
+    if (!textures.shown || !textures.update_name.empty()) {
+        return;
+    }
+    for (const auto& [id, name] : updates) {
+        if (updates_noted.insert(id).second) {
+            textures.update_name = name;
+            return;
+        }
     }
 }
 
@@ -1764,11 +1800,11 @@ void FrameMods::AllowAnyway(const std::string& id, int value) {
 
 void FrameMods::StartDownload(const std::string& id) {
     Menu::PackOffer* o = PackOffer(id);
-    if (!o || !downloader || textures.downloading) {
+    if (!o || !downloader || textures.downloading || !deleting.empty()) {
         return;
     }
     if (!downloader->Start(id, title_id, unscanned_ok.count(id) != 0,
-                           anyway.count(id) != 0)) { // returns at once; the work runs on its thread
+                           anyway.count(id) != 0, updates.count(id) != 0)) { // returns at once; the work runs on its thread
         LOG_WARNING(Frontend, "xr: texture packs: download {} did not start", id);
         return;
     }
@@ -1826,8 +1862,11 @@ void FrameMods::PollDownload() {
     case Phase::Done:
         LOG_INFO(Frontend, "xr: texture packs: {} downloaded", st.pack_id);
         for (const std::string& f : st.installed) {
-            downloaded.insert(f);
-            nudge_candidates.insert("folder:" + f); // AzaharFrame ui3
+            if (st.update) {
+                PackUpdated(f);
+            } else {
+                nudge_candidates.insert("folder:" + f); // AzaharFrame ui3
+            }
         }
         RefreshPacks();
         break;
@@ -1851,48 +1890,160 @@ void FrameMods::PollDownload() {
     ListPackDownloads();
 }
 
-void FrameMods::DeletePack(const std::string& folder, const std::string& other) {
-    if (!downloader || textures.busy || textures.downloading) {
+// ---- Delete ----
+
+namespace {
+
+std::string HomeDir() {
+    return QDir::homePath().toStdString();
+}
+
+/// "~/Downloads/Packs" for a folder under the home folder.
+std::string FolderText(const std::string& folder) {
+    const std::string home = HomeDir();
+    if (folder == home) {
+        return "~";
+    }
+    if (!home.empty() && folder.rfind(home + "/", 0) == 0) {
+        return "~" + folder.substr(home.size());
+    }
+    return folder;
+}
+
+} // namespace
+
+Menu::PackOrigin FrameMods::PackOriginOf(const std::string& pack_id) const {
+    const CustomTex::Pack* p = layers ? layers->Find(pack_id) : nullptr;
+    if (!p || !p->managed) {
+        return Menu::PackOrigin::Own;
+    }
+    const auto it = layers->catalog_ids.find(pack_id);
+    const std::string id = it != layers->catalog_ids.end() ? it->second : std::string{};
+    if (id.rfind("zip:", 0) == 0) {
+        return Menu::PackOrigin::Zip;
+    }
+    // only what Download Packs lists can be downloaded again
+    const bool offered = std::any_of(textures.downloads.begin(), textures.downloads.end(),
+                                     [&](const Menu::PackOffer& o) { return o.id == id; });
+    return offered ? Menu::PackOrigin::Download : Menu::PackOrigin::Own;
+}
+
+bool FrameMods::PacksBusy(const std::vector<std::string>& ids) const {
+    const auto has = [&ids](const std::string& path) {
+        return !path.empty() && std::find(ids.begin(), ids.end(), path) != ids.end();
+    };
+    const auto converting = [&](const std::string& png) {
+        if (png.empty()) {
+            return false;
+        }
+        std::error_code ec;
+        const auto copy =
+            std::filesystem::weakly_canonical(CustomTex::Optimize::OptimizedPath(png), ec);
+        return has(png) || has(copy.generic_string());
+    };
+    return (downloader && downloader->GetState().Busy()) || zip.working ||
+           converting(optimize_png) || converting(optimize_checking) || FrameTexturesLoading();
+}
+
+void FrameMods::DeletePackAsk(const std::string& pack_id) {
+    using Place = CustomTex::Deletion::Place;
+    const CustomTex::Pack* pack = layers ? layers->Find(pack_id) : nullptr;
+    const auto target = deletable.find(pack_id);
+    if (!pack || target == deletable.end() || textures.busy || textures.downloading ||
+        textures.dialog.kind != Menu::ModsDialogKind::None) {
+        return;
+    }
+    Pending p{Pending::Kind::Delete, pack_id};
+    Menu::DeletePackText text;
+    text.origin = PackOriginOf(pack_id);
+    p.outside = target->second.place == Place::Outside;
+    text.other_azahar = target->second.other_azahar;
+    // AzaharFrame texrow: the row is the pair: its other copy goes too, when it can (and is in
+    // Azahar's own folders or outside them as the row's is)
+    const auto o = layers->partners.find(pack_id);
+    const auto other = o != layers->partners.end() ? deletable.find(o->second) : deletable.end();
+    if (other != deletable.end() && (other->second.place == Place::Outside) == p.outside) {
+        p.packs.push_back(o->second);
+        text.both = true;
+        text.other_azahar |= other->second.other_azahar;
+        if (text.origin == Menu::PackOrigin::Own) {
+            text.origin = PackOriginOf(o->second); // an optimized copy has no marker of its own
+        }
+    }
+    p.packs.push_back(pack_id);
+    if (PacksBusy(p.packs)) {
+        LOG_WARNING(Frontend, "xr: texture packs: not deleting {}: in use", pack_id);
+        FrameXr::ShowToastText("Texture Pack Not Deleted", FrameXr::ToastTime::Long);
+        return;
+    }
+    const CustomTex::Paths paths = CustomTex::DefaultPaths();
+    for (const std::string& id : p.packs) {
+        p.shared |= !CustomTex::Deletion::OtherGames(paths, title_id, id).empty();
+    }
+    text.shared = p.shared;
+    pack_pending = std::move(p);
+    textures.dialog = {Menu::ModsDialogKind::DeletePack, pack->name, Menu::DeletePackBody(text)};
+    if (pack_pending.outside) {
+        for (const std::string& id : pack_pending.packs) {
+            textures.dialog.places.push_back(FolderText(deletable.at(id).path));
+        }
+    }
+    PublishTextures();
+}
+
+void FrameMods::DeletePacks(const Pending& p) {
+    if (textures.busy || textures.downloading || p.packs.empty()) {
+        return;
+    }
+    if (PacksBusy(p.packs)) {
+        LOG_WARNING(Frontend, "xr: texture packs: not deleting {}: in use", p.id);
+        FrameXr::ShowToastText("Texture Pack Not Deleted", FrameXr::ToastTime::Long);
         return;
     }
     bool was_active = false;
-    for (const CustomTex::Pack& p : packs) {
-        const std::string f = std::filesystem::path(p.path).filename().string();
-        if (p.managed && (f == folder || (!other.empty() && f == other))) {
-            // texrow: what the game reads now (a waiting switch's `from` too)
-            was_active |= p.active || PendingFor(title_id, p.id) != nullptr;
-            DropPending(title_id, p.id); // AzaharFrame texrow: the pair goes, and its switch
+    std::vector<PendingSwitch> dropped; // come back when nothing was deleted
+    for (const std::string& id : p.packs) {
+        // texrow: what the game reads now (a waiting switch's `from` too)
+        was_active |= layers && layers->IsOn(id);
+        if (const PendingSwitch* s = PendingFor(title_id, id)) {
+            was_active = true;
+            dropped.push_back(*s);
+            DropPending(title_id, id); // AzaharFrame texrow: the pair goes, and its switch
+        }
+        deleting.insert(id);
+        if (textures.nudge_pack == id) {
+            textures.nudge_pack.clear();
         }
     }
     textures.busy = true;
     PublishTextures();
-    const auto dl = downloader;
     const u64 tid = title_id;
-    LOG_INFO(Frontend, "xr: texture packs: delete {}{}", folder, other.empty() ? "" : " and " + other);
+    LOG_INFO(Frontend, "xr: texture packs: delete {}{}", p.id,
+             p.packs.size() > 1 ? " and its pair" : "");
     OffThread(
         this,
-        [dl, tid, folder, other] {
-            // AzaharFrame texrow: the pair's other copy first, then the one the row showed
-            if (!other.empty()) {
-                if (CustomTex::Download::Result r = dl->Delete(tid, other); !r.ok) {
-                    return r;
+        [tid, p] {
+            return CustomTex::Deletion::Delete(CustomTex::DefaultPaths(), tid, p.packs,
+                                               {.shared = p.shared, .outside = p.outside});
+        },
+        [this, tid, p, was_active, dropped](const CustomTex::Deletion::Result& out) {
+            deleting.clear();
+            if (!out.changed) {
+                for (const PendingSwitch& s : dropped) {
+                    if (!PendingFor(s.title, s.path)) {
+                        pending_switches.push_back(s);
+                    }
                 }
             }
-            return dl->Delete(tid, folder);
-        },
-        [this, tid, folder, other, was_active](const CustomTex::Download::Result& out) {
-            textures.busy = false;
+            if (!out.ok) {
+                LOG_WARNING(Frontend, "xr: texture packs: delete {} failed: {}", p.id, out.error);
+                FrameXr::ShowToastText("Texture Pack Not Deleted", FrameXr::ToastTime::Long);
+            }
             if (tid != title_id) {
                 return;
             }
-            if (out.ok) {
-                downloaded.erase(folder);
-                downloaded.erase(other);
-                textures.needs_restart |= was_active; // the game still has its textures
-            } else {
-                LOG_WARNING(Frontend, "xr: texture packs: delete {} failed: {}", folder, out.error);
-                FrameXr::ShowToastText("Texture Pack Not Deleted", FrameXr::ToastTime::Long);
-            }
+            textures.busy = false;
+            textures.needs_restart |= out.changed && was_active; // the game still has its textures
             RefreshPacks();
             ListPackDownloads();
         });
@@ -1908,10 +2059,6 @@ std::string LoadDirPath() {
     return CustomTex::DefaultPaths().load_dir;
 }
 
-std::string HomeDir() {
-    return QDir::homePath().toStdString();
-}
-
 /// Downloads, Documents and Home, those that exist.
 std::vector<Menu::ZipChip> QuickFolders() {
     std::vector<Menu::ZipChip> chips;
@@ -1924,18 +2071,6 @@ std::vector<Menu::ZipChip> QuickFolders() {
     add("Documents", QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation));
     add("Home", QDir::homePath());
     return chips;
-}
-
-/// "~/Downloads/Packs" for a folder under the home folder.
-std::string FolderText(const std::string& folder) {
-    const std::string home = HomeDir();
-    if (folder == home) {
-        return "~";
-    }
-    if (!home.empty() && folder.rfind(home + "/", 0) == 0) {
-        return "~" + folder.substr(home.size());
-    }
-    return folder;
 }
 
 bool EndsWithNoCase(const std::string& name, std::string_view e) {
