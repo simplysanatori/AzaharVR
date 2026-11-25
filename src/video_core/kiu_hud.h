@@ -52,16 +52,23 @@ struct Place {
     bool on = false;
     bool page = false; ///< not the HUD: a page's 2D, whole, over the game's own frame (PagePlace)
     bool cards = false; ///< the hub's: its cards go with its 2D (MayBeCard)
+    bool room = false;  ///< the hub's: fixed in the room, not to the head (InRoom)
     float half_across = 1.0f, half_up = 1.0f;
     float middle_up = 0.0f;
     float bar_across = 0.0f, bar_up = 0.0f;
     float score_across = 0.0f, score_up = 0.0f;
     float subtitle_up = 0.0f, subtitle_half_across = 0.0f, subtitle_half_up = 0.0f;
+    /// AzaharFrame kiuhs3: the frame the direction marks sit at the edges of (MoveMarks).
+    float edge_half_across = 1.0f, edge_half_up = 1.0f, edge_up = 0.0f;
 };
 
 /// Degrees across at HUD Size 100 %, and the height of the frame's middle.
 inline constexpr float kWidthDeg = 60.0f, kMiddleDeg = 6.0f;
+/// How high the game's own camera's frame is, in degrees.
+inline constexpr float kGameHighDeg = 45.0f;
 inline constexpr float kFrameAspect = 400.0f / 240.0f;
+/// How much of its frame's height the top direction mark needs (7 of 240 lines, and a gap).
+inline constexpr float kMarkHigh = 0.04f;
 /// The two top groups in the frame, across to the right (a desktop picture: the bar from -1 to -0.33, the score from
 /// 0.58 to 1, both about 0.86 up), and what a draw is told from them by.
 inline constexpr float kTopUp = 0.6f, kBarAside = -0.2f, kScoreAside = 0.4f;
@@ -97,6 +104,8 @@ inline Place PlaceFor(const Wanted& w, float tan_half_x, float tan_half_y, float
     p.subtitle_half_across = st / tan_half_x;
     p.subtitle_half_up = st / kFrameAspect / tan_half_y;
     p.subtitle_up = up_at(w.subtitle_height);
+    const float game = std::tan(0.5f * kGameHighDeg * kDeg);
+    p.edge_half_across = std::min(game * kFrameAspect / tan_half_x, 1.0f);
     constexpr float kBarMiddle = 0.5f * (kBarLeft + kBarRight);
     constexpr float kScoreMiddle = 0.5f * (kScoreLeft + kScoreRight);
     if (w.linked) {
@@ -114,6 +123,19 @@ inline Place PlaceFor(const Wanted& w, float tan_half_x, float tan_half_y, float
         p.score_across = across_at(w.score_across) - p.half_across * kScoreMiddle;
         p.score_up = up_at(w.score_height) - p.half_up * kGroupUp;
     }
+    // The direction marks' frame: the game camera's, its top above the health bar and the score where
+    // they are across it, as the game has them (the bar's and the score's top at the frame's: 1).
+    const float low = std::max(up_at(0.0f) - game / tan_half_y, -1.0f);
+    float high = up_at(0.0f) + game / tan_half_y;
+    for (const float up : {p.bar_up, p.score_up}) {
+        const float top = up + p.half_up, foot = up + p.half_up * (2.0f * kGroupUp - 1.0f);
+        if (foot < high && top + kMarkHigh * (high - low) > high) {
+            high = top + kMarkHigh * (high - low);
+        }
+    }
+    high = std::min(high, 1.0f);
+    p.edge_half_up = 0.5f * (high - low);
+    p.edge_up = 0.5f * (high + low);
     return p;
 }
 
@@ -134,7 +156,7 @@ inline Place PagePlace(float factor_across, float factor_up) {
 /// AzaharFrame kiu1s: a page while the battle's camera is still in (the results as they start): the
 /// game's frame is then the whole view, so the page gets the frame the game's own camera has (45
 /// degrees high), as PagePlace gives it once that camera is out.
-inline constexpr float kPageHighDeg = 45.0f;
+inline constexpr float kPageHighDeg = kGameHighDeg;
 inline Place PagePlaceInBattle(float tan_half_x, float tan_half_y) {
     Place p;
     if (!(tan_half_x > 0.05f) || !(tan_half_y > 0.05f)) {
@@ -150,9 +172,11 @@ inline Place PagePlaceInBattle(float tan_half_x, float tan_half_y) {
 /// AzaharFrame kiuhud: a menu's 2D (the hub's hearts, words and battery): the game's own layout,
 /// whole, in the frame the battle's HUD has (HUD Size), its middle straight ahead at the HUD's
 /// height: in the view and readable, where the game's own frame is 2.8 to 5 times smaller there.
-inline Place PageInView(const Wanted& w, float tan_half_x, float tan_half_y, float pitch_rad) {
-    Place p = PlaceFor(w, tan_half_x, tan_half_y, pitch_rad);
-    p.page = p.cards = p.on;
+/// AzaharFrame kiuhs3: in the game camera's own frame (no pitch), which the world's turn then takes to
+/// where the head looks (InRoom): fixed in the room, in front of its straight ahead.
+inline Place PageInView(const Wanted& w, float tan_half_x, float tan_half_y) {
+    Place p = PlaceFor(w, tan_half_x, tan_half_y, 0.0f);
+    p.page = p.cards = p.room = p.on;
     return p;
 }
 
@@ -332,6 +356,101 @@ inline Group MovePiece(Vertex* v, std::size_t n, const Place& p, float factor_ac
     return group;
 }
 
+/// AzaharFrame kiuhs3: how far in front of the camera the hub's 2D is, in the game's units: where its
+/// own cards are (40, the census: 5.2 m at life size).
+inline constexpr float kRoomDistance = 40.0f;
+/// A placed vertex (any w: only its direction counts) through the world's turn `h`
+/// (vr_view_matrix.h ClipCorrection; `z_scale` and `z_constant` the projection's third row), as a point of the room at kRoomDistance. Its own depth (z over w) stays as it was placed:
+/// nothing of the room hides it.
+inline Vertex InRoom(const Vertex& placed, const float h[4][4], float z_scale, float z_constant) {
+    const float d = kRoomDistance;
+    const float at[4] = {placed.x / placed.w * d, placed.y / placed.w * d,
+                         -z_scale * d + z_constant, d};
+    float r[4];
+    for (int i = 0; i < 4; ++i) {
+        r[i] = h[i][0] * at[0] + h[i][1] * at[1] + h[i][2] * at[2] + h[i][3] * at[3];
+    }
+    // The shader keeps a vertex with w = 1 for the game's flat ones (its VrFactor rule).
+    const float k = std::abs(r[3] - 1.0f) < 1e-3f ? 1.01f : 1.0f;
+    const float depth = std::clamp(placed.z / placed.w, -1.0f, 0.0f);
+    return {r[0] * k, r[1] * k, depth * r[3] * k, r[3] * k};
+}
+
+/// AzaharFrame kiuhs3: the direction marks: where an enemy is, in eight steps round the game's camera
+/// (EUR 0x92F05C: one draw of one to eight quads, a table of eight places at the frame's edges and
+/// corners, top, then clockwise; the mask of them [context + 0x8EC]). One colour for all, and the
+/// atlas's shapes in its colour where its alpha is 0.
+inline constexpr float kMarkColor[3] = {242.0f / 255.0f, 132.0f / 255.0f, 35.0f / 255.0f};
+constexpr bool MayBeMarks(const Draw& d) {
+    return d.width == 256 && d.height == 256 && d.format == 9 && d.vertices % 6 == 0 &&
+           d.vertices != 0 && d.vertices <= 8 * 6;
+}
+constexpr bool IsMarkColor(float r, float g, float b) {
+    const auto near = [](float a, float c) { return a - c < 0.002f && c - a < 0.002f; };
+    return near(r, kMarkColor[0]) && near(g, kMarkColor[1]) && near(b, kMarkColor[2]);
+}
+/// A mark's vertex and where it is in its texture.
+struct MarkVertex {
+    Vertex v;
+    float s, t;
+};
+/// The marks of a draw: each quad cut at the game's frame (some go 8 pixels past it, where the atlas
+/// has another picture), then put at the same edge or corner of a frame as large as the game's own
+/// camera's, straight ahead: never apart, and never with the health bar or the score. False (nothing
+/// changed) for vertices that are not flat quads of two triangles.
+inline bool MoveMarks(MarkVertex* m, std::size_t n, const Place& p, float factor_across,
+                      float factor_up) {
+    const auto same = [](const MarkVertex& a, const MarkVertex& b) {
+        return a.v.x == b.v.x && a.v.y == b.v.y;
+    };
+    for (std::size_t i = 0; i < n; ++i) {
+        if (!(std::abs(m[i].v.w - 1.0f) < 1e-4f) || !std::isfinite(m[i].v.x) ||
+            !std::isfinite(m[i].v.y)) {
+            return false;
+        }
+    }
+    if (n == 0 || n % 6 != 0) {
+        return false;
+    }
+    for (std::size_t q = 0; q < n; q += 6) { // 0, 1, 2, 1, 3, 2
+        if (!same(m[q + 1], m[q + 3]) || !same(m[q + 2], m[q + 5])) {
+            return false;
+        }
+    }
+    const auto cut = [](MarkVertex& a, MarkVertex& b, float Vertex::* at) {
+        const auto one = [at](MarkVertex& out, const MarkVertex& in) {
+            const float from = out.v.*at, to = in.v.*at, edge = std::clamp(from, -1.0f, 1.0f);
+            if (edge == from || from == to) {
+                return;
+            }
+            const float k = std::clamp((edge - from) / (to - from), 0.0f, 1.0f);
+            out.v.x += (in.v.x - out.v.x) * k;
+            out.v.y += (in.v.y - out.v.y) * k;
+            out.s += (in.s - out.s) * k;
+            out.t += (in.t - out.t) * k;
+        };
+        one(a, b);
+        one(b, a);
+    };
+    for (std::size_t q = 0; q < n; q += 6) {
+        MarkVertex c[4] = {m[q], m[q + 1], m[q + 2], m[q + 4]};
+        cut(c[0], c[1], &Vertex::y);
+        cut(c[2], c[3], &Vertex::y);
+        cut(c[0], c[2], &Vertex::x);
+        cut(c[1], c[3], &Vertex::x);
+        for (int k = 0; k < 4; ++k) {
+            const float u = p.edge_up + p.edge_half_up * c[k].v.x;
+            const float a = -p.edge_half_across * c[k].v.y; // to the right
+            c[k].v = {2.0f * u * factor_up, -2.0f * a * factor_across, 2.0f * c[k].v.z, 2.0f};
+        }
+        const int order[6] = {0, 1, 2, 1, 3, 2};
+        for (int k = 0; k < 6; ++k) {
+            m[q + static_cast<std::size_t>(k)] = c[order[k]];
+        }
+    }
+    return true;
+}
+
 /// AzaharFrame kiuhud: a page's draw: each quad (or triangle) that is flat and not the whole frame
 /// goes to the page's frame; one over the whole frame (the dim behind the page) stays over the
 /// whole view: its corners exactly at the frame's, where the shader keeps a flat vertex (VrFactor).
@@ -472,18 +591,20 @@ inline std::array<VeilVertex, 54> SoftVeil(const Vertex* in, std::size_t n) {
 /// The place in force. One writer (the XR thread, once a frame), read by the emulation thread a
 /// draw; a read across a write mixes two frames' numbers, which are the same or next to it.
 struct Live {
-    std::array<std::atomic<float>, 10> f{};
-    std::atomic<bool> on{false}, page{false}, cards{false};
+    std::array<std::atomic<float>, 13> f{};
+    std::atomic<bool> on{false}, page{false}, cards{false}, room{false};
 
     void Set(const Place& p) {
-        const float v[10] = {p.half_across, p.half_up,      p.middle_up, p.bar_across,
+        const float v[13] = {p.half_across, p.half_up,      p.middle_up, p.bar_across,
                             p.bar_up,      p.score_across, p.score_up,  p.subtitle_up,
-                             p.subtitle_half_across, p.subtitle_half_up};
-        for (int i = 0; i < 10; ++i) {
+                             p.subtitle_half_across, p.subtitle_half_up,
+                             p.edge_half_across, p.edge_half_up, p.edge_up};
+        for (int i = 0; i < 13; ++i) {
             f[i].store(v[i], std::memory_order_relaxed);
         }
         page.store(p.page, std::memory_order_relaxed);
         cards.store(p.cards, std::memory_order_relaxed);
+        room.store(p.room, std::memory_order_relaxed);
         on.store(p.on, std::memory_order_release);
     }
     Place Get() const {
@@ -491,10 +612,12 @@ struct Live {
         p.on = on.load(std::memory_order_acquire);
         p.page = page.load(std::memory_order_relaxed);
         p.cards = cards.load(std::memory_order_relaxed);
-        float* const v[10] = {&p.half_across, &p.half_up,      &p.middle_up, &p.bar_across,
+        p.room = room.load(std::memory_order_relaxed);
+        float* const v[13] = {&p.half_across, &p.half_up,      &p.middle_up, &p.bar_across,
                              &p.bar_up,      &p.score_across, &p.score_up,  &p.subtitle_up,
-                             &p.subtitle_half_across, &p.subtitle_half_up};
-        for (int i = 0; i < 10; ++i) {
+                             &p.subtitle_half_across, &p.subtitle_half_up,
+                             &p.edge_half_across, &p.edge_half_up, &p.edge_up};
+        for (int i = 0; i < 13; ++i) {
             *v[i] = f[i].load(std::memory_order_relaxed);
         }
         return p;

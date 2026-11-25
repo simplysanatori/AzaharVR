@@ -1712,8 +1712,8 @@ void OnFrame(const FrameInfo& info) {
         const bool battle = Kiu::FirstPerson::Battle(), page = Kiu::FirstPerson::BattlePage();
         if (battle && page) { // AzaharFrame kiu1s: the results as they start
             hud_place = VideoCore::KiuHud::PagePlaceInBattle(tan_x, tan_y);
-        } else if (Kiu::FirstPerson::MenuPage()) { // AzaharFrame kiuhud: the hub: in the view
-            hud_place = VideoCore::KiuHud::PageInView(wanted, tan_x, tan_y, g.solved.pitch_rad);
+        } else if (Kiu::FirstPerson::MenuPage()) { // AzaharFrame kiuhud: the hub: in its room
+            hud_place = VideoCore::KiuHud::PageInView(wanted, tan_x, tan_y);
         } else if (!battle) { // a page, over the game's own frame
             hud_place = VideoCore::KiuHud::PagePlace(g.solved.factor, g.solved.factor_y);
         } else {

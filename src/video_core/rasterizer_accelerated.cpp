@@ -353,6 +353,7 @@ void RasterizerAccelerated::SetVRData(const int32_t &vrImmersiveMode, const floa
     // frame whose sprites come with no world (a pause, a menu) does not take an old one.
     for (auto& c : vr_soft_clip) {
         c.valid = false;
+        ++c.age;
     }
     vr_immersive_mode = vrImmersiveMode;
     vr_game_pos_scaler = gamePosScaler;
@@ -656,6 +657,64 @@ void RasterizerAccelerated::MoveCard(const VideoCore::KiuHud::Place& place) {
     }
 }
 
+void RasterizerAccelerated::PutInRoom() {
+    // The last turn of this buffer's world, or the picture before's if this one's is not known yet;
+    // none: with the head, as it was placed.
+    const u32 buffer = regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress();
+    const SoftClip* clip = nullptr;
+    for (const auto& c : vr_soft_clip) {
+        if (c.buffer == buffer && c.age <= 2 && c.z_constant != 0.0f &&
+            (!clip || c.serial > clip->serial)) {
+            clip = &c;
+        }
+    }
+    if (!clip) {
+        return;
+    }
+    for (auto& v : vertex_batch) {
+        // Placed (w 2) or a card's (w its distance); a page's dim, left as the game's (w 1), covers
+        // the whole view and stays with it.
+        if (v.position.w == 1.0f) {
+            continue;
+        }
+        const KiuHud::Vertex r =
+            KiuHud::InRoom({v.position.x, v.position.y, v.position.z, v.position.w}, clip->h,
+                           clip->z_scale, clip->z_constant);
+        v.position = {r.x, r.y, r.z, r.w};
+    }
+}
+
+bool RasterizerAccelerated::MoveMarks(const VideoCore::KiuHud::Place& place) {
+    namespace H = VideoCore::KiuHud;
+    H::Draw d;
+    d.vertices = static_cast<u32>(vertex_batch.size());
+    d.width = regs.texturing.texture0.width;
+    d.height = regs.texturing.texture0.height;
+    d.format = static_cast<u32>(regs.texturing.texture0_format.Value());
+    if (!H::MayBeMarks(d) ||
+        !std::all_of(vertex_batch.begin(), vertex_batch.end(), [](const HardwareVertex& v) {
+            return H::IsMarkColor(v.color.x, v.color.y, v.color.z);
+        })) {
+        return false;
+    }
+    std::array<H::MarkVertex, 8 * 6> marks;
+    for (std::size_t i = 0; i < vertex_batch.size(); ++i) {
+        const HardwareVertex& v = vertex_batch[i];
+        marks[i] = {{v.position.x, v.position.y, v.position.z, v.position.w},
+                    v.tex_coord0.x,
+                    v.tex_coord0.y};
+    }
+    if (!H::MoveMarks(marks.data(), vertex_batch.size(), place, vr_factor, vr_factor_y)) {
+        return false;
+    }
+    for (std::size_t i = 0; i < vertex_batch.size(); ++i) {
+        HardwareVertex& v = vertex_batch[i];
+        v.position = {marks[i].v.x, marks[i].v.y, marks[i].v.z, marks[i].v.w};
+        v.tex_coord0 = {marks[i].s, marks[i].t};
+    }
+    return true;
+}
+
 void RasterizerAccelerated::TurnSoftwareVertices() {
     hud_piece = {}; // AzaharFrame kiuhs3a
     // AzaharFrame kiu140: a cloud sheet's soft rim; the turn below takes it with the sheet.
@@ -698,9 +757,11 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
             }
         };
         const char* done = nullptr;
+        bool placed = false; // vertex_batch itself is as it is to be
         if (as == As::Card) {
             if (H::IsCard(flat.data(), flat.size())) {
                 MoveCard(place);
+                placed = true;
                 done = "card";
             }
         } else if (as == As::Page || place.page) {
@@ -711,6 +772,9 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
         } else if (as == As::Subtitle &&
                    H::MoveSubtitle(flat.data(), flat.size(), place, vr_factor, vr_factor_y)) {
             done = "subtitle";
+        } else if ((as == As::Piece || as == As::Guess) && MoveMarks(place)) { // AzaharFrame kiuhs3
+            placed = true;
+            done = "marks";
         } else if (H::Movable(flat.data(), flat.size())) {
             if (as == As::Piece) { // AzaharFrame kiu1s: the whole draw is one piece
                 const H::Group group =
@@ -734,8 +798,11 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
             HudCensus(done ? done : "the 2D's, left (the whole frame, or not flat)");
         }
         if (done) {
-            if (as != As::Card) {
+            if (!placed) {
                 put();
+            }
+            if (place.room) { // AzaharFrame kiuhs3
+                PutInRoom();
             }
             return;
         }
@@ -1294,6 +1361,9 @@ void RasterizerAccelerated::ApplyVRDataToPicaVSUniforms(Pica::Shader::Generator:
                 }
                 slot->valid =
                     VideoCore::Immersive::ClipCorrection(proj, vr_world_eye, patched, slot->h);
+                slot->z_scale = slot->valid ? proj[2][2] : 0.0f;
+                slot->z_constant = slot->valid ? proj[2][3] : 0.0f;
+                slot->age = 0;
                 slot->buffer = buffer;
                 slot->serial = ++vr_soft_clip_serial;
             }

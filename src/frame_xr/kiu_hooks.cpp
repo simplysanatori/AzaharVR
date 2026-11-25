@@ -38,6 +38,7 @@
 #include "frame_xr/kiu_talk.h" // AzaharFrame kiutalk
 #include "video_core/kiu_hud.h" // AzaharFrame kiu1s
 #include "video_core/kiu_powers.h" // AzaharFrame kiupowers
+#include "video_core/kiu_clear.h" // AzaharFrame kiuhs3
 #include "video_core/kiu_sheets.h" // AzaharFrame kiu140
 #include "video_core/kiu_view_tap.h" // AzaharFrame kiuvr: the view register's tap
 
@@ -66,6 +67,7 @@ constexpr const char* kSwitchGroupKeep = "AZAHARFRAME_KIU_GROUP_KEEP";
 constexpr const char* kSwitchNoFollow = "AZAHARFRAME_KIU_NO_FOLLOW";
 constexpr const char* kSwitchNoPlayerShadow = "AZAHARFRAME_KIU_NO_PLAYER_SHADOW"; // kiuperf
 constexpr const char* kSwitchFp2d = "AZAHARFRAME_KIU_FP_2D"; // AzaharFrame kiu2d
+constexpr const char* kSwitchClear = "AZAHARFRAME_KIU_CLEAR"; // AzaharFrame kiuhs3
 constexpr const char* kSwitchReticleSize = "AZAHARFRAME_KIU_RETICLE_SIZE"; // AzaharFrame kiu131
 constexpr const char* kSwitchReticleTexture = "AZAHARFRAME_KIU_RETICLE_TEX";
 constexpr const char* kSwitchSheets = "AZAHARFRAME_KIU_SHEETS"; // AzaharFrame kiu140
@@ -717,6 +719,7 @@ void Hook(int64_t ticks) {
         CutsceneOff(s); // AzaharFrame kiu140
         PowersStrip(false); // AzaharFrame kiupowers
         VideoCore::Immersive::g_soft_draw_turn.store(false, std::memory_order_relaxed); // kiu2d
+        VideoCore::KiuClear::g_on.store(false, std::memory_order_relaxed); // kiuhs3
         VideoCore::Immersive::g_reticle_texture.store(0, std::memory_order_relaxed); // kiu131
         VideoCore::KiuSheets::g_mode.store(VideoCore::KiuSheets::Mode::Off,
                                            std::memory_order_relaxed); // kiu140
@@ -736,6 +739,7 @@ void Hook(int64_t ticks) {
         Kiu::FirstPerson::SetGameCode(0, false); // AzaharFrame kiumode
         Kiu::FirstPerson::SupplyRegisters(false);
         VideoCore::Immersive::g_soft_draw_turn.store(false, std::memory_order_relaxed); // kiu2d
+        VideoCore::KiuClear::g_on.store(false, std::memory_order_relaxed); // kiuhs3
         VideoCore::Immersive::g_reticle_texture.store(0, std::memory_order_relaxed); // kiu131
         VideoCore::KiuSheets::g_mode.store(VideoCore::KiuSheets::Mode::Off,
                                            std::memory_order_relaxed); // kiu140
@@ -834,6 +838,12 @@ void Hook(int64_t ticks) {
     const auto fp2d_text = Switch(kSwitchFp2d);
     VideoCore::Immersive::g_soft_draw_turn.store(
         KH::GroupWanted(first_person, fp2d_text ? fp2d_text->c_str() : nullptr),
+        std::memory_order_relaxed);
+    // AzaharFrame kiuhs3: what nothing draws in the picture (video_core/kiu_clear.h);
+    // AZAHARFRAME_KIU_CLEAR=0 leaves what was there, for an A/B.
+    const auto clear_text = Switch(kSwitchClear);
+    VideoCore::KiuClear::g_on.store(
+        KH::GroupWanted(first_person, clear_text ? clear_text->c_str() : nullptr),
         std::memory_order_relaxed);
     // AzaharFrame kiu140: the cloud sheets' soft rim (video_core/kiu_sheets.h).
     {
