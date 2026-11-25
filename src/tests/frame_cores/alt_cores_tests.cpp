@@ -552,6 +552,7 @@ struct Job {
     int loads = 0;
     int pages = 0;
     bool held = false;
+    int paint = -1; ///< a pixel of the Primary Screen the driver paints over
     FrameCores::DriverPicture picture;
 };
 
@@ -573,6 +574,9 @@ public:
                 pixels[y * job.picture.width + x] =
                     job.picture.pixels[y * job.picture.stride + x] | 0xFF000000u;
             }
+        }
+        if (job.paint >= 0) {
+            pixels[static_cast<size_t>(job.paint)] ^= 0x00FFFFFFu;
         }
         out.primary = {pixels.data(), job.picture.width, job.picture.height, job.picture.width};
         if (job.frames > 0) {
@@ -1844,8 +1848,8 @@ TEST_CASE("Layer Depth: no shift on a screen too wide for one", "[frame_cores]")
 
 TEST_CASE("Layer Depth: lines mGBA left undrawn at the start", "[frame_cores]") {
     // At line 0 forced blank goes off and no register was ever set to anything but 0. mGBA takes
-    // the lines of its first, short frame as unchanged and leaves them blank; the right eye's
-    // are drawn afresh after the copy. It ends with the first register the game sets.
+    // the lines of its first, short frame as unchanged and leaves them blank, in both eyes. It ends
+    // with the first register the game sets.
     std::vector<uint8_t> rom = MakeHomebrewGbaRom();
     const uint32_t code[] = {
         0xE3A00301u, // mov r0, #0x04000000
@@ -1860,19 +1864,24 @@ TEST_CASE("Layer Depth: lines mGBA left undrawn at the start", "[frame_cores]") 
         PutLE32(rom, pc, word);
         pc += 4;
     }
-    DepthGame game(true, rom, 1);
-    game.Run();
-    CHECK((game.Right() == game.Left()));
-    for (int i = 0; i < 3; ++i) {
-        game.Run();
-    }
-    const Pixels left = game.Left();
-    const Pixels right = game.Right();
-    constexpr size_t kFirst = 126 * 240; // VCOUNT at the start
-    CHECK(std::equal(left.begin(), left.begin() + kFirst, right.begin()));
-    CHECK(std::all_of(right.begin(), right.end(), [](uint32_t p) { return p == 0xFF000000u; }));
-    CHECK(std::none_of(left.begin() + kFirst, left.end(),
-                       [](uint32_t p) { return p == 0xFF000000u; }));
+    DepthGame game(true, rom, 3);
+    const auto same = [&game] {
+        for (int i = 0; i < 10; ++i) {
+            INFO("frame " << i);
+            game.Run();
+            REQUIRE(game.out.primary_right.HasPicture());
+            REQUIRE((game.Right() == game.Left()));
+        }
+        const Pixels left = game.Left();
+        constexpr size_t kFirst = 126 * 240; // VCOUNT at the start
+        CHECK(std::all_of(left.begin(), left.begin() + kFirst,
+                          [](uint32_t p) { return p == 0xFF000000u; }));
+        CHECK(std::none_of(left.begin() + kFirst, left.end(),
+                           [](uint32_t p) { return p == 0xFF000000u; }));
+    };
+    same();
+    game.core->Reset();
+    same();
 }
 
 TEST_CASE("Layer Depth: each layer moves by its priority", "[frame_cores]") {
@@ -2034,20 +2043,45 @@ TEST_CASE("Layer Depth goes by the driver", "[frame_cores]") {
         game.Run();
         CHECK((game.Right() != right));
     }
-    {
-        auto opts = WithJob(job);
-        opts.driver.kind = DriverKind::GbaDs;
-        DepthGame game(true, MakeDeepRom(true), 2, opts);
-        for (int i = 0; i < 30; ++i) {
+    for (const auto kind : {DriverKind::PokeDaisy, DriverKind::GbaDs}) {
+        for (const bool gba : {true, false}) {
+            if (!gba && kind == DriverKind::GbaDs) {
+                continue;
+            }
+            INFO("driver " << static_cast<int>(kind) << " gba " << gba);
+            auto opts = WithJob(job);
+            opts.driver.kind = kind;
+            DepthGame game(gba, MakeDeepRom(gba), 2, opts);
+            DepthGame plain(gba, MakeDeepRom(gba), 2);
+            CHECK(game.core->GetCapabilities().layer_depth);
+            for (int i = 0; i < 30; ++i) {
+                game.Run();
+                plain.Run();
+                REQUIRE((game.Left() == plain.Left()));
+                REQUIRE((game.Right() == plain.Right()));
+                REQUIRE(game.out.layer_shift == plain.out.layer_shift);
+            }
+            CHECK((game.Right() != game.Left()));
+            // Something of the driver's on the game's picture: both eyes see the same
+            job.paint = 5;
+            for (int i = 0; i < 3; ++i) {
+                game.Run();
+                plain.Run();
+                CHECK((game.Left() != plain.Left()));
+                CHECK((game.Right() == game.Left()));
+                CHECK(game.out.layer_shift == 0.0f);
+            }
+            job.paint = -1;
             game.Run();
+            plain.Run();
+            CHECK((game.Right() == plain.Right()));
+            CHECK(game.out.layer_shift == plain.out.layer_shift);
         }
-        CHECK(game.out.primary.HasPicture());
-        CHECK(!game.out.primary_right.HasPicture());
     }
 
-    // The runner: the step stays one a frame, the picture goes out only where it belongs
+    // The runner: one step a frame, and the picture only where it belongs
     uint32_t steps = 0;
-    const Pixels pixels(16 * 8, 0xFF112233u);
+    Pixels pixels(16 * 8, 0x00112233u);
     FrameCores::DriverServices services;
     services.step = [&steps](uint32_t) { ++steps; };
     services.picture = [&pixels] {
@@ -2056,28 +2090,34 @@ TEST_CASE("Layer Depth goes by the driver", "[frame_cores]") {
     auto caps = Common::AltCore::Capabilities::ForGBA();
     FrameCores::DriverRunner runner;
     FrameCores::FrameOutput out;
-    CHECK(!runner.PrimaryIsGame());
-    for (const auto kind : {DriverKind::Plain, DriverKind::PokeDaisy, DriverKind::GbaDs}) {
-        const bool plain = kind == DriverKind::Plain;
-        steps = 0;
-        runner.Start(kind, {}, services, {}, WithJob(job), {}, caps);
-        CHECK(runner.PrimaryIsGame() == plain);
-        for (int i = 0; i < 5; ++i) {
-            runner.RunFrame({}, out, caps);
-            CHECK(!out.primary_right.HasPicture());
-            CHECK(out.layer_shift == 0.0f);
-            runner.SetRightEye({pixels.data(), 16, 8, 16}, 0.5f, out);
-            CHECK(out.primary_right.HasPicture() == plain);
-            CHECK(out.layer_shift == (plain ? 0.5f : 0.0f));
-        }
+    const Pixels moved(16 * 8, 0xFF332211u);
+    const FrameCores::DriverPicture right{moved.data(), 16, 8, 16};
+    const FrameCores::DriverPicture game{pixels.data(), 16, 8, 16};
+    runner.Start(DriverKind::PokeDaisy, {}, services, {}, WithJob(job), {}, caps);
+    const auto frame = [&] {
         runner.RunFrame({}, out, caps);
-        runner.SetRightEye({pixels.data(), 8, 8, 16}, 0.5f, out); // another size
         CHECK(!out.primary_right.HasPicture());
-        runner.SetRightEye({}, 0.0f, out);
-        CHECK(!out.primary_right.HasPicture());
-        CHECK(steps == 6);
-        CHECK(runner.Missteps() == 0);
-        runner.Stop();
-        CHECK(!runner.PrimaryIsGame());
-    }
+        CHECK(out.layer_shift == 0.0f);
+    };
+    frame();
+    runner.SetRightEye(right, game, 0.5f, out); // its alpha is none of the picture's
+    CHECK(out.primary_right.pixels == moved.data());
+    CHECK(out.layer_shift == 0.5f);
+    frame();
+    pixels.back() ^= 1; // the driver shows another picture
+    runner.SetRightEye(right, game, 0.5f, out);
+    CHECK(out.primary_right.pixels == out.primary.pixels);
+    CHECK(out.layer_shift == 0.0f);
+    frame();
+    runner.SetRightEye({moved.data(), 8, 8, 16}, game, 0.5f, out); // another size
+    CHECK(out.primary_right.pixels == out.primary.pixels);
+    frame();
+    runner.SetRightEye(right, {}, 0.5f, out);
+    CHECK(out.primary_right.pixels == out.primary.pixels);
+    frame();
+    runner.SetRightEye({}, game, 0.5f, out);
+    CHECK(!out.primary_right.HasPicture());
+    CHECK(steps == 5);
+    CHECK(runner.Missteps() == 0);
+    runner.Stop();
 }

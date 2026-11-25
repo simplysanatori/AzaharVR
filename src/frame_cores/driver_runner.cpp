@@ -24,6 +24,26 @@ Vulkan::AltScreenImage ToImage(const DriverPicture& picture) {
     return image;
 }
 
+/// The same colours, whatever the alpha.
+bool Shows(const Vulkan::AltScreenImage& image, const DriverPicture& picture) {
+    if (!picture.pixels || image.width != picture.width || image.height != picture.height) {
+        return false;
+    }
+    const uint32_t stride = image.stride_pixels ? image.stride_pixels : image.width;
+    for (uint32_t y = 0; y < image.height; ++y) {
+        const uint32_t* a = image.pixels + static_cast<std::size_t>(y) * stride;
+        const uint32_t* b = picture.pixels + static_cast<std::size_t>(y) * picture.stride;
+        uint32_t different = 0;
+        for (uint32_t x = 0; x < image.width; ++x) {
+            different |= a[x] ^ b[x];
+        }
+        if ((different & 0x00FFFFFFu) != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// `kind` becomes what was made.
 std::unique_ptr<FrameDriver> MakeDriver(DriverKind& kind, const DriverServices& services,
                                         const RomInfo& info, const CoreBootOptions& opts) {
@@ -136,7 +156,6 @@ void DriverRunner::Start(DriverKind kind, const Known& known, DriverServices ser
         return backed_up;
     };
     driver = MakeDriver(kind, services, info, opts);
-    primary_is_game = kind == DriverKind::Plain;
     driver->SetEditing(editing);
     caps.has_touch = driver->HasTouch();
     caps.second_screen_choices = known.Choices();
@@ -148,7 +167,6 @@ void DriverRunner::Start(DriverKind kind, const Known& known, DriverServices ser
 
 void DriverRunner::Stop() {
     driver.reset();
-    primary_is_game = false;
     if (missteps > 0) {
         LOG_ERROR(Core, "DriverRunner: {} frames did not step the game once", missteps);
     }
@@ -239,12 +257,16 @@ void DriverRunner::TurnPage() {
     }
 }
 
-void DriverRunner::SetRightEye(const DriverPicture& picture, float shift,
-                               FrameOutput& out) const {
-    if (primary_is_game && picture.pixels && out.primary.HasPicture() &&
-        picture.width == out.primary.width && picture.height == out.primary.height) {
-        out.primary_right = ToImage(picture);
+void DriverRunner::SetRightEye(const DriverPicture& right, const DriverPicture& game, float shift,
+                               FrameOutput& out) {
+    if (!right.pixels || !out.primary.HasPicture()) {
+        return;
+    }
+    if (right.width == game.width && right.height == game.height && Shows(out.primary, game)) {
+        out.primary_right = ToImage(right);
         out.layer_shift = shift;
+    } else {
+        out.primary_right = out.primary;
     }
 }
 

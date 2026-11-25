@@ -152,7 +152,7 @@ struct GbCore::Impl {
         info.kind = Common::AltCore::CoreKind::GB;
         driver.Start(kind, known, std::move(services), info, opts, save_path, caps);
 
-        caps.layer_depth = driver.PrimaryIsGame() && ShadowEye::Fits(core);
+        caps.layer_depth = ShadowEye::Fits(core);
         ApplyLayerDepth();
     }
 
@@ -390,7 +390,9 @@ void GbCore::SetInput(const Common::AltCore::InputState& input) {
 
 void GbCore::RunFrame(FrameOutput& out) {
     impl->driver.RunFrame(impl->input, out, impl->caps);
-    impl->driver.SetRightEye(impl->shadow.Picture(), impl->shadow.FarthestShift(), out);
+    impl->driver.SetRightEye(impl->shadow.Picture(),
+                             {impl->fb.data(), impl->width, impl->height, impl->stride},
+                             impl->shadow.FarthestShift(), out);
 }
 
 uint32_t GbCore::AudioSampleRate() const {
