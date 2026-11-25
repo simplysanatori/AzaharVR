@@ -389,6 +389,7 @@ if (ENABLE_FRAME_XR AND ENABLE_TESTS AND NOT WIN32)
                                   ../tests/frame_xr/update_prompt.cpp update_prompt.cpp # AzaharVR updatecheck
                                   frame_offscreen.h
                                   ../tests/frame_xr/per_game_ini.cpp # AzaharFrame useglobal
+                                  ../tests/frame_xr/wrist_angle_carry.cpp # AzaharFrame kiuaim
                                   configuration/frame_per_game_ini.h
                                   ../tests/frame_xr/open_folder.cpp # AzaharFrame qtfiles
                                   frame_open_folder.cpp frame_open_folder.h

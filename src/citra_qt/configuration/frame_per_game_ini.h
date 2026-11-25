@@ -41,6 +41,52 @@ inline std::optional<unsigned> MigratedMatchCamera(const QSettings& ini, bool gl
     return ini.value(old, true).toBool() ? 2u : 0u;
 }
 
+/// AzaharFrame kiuaim: Wrist Angle (`vr_kiu_wrist_angle`, degrees round the wrist) counted from
+/// Wrist Side's place and counts from the back of the wrist now. A file's angle is carried over
+/// once; `vr_kiu_wrist_angle_from` in the file is the mark (absent: not carried yet).
+/// The global file (its "VR" group open): with Wrist Side on Inside the angle gets 180 added (a
+/// file that never had the angle: 0 becomes 180, the same place) and the mark is 2; else nothing
+/// changes and the mark is 1. A game's file: an angle of its own gets 180 added when the global
+/// file's mark is 2 (`global_mark`: the side when the global one was carried, not the side now);
+/// its mark is 1. `angle` is set only when the value changes.
+struct WristAngleCarry {
+    std::optional<unsigned> angle;
+    unsigned mark = 0;
+    bool now = false; ///< carried by this read (the mark was not in the file)
+};
+inline constexpr const char* kWristAngleFromKey = "vr_kiu_wrist_angle_from";
+inline WristAngleCarry CarriedWristAngle(const QSettings& ini, bool global, unsigned global_mark) {
+    const QString mark = QString::fromLatin1(kWristAngleFromKey);
+    const QString angle = QStringLiteral("vr_kiu_wrist_angle");
+    const QString side = QStringLiteral("vr_wrist_side");
+    WristAngleCarry out;
+    if (ini.contains(mark)) {
+        const unsigned m = ini.value(mark).toUInt();
+        out.mark = global ? (m == 2u ? 2u : 1u) : 1u;
+        return out;
+    }
+    out.now = true;
+    const auto added = [](unsigned v) { return ((v > 360u ? 360u : v) + 180u) % 360u; };
+    if (global) {
+        const bool inside = !ini.value(side + QStringLiteral("/default"), false).toBool() &&
+                            ini.value(side, 0u).toUInt() == 1u;
+        const unsigned v = ini.value(angle + QStringLiteral("/default"), false).toBool()
+                               ? 0u
+                               : ini.value(angle, 0u).toUInt();
+        out.mark = inside ? 2u : 1u;
+        if (inside) {
+            out.angle = added(v);
+        }
+        return out;
+    }
+    out.mark = 1u;
+    const bool own = !ini.value(angle + QStringLiteral("/use_global"), true).toBool();
+    if (own && global_mark == 2u) {
+        out.angle = added(ini.value(angle, 0u).toUInt());
+    }
+    return out;
+}
+
 /// AzaharFrame kiu: Narrow Screen and Narrow Height (`vr_immersive_squeeze`, `_y`: percent
 /// narrower, 0 to 30; 1, 2 and 3 were the 10 % steps of earlier builds) are now Horizontal and
 /// Vertical Scale (`vr_immersive_scale_x`, `_y`: signed percent, negative is smaller). For a file

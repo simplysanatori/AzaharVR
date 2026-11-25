@@ -261,6 +261,29 @@ TEST_CASE("FrameXr vis: a still controller fades, a lost one goes", "[frame_xr]"
     REQUIRE(a.Model() == 0.0f);
 }
 
+TEST_CASE("FrameXr vis: a controller put down goes, with what it holds; picked up it is back", "[frame_xr]") {
+    // What took Pit's hand and the weapon from a mock run whose controllers never move.
+    HandActivity a;
+    Input::HandInput hand;
+    hand.active = true;
+    int64_t t = 0;
+    const int64_t step = 8'333'333;
+    for (; t < HandActivity::kModelIdleNs - 1'000'000'000; t += step) {
+        a.Update(t, hand, false);
+    }
+    REQUIRE(a.Model() == Approx(1.0f));
+    for (; t < HandActivity::kModelIdleNs + 1'000'000'000; t += step) {
+        a.Update(t, hand, false);
+    }
+    REQUIRE(a.Tracked());
+    REQUIRE(a.Model() == 0.0f);
+    hand.aim.position.x += 0.02f;
+    for (const int64_t end = t + 1'000'000'000; t < end; t += step) {
+        a.Update(t, hand, false);
+    }
+    REQUIRE(a.Model() == Approx(1.0f));
+}
+
 TEST_CASE("FrameXr vis: model files", "[frame_xr]") {
     // A one-triangle model with a translating button, written as the converter writes it.
     const std::string path = "frame_xr_vis_test.model";

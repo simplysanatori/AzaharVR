@@ -283,6 +283,30 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
         f(v.vr_kiu_subtitle_size);
         return true;
+    case Id::KiuPowerMenu: // AzaharFrame kiuaim
+        f(v.vr_kiu_power_menu);
+        return true;
+    case Id::KiuPowerMenuAcross:
+        f(v.vr_kiu_power_menu_across);
+        return true;
+    case Id::KiuPowerMenuHeight:
+        f(v.vr_kiu_power_menu_height);
+        return true;
+    case Id::KiuPowerMenuOpacity:
+        f(v.vr_kiu_power_menu_opacity);
+        return true;
+    case Id::KiuStickClick: // AzaharFrame kiucam
+        f(v.vr_kiu_stick_click);
+        return true;
+    case Id::KiuHideOffHand: // AzaharFrame kiuhands
+        f(v.vr_kiu_hide_off_hand);
+        return true;
+    case Id::KiuTalkPortraits: // AzaharFrame kiuaim
+        f(v.vr_kiu_talk_portraits);
+        return true;
+    case Id::KiuTalkPortraitsOpacity:
+        f(v.vr_kiu_talk_portraits_opacity);
+        return true;
     case Id::KiuReticleSize:
         f(v.vr_kiu_reticle_size);
         return true;

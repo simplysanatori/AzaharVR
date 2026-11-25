@@ -1162,6 +1162,20 @@ struct Values {
     // Its size and opacity in percent (Persistent and Wrist alike).
     SwitchableSetting<u32, true> vr_kiu_bottom_size{100, 50, 200, "vr_kiu_bottom_size"};
     SwitchableSetting<u32, true> vr_kiu_bottom_opacity{100, 20, 100, "vr_kiu_bottom_opacity"};
+    // AzaharFrame kiu1s: the talk's portraits as a card in Angel's Aim's view, and its opacity in
+    // percent.
+    SwitchableSetting<bool> vr_kiu_talk_portraits{false, "vr_kiu_talk_portraits"};
+    SwitchableSetting<u32, true> vr_kiu_talk_portraits_opacity{100, 20, 100,
+                                                               "vr_kiu_talk_portraits_opacity"};
+    // AzaharFrame kiupowers: the powers (on land) and the special attack's dots (in the air) in
+    // Angel's Aim: 0 off, 1 over the off hand, 2 under the health bar, 3 between the bar and the
+    // score, 4 under the score; their opacity in percent; with the HUD (2 to 4), degrees to the
+    // right and up from that place.
+    SwitchableSetting<u32, true> vr_kiu_power_menu{0, 0, 4, "vr_kiu_power_menu"};
+    SwitchableSetting<u32, true> vr_kiu_power_menu_opacity{100, 20, 100,
+                                                           "vr_kiu_power_menu_opacity"};
+    SwitchableSetting<s32, true> vr_kiu_power_menu_across{0, -40, 40, "vr_kiu_power_menu_across"};
+    SwitchableSetting<s32, true> vr_kiu_power_menu_height{0, -40, 40, "vr_kiu_power_menu_height"};
     // AzaharFrame kiu140: HUD in Angel's Aim: 0 where the game puts it, 1 in the view, its size in
     // percent; the health bar and the score side by side as one (linked), where that is (degrees
     // to the right and up from straight ahead), or each with a place of its own.
@@ -1178,11 +1192,20 @@ struct Values {
     SwitchableSetting<s32, true> vr_kiu_score_height{22, -40, 40, "vr_kiu_score_height"};
     // AzaharFrame kiu140: Pit's Arm on the free hand.
     SwitchableSetting<u32, true> vr_kiu_arm{1, 0, 1, "vr_kiu_arm"};
+    // AzaharFrame kiuhands: the hand without the weapon is not drawn in Angel's Aim (Pit's arm, the
+    // game's arm or the controller there).
+    SwitchableSetting<bool> vr_kiu_hide_off_hand{false, "vr_kiu_hide_off_hand"};
     // AzaharFrame kiu140: Cutscenes in Angel's Aim: 0 in the view, 1 on the Primary Screen.
     SwitchableSetting<u32, true> vr_kiu_cutscenes{0, 0, 1, "vr_kiu_cutscenes"};
-    // AzaharFrame kiu140: the Wrist's place: degrees round the wrist from Wrist Side's, and
-    // centimetres up the arm from there (toward the hand below 0).
+    // AzaharFrame kiu140: the Wrist's place: degrees round the wrist, and centimetres up the arm
+    // from there (toward the hand below 0). AzaharFrame kiuaim: the degrees count from the back
+    // of the wrist (180 the inside), whatever Wrist Side is; they counted from Wrist Side's.
+    // vr_kiu_wrist_angle_from is the mark that a file's angle was carried over, once: in the
+    // global file 1 (Wrist Side was Back: nothing added) or 2 (Inside: 180 added), which is what
+    // a game's file with its own angle gets when it is carried later (its own mark is the file's
+    // key, never kept here). citra_qt/configuration/frame_per_game_ini.h.
     SwitchableSetting<u32, true> vr_kiu_wrist_angle{0, 0, 360, "vr_kiu_wrist_angle"};
+    Setting<u32> vr_kiu_wrist_angle_from{0, "vr_kiu_wrist_angle_from"};
     SwitchableSetting<s32, true> vr_kiu_wrist_along{0, -12, 25, "vr_kiu_wrist_along"};
     // Persistent's place moved by the grip: degrees right of and below its default place.
     SwitchableSetting<float, true> vr_kiu_bottom_x{0.f, -60.f, 60.f, "vr_kiu_bottom_x"};
@@ -1195,6 +1218,9 @@ struct Values {
     /// 100) in the views from outside Pit.
     SwitchableSetting<bool> vr_kiu_game_camera{false, "vr_kiu_game_camera"};
     SwitchableSetting<u32, true> vr_kiu_pit_opacity{100, 20, 100, "vr_kiu_pit_opacity"};
+    // AzaharFrame kiucam: a tap of the right stick's click in a battle in Angel's Aim: 0 switches
+    // the camera, 1 Swap Screens (frame_xr/kiu_camera_tap.h).
+    SwitchableSetting<u32, true> vr_kiu_stick_click{0, 0, 1, "vr_kiu_stick_click"};
     // AzaharFrame kiu: in a game's own file only: the Controls preset's values already decided
     // for this game (FrameXr::ControlsPresetField bits). A value the preset gave, or the game
     // already had, is never given again, so a later choice (Use Global Value too) stays.

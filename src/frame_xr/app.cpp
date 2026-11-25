@@ -56,6 +56,8 @@
 #include "frame_xr/vis/proj_screen_layer.h"
 #include "frame_xr/watchdog.h"
 #include "frame_xr/xr_loader.h"
+#include "video_core/kiu_powers.h" // AzaharFrame kiupowers
+#include "video_core/kiu_talk.h" // AzaharFrame kiutalk
 #include "video_core/vr_content_repeat.h" // AzaharFrame bfikit
 #include "video_core/vr_dynamic_resolution.h" // AzaharFrame menuux
 #include "video_core/xr_screen_cover.h"
@@ -1207,8 +1209,13 @@ void Runtime::FrameLoop() {
         // of layers its quads would have gone.
         proj = {};
         proj_fallback.clear();
+        // AzaharFrame kiuaim: Angel's Aim's Bottom Screen kept on view with the menu's Bottom
+        // Screen page: its quad, added after the menu's (below).
+        Quad preview_quad;
+        bool preview_take = false, preview_have = false;
         std::size_t proj_at = 0;
         bool proj_placed = false;
+        PowerLayers::In powers_in; // AzaharFrame kiupowers
         const bool proj_mode = want_proj && ui && fs.shouldRender; // AzaharFrame projdef
         const bool proj_also_quads = // AzaharFrame projscreen: a mock check only
             proj_mode && TestSwitches::OnFrom(Common::FrameTestSwitches::Value(Vis::kProjAlsoQuadsSwitch));
@@ -1450,7 +1457,9 @@ void Runtime::FrameLoop() {
                                       top && top_layers.omit);
                 // AzaharFrame kiuwrist: Angel's Aim's wrist screen is no screen the toast keeps
                 // in front of (it is on the hand, under the view).
-                if (use.toast_input && !(!top && shown.bottom_on_wrist)) {
+                // AzaharFrame kiu1s: nor are the portraits while their layer is shrunk to nothing.
+                const bool shrunk = !top && size.width < 0.001f;
+                if (use.toast_input && !shrunk && !(!top && shown.bottom_on_wrist)) {
                     // AzaharFrame kiu2: where it is in LOCAL space, for the toast (toast_depth.h).
                     Input::PanelQuad tq;
                     tq.pose = {{pose.orientation.x, pose.orientation.y, pose.orientation.z,
@@ -1477,7 +1486,7 @@ void Runtime::FrameLoop() {
                 // other picture. By depth when the choice
                 // includes this screen's slot (Primary: the top screen, or the bottom one swapped
                 // in), else in front of the controllers wherever they are.
-                if (use.toast_input) {
+                if (use.toast_input && !shrunk) {
                     const bool by_depth = Vis::InFrontOfScreen(in_front, top != screens_swapped);
                     if (!by_depth || !top || !top_immersive) {
                         add_occluder(space, pose, size, curve, eye, !by_depth);
@@ -1518,6 +1527,10 @@ void Runtime::FrameLoop() {
                 q.image_rect = {{0, 0},
                                 {static_cast<int32_t>(chain.width),
                                  static_cast<int32_t>(chain.height)}};
+                if (!top) { // AzaharFrame kiupowers: the picture, not the strip under it
+                    q.image_rect.extent.height = static_cast<int32_t>(
+                        VideoCore::KiuPowers::PictureHeight(chain.width, chain.height));
+                }
                 if (packed_now && top) {
                     const int32_t half =
                         static_cast<int32_t>((chain.height - VideoCore::kXrPackedGap) / 2);
@@ -1527,15 +1540,34 @@ void Runtime::FrameLoop() {
                             half + static_cast<int32_t>(VideoCore::kXrPackedGap);
                     }
                 }
+                const VideoCore::KiuTalk::PixelRect talk = // AzaharFrame kiutalk
+                    !top && shown.bottom_talk
+                        ? VideoCore::KiuTalk::StripIn(chain.width, chain.height)
+                        : VideoCore::KiuTalk::PixelRect{};
+                if (!top && !shown.bottom_cut.Whole()) { // AzaharFrame kiu1s
+                    const Kiu::FirstPerson::CutRect r =
+                        Kiu::FirstPerson::CutIn(shown.bottom_cut, static_cast<int>(chain.width),
+                                                q.image_rect.extent.height);
+                    q.image_rect = {{r.x, r.y}, {r.width, r.height}};
+                }
                 q.pose = pose;
                 q.size = size;
                 if (top && top_layers.collapse) { // AzaharFrame flash: a dark refresh
                     q.size = {size.width * MotionClarity::kCollapse,
                               size.height * MotionClarity::kCollapse};
                 }
+                if (talk.width != 0) { // AzaharFrame kiutalk: the characters alone, all their rows
+                    const auto grown = VideoCore::KiuTalk::GrownFrom(size.height);
+                    q.image_rect = {{static_cast<int32_t>(talk.x), static_cast<int32_t>(talk.y)},
+                                    {static_cast<int32_t>(talk.width),
+                                     static_cast<int32_t>(talk.height)}};
+                    q.pose = Vis::ComposePose(pose, {{0.0f, 0.0f, 0.0f, 1.0f},
+                                                     {0.0f, grown.up, 0.0f}});
+                    q.size.height = grown.height;
+                }
                 q.eye = eye;
                 // AzaharFrame kiu131: Bottom Screen Opacity: blended by the picture's alpha.
-                if (!top && shown.bottom_alpha < 1.0f) {
+                if (!top && (shown.bottom_alpha < 1.0f || talk.width != 0)) {
                     q.flags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
                 }
                 if (to_proj) {
@@ -1553,6 +1585,8 @@ void Runtime::FrameLoop() {
                     pe.serial = chain.frame_serial;
                     // AzaharFrame kiuview: first person's soft edge (the top screen only).
                     pe.soft_edge = top_immersive ? Kiu::FirstPerson::EdgeShare() : 0.0f;
+                    pe.darker = // AzaharFrame kiucam
+                        top_immersive ? 1.0f - ui->CameraBrightness(fs.predictedDisplayTime) : 0.0f;
                     // projb: "Controllers in Front of Screen" as on the quad path (ctrlfront's
                     // occluders above): by depth when the choice takes this screen's slot (the
                     // immersive screen then never hides them: what it shows is far away), else
@@ -1577,6 +1611,11 @@ void Runtime::FrameLoop() {
                         return;
                     }
                 }
+                if (preview_take) { // AzaharFrame kiuaim: after the menu's layers
+                    preview_quad = q;
+                    preview_have = true;
+                    return;
+                }
                 // fixa: Match Bottom Screen Brightness by the layer's colour scale.
                 const bool dimmed = !top && bottom_dim < 1.0f &&
                                     dim_method == MotionClarity::DimMethod::ColorScale;
@@ -1594,6 +1633,25 @@ void Runtime::FrameLoop() {
                     quad_layers.push_back(layer);
                 }
             };
+            VideoCore::KiuTalk::g_live.shown.store(shown.bottom_talk, std::memory_order_relaxed);
+            { // AzaharFrame kiupowers
+                powers_in.playing = !draw.swapped && shown.head_driven && shown.show_top;
+                // (kiutalk: the talk card without its backdrop has no power bar)
+                powers_in.bottom_shown =
+                    shown.show_bottom && draw.bottom_visible && !shown.bottom_talk;
+                powers_in.bottom_persistent = shown.bottom_persistent;
+                powers_in.top_pose[0] = shown.top_pose[0];
+                powers_in.top_pose[1] = shown.top_pose[1];
+                powers_in.top_size = shown.top_size[0];
+                powers_in.top_in_view = shown.top_space == view_space;
+                const ScreenChain& chain =
+                    LayerChain(static_cast<std::size_t>(VideoCore::XrScreen::Bottom));
+                if (chain.handle != XR_NULL_HANDLE && chain.has_image) {
+                    powers_in.bottom = chain.handle;
+                    powers_in.bottom_width = chain.width;
+                    powers_in.bottom_height = chain.height;
+                }
+            }
             // AzaharFrame screenswap: with the bottom screen in focus the screens trade places
             // (immersive is paused then); a hidden screen is not added. (AzaharFrame flash: `draw`
             // is taken above, for Motion Clarity.)
@@ -1663,8 +1721,11 @@ void Runtime::FrameLoop() {
                 // Each eye sees its own top image on the same quad (or both eyes share TopLeft for mono cores).
                 const auto add_bottom = [&] {
                     if (shown.show_bottom && draw.bottom_visible) {
+                        preview_take = shown.bottom_preview; // AzaharFrame kiuaim
                         add_screen(VideoCore::XrScreen::Bottom, local_space, shown.bottom_pose,
-                                   shown.bottom_size, XR_EYE_VISIBILITY_BOTH, draw.bottom_curve);
+                                   shown.bottom_size, XR_EYE_VISIBILITY_BOTH,
+                                   shown.bottom_preview ? 0.0f : draw.bottom_curve);
+                        preview_take = false;
                     }
                 };
                 if (shown.bottom_first) {
@@ -1783,6 +1844,21 @@ void Runtime::FrameLoop() {
                     add_occluder(local_space, q.pose, q.size, 0.0f, q.eye, false);
                 }
             };
+            // AzaharFrame kiupowers: the powers and the dots, over the screens and under the rest;
+            // their places in the list from the first frame they may show on.
+            powers_in.head = LatestViewPose();
+            powers_in.time = fs.predictedDisplayTime;
+            for (const Quad& q : power_layers.Update(*this, powers_in)) {
+                const uint64_t chain = reinterpret_cast<uint64_t>(q.swapchain);
+                Quad stand_in = q;
+                stand_in.visible = true;
+                layer_slots.Reserve(LayerSlots::Group::Extra, chain, 0, 0,
+                                    SlotQuad{local_space, stand_in});
+                if (q.visible) {
+                    layer_slots.Add(LayerSlots::Group::Extra, chain, 0, 0,
+                                    SlotQuad{local_space, q});
+                }
+            }
             for (const Quad* q : extra) {
                 slot_add(LayerSlots::Group::Extra, local_space, *q);
                 panel_occluder(*q);
@@ -1791,6 +1867,9 @@ void Runtime::FrameLoop() {
             for (const Quad& q : ui_quads) {
                 slot_add(LayerSlots::Group::Ui, local_space, q);
                 panel_occluder(q);
+            }
+            if (preview_have) { // AzaharFrame kiuaim: over the menu (and its dim quad), as it is nearer
+                slot_add(LayerSlots::Group::Ui, local_space, preview_quad);
             }
             // AzaharFrame vrqol: a toast (Quick Saved ...) in front of everything.
             Quad toast;

@@ -18,6 +18,7 @@
 #include "common/frame_flat.h"
 #include "common/frame_test_switches.h" // AzaharFrame integ9
 #include "common/stall_telemetry.h"     // AzaharFrame bfidr
+#include "frame_xr/retired_swapchains.h" // AzaharFrame kiupowers
 #include "frame_xr/input/hand_joints.h"
 #include "frame_xr/controls.h"
 #include "frame_xr/screen_handover.h" // AzaharFrame flash3
@@ -497,6 +498,7 @@ void Runtime::DestroySession() {
     }
     IdleBeforeDestroy(vulkan.get(), queue_lock); // AzaharFrame kiu140
     hud.Destroy(); // AzaharFrame vrqol
+    power_layers.Destroy(); // AzaharFrame kiupowers
     if (ui) {
         ui->DestroyXr();
     }
@@ -512,6 +514,7 @@ void Runtime::DestroySession() {
                 ReturnHeldImage(chain, queue_lock);
                 const XrResult r =
                     queue_lock.With([&] { return xr.xrDestroySwapchain(chain.handle); });
+                RetiredSwapchains::Note(reinterpret_cast<uint64_t>(chain.handle)); // AzaharFrame kiupowers
                 if (XR_FAILED(r)) {
                     LOG_ERROR(Frontend, "xr: xrDestroySwapchain: {}", ResultName(r));
                 }
@@ -605,6 +608,7 @@ bool Runtime::EnsureSwapchain(VideoCore::XrScreen screen, uint32_t width, uint32
                 IdleForProjPass(proj_screens_used.load(), vulkan.get());
                 return xr.xrDestroySwapchain(old.handle);
             });
+            RetiredSwapchains::Note(reinterpret_cast<uint64_t>(old.handle)); // AzaharFrame kiupowers
             old = {};
         }
         if (ScreenHandover::KeepOnReplace(chain.has_image)) {
@@ -619,6 +623,7 @@ bool Runtime::EnsureSwapchain(VideoCore::XrScreen screen, uint32_t width, uint32
                 IdleForProjPass(proj_screens_used.load(), vulkan.get());
                 return xr.xrDestroySwapchain(chain.handle);
             });
+            RetiredSwapchains::Note(reinterpret_cast<uint64_t>(chain.handle)); // AzaharFrame kiupowers
         }
         chain = {};
     }
@@ -693,6 +698,7 @@ void Runtime::DropOldScreens(bool all) { // AzaharFrame flash3
             if (XR_FAILED(r)) {
                 LOG_ERROR(Frontend, "xr: xrDestroySwapchain: {}", ResultName(r));
             }
+            RetiredSwapchains::Note(reinterpret_cast<uint64_t>(old.handle)); // AzaharFrame kiupowers
         }
         old = {};
         old_kept[i] = 0;

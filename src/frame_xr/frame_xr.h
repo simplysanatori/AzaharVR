@@ -430,6 +430,14 @@ enum class MenuSetting {
     KiuScoreHeight, ///< AzaharFrame kiu140: `value` a slider, -40 to 40 degrees (vr_kiu_score_height)
     KiuSubtitleHeight, ///< AzaharFrame kiu140: `value` a slider, -40 to 40 degrees (vr_kiu_subtitle_height)
     KiuSubtitleSize, ///< AzaharFrame kiu140: `value` a slider, 50 to 250 percent (vr_kiu_subtitle_size)
+    KiuTalkPortraits, ///< AzaharFrame kiuaim: `value` index: Hidden, Shown (vr_kiu_talk_portraits)
+    KiuTalkPortraitsOpacity, ///< `value` percent, 20 to 100 (vr_kiu_talk_portraits_opacity)
+    KiuStickClick, ///< AzaharFrame kiucam: `value` index: Switch Camera, Swap Screens
+    KiuHideOffHand, ///< AzaharFrame kiuhands: `value` index: Off, On (vr_kiu_hide_off_hand)
+    KiuPowerMenu, ///< AzaharFrame kiuaim: `value` index: Off, Off Hand, Health Bar, Middle, Score (vr_kiu_power_menu)
+    KiuPowerMenuAcross, ///< `value` a slider, -40 to 40 degrees (vr_kiu_power_menu_across)
+    KiuPowerMenuHeight, ///< `value` a slider, -40 to 40 degrees (vr_kiu_power_menu_height)
+    KiuPowerMenuOpacity, ///< `value` percent, 20 to 100 (vr_kiu_power_menu_opacity)
     AngelsAimIntroShown, ///< AzaharFrame kiuweap2: `value` 1 (vr_angels_aim_intro_shown, global)
     /// AzaharFrame bfidr: what Black Frame Insertion turned on (bfi_helpers.h): `value` bit 0
     /// vr_bfi_set_dynamic_resolution, bit 1 vr_bfi_set_panel

@@ -237,9 +237,10 @@ void ReadPitModel() {
         }
     }
     if (ok) {
-        LOG_INFO(Frontend, "xr: Pit's arm: {}, {} + {} triangles, textures {}x{}",
+        const uint32_t seams = PitModelSmoothSeams(*model);
+        LOG_INFO(Frontend, "xr: Pit's arm: {}, {} + {} triangles, textures {}x{}, {} seam vertices smoothed",
                  own ? "the player's hand file" : "the built-in arm", model->body_index_count / 3,
-                 model->plate_index_count / 3, model->texture_width, model->texture_height);
+                 model->plate_index_count / 3, model->texture_width, model->texture_height, seams);
     }
     auto& source = PitSource();
     const std::lock_guard lock{source.m};
@@ -639,6 +640,8 @@ struct ControllerModels::Gpu {
         vk::DescriptorSet set;
         vk::Sampler sampler;
         std::array<PitHandPose, 2> skinned;
+        std::array<PitTracked, 2> skinned_fingers;
+        std::array<int, 2> skinned_way{}; ///< what the vertices were made by (pit_way, the gap)
         std::array<PitVec3, 2> elbow{};
         std::array<bool, 2> skinned_once{};
     } pit;
@@ -3172,7 +3175,7 @@ void ControllerModels::FitArms(const ViewPose& views, const std::array<Hand, 2>&
     for (int h = 0; h < 2; h++) {
         const Hand& hand = hands[static_cast<std::size_t>(h)];
         ArmDraw& d = draws[static_cast<std::size_t>(h)];
-        if (!d.on && hand.shown && hand.pit_arm && hand.weapon < 0 && pit_model && gpu &&
+        if (!d.on && (hand.shown || hand.hidden) && hand.pit_arm && hand.weapon < 0 && pit_model && gpu &&
             gpu->pipeline_pit && gpu->pit.state != 2) {
             const bool left = h == Input::HandIndex(Input::Hand::Left);
             d.on = d.pit = true;
@@ -3272,6 +3275,10 @@ void ControllerModels::TakePit() {
         }
     }
     pit_posed = {};
+    pit_way = {};
+    pit_lost_s = {};
+    pit_thin.reset();
+    pit_width = 100;
 }
 
 // Each hand's vertices (host visible, written again when its pose changes: one image is drawn at a
@@ -3357,8 +3364,23 @@ void ControllerModels::MakePit() {
 
 void ControllerModels::SkinPit(const std::array<Hand, 2>& hands) {
     Gpu::Pit& p = gpu->pit;
+    // AzaharFrame kiuhands: the fingers' width, a test switch.
+    const int width = PitFingerWidth(Common::FrameTestSwitches::Value(kFingersWidthSwitch));
+    const bool thin_changed = pit_model && width != pit_width;
+    if (thin_changed) {
+        pit_width = width;
+        pit_thin.reset();
+        if (width != 100) {
+            pit_thin = std::make_shared<const PitModel>(
+                PitModelThinned(*pit_model, static_cast<float>(width) * 0.01f));
+        }
+    }
+    if (!pit_model) {
+        return;
+    }
+    const PitModel& m = pit_thin ? *pit_thin : *pit_model;
     for (std::size_t h = 0; h < 2; h++) {
-        if (!arm_draws[h].pit || !pit_model) {
+        if (!arm_draws[h].pit || hands[h].hidden) {
             continue;
         }
         const int64_t now = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -3369,6 +3391,34 @@ void ControllerModels::SkinPit(const std::array<Hand, 2>& hands) {
                              : 0.0f;
         pit_time_ns[h] = now;
         const bool left = h == static_cast<std::size_t>(Input::HandIndex(Input::Hand::Left));
+        const PitVec3 elbow = pit_model->elbow;
+        const bool gap = Common::FrameTestSwitches::Value(kFingersGapSwitch).value_or("1") != "0";
+        // AzaharFrame kiuhands: the tracked fingers on the file's own bones, one joint to one bone.
+        PitTracked fingers;
+        const bool old_way = Common::FrameTestSwitches::Value(kFingersOldSwitch).value_or("0") == "1";
+        const bool tracked = hands[h].pit_tracked && hands[h].pit_placed && !old_way &&
+                             PitTrackedFromJoints(hands[h].pit_joints, !left, fingers);
+        // Without joints for a moment the last ones stay.
+        if (const PitFingersFrom from = PitFingersKeep(tracked, pit_way[h] == 2 && !old_way, dt, pit_lost_s[h]);
+            from != PitFingersFrom::None) {
+            const int way = gap ? 2 : 3;
+            if (from == PitFingersFrom::Joints) {
+                pit_fingers[h] = pit_way[h] == 2 ? PitTrackedEase(pit_fingers[h], fingers, dt, kFingersEase)
+                                                 : fingers;
+            }
+            pit_way[h] = 2;
+            pit_posed[h] = true;
+            if (!p.skinned_once[h] || thin_changed || p.skinned_way[h] != way ||
+                PitTrackedDiffers(pit_fingers[h], p.skinned_fingers[h])) {
+                PitModelEvaluateTracked(m, pit_fingers[h], &elbow, gap, pit_bones);
+                PitModelSkin(m, pit_bones, {p.map[h], std::size_t{m.vertex_count} * kPitVertexFloats});
+                p.skinned_fingers[h] = pit_fingers[h];
+                p.skinned_way[h] = way;
+                p.elbow[h] = elbow;
+                p.skinned_once[h] = true;
+            }
+            continue;
+        }
         const bool palm_turn =
             Common::FrameTestSwitches::Value(kFingersPalmSwitch).value_or("0") == "1";
         const PitHandPose target =
@@ -3376,16 +3426,17 @@ void ControllerModels::SkinPit(const std::array<Hand, 2>& hands) {
                 ? PitHandPoseFromJoints(hands[h].pit_joints, !left, 0.0f, // our palm's own shape
                                         palm_turn)
                 : PitHandPoseFromInputs(hands[h].pit, PitHandGrasp::Free);
-        pit_pose[h] = pit_posed[h] ? PitHandEase(pit_pose[h], target, dt) : target;
+        pit_pose[h] = pit_way[h] == 1 ? PitHandEase(pit_pose[h], target, dt) : target;
+        pit_way[h] = 1;
         pit_posed[h] = true;
-        const PitVec3 elbow = pit_model->elbow;
         const float moved = std::hypot(elbow[0] - p.elbow[h][0], elbow[1] - p.elbow[h][1],
                                        elbow[2] - p.elbow[h][2]);
-        if (!p.skinned_once[h] || moved > 0.001f || PitHandPoseDiffers(pit_pose[h], p.skinned[h])) {
-            PitModelSkin(*pit_model, PitModelEvaluate(*pit_model, &pit_pose[h], &elbow,
-                                                          !hands[h].pit_tracked),
-                         {p.map[h], std::size_t{pit_model->vertex_count} * kPitVertexFloats});
+        if (!p.skinned_once[h] || thin_changed || p.skinned_way[h] != 1 || moved > 0.001f ||
+            PitHandPoseDiffers(pit_pose[h], p.skinned[h])) {
+            PitModelSkin(m, PitModelEvaluate(m, &pit_pose[h], &elbow, !hands[h].pit_tracked),
+                         {p.map[h], std::size_t{m.vertex_count} * kPitVertexFloats});
             p.skinned[h] = pit_pose[h];
+            p.skinned_way[h] = 1;
             p.elbow[h] = elbow;
             p.skinned_once[h] = true;
         }
@@ -3606,7 +3657,7 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
                        se->rect.extent.height / ih};
             sp.tex = {iw, ih, marks ? 1.0f : 0.0f, 0.0f};
             // projb; projdef: filter; kiuview: the soft edge (first person's top screen)
-            sp.extra = {ProjDepthCode(se->depth), filter, se->soft_edge, 0.0f};
+            sp.extra = {ProjDepthCode(se->depth), filter, se->soft_edge, se->darker};
             c.bindPipeline(vk::PipelineBindPoint::eGraphics, g.screen_pipeline);
             c.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g.screen_layout, 0,
                                  g.screen_sets[static_cast<std::size_t>(e)], {});

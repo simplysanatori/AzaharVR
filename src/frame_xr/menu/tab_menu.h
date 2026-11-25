@@ -321,6 +321,14 @@ enum class Id : int {
     KiuScoreHeight, ///< AzaharFrame kiu140: a slider, -40 to 40 degrees (vr_kiu_score_height)
     KiuSubtitleHeight, ///< AzaharFrame kiu140: a slider, -40 to 40 degrees (vr_kiu_subtitle_height)
     KiuSubtitleSize, ///< AzaharFrame kiu140: a slider, 50 to 250 percent (vr_kiu_subtitle_size)
+    KiuTalkPortraits, ///< AzaharFrame kiuaim: index: Hidden, Shown (vr_kiu_talk_portraits)
+    KiuTalkPortraitsOpacity, ///< AzaharFrame kiuaim: a slider, 20 to 100 percent, while Shown
+    KiuStickClick, ///< AzaharFrame kiucam: index: Switch Camera, Swap Screens (vr_kiu_stick_click)
+    KiuHideOffHand, ///< AzaharFrame kiuhands: index: Off, On (vr_kiu_hide_off_hand)
+    KiuPowerMenu, ///< AzaharFrame kiuaim: index: Off, Off Hand, Health Bar, Middle, Score (vr_kiu_power_menu)
+    KiuPowerMenuAcross, ///< a slider, -40 to 40 degrees, on the HUD (vr_kiu_power_menu_across)
+    KiuPowerMenuHeight, ///< a slider, -40 to 40 degrees, on the HUD (vr_kiu_power_menu_height)
+    KiuPowerMenuOpacity, ///< AzaharFrame kiuaim: a slider, 20 to 100 percent, while not Off
     /// AzaharFrame kiu132: a group's title in the Angel's Aim segment's settings (no action;
     /// index: AngelsAimGroupKind)
     AngelsAimGroup,
@@ -561,6 +569,14 @@ struct MenuModel {
     int kiu_score_height = 22; ///< AzaharFrame kiu140 (vr_kiu_score_height)
     int kiu_subtitle_height = -18; ///< AzaharFrame kiu140 (vr_kiu_subtitle_height)
     int kiu_subtitle_size = 130; ///< AzaharFrame kiu140 (vr_kiu_subtitle_size)
+    int kiu_stick_click = 0; ///< AzaharFrame kiucam (vr_kiu_stick_click)
+    int kiu_hide_off_hand = 0; ///< AzaharFrame kiuhands (vr_kiu_hide_off_hand)
+    int kiu_talk_portraits = 0; ///< AzaharFrame kiuaim (vr_kiu_talk_portraits)
+    int kiu_talk_portraits_opacity = 100; ///< percent, 20 to 100 (vr_kiu_talk_portraits_opacity)
+    int kiu_power_menu = 0; ///< AzaharFrame kiuaim (vr_kiu_power_menu)
+    int kiu_power_menu_across = 0;    ///< degrees (vr_kiu_power_menu_across)
+    int kiu_power_menu_height = 0;    ///< degrees (vr_kiu_power_menu_height)
+    int kiu_power_menu_opacity = 100; ///< percent, 20 to 100 (vr_kiu_power_menu_opacity)
     int wrist_side = 0;             ///< 0 Back, 1 Inside (global)
     int kiu_reticle_size = 100;     ///< percent (30 to 150)
     int kiu_view = 0;               ///< AzaharFrame kiu133: Camera, Kiu::FirstPerson::ViewFor
@@ -763,6 +779,10 @@ struct MenuView {
     /// AzaharFrame kiuweap2: the "Angel's Aim Is On" prompt is open (AngelsIntroDialog): OK
     /// closes it, Controls closes it and shows the Controls tab at Aiming
     bool angels_intro = false;
+    /// AzaharFrame kiuaim: the Angel's Aim page's open group (AimGroup; -1 the front view), and
+    /// its More rows in place of its own (angels_aim_tab.h)
+    int aim_group = -1;
+    bool aim_more = false;
     /// AzaharFrame ctgp7: the open dialog's checkbox (ModsDialog::check) is ticked; off for each new one
     bool dialog_check = false;
     GamesView games; ///< AzaharVR: the Games tab
@@ -957,6 +977,10 @@ private:
                                 const Rect& c, const Rect& list, float y, Rect& open_anchor,
                                 int& open_selected);
     static float AngelsAimSettingsHeight(const MenuModel& model);
+    /// AzaharFrame kiuaim: `ids` as rows from `y` (the Angel's Aim page's); returns their end.
+    float DrawAimRows(Kit& kit, const MenuModel& model, const MenuView& view,
+                      const std::vector<Id>& ids, const Rect& c, const Rect& list, float y,
+                      Rect& open_anchor, int& open_selected);
     /// AzaharFrame reticle: the scope control at the top right of `c` (the pane's content);
     /// returns its left edge. DrawScopeMenu draws its ⋮ menu when open (last, over the rest).
     float DrawScope(Kit& kit, const MenuModel& model, const MenuView& view, const Rect& c,

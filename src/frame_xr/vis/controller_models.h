@@ -94,8 +94,10 @@ public:
         /// AzaharFrame kiu140: Pit's hand and forearm (pit_hand.h) in place of this controller,
         /// its fingers from what the controller feels; drawn while the weapon is in the other.
         bool pit_arm = false;
+        bool hidden = false; ///< AzaharFrame kiuhands: shown but for Hide Off Hand (`shown` false)
         PitHandInputs pit;
         bool pit_tracked = false; ///< the runtime has the fingers' joints: `pit_joints`, not `pit`
+        bool pit_placed = false;  ///< ... and their places (PitTrackedFromJoints needs them)
         std::array<PitJointPose, kPitXrJoints> pit_joints{};
     };
 
@@ -231,6 +233,12 @@ private:
     std::array<int64_t, 2> pit_time_ns{};
     std::array<PitHandPose, 2> pit_pose;       ///< eased toward each controller's
     std::array<bool, 2> pit_posed{};
+    std::array<PitTracked, 2> pit_fingers; ///< tracked fingers (PitModelEvaluateTracked), eased
+    std::array<int, 2> pit_way{};          ///< 1: from pit_pose, 2: from pit_fingers; 0: none yet
+    std::array<float, 2> pit_lost_s{};     ///< seconds without tracked fingers (kFingersHold)
+    std::vector<PitMat34> pit_bones;       ///< kept between frames
+    std::shared_ptr<const PitModel> pit_thin; ///< pit_model with narrower fingers (kFingersWidthSwitch)
+    int pit_width = 100;
     void TakePit();            ///< the newest hand file, if it changed
     void MakePit();            ///< the GPU side, recorded into the frame's commands (once)
     void SkinPit(const std::array<Hand, 2>& hands);

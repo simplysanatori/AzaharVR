@@ -11,6 +11,7 @@ add_executable(frame_xr_picker_tests
     utf8_text.cpp # AzaharFrame utf8
     homebrew_uninstall.cpp # AzaharFrame emhb
     angels_aim_menu.cpp # AzaharFrame kiufix
+    angels_aim_page.cpp # AzaharFrame kiuaim
     verified_chip.cpp # AzaharFrame fixd
     hud_spacing_menu.cpp # AzaharFrame hudmove
     core_rows.cpp # AzaharVR: each console's rows

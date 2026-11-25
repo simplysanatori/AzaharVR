@@ -30,6 +30,7 @@ struct GyroAimFrame {
     /// AzaharFrame kiufire: Trigger Layout is Fire and Power and Kid Icarus: Uprising is running
     /// (controls.cpp; kiu_trigger_layout.h).
     bool kiu_fire_and_power = false;
+    bool kiu_air = false; ///< AzaharFrame kiupowers: an air battle (KiuTriggers::Frame::air)
 };
 
 class InputBridge {

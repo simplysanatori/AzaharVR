@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "video_core/kiu_powers.h" // AzaharFrame kiupowers
+#include "video_core/renderer_vulkan/vk_kiu_talk.h" // AzaharFrame kiutalk
 #include "video_core/rasterizer_accelerated.h"
 #include "video_core/renderer_vulkan/vk_descriptor_update_queue.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
@@ -70,7 +72,45 @@ public:
     }
     bool DiskResourcesLoadCrashed(u64 title_id) override;
 
+    /// AzaharFrame kiupowers: the power bar's sprites of the game's last bottom screen, and their
+    /// textures, in the order the sprites name them (video_core/kiu_powers.h).
+    bool KiuPowersFresh() const { // the game still draws them (it draws every other frame)
+        return powers_tick - powers_drawn <= 6;
+    }
+    const std::vector<VideoCore::KiuPowers::Sprite>& KiuPowersSprites() const {
+        return powers_sprites;
+    }
+    template <typename F>
+    void KiuPowersTextures(F&& each) {
+        if (!KiuPowersFresh()) {
+            return;
+        }
+        for (const auto& texture : powers_textures) {
+            Surface& surface = res_cache.GetTextureSurface(texture);
+            each(surface.ImageView(), res_cache.GetSampler(texture.config).Handle());
+        }
+    }
+
+    /// AzaharFrame kiutalk: the talk's portraits and illustrations, and their textures in the order
+    /// the sprites name them.
+    const KiuTalkDraws& KiuTalk() const {
+        return kiu_talk;
+    }
+    template <typename F>
+    void KiuTalkTextures(F&& each) {
+        if (!kiu_talk.Fresh()) {
+            return;
+        }
+        for (const auto& texture : kiu_talk.Textures()) {
+            Surface& surface = res_cache.GetTextureSurface(texture);
+            each(surface.ImageView(), res_cache.GetSampler(texture.config).Handle());
+        }
+    }
+
 private:
+    /// AzaharFrame kiupowers: keeps the bar's quads of a draw of the bottom screen.
+    void NoteKiuPowersDraw();
+
     /// Syncs pipeline state from PICA registers
     void SyncDrawState();
 
@@ -147,6 +187,13 @@ private:
     u32 uniform_size_aligned_vs;
     u32 uniform_size_aligned_fs;
     bool async_shaders{false};
+    // AzaharFrame kiupowers
+    std::vector<VideoCore::KiuPowers::Sprite> powers_sprites;
+    std::vector<Pica::TexturingRegs::FullTextureConfig> powers_textures;
+    u64 powers_tick = 0, powers_drawn = 0; ///< TickFrames; the one of the sprites' last draw
+    u32 powers_offset = UINT32_MAX;        ///< the last draw's place in the batch's indices
+    static constexpr std::size_t kMostPowersSprites = 64; ///< the bar has 25
+    KiuTalkDraws kiu_talk; ///< AzaharFrame kiutalk
 };
 
 } // namespace Vulkan

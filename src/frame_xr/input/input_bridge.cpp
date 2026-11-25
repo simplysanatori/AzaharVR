@@ -173,6 +173,7 @@ const MapperOutput& InputBridge::Process(const InputFrame& frame, const PanelGeo
         layout.mode = gyro_aim->mode;
         layout.aiming = KiuTriggers::AimingHand(Settings::values.vr_motion_controls.GetValue());
         layout.time_ns = frame.time_ns;
+        layout.air = gyro_aim->kiu_air; // AzaharFrame kiupowers
     }
     if (layout.Active()) {
         gyro_fire_ = kiu_triggers_.Apply(last_.controls, layout);
