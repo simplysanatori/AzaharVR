@@ -305,6 +305,29 @@ TEST_CASE("Covers: Download Thumbnails? once for a scan's new files", "[covers]"
     CHECK(scan(now) == 0);
 }
 
+TEST_CASE("Covers: no question for a list with 3DS games alone", "[covers]") {
+    Folder folder;
+    Library library(folder.Path());
+    NewGames games;
+    using Listed = NewGames::Listed;
+    const Listed one{"/a/Game A (USA).3ds", {GameSystem::N3DS, 0x1, "Game A (USA)"}};
+    const Listed two{"/a/Game B (USA).3ds", {GameSystem::N3DS, 0x2, "Game B (USA)"}};
+    const Listed three{"/a/Game C (USA).3ds", {GameSystem::N3DS, 0x3, "Game C (USA)"}};
+    const Listed gba{"/b/Game A (USA).gba", kA};
+    const auto scan = [&](const std::vector<Listed>& list) {
+        games.Scanned(list, library, 1000);
+        return games.Take(library, {.time = 1000});
+    };
+    CHECK(scan({one}).empty());
+    CHECK(scan({one, two}).empty());
+    // A folder with GBA games came: those, and not the ones listed before
+    const auto offer = scan({one, two, gba});
+    REQUIRE(offer.size() == 1);
+    CHECK(offer[0].path == gba.path);
+    CHECK(scan({one, two, gba, three}).size() == 1);
+    CHECK(library.Wanted(three.game, 1000)); // it could have one: only the list decides
+}
+
 TEST_CASE("Covers: image types", "[covers]") {
     CHECK(ImageOf(kPng) == Image::Png);
     CHECK(ImageOf(kJpeg) == Image::Jpeg);

@@ -4,6 +4,7 @@
 
 #include "core/frame_covers.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <fstream>
@@ -432,7 +433,10 @@ Outcome Download(const Get& get, Library& library, const Game& game, Art art, st
 // ---- "Download Thumbnails?" ----
 
 void NewGames::Scanned(const std::vector<Listed>& games, Library& library, std::time_t now) {
-    const bool first = !library.HasKnown();
+    const bool only_note = !library.HasKnown() ||
+                           std::all_of(games.begin(), games.end(), [](const Listed& g) {
+                               return g.game.system == Common::GameSystem::N3DS;
+                           });
     std::vector<Game> seen;
     std::set<std::string> ids;
     waiting.clear(); // the ones still listed are found again
@@ -440,7 +444,7 @@ void NewGames::Scanned(const std::vector<Listed>& games, Library& library, std::
         if (library.Known(g.game) || !ids.insert(g.game.Id()).second) {
             continue;
         }
-        if (first || !library.Wanted(g.game, now)) {
+        if (only_note || !library.Wanted(g.game, now)) {
             seen.push_back(g.game);
         } else {
             waiting.push_back(g);

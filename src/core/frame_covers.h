@@ -145,7 +145,8 @@ Outcome Download(const Get& get, Library& library, const Game& game, Art art, st
 
 /// "Download Thumbnails?" after a scan: once for the files that were not in the list before. A file
 /// is known by Game::Id (its per-game key and its name), so a moved file is not new and a renamed
-/// one is. The first scan ever only notes what is there.
+/// one is. The first scan ever only notes what is there, and so does a scan of a list with 3DS games
+/// alone: no Games tab, so no covers.
 class NewGames {
 public:
     struct Listed {
