@@ -1473,7 +1473,7 @@ void Runtime::FrameLoop() {
                 if (!top && !shown.bottom_cut.Whole()) { // AzaharFrame kiu1s
                     const Kiu::FirstPerson::CutRect r =
                         Kiu::FirstPerson::CutIn(shown.bottom_cut, static_cast<int>(chain.width),
-                                                static_cast<int>(chain.height));
+                                                q.image_rect.extent.height);
                     q.image_rect = {{r.x, r.y}, {r.width, r.height}};
                 }
                 q.pose = pose;

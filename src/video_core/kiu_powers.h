@@ -37,9 +37,6 @@ inline constexpr uint32_t kGapPx = 8;
 constexpr uint32_t ImageHeight(uint32_t scale, bool strip) {
     return kScreenHigh * scale + (strip ? kGapPx + kHigh * scale : 0);
 }
-constexpr uint32_t PictureHeight(uint32_t width, uint32_t height) {
-    return std::min(height, width * kScreenHigh / kScreenWide);
-}
 struct PixelRect {
     uint32_t x = 0, y = 0, width = 0, height = 0;
     bool operator==(const PixelRect&) const = default;
@@ -51,6 +48,10 @@ constexpr PixelRect StripIn(uint32_t width, uint32_t height) {
         return {};
     }
     return {0, kScreenHigh * scale + kGapPx, kWide * scale, kHigh * scale};
+}
+/// An image without the strip (any other size too) is the picture whole.
+constexpr uint32_t PictureHeight(uint32_t width, uint32_t height) {
+    return StripIn(width, height).width != 0 ? width * kScreenHigh / kScreenWide : height;
 }
 
 /// How the game colours a draw (its TEV, read from the registers in a census of the bar's draws):
