@@ -75,6 +75,7 @@ constexpr float kAspect16x10 = 16.0f / 10.0f;
 
 // The aspect in use (TopAspect). Outside State: it is read from other threads.
 std::atomic<float> g_top_aspect{kAspect3ds};
+std::atomic<bool> g_focus_bottom{false}; ///< State::focus_bottom, for any thread
 
 float AspectFor(u32 shape) {
     switch (shape) {
@@ -2281,6 +2282,7 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
     out.top_size[0] = out.top_size[1] = placement.top_size;
     out.bottom_pose = placement.bottom_pose;
     out.bottom_size = placement.bottom_size;
+    out.bottom_curve = placement.bottom_curve;
     const Common::AltCore::Capabilities core_caps = GetCoreCapabilities();
     out.show_bottom = BottomShown() && core_caps.screens.has_bottom;
     out.full_mode = g.live && IsViewMode(g.mode); // AzaharFrame flash2
@@ -2556,6 +2558,9 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
                                    ? g.solved.distance
                                    : DistanceTo(out.top_pose[0]);
     out.bottom_first = DistanceTo(out.bottom_pose) > top_distance;
+    if (g.engaged || out.bottom_preview || out.screens_fixed) {
+        out.bottom_curve = 0.0f; // not at the second slot's own place
+    }
     VideoCore::Immersive::g_bottom_as_drawn.store(bottom_as_drawn, std::memory_order_relaxed);
     return out;
 }
@@ -2595,7 +2600,12 @@ void ToggleBottom() {
     LOG_INFO(Frontend, "xr: bottom screen {}", BottomShown() ? "shown" : "hidden");
 }
 
+bool BottomFocused() {
+    return g_focus_bottom.load(std::memory_order_relaxed);
+}
+
 void SetBottomFocused(bool focused) {
+    g_focus_bottom.store(focused, std::memory_order_relaxed);
     if (focused != g.focus_bottom) {
         g.focus_bottom = focused;
         g.adjuster.Cancel();

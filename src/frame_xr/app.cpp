@@ -10,6 +10,7 @@
 // xrBeginFrame / xrEndFrame (XR_KHR_vulkan_enable2: the runtime may use the queue).
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -225,18 +226,70 @@ XrExtent2Df NormalBottomSize(float scale) {
 }
 
 namespace {
+/// The top screen is drawn into the projection layer (set by the frame loop).
+std::atomic<bool> g_top_projected{false};
+
+/// Screen Gap under its default: the second slot, at `apart` without it, on its way into the main
+/// screen's plane or cylinder. The screens' shapes as they are drawn, swapped ones too
+/// (Input::ScreenView::Layout keeps the slots' heights).
+void JoinSecond(ScreenPlacement& place, const Input::Posef& apart, uint32_t layout,
+                const Common::AltCore::ScreenMetrics& screens) {
+    const XrExtent2Df top = place.top_size, bottom = place.bottom_size;
+    XrExtent2Df main = top, second = bottom;
+    if (Immersive::BottomFocused()) {
+        main.width = top.height * bottom.width / bottom.height;
+        second.width = bottom.height * top.width / top.height;
+    }
+    const bool turned = screens.rotation_deg % 180 != 0;
+    const auto* rt = GetRuntime();
+    const bool bent = screens.rotation_deg == 0 && rt &&
+                      rt->HasExtension(XR_KHR_COMPOSITION_LAYER_CYLINDER_EXTENSION_NAME);
+    const XrPosef& t = place.top_pose;
+    Input::ScreenRig::LinkedIn in;
+    in.main = {{t.orientation.x, t.orientation.y, t.orientation.z, t.orientation.w},
+               {t.position.x, t.position.y, t.position.z}};
+    in.main_width = turned ? main.height : main.width;
+    in.main_height = turned ? main.width : main.height;
+    in.main_curve_radius =
+        bent ? Input::ScreenRig::CurveRadius(
+                   main.width, std::min(Settings::RunningGraphics().screen_curve.GetValue(),
+                                        Input::ScreenRig::kMaxCurveDeg))
+             : 0.0f;
+    in.apart = apart;
+    in.apart_width = turned ? second.height : second.width;
+    in.apart_height = turned ? second.width : second.height;
+    // As high as the main one: a 3DS or DS game's pixels are then the same size in both.
+    in.join_size = main.height / second.height;
+    if (g_top_projected.load(std::memory_order_relaxed)) {
+        in.overlap = std::max(in.overlap, Input::ScreenRig::kJoinOverlapProjected *
+                                              Input::Length(in.main.position));
+    }
+    in.layout = layout;
+    in.share = place.join_share;
+    const Input::ScreenRig::Linked linked = Input::ScreenRig::PlaceLinked(in);
+    const Input::Posef& p = linked.pose;
+    place.bottom_pose = {{p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w},
+                         {p.position.x, p.position.y, p.position.z}};
+    place.bottom_size = {bottom.width * linked.size, bottom.height * linked.size};
+    place.bottom_curve = linked.curve_radius;
+}
+
 // AzaharFrame layout: the second slot always follows the main one by the Screen Layout setting,
 // so a switch, a grip move, a nudge, a size change and the reset all keep the layout.
 // AzaharFrame move: unless it has a pose of its own (Detach Screens Secondary or Both, after a grab).
 ScreenPlacement WithSecondSlot(ScreenPlacement place) {
     const uint32_t detach =
         Input::ScreenRig::ClampDetach(Settings::values.vr_move_screens.GetValue());
+    place.join_share = 0.0f;
+    place.bottom_curve = 0.0f;
     if (place.second_free && detach != Input::ScreenRig::kDetachOff) {
         place.bottom_pose = place.second_pose;
         place.bottom_size = NormalBottomSize(place.second_scale);
         return place;
     }
     const uint32_t layout = Settings::RunningGraphics().screen_layout.GetValue();
+    const float gap = static_cast<float>(Settings::RunningGraphics().screen_gap.GetValue());
+    place.join_share = Input::ScreenRig::JoinShare(gap);
     const Common::AltCore::ScreenMetrics screens = GetCoreCapabilities().screens;
     place.bottom_size =
         NormalBottomSize(Input::ScreenRig::LinkedScale(screens.equal_screens, layout));
@@ -253,9 +306,12 @@ ScreenPlacement WithSecondSlot(ScreenPlacement place) {
     const Input::Posef b = Input::ScreenRig::SecondFromMain(
         top, place.top_scale, main.width, second.width, layout,
         main.height / Input::ScreenRig::ClampScale(place.top_scale), second.height,
-        static_cast<float>(Settings::RunningGraphics().screen_gap.GetValue()));
+        Input::ScreenRig::GapTurnDeg(gap));
     place.bottom_pose = {{b.orientation.x, b.orientation.y, b.orientation.z, b.orientation.w},
                          {b.position.x, b.position.y, b.position.z}};
+    if (place.join_share > 0.0f) {
+        JoinSecond(place, b, layout, screens);
+    }
     return place;
 }
 } // namespace
@@ -1218,6 +1274,7 @@ void Runtime::FrameLoop() {
         bool proj_placed = false;
         PowerLayers::In powers_in; // AzaharFrame kiupowers
         const bool proj_mode = want_proj && ui && fs.shouldRender; // AzaharFrame projdef
+        g_top_projected.store(proj_mode, std::memory_order_relaxed);
         const bool proj_also_quads = // AzaharFrame projscreen: a mock check only
             proj_mode && TestSwitches::OnFrom(Common::FrameTestSwitches::Value(Vis::kProjAlsoQuadsSwitch));
         if (fs.shouldRender && screens_live) {
@@ -1699,7 +1756,8 @@ void Runtime::FrameLoop() {
             Settings::frame_vr_depth_scale =
                 !core_caps.has_stereo_3d || !shown.top_pointable ? 1.0f
                 : draw.swapped
-                    ? Input::ScreenRig::DepthScale(place.second_free ? place.second_scale : 1.0f)
+                    ? Input::ScreenRig::DepthScale(place.second_free ? place.second_scale
+                                                               : draw.top_size.height)
                     : Input::ScreenRig::DepthScale(place.top_scale);
             // Layer Depth (the consoles without a stereo screen)
             float recentre = 0.0f;
@@ -1725,11 +1783,26 @@ void Runtime::FrameLoop() {
                 }
                 return pose;
             };
+            // Screen Gap: joined to it, the other screen moves with the recentred one.
+            const XrPosef& deep = draw.swapped ? draw.top_pose : shown.top_pose[0];
+            const XrPosef deep_at = recentred(deep);
+            const Input::Vec3f joined{(deep_at.position.x - deep.position.x) * place.join_share,
+                                      (deep_at.position.y - deep.position.y) * place.join_share,
+                                      (deep_at.position.z - deep.position.z) * place.join_share};
+            const auto joined_to = [&joined](XrPosef pose) {
+                pose.position.x += joined.x;
+                pose.position.y += joined.y;
+                pose.position.z += joined.z;
+                return pose;
+            };
+            if (ui) {
+                ui->NoteJoinedShift(joined);
+            }
             // Quad layers are drawn in the order they are submitted, with no depth test: the
             // farther screen goes first, so the nearer one is never drawn through.
             if (draw.swapped) {
                 // The bottom screen in the main slot, the top one in the nearer secondary slot.
-                add_screen(VideoCore::XrScreen::Bottom, local_space, draw.bottom_pose,
+                add_screen(VideoCore::XrScreen::Bottom, local_space, joined_to(draw.bottom_pose),
                            draw.bottom_size, XR_EYE_VISIBILITY_BOTH, draw.bottom_curve);
                 if (draw.top_visible) {
                     if (top_is_stereo) {
@@ -1748,8 +1821,9 @@ void Runtime::FrameLoop() {
                 const auto add_bottom = [&] {
                     if (shown.show_bottom && draw.bottom_visible) {
                         preview_take = shown.bottom_preview; // AzaharFrame kiuaim
-                        add_screen(VideoCore::XrScreen::Bottom, local_space, shown.bottom_pose,
-                                   shown.bottom_size, XR_EYE_VISIBILITY_BOTH,
+                        add_screen(VideoCore::XrScreen::Bottom, local_space,
+                                   joined_to(shown.bottom_pose), shown.bottom_size,
+                                   XR_EYE_VISIBILITY_BOTH,
                                    shown.bottom_preview ? 0.0f : draw.bottom_curve);
                         preview_take = false;
                     }

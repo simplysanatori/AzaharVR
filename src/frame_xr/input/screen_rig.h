@@ -90,12 +90,21 @@ const char* LayoutName(uint32_t layout);
 std::string LayoutToast(uint32_t layout);
 /// The other layout (two of them: the cycle is a switch).
 uint32_t NextLayout(uint32_t layout);
-/// Screen Gap (Settings::values.vr_screen_gap, per game): the linked second screen turned
-/// further from the main one about the viewer, by this many degrees at most; 0 is its own place.
+/// Screen Gap (Settings::values.vr_screen_gap): the linked second screen's distance from the main
+/// one in degrees, as a nominal number: kScreenGapDefaultDeg is the layout's own place (stacked
+/// 0.25 m under the main screen's edge, 0.5 m nearer and tilted back; side by side kSideGap to its
+/// right), more turns the second screen further away about the viewer by the difference, and less
+/// brings it into the main screen's own plane (or cylinder), where 0 joins their edges
+/// (PlaceLinked).
 inline constexpr uint32_t kMaxScreenGapDeg = 20;
+inline constexpr uint32_t kScreenGapDefaultDeg = 4;
+/// What SecondFromMain turns the second screen by at this setting (0 up to the default).
+float GapTurnDeg(float setting_deg);
+/// 1: the screens are joined, 0: the layout's own place (or further), between: part of the way.
+float JoinShare(float setting_deg);
 
 /// The second slot's pose for the main slot's pose, scale and width and the second screen's
-/// width (and their heights, as BottomOffset), `gap_deg` (Screen Gap) further away: down about
+/// width (and their heights, as BottomOffset), `gap_deg` (GapTurnDeg) further away: down about
 /// the viewer when stacked, to the right when side by side. It keeps its distance and its tilt.
 Posef SecondFromMain(const Posef& main, float scale, float main_width, float second_width,
                      uint32_t layout, float main_height = 2.0f * kTopHalfHeight,
@@ -103,6 +112,38 @@ Posef SecondFromMain(const Posef& main, float scale, float main_width, float sec
 /// The second screen's scale while it follows the main one (`equal`: ScreenMetrics::equal_screens).
 float LinkedScale(bool equal, uint32_t layout);
 
+/// Joined edges overlap by this much (metres), far less than a pixel, so rounding leaves no crack
+/// between the two layers.
+inline constexpr float kJoinOverlap = 0.00005f;
+/// The same with one of them drawn into the projection layer, whose edge is rounded to that
+/// layer's pixels: this much for each metre away (about 0.09 degrees, under the edge).
+inline constexpr float kJoinOverlapProjected = 0.0015f;
+
+/// The linked second screen: its pose, its size times the one at the layout's own place, and the
+/// radius it is bent with (0: flat).
+struct Linked {
+    Posef pose;
+    float size = 1.0f;
+    float curve_radius = 0.0f;
+};
+/// What PlaceLinked goes by. Widths and heights as the screens are drawn and stand (swapped
+/// screens each in the other's slot, a turned DS screen's width is its height).
+struct LinkedIn {
+    Posef main;
+    float main_width = 0.0f, main_height = 0.0f;
+    float main_curve_radius = 0.0f; ///< 0: flat
+    Posef apart;                    ///< SecondFromMain
+    float apart_width = 0.0f, apart_height = 0.0f;
+    float join_size = 1.0f; ///< the second screen's size when joined, times the apart one
+    float overlap = kJoinOverlap; ///< of the joined edges (metres)
+    uint32_t layout = kLayoutStacked;
+    float share = 0.0f; ///< JoinShare
+};
+/// At share 0 `apart` as it is. At 1 the second screen carries the main one on, in its plane or on
+/// its cylinder, straight below it or straight right of it, centred and edge to edge. Between, the
+/// edge of the second screen that is next to the main one goes straight from one place to the
+/// other while the screen turns, bends and grows, and it is kept off the main one as you see them.
+Linked PlaceLinked(const LinkedIn& in);
 /// The top screen turned about the viewer (the LOCAL origin) by `right_steps` and `up_steps`
 /// presses: its distance does not change and it faces the viewer. Nothing (no move) when that
 /// would take it past kMaxNudgeAngleDeg or nearer than kNearestTopZ.
@@ -140,7 +181,7 @@ std::string CurveToast(uint32_t deg);
 /// The radius that bends a screen `width` wide by `deg` degrees (arc length = width); 0 = flat.
 float CurveRadius(float width, uint32_t deg);
 /// Sets curve_radius for `deg`: the screen in the main slot bends (0 leaves it flat), the one in
-/// the second slot is always flat.
+/// the second slot is flat (unless it carries the main one on: Linked::curve_radius).
 void ApplyCurve(PanelQuad& main, PanelQuad& secondary, uint32_t deg);
 
 /// What a cylinder layer needs to show a screen of this size bent with this radius.

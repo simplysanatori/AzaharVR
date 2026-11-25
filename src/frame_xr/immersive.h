@@ -67,6 +67,7 @@ struct ScreenLayers {
     bool top_pointable = true;
     XrPosef bottom_pose{};
     XrExtent2Df bottom_size{};
+    float bottom_curve = 0.0f; ///< the radius it is bent with (ScreenPlacement::bottom_curve)
     bool show_bottom = true;
     /// The bottom screen is farther away than the top one: submit it first. Quad layers are
     /// drawn in submission order, with no depth test, so the nearer one has to come last.
@@ -157,6 +158,8 @@ void ToggleBottom();
 /// itself is not changed here). Immersive mode pauses while it is, as when the bottom screen
 /// shows, and resumes after. Cleared when no game is on view. XR thread.
 void SetBottomFocused(bool focused);
+/// Any thread.
+bool BottomFocused();
 
 /// A grip holds the immersive screen now (OnGameInput). The stick click taps do not swap or
 /// hide the screens then (a swap would cancel the move half way). XR thread.

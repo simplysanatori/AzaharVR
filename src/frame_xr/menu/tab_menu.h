@@ -502,7 +502,7 @@ struct MenuModel {
     bool hide_bottom_screen = false;
     int screen_shape = 0;  ///< Settings::values.vr_top_aspect
     int screen_layout = 0; ///< 0 Stacked, 1 Side by Side (AzaharFrame layout)
-    int screen_gap = 0;    ///< degrees (vr_screen_gap)
+    int screen_gap = 4;    ///< degrees (vr_screen_gap)
     bool second_free = false; ///< the Secondary Screen has a place of its own (Detach Screens)
     int move_screens = 0;  ///< 0 Off, 1 Secondary, 2 Both (AzaharFrame menu)
     int screen_curve = 0;  ///< index of Off, 15, 30, 45, 60, 75, 90 degrees
