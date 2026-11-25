@@ -174,7 +174,7 @@ std::vector<Quad> PowerLayers::Update(Runtime& rt, const In& in) {
                                      static_cast<float>(KP::kWide),
                                      static_cast<float>(KP::kHigh)));
         }
-        powers_width_ = p.width;
+        powers_width_ = settings.at == P::At::Hand ? p.width : 0.0f; // not the HUD's
         put(out.powers, p);
     } else {
         powers_width_ = 0.0f;
@@ -199,7 +199,7 @@ std::vector<Quad> PowerLayers::Update(Runtime& rt, const In& in) {
                                      kDot * kWide / kAspect));
             shift = settings.at == P::At::Right ? 1.0f - part : 0.0f;
         }
-        dots_width_ = p.width;
+        dots_width_ = settings.at == P::At::Hand ? p.width : 0.0f; // not the HUD's
         p.pose.position =
             p.pose.position + Input::Rotate(p.pose.orientation, {shift * p.width, 0.0f, 0.0f});
         put(out.dots, p);

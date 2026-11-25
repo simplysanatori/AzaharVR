@@ -196,6 +196,26 @@ constexpr float BarFade(const Sprites& sprites) {
     }
     return most > 0.05f ? std::min(most, 1.0f) : 1.0f;
 }
+/// `alpha` (a vertex colour's or the icons' constant) of a part without the bar's fade.
+constexpr float Unfaded(Part part, float alpha, float fade) {
+    return part == Part::Bubble || part == Part::Name ? alpha : std::min(alpha / fade, 1.0f);
+}
+
+/// `s` half a texel (the arrows': a pixel of the game) smaller on each side: filtered up to its
+/// edge, it would take in what is beside it in the sheet.
+constexpr Sprite Inset(Sprite s) {
+    const std::array<float, 4> x = s.x, y = s.y, u = s.u, v = s.v;
+    // Top left, top right, bottom left, bottom right.
+    const float across = 0.5f / std::max(x[1] - x[0], 1.0f), down = 0.5f / std::max(y[2] - y[0], 1.0f);
+    for (std::size_t i = 0; i < 4; ++i) {
+        const std::size_t side = i ^ 1, other = i ^ 2;
+        s.x[i] += (x[side] - x[i]) * across;
+        s.u[i] += (u[side] - u[i]) * across;
+        s.y[i] += (y[other] - y[i]) * down;
+        s.v[i] += (v[other] - v[i]) * down;
+    }
+    return s;
+}
 
 /// The strip's opacity for the game's next pictures (the XR thread; 0: not drawn).
 inline std::atomic<float> g_alpha{0.0f};

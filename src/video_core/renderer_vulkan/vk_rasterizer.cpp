@@ -668,7 +668,7 @@ void RasterizerVulkan::NoteKiuPowersDraw() {
             powers_textures.push_back(regs.texturing.GetTextures()[0]);
         }
         s.texture = static_cast<u32>(powers_textures.size() - 1);
-        powers_sprites.push_back(s);
+        powers_sprites.push_back(part == KP::Part::Arrow ? KP::Inset(s) : s);
     }
 }
 
