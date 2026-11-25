@@ -34,10 +34,12 @@ TEST_CASE("Update prompt: text, buttons and picture", "[update]") {
                                   QStringLiteral("Azahar VR"));
     CHECK(box->windowTitle() == QStringLiteral("Update Available"));
     CHECK(box->text() == QStringLiteral("Update v1.4.0 for Azahar VR is available.\nYou have "
-                                        "version 1.3.0.\nWould you like to download it?"));
+                                        "version 1.3.0."));
     CHECK(box->icon() == QMessageBox::Information);
     REQUIRE(box->button(QMessageBox::Yes) != nullptr);
     REQUIRE(box->button(QMessageBox::Ignore) != nullptr);
+    CHECK(box->button(QMessageBox::Yes)->text() == QStringLiteral("Open GitHub"));
+    CHECK(box->button(QMessageBox::Ignore)->text() == QStringLiteral("Not Now"));
     CHECK(box->buttons().size() == 2);
 
     box->show();

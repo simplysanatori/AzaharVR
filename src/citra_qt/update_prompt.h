@@ -15,8 +15,8 @@ class QWidget;
 
 namespace UpdatePrompt {
 
-/// Upstream's box (title, Information icon, Yes and Ignore): "Update <latest> for <product> is
-/// available. You have version <current>. Would you like to download it?". Not shown yet.
+/// Upstream's box (title, Information icon) with Open GitHub (Yes) and Not Now (Ignore): "Update
+/// <latest> for <product> is available. You have version <current>.". Not shown yet.
 std::unique_ptr<QMessageBox> Make(QWidget* parent, const QString& latest, const QString& current,
                                   const QString& product);
 
