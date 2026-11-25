@@ -1190,4 +1190,4 @@ in both builds by its code; no code or layout of it is used.
   the aiming hand's beam touch nothing while the Primary Screen is a screen. The stick and the buttons go to the game as ever.
   V, all by the beam and the trigger, each pixel asked and touched, ZL, ZR and L 0: the title (0), the file (2), the main menu
   (4), the hub (3) and back; the Cauldron (5): a drag along the intensity bar (155,22 to 93,22: 4.0 to 2.2) and Move Out, the
-  battle, Retreat, the hub again. A grip on the panel moved nothing. Not run: the rooms past the hub, a swap, a re-centre.
+  battle, Retreat, the hub again. A grip on the panel moved nothing. Not run: the rooms past the hub, a swap, a re-centre, a wrist turned up (the mock's wrist screen did not come up), the stick and buttons.
