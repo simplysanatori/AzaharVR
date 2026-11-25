@@ -337,7 +337,8 @@ if (ENABLE_FRAME_XR) # AzaharFrame
     target_sources(citra_qt PRIVATE frame_tools.cpp frame_tools.h)
     # AzaharFrame emerald: the Homebrew menu and the Mods tab's Homebrew segment, the Qt side.
     target_sources(citra_qt PRIVATE frame_homebrew.cpp frame_homebrew.h frame_emerald.cpp
-                                    frame_emerald.h)
+                                    frame_emerald.h frame_handheld_homebrew.cpp
+                                    frame_handheld_homebrew.h)
     # AzaharFrame ctgp7: the Mods tab's CTGP-7 segment, the Qt side.
     target_sources(citra_qt PRIVATE frame_ctgp7.cpp frame_ctgp7.h)
 else() # AzaharVR: builds with ENABLE_FRAME_XR off: the Qt-only and standalone helpers that shared

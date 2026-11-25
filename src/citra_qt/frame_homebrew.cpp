@@ -6,6 +6,8 @@
 
 #include "citra_qt/frame_homebrew.h"
 
+#include <filesystem>
+#include <fstream>
 #include <QAction>
 #include <QDateTime>
 #include <QMenu>
@@ -14,6 +16,8 @@
 #include <QPointer>
 #include <QTimer>
 #include "citra_qt/frame_emerald.h"
+#include "citra_qt/frame_handheld_homebrew.h" // AzaharVR homebrew
+#include "common/file_util.h"
 #include "common/logging/log.h"
 #include "core/core.h"
 #include "frame_xr/frame_xr.h"
@@ -41,14 +45,14 @@ FrameHomebrew::FrameHomebrew(QWidget* window_, QMenuBar* bar, QMenu* before,
     menu = new QMenu(tr("Homebrew"), bar);
     bar->insertMenu(before->menuAction(), menu);
 
+    std::vector<HomebrewPackager*> found;
     for (const Homebrew::PackageInfo& info : Homebrew::Packages()) {
-        HomebrewPackager* p = nullptr;
         if (info.id == "emerald3ds") {
-            p = new FrameEmerald(info, this);
+            found.push_back(new FrameEmerald(info, this));
         }
-        if (p == nullptr) {
-            continue;
-        }
+    }
+    LoadHandheldList(found); // AzaharVR homebrew: the DS / GBA / Game Boy list, when there is one
+    for (HomebrewPackager* p : found) {
         packagers.push_back(p);
         QAction* action = menu->addAction(QString{});
         actions.push_back(action);
@@ -125,7 +129,8 @@ void FrameHomebrew::Refresh() {
         item.checked = Homebrew::CheckedText(s.checked, now);
         item.repair = s.repair; // AzaharFrame emhb
         item.can_uninstall = s.can_uninstall;
-        can_check |= s.installed && !s.busy && !s.checking;
+        item.can_check = packagers[i]->SupportsCheck(); // AzaharVR homebrew
+        can_check |= s.installed && !s.busy && !s.checking && item.can_check;
         // AzaharFrame emhb: Uninstall's dialog, while its package can still be uninstalled
         if (vr_dialog.package == Id(packagers[i]) && (s.busy || !s.can_uninstall)) {
             vr_dialog = {}; // nothing left to uninstall, or it got busy meanwhile
@@ -252,7 +257,8 @@ void FrameHomebrew::CheckNow(const QString& package, bool vr) { // AzaharFrame u
         const QString id =
             QString::fromUtf8(p->Info().id.data(), static_cast<qsizetype>(p->Info().id.size()));
         const HomebrewPackager::Status s = p->GetStatus();
-        if ((!package.isEmpty() && id != package) || !s.installed || s.busy) {
+        if ((!package.isEmpty() && id != package) || !s.installed || s.busy ||
+            !p->SupportsCheck()) {
             continue;
         }
         const QString title = QString::fromUtf8(p->Info().title.data(),
@@ -302,5 +308,32 @@ void FrameHomebrew::ApplyBootSettings(const QString& path) {
             g_booted = p;
             return;
         }
+    }
+}
+
+/// AzaharVR homebrew: the DS / GBA / Game Boy list (core/homebrew/handheld_catalogue.h), a file in
+/// the user folder: <user folder>/homebrew/handheld-catalogue.json. Nothing is read from the network,
+/// and no file means no rows, as before.
+void FrameHomebrew::LoadHandheldList(std::vector<HomebrewPackager*>& out) {
+    namespace H = Homebrew::Handheld;
+    const std::filesystem::path base =
+        std::filesystem::path(FileUtil::GetUserPath(FileUtil::UserPath::UserDir)) / "homebrew";
+    std::ifstream in(base / "handheld-catalogue.json", std::ios::binary);
+    if (!in) {
+        return;
+    }
+    std::string text(H::kMaxCatalogueBytes + 1, '\0');
+    in.read(text.data(), static_cast<std::streamsize>(text.size()));
+    text.resize(static_cast<std::size_t>(in.gcount()));
+    const H::Catalogue list = H::Parse(text);
+    if (!list.error.empty()) {
+        LOG_WARNING(Frontend, "homebrew: the DS / GBA list was not used: {}", list.error);
+        return;
+    }
+    for (const std::string& why : list.rejected) {
+        LOG_WARNING(Frontend, "homebrew: an entry of the DS / GBA list was left out: {}", why);
+    }
+    for (const H::Entry& entry : list.entries) {
+        out.push_back(new FrameHandheldHomebrew(entry, (base / "handheld").string(), this));
     }
 }

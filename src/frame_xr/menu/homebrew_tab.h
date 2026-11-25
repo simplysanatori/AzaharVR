@@ -42,6 +42,7 @@ struct HomebrewItem {
     // AzaharFrame emhb
     bool repair = false;        ///< some of it is there but it cannot be played: Repair (Install)
     bool can_uninstall = false; ///< anything of it is there: Uninstall
+    bool can_check = true;      ///< AzaharVR homebrew: Check for Updates means something for it
     bool operator==(const HomebrewItem&) const = default;
 };
 

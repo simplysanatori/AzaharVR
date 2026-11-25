@@ -44,6 +44,23 @@ HomebrewItem Item() {
 
 } // namespace
 
+// AzaharVR homebrew: a package pinned by its checksum (the DS / GBA list) has no Check for Updates;
+// every 3DS row keeps it (can_check is on by default).
+TEST_CASE("Homebrew tab: no Check for Updates when it means nothing", "[frame_xr][homebrew]") {
+    HomebrewItem it = Item();
+    CHECK(it.can_check);
+    it.installed = true;
+    it.can_uninstall = true;
+    CHECK(HomebrewButtons(it) == std::vector<Id>{Id::HomebrewPlay, Id::HomebrewCheck,
+                                                 Id::HomebrewReinstall, Id::HomebrewUninstall});
+    it.can_check = false;
+    CHECK(HomebrewButtons(it) ==
+          std::vector<Id>{Id::HomebrewPlay, Id::HomebrewReinstall, Id::HomebrewUninstall});
+    it.update = true;
+    CHECK(HomebrewButtons(it) ==
+          std::vector<Id>{Id::HomebrewPlay, Id::HomebrewUpdate, Id::HomebrewUninstall});
+}
+
 TEST_CASE("Homebrew tab: Uninstall whenever anything is there, Repair when broken", "[frame_xr][emhb]") {
     HomebrewItem it = Item();
     CHECK(HomebrewButtons(it) == std::vector<Id>{Id::HomebrewInstall});

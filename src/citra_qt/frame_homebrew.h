@@ -68,6 +68,11 @@ public:
     /// Settings this package's game needs, applied as it boots (`path`: the booted file). True when
     /// the file is this package's.
     virtual bool ApplyBootSettings(const QString& path) = 0;
+    /// AzaharVR homebrew: whether Check for Updates means anything for it (a package pinned by its
+    /// checksum, the DS / GBA list's, has no newer release to find).
+    virtual bool SupportsCheck() const {
+        return true;
+    }
     /// An install started at launch with no dialogs (a developer setting), or false.
     virtual bool Automatic() const {
         return false;
@@ -120,6 +125,7 @@ public:
 
 private:
     void Refresh();
+    void LoadHandheldList(std::vector<HomebrewPackager*>& out); ///< AzaharVR homebrew
     HomebrewPackager* Find(const QString& package) const; // AzaharFrame emhb
     /// AzaharFrame emhb: the package's game is the one running (it cannot be uninstalled then).
     bool Running(const HomebrewPackager* p) const;
