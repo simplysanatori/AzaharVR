@@ -291,7 +291,7 @@ enum class MenuCommand {
                   ///< button; `text` "checked" when its checkbox is ticked
     Ctgp7Uninstall, ///< asks "Uninstall CTGP-7?" (answered with Ctgp7Dialog)
     // Non-3DS cores (GBA / GB / DS / DSi)
-    DsMicBlow,   ///< toggle/trigger DS microphone blow noise (`value`: 1 on, 0 off)
+    DsMicBlow,   ///< one blow into the DS microphone
     DsLidToggle, ///< toggle DS lid closed (`value`: 1 closed, 0 open)
     ImportSave,  ///< open file picker to import a .sav / .dsv save file
 };
@@ -678,7 +678,6 @@ void SetRumble(float strength);
 /// What the VR menu holds down on a running DS: commands, not settings (a game starts without).
 struct DsHeld {
     bool lid_closed = false;
-    bool mic_blow = false;
 };
 void SetDsHeld(const DsHeld& held);
 DsHeld GetDsHeld();

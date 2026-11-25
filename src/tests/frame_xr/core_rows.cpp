@@ -106,8 +106,8 @@ TEST_CASE("Core rows: a 3DS game has every row but the other consoles'", "[frame
         CHECK(RowApplies(id, CoreCaps::ForN3DS()) == !kOthersOnly.contains(id));
     }
     const MenuModel m = Game(CoreCaps::ForN3DS());
-    for (int i = 0; i < static_cast<int>(SettingsSection::Count); i++) {
-        CHECK(SectionShown(static_cast<SettingsSection>(i), m));
+    for (const SettingsSection section : kSectionOrder) {
+        CHECK(SectionShown(section, m) == (section != SettingsSection::Console));
     }
     for (int i = 0; i < static_cast<int>(Tab::Count); i++) {
         CHECK(TabApplies(static_cast<Tab>(i), m.core));
@@ -131,10 +131,12 @@ TEST_CASE("Core rows: the table for each other console", "[frame_xr][tabmenu]") 
         touch.screens.has_bottom = true;
         touch.has_touch = true;
         CHECK(Table(touch) == Expected(With(kTwoScreens, kTouch)));
-        const auto general = Drawn(Game(touch), SettingsView(SettingsSection::General));
-        CHECK(!general.contains(Id::DsTouchEnabled));
+        const auto console = Drawn(Game(touch), SettingsView(SettingsSection::Console));
+        CHECK(console.contains(Id::ImportSave));
+        CHECK(!console.contains(Id::DsTouchEnabled));
         touch.has_save_import = false;
         CHECK(!RowApplies(Id::CoreHeader, touch));
+        CHECK(!SectionShown(SettingsSection::Console, Game(touch)));
     }
     // Black Frame Insertion brings its rows and Graphics back.
     map.has_bfi = true;
@@ -146,22 +148,34 @@ TEST_CASE("Core rows: the menu draws what the table says", "[frame_xr][tabmenu]"
     for (const CoreCaps& core : OtherConsoles()) {
         INFO("console " << static_cast<int>(core.kind));
         const MenuModel m = Game(core);
-        for (const Id id : Drawn(m, SettingsView(SettingsSection::General))) {
-            if (PerGameSetting(id) || kOthersOnly.contains(id)) {
-                INFO("id " << static_cast<int>(id));
-                CHECK(RowApplies(id, core));
+        for (const SettingsSection section : {SettingsSection::Console, SettingsSection::General}) {
+            for (const Id id : Drawn(m, SettingsView(section))) {
+                if (PerGameSetting(id) || kOthersOnly.contains(id)) {
+                    INFO("id " << static_cast<int>(id));
+                    CHECK(RowApplies(id, core));
+                    CHECK(SectionOf(id) == section);
+                }
             }
         }
         const auto general = Drawn(m, SettingsView(SettingsSection::General));
         CHECK(general.contains(Id::FaceButtons));
-        CHECK(general.contains(Id::ImportSave));
         CHECK(general.contains(Id::Autosave) == kAltAutosave);
-        CHECK(general.contains(Id::DsConsoleMode) == core.has_dsi_mode);
-        // General alone: no section to pick
+        const auto console = Drawn(m, SettingsView(SettingsSection::Console));
+        CHECK(console.contains(Id::ImportSave));
+        CHECK(console.contains(Id::DsMicBlow) == core.has_mic_blow);
+        CHECK(console.contains(Id::DsConsoleMode) == core.has_dsi_mode);
+        CHECK(SectionShown(SettingsSection::Console, m));
         CHECK(SectionShown(SettingsSection::General, m));
         CHECK(!SectionShown(SettingsSection::Graphics, m));
         CHECK(!SectionShown(SettingsSection::Immersive, m));
-        CHECK(!general.contains(Id::SettingsSection));
+        CHECK(general.contains(Id::SettingsSection));
+        // It opens on Console when the console changed to one that has it
+        for (const SettingsSection before : kSectionOrder) {
+            CHECK(OpeningSection(before, m, true) == SettingsSection::Console);
+            const bool has = before == SettingsSection::Console;
+            CHECK(OpeningSection(before, m, false) ==
+                  (has ? SettingsSection::Console : SettingsSection::General));
+        }
         CHECK(!TabApplies(Tab::Homebrew, core));
         CHECK(TabApplies(Tab::Mods, core) == core.has_alt_cheats);
         MenuView position;
@@ -180,6 +194,8 @@ TEST_CASE("Core rows: the menu draws what the table says", "[frame_xr][tabmenu]"
     }
     // The 3DS keeps its sections and the card.
     const MenuModel ds3 = Game(CoreCaps::ForN3DS());
+    CHECK(OpeningSection(SettingsSection::Console, ds3, true) == SettingsSection::General);
+    CHECK(OpeningSection(SettingsSection::Graphics, ds3, true) == SettingsSection::Graphics);
     CHECK(Drawn(ds3, SettingsView(SettingsSection::General)).contains(Id::SettingsSection));
     CHECK(Drawn(ds3, SettingsView(SettingsSection::Graphics)).contains(Id::InternalResolution));
     MenuView load;
@@ -189,7 +205,7 @@ TEST_CASE("Core rows: the menu draws what the table says", "[frame_xr][tabmenu]"
 
 TEST_CASE("Core rows: a section's target keeps its own value", "[frame_xr][tabmenu]") {
     CoreCaps core = CoreCaps::ForNDS();
-    core.has_bfi = true; // General and Graphics
+    core.has_bfi = true; // Console, General and Graphics
     const MenuModel m = Game(core);
     Kit kit{1.0f};
     frame_xr::ui::Canvas canvas;
@@ -203,7 +219,8 @@ TEST_CASE("Core rows: a section's target keeps its own value", "[frame_xr][tabme
             sections.push_back(h.t.index);
         }
     }
-    CHECK(sections == std::vector<int>{static_cast<int>(SettingsSection::General),
+    CHECK(sections == std::vector<int>{static_cast<int>(SettingsSection::Console), // first
+                                       static_cast<int>(SettingsSection::General),
                                        static_cast<int>(SettingsSection::Graphics)});
 }
 
@@ -284,7 +301,7 @@ TEST_CASE("Core rows: Second Screen and Allow Game Editing", "[frame_xr][tabmenu
         CHECK(has(core, Id::AllowGameEditing));
         CHECK(!has(core, Id::SecondScreen));
     }
-    // Only the Console group's rows follow; a game with neither has just what it had
+    // Only the Console section's rows follow; a game with neither has just what it had
     CoreCaps gb = CoreCaps::ForGB();
     CHECK(Table(gb) == Expected({Id::ImportSave}));
     gb.second_screen_choices = kPoke | kOff;
@@ -296,16 +313,16 @@ TEST_CASE("Core rows: Second Screen and Allow Game Editing", "[frame_xr][tabmenu
     n3ds.can_edit_game = true;
     CHECK(!has(n3ds, Id::SecondScreen));
     CHECK(!has(n3ds, Id::AllowGameEditing));
-    // Drawn in the Console group, on the general section
+    // Drawn in the Console section
     CoreCaps gba = CoreCaps::ForGBA();
     gba.second_screen_choices = kPoke | kGbaDs | kOff;
     gba.can_edit_game = true;
-    const auto drawn = Drawn(Game(gba), SettingsView(SettingsSection::General));
+    const auto drawn = Drawn(Game(gba), SettingsView(SettingsSection::Console));
     CHECK(drawn.contains(Id::SecondScreen));
     CHECK(drawn.contains(Id::AllowGameEditing));
     gba.second_screen_choices = kOff;
     gba.can_edit_game = false;
-    const auto none = Drawn(Game(gba), SettingsView(SettingsSection::General));
+    const auto none = Drawn(Game(gba), SettingsView(SettingsSection::Console));
     CHECK(!none.contains(Id::SecondScreen));
     CHECK(!none.contains(Id::AllowGameEditing));
     // The options: the game's own, in order; the row's index counts them

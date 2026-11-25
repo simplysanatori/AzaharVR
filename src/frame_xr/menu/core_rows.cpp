@@ -25,7 +25,7 @@ enum class Need {
     TextureFilter,
     Autosave,
     // Rows a 3DS game never has
-    ConsoleGroup, ///< any of the Console group's rows
+    ConsoleGroup, ///< any of the Console section's rows
     SolarSensor,
     ConsoleMode,
     DsTouch,
@@ -50,7 +50,7 @@ constexpr Rule kRules[] = {
     {Id::SwapScreens, Need::Bottom},
     {Id::ScreenCurve, Need::Any},
     {Id::DsScreenRotation, Need::Rotation},
-    // Settings, General
+    // Settings, Console
     {Id::CoreHeader, Need::ConsoleGroup},
     {Id::GbaSolarLevel, Need::SolarSensor},
     {Id::DsConsoleMode, Need::ConsoleMode},
@@ -60,6 +60,7 @@ constexpr Rule kRules[] = {
     {Id::DsMicBlow, Need::MicBlow},
     {Id::DsLidToggle, Need::Lid},
     {Id::ImportSave, Need::SaveImport},
+    // Settings, General
     {Id::Background, Need::Any},
     {Id::WindowScale, Need::Any},
     {Id::FaceButtons, Need::Any},

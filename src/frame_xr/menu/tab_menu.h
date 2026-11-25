@@ -549,7 +549,6 @@ struct MenuModel {
     bool ds_touch_enabled = true; ///< DS touch input switch
     int ds_screen_rotation = 0;   ///< 0 = 0°, 1 = 90°, 2 = 270°
     bool ds_lid_closed = false;   ///< DS lid closed toggle
-    bool ds_mic_active = false;   ///< DS microphone blow toggle
     bool operator==(const MenuModel&) const = default;
 };
 
@@ -561,7 +560,12 @@ ModsDialog AngelsIntroDialog(const MenuModel& model);
 enum class Page { Tabs, SaveSlots, LoadSlots };
 
 /// AzaharFrame autosave: the Settings tab's sections (owner decision, round 2).
-enum class SettingsSection : int { General, Graphics, Immersive, Count };
+/// AzaharVR: Console (DS, GBA and Game Boy games) drawn first.
+enum class SettingsSection : int { General, Graphics, Immersive, Console, Count };
+/// The sections as they are drawn.
+constexpr std::array<SettingsSection, static_cast<int>(SettingsSection::Count)> kSectionOrder{
+    SettingsSection::Console, SettingsSection::General, SettingsSection::Graphics,
+    SettingsSection::Immersive};
 /// The scope the menu opens on: Per-Game (1) whenever the game can have settings of its own.
 constexpr int OpeningScope(bool per_game_ok) {
     return per_game_ok ? 1 : 0;
@@ -570,6 +574,9 @@ constexpr int OpeningScope(bool per_game_ok) {
 SettingsSection SectionOf(Id id);
 /// Whether the section has any row for the running game's console.
 bool SectionShown(SettingsSection section, const MenuModel& model);
+/// The section Settings shows: `section`, or Console when the console changed (`new_console`) to
+/// one that has it, or General when the console does not have `section`.
+SettingsSection OpeningSection(SettingsSection section, const MenuModel& model, bool new_console);
 /// How many of the section's rows come before this one, for the running game's console.
 int RowsBefore(Id id, SettingsSection section, const MenuModel& model);
 /// Per-game settings (Azahar's Properties have most of them too): a change in Per-Game is the

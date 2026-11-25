@@ -1333,12 +1333,14 @@ void MenuPanel::BuildModel(const Host& host) {
         m.gba_allow_editing = v.gba_allow_editing.GetValue();
         const DsHeld held = GetDsHeld();
         m.ds_lid_closed = held.lid_closed;
-        m.ds_mic_active = held.mic_blow;
         if (!Menu::TabApplies(view.tab, m.core)) {
             view.tab = Menu::Tab::Main;
         }
-        if (!Menu::SectionShown(view.section, m)) {
-            view.section = Menu::SettingsSection::General;
+        const auto section =
+            Menu::OpeningSection(view.section, m, m.core.kind != model.core.kind);
+        if (section != view.section) {
+            view.section = section;
+            view.scroll[static_cast<std::size_t>(Menu::Tab::Settings)] = 0.0f;
         }
     }
     model = std::move(m);
@@ -2752,13 +2754,9 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::AllowGameEditing:
         SetSetting(Id::AllowGameEditing, model.gba_allow_editing ? 0 : 1, host);
         break;
-    case Id::DsMicBlow: {
-        DsHeld held = GetDsHeld();
-        held.mic_blow = !held.mic_blow;
-        SetDsHeld(held);
-        ask(MenuCommand::DsMicBlow, held.mic_blow ? 1 : 0);
+    case Id::DsMicBlow:
+        ask(MenuCommand::DsMicBlow);
         break;
-    }
     case Id::DsLidToggle: {
         DsHeld held = GetDsHeld();
         held.lid_closed = !held.lid_closed;

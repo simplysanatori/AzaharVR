@@ -218,6 +218,10 @@ public:
     /// The Secondary Screen's next page, from the next frame. BtnTurnPage does it too.
     void TurnPage();
     void SetMicBlow(bool on);
+    /// One blow of kMicBlowFrames of the game's frames, so a paused game gets it when it goes on.
+    void BlowMic();
+    int MicBlowFramesLeft() const;
+    static constexpr int kMicBlowFrames = 120;
     void SetLidClosed(bool closed);
     void SetTouchEnabled(bool on);
     void SetScreenRotation(int deg);

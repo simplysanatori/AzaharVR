@@ -153,6 +153,7 @@ struct AltCoreHost::Impl {
 
     std::thread emu_thread;
     float last_rumble = 0.0f;
+    int mic_blow_frames = 0; ///< BlowMic's frames to go
 
     std::mutex request_mutex;
     std::deque<StateRequest> requests;    ///< guarded by request_mutex
@@ -626,6 +627,9 @@ struct AltCoreHost::Impl {
 
         core->SetInput(in);
         core->RunFrame(last_frame);
+        if (mic_blow_frames > 0 && --mic_blow_frames == 0) {
+            core->SetMicBlow(false);
+        }
         holding.store(last_frame.held, std::memory_order_relaxed);
 
         if (last_frame.metrics_changed) {
@@ -849,6 +853,7 @@ bool AltCoreHost::Boot(const std::string& rom_path, const std::string& data_dir,
     impl->page_before = false;
     impl->hidden_frames = 0;
     impl->last_rumble = 0.0f;
+    impl->mic_blow_frames = 0;
     impl->screens = {};
     impl->paused.store(false, std::memory_order_relaxed);
     impl->redraw.store(false, std::memory_order_relaxed);
@@ -1225,9 +1230,23 @@ void AltCoreHost::TurnPage() {
 
 void AltCoreHost::SetMicBlow(bool on) {
     std::lock_guard lock(impl->core_mutex);
+    impl->mic_blow_frames = 0;
     if (impl->core) {
         impl->core->SetMicBlow(on);
     }
+}
+
+void AltCoreHost::BlowMic() {
+    std::lock_guard lock(impl->core_mutex);
+    if (impl->core) {
+        impl->core->SetMicBlow(true);
+        impl->mic_blow_frames = kMicBlowFrames;
+    }
+}
+
+int AltCoreHost::MicBlowFramesLeft() const {
+    std::lock_guard lock(impl->core_mutex);
+    return impl->mic_blow_frames;
 }
 
 void AltCoreHost::SetLidClosed(bool closed) {

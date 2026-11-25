@@ -265,6 +265,8 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
     if (tab == Tab::Position) {
         rows.push_back(row(Id::HideBottomScreen, RowKind::Switch, 0, m.hide_bottom_screen));
         rows.push_back(row(Id::ScreenLayout, RowKind::Segmented, m.screen_layout));
+        rows.push_back(row(Id::DsScreenRotation, RowKind::Segmented,
+                           std::clamp(m.ds_screen_rotation, 0, 2)));
         rows.push_back(row(Id::MoveScreens, RowKind::Segmented, m.move_screens)); // AzaharFrame menu
         rows.push_back(row(Id::ScreenShape, RowKind::MenuButton, m.screen_shape));
         rows.push_back(row(Id::ScreenCurve, RowKind::MenuButton, m.screen_curve));
@@ -272,8 +274,6 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
         offset.value = m.immersive_offset;
         offset.on = m.immersive_offset_set;
         rows.push_back(offset);
-        rows.push_back(row(Id::DsScreenRotation, RowKind::Segmented,
-                           std::clamp(m.ds_screen_rotation, 0, 2)));
     } else if (tab == Tab::Settings) {
         // Render Margin and on: the Full (6DoF) modes only.
         const auto full = [&](Row r) {
@@ -282,11 +282,8 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             }
             return r;
         };
-        // AzaharFrame autosave: in three sections (owner decision, round 2). General: the
-        // settings that are the same in every game, and the list's end.
-        if (section == SettingsSection::General) {
-            // AzaharVR: the Console group (DS, GBA and Game Boy games)
-            rows.push_back(row(Id::CoreHeader, RowKind::Header));
+        // AzaharVR: Console (DS, GBA and Game Boy games): what is used while playing first.
+        if (section == SettingsSection::Console) {
             Row solar = row(Id::GbaSolarLevel, RowKind::Slider);
             const SliderRange sr = SliderFor(Id::GbaSolarLevel);
             const float sv = std::clamp(static_cast<float>(m.gba_solar_level), sr.min, sr.max);
@@ -294,15 +291,20 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             solar.stops = 10;
             solar.value = SliderText(Id::GbaSolarLevel, sv);
             rows.push_back(solar);
-            rows.push_back(row(Id::DsConsoleMode, RowKind::Segmented,
-                               std::clamp(m.ds_console_mode, 0, 2)));
+            rows.push_back(row(Id::DsMicBlow, RowKind::Button));
+            rows.push_back(row(Id::DsLidToggle, RowKind::Switch, 0, m.ds_lid_closed));
             rows.push_back(row(Id::SecondScreen, RowKind::Segmented,
                                SecondScreenIndex(m.core, m.gba_second_screen)));
             rows.push_back(row(Id::AllowGameEditing, RowKind::Switch, 0, m.gba_allow_editing));
             rows.push_back(row(Id::DsTouchEnabled, RowKind::Switch, 0, m.ds_touch_enabled));
-            rows.push_back(row(Id::DsMicBlow, RowKind::Switch, 0, m.ds_mic_active));
-            rows.push_back(row(Id::DsLidToggle, RowKind::Switch, 0, m.ds_lid_closed));
+            rows.push_back(row(Id::DsConsoleMode, RowKind::Segmented,
+                               std::clamp(m.ds_console_mode, 0, 2)));
             rows.push_back(row(Id::ImportSave, RowKind::Button));
+            return rows;
+        }
+        // AzaharFrame autosave: in three sections (owner decision, round 2). General: the
+        // settings that are the same in every game, and the list's end.
+        if (section == SettingsSection::General) {
             rows.push_back(row(Id::Background, RowKind::Segmented, m.background));
             rows.push_back(row(Id::WindowScale, RowKind::Segmented, m.window_scale));
             rows.push_back(row(Id::FaceButtons, RowKind::Segmented, m.face_buttons));
@@ -490,7 +492,15 @@ std::vector<Row> RowsFor(Tab tab, const MenuModel& m,
 } // namespace
 
 bool SectionShown(SettingsSection section, const MenuModel& model) {
-    return Is3ds(model.core) || !RowsFor(Tab::Settings, model, section).empty();
+    return (Is3ds(model.core) && section != SettingsSection::Console) ||
+           !RowsFor(Tab::Settings, model, section).empty();
+}
+
+SettingsSection OpeningSection(SettingsSection section, const MenuModel& model, bool new_console) {
+    if (new_console && SectionShown(SettingsSection::Console, model)) {
+        return SettingsSection::Console;
+    }
+    return SectionShown(section, model) ? section : SettingsSection::General;
 }
 
 int RowsBefore(Id id, SettingsSection section, const MenuModel& model) {
@@ -537,6 +547,16 @@ SettingsSection SectionOf(Id id) {
     case Id::KiuPitOpacity: // AzaharFrame kiu133
     case Id::KiuSnapTurn:
         return SettingsSection::Immersive;
+    case Id::CoreHeader: // AzaharVR
+    case Id::GbaSolarLevel:
+    case Id::DsMicBlow:
+    case Id::DsLidToggle:
+    case Id::SecondScreen:
+    case Id::AllowGameEditing:
+    case Id::DsTouchEnabled:
+    case Id::DsConsoleMode:
+    case Id::ImportSave:
+        return SettingsSection::Console;
     default:
         return SettingsSection::General;
     }
@@ -891,7 +911,8 @@ const std::vector<std::string>& OptionsFor(Id id) {
     static const std::vector<std::string> kPage{"In Game", "Azahar's Window"};
     static const std::vector<std::string> kModsSegments{"Cheats", "Mods", "Textures"}; // cheatstab
     static const std::vector<std::string> kScope{"Global", "Per-Game"};
-    static const std::vector<std::string> kSections{"General", "Graphics", "Immersive"}; // autosave
+    static const std::vector<std::string> kSections{"General", "Graphics", "Immersive", // autosave
+                                                    LabelFor(Id::CoreHeader)};
     static const std::vector<std::string> kBackground{"Black", "Passthrough"};
     // AzaharFrame ctrlfront: vr_controllers_in_front's values in order, worded as Detach
     // Screens (kMove) with Primary added
@@ -3111,13 +3132,14 @@ void TabMenu::DrawRows(Kit& kit, const MenuModel& model, const MenuView& view, c
                 AddHit(b, {Id::SwapScreens}, pane);
             }
         } else {
-            // AzaharFrame autosave: the section (General, Graphics, Immersive). AzaharVR: those
-            // with rows for the console, and none to pick from when that is General alone; a
-            // target's index is the section's own value.
+            // AzaharFrame autosave: the section (General, Graphics, Immersive). AzaharVR: Console
+            // before them; those with rows for the console, and none to pick from when that is
+            // General alone; a target's index is the section's own value.
             std::vector<std::string> sections;
             std::vector<int> values;
-            for (int i = 0; i < static_cast<int>(SettingsSection::Count); i++) {
-                if (SectionShown(static_cast<SettingsSection>(i), model)) {
+            for (const SettingsSection section : kSectionOrder) {
+                if (SectionShown(section, model)) {
+                    const int i = static_cast<int>(section);
                     sections.push_back(
                         OptionsFor(Id::SettingsSection)[static_cast<std::size_t>(i)]);
                     values.push_back(i);
@@ -3227,8 +3249,12 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
         if (r.kind == RowKind::Button) {
             // AzaharFrame menuux: a full-width tonal button (Switch to Flat), no label.
             const Rect b{c.x0, cy - 28.0f, c.x1, cy + 28.0f};
+            if (r.id == Id::DsMicBlow && row.y1 > list.y0 && row.y0 < list.y1) {
+                anchors.push_back({r.id, c.x0, std::max(row.y0, list.y0) + 6.0f, r.lock, -1, b.Cx()});
+            }
             kit.Button(b, ButtonStyle::Tonal,
-                       r.id == Id::FillView            ? Sym::kFitScreen
+                       r.id == Id::DsMicBlow           ? 0
+                       : r.id == Id::FillView          ? Sym::kFitScreen
                        : r.id == Id::KiuBottomReset    ? Sym::kRecenter // AzaharFrame kiu131
                        : r.id == Id::AngelsAimSettings ? Sym::kTune     // AzaharFrame kiu132
                                                        : Sym::kTv,
