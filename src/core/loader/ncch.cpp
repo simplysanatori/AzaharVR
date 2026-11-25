@@ -174,14 +174,19 @@ ResultStatus AppLoader_NCCH::LoadExec(std::shared_ptr<Kernel::Process>& process)
             return patch_result;
 
         // AzaharFrame kiu60: Kid Icarus: Uprising at 60 (kiu_60fps.h), after the mods' patch.
-        if (FileSys::Kiu60::BuildFor(overlay_ncch->ncch_header.program_id)) {
+        if (const FileSys::Kiu60::Build* build =
+                FileSys::Kiu60::BuildFor(overlay_ncch->ncch_header.program_id)) {
             namespace K60 = FileSys::Kiu60;
             const auto asked = Common::FrameTestSwitches::Value(K60::kSwitch);
+            const K60::Look look =
+                K60::LookAt(*build, [&code](u32 a) { return K60::ReadWord(code, a); });
+            bool patched = false;
             if (K60::Wanted(asked ? std::optional<std::string_view>(*asked) : std::nullopt,
                             Settings::values.vr_kiu_60fps.GetValue())) {
                 const K60::Patch patch = K60::Make(overlay_ncch->ncch_header.program_id, code);
                 if (patch.result == K60::Outcome::Made &&
                     FileSys::Patch::ApplyIpsPatch(patch.ips, code) == ResultStatus::Success) {
+                    patched = true;
                     LOG_INFO(Loader, "Kid Icarus 60 FPS: on ({})", patch.build->name);
                 } else if (patch.result == K60::Outcome::Differs) {
                     LOG_WARNING(Loader,
@@ -189,9 +194,10 @@ ResultStatus AppLoader_NCCH::LoadExec(std::shared_ptr<Kernel::Process>& process)
                                 "0x{:08X}): another version of the game, or a mod's code",
                                 patch.address, patch.found);
                 } else if (patch.result == K60::Outcome::Already) {
-                    LOG_INFO(Loader, "Kid Icarus 60 FPS: the game's code has it already");
+                    LOG_INFO(Loader, "Kid Icarus 60 FPS: the game's code has it already (a mod)");
                 }
             }
+            K60::g_run.store(K60::RunFor(look.code, patched));
         }
 
         codeset->entrypoint = codeset->CodeSegment().addr;

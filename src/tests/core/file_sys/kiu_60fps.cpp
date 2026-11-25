@@ -4,6 +4,10 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <string>
 #include <map>
 #include <vector>
 #include <catch2/catch_test_macros.hpp>
@@ -121,6 +125,53 @@ TEST_CASE("Kid Icarus 60: the Turn Zone's push is the game's update long", "[kiu
     REQUIRE(UpdateShareFor(0x40000000) == 1.0f); // 30
     REQUIRE(UpdateShareFor(0x40400000) == 1.0f); // anything else: as it was
     REQUIRE(UpdateShareFor(0) == 1.0f);
+}
+
+TEST_CASE("Kid Icarus 60: what the run was started at", "[kiu60]") {
+    REQUIRE(RunFor(Code::Game, false) == Run::At30);
+    REQUIRE(RunFor(Code::Game, true) == Run::At60);
+    REQUIRE(RunFor(Code::Ours, false) == Run::At60); // a mod's code.ips: the app does nothing
+    REQUIRE(RunFor(Code::Differs, false) == Run::Leave);
+}
+
+// The mod's files: each region's load/mods/<title>/exefs/code.ips, from the same table. Not run
+// with the rest: KIU60_MOD_DIR=dir tests "[.kiu60mod]".
+TEST_CASE("Kid Icarus 60: the mod's files", "[.][kiu60mod]") {
+    const char* dir = std::getenv("KIU60_MOD_DIR");
+    REQUIRE(dir != nullptr);
+    for (const Build& b : kBuilds) {
+        char title[17];
+        std::snprintf(title, sizeof(title), "%016llX", static_cast<unsigned long long>(b.title));
+        const std::filesystem::path out =
+            std::filesystem::path(dir) / b.name / "load" / "mods" / title / "exefs";
+        std::filesystem::create_directories(out);
+        const std::vector<uint8_t> ips = MakeIps(b);
+        std::ofstream file(out / "code.ips", std::ios::binary);
+        file.write(reinterpret_cast<const char*>(ips.data()),
+                   static_cast<std::streamsize>(ips.size()));
+        REQUIRE(file.good());
+    }
+}
+
+// The mod put on the game's code is the app's patch.
+TEST_CASE("Kid Icarus 60: the mod is the option's patch", "[kiu60]") {
+    for (const Build& b : kBuilds) {
+        std::vector<uint8_t> code(0x900000, 0);
+        for (const Word& w : b.words) {
+            const std::size_t at = w.address - kCodeBase;
+            for (int i = 0; i < 4; ++i) {
+                code[at + i] = static_cast<uint8_t>(w.game >> (8 * i));
+            }
+        }
+        const Patch p = Make(b.title, code);
+        REQUIRE(p.result == Outcome::Made);
+        REQUIRE(p.ips == MakeIps(b));
+        REQUIRE(FileSys::Patch::ApplyIpsPatch(p.ips, code) == Loader::ResultStatus::Success);
+        // and then the option finds its code there already and puts nothing on.
+        const Patch again = Make(b.title, code);
+        REQUIRE(again.result == Outcome::Already);
+        REQUIRE(again.ips.empty());
+    }
 }
 
 namespace {

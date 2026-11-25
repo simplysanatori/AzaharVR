@@ -1269,5 +1269,7 @@ changed after). Run by the desktop's flat build and VR mock; see reports/102/rig
   changed: the six-update history a flick's speed is the biggest of (100 ms at 60, 200 at 30).
 - **Right Stick, Snap Turn.** By the host's clock (`kiu_turn.h`): no change.
 - **Turn Zone.** A push is taken once an update: it's scaled by the game's own update length (`UpdateShareFor`).
-- **Save states** carry the code and the rate they were made with. At a VBlank, if the code is one of the two and the vsync manager's rate is the other of
-  the pair, all of it is written over (`TurnTo`, logged once); otherwise it is left.
+- **Save states** carry the code and the rate they were made with. At a VBlank, if the code is the other of the two and the vsync manager's
+  rate too, all of it is written over (`TurnTo`, logged) to what the run was started at (`g_run`, from the loader); otherwise it is left.
+- **A mod's `exefs/code.ips`** with the same words (made from this table by the test `[.kiu60mod]`): the loader finds its code there already, puts nothing on and says
+  so; `g_run` is 60 whatever the option. A code file that differs (a C-Stick mod's) is left alone with a log line.

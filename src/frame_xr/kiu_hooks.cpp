@@ -664,9 +664,10 @@ void CutsceneOff(State& s) {
     VideoCore::Immersive::g_drawn_angle.reg.store(0, std::memory_order_relaxed);
 }
 
-/// AzaharFrame kiu60 (core/file_sys/kiu_60fps.h): the rate this run was started for. The loader
-/// makes the game's code so; here, a save state made at the other rate is brought to it, and the
-/// setting changed while the game runs says that it counts from the next start.
+/// AzaharFrame kiu60 (core/file_sys/kiu_60fps.h): the setting as this run started (the loader made
+/// the game's code from it, and says what it is in g_run). Here, a save state made at the other
+/// rate is brought to it, and the setting changed while the game runs says that it counts from the
+/// next start.
 std::atomic<bool> g_sixty{false};
 
 bool SixtyWanted() {
@@ -682,9 +683,10 @@ void SixtyFps(State& s, uint64_t title, GuestMemory& mem) {
         return;
     }
     const bool sixty = g_sixty.load(std::memory_order_relaxed);
-    if (!s.sixty_off) {
+    const K60::Run run = K60::g_run.load(std::memory_order_relaxed);
+    if (!s.sixty_off && run != K60::Run::Leave) {
         const K60::Turned turned = K60::TurnTo(
-            *build, sixty,
+            *build, run == K60::Run::At60,
             [&](uint32_t a) {
                 uint32_t v = 0;
                 return mem.Read32(a, v) ? std::optional<uint32_t>(v) : std::nullopt;
@@ -693,14 +695,14 @@ void SixtyFps(State& s, uint64_t title, GuestMemory& mem) {
             [&](uint32_t a, uint32_t v) { mem.WriteData(a, v); });
         if (turned == K60::Turned::Yes) {
             LOG_INFO(Frontend, "xr: Kid Icarus {} FPS: the game was at {} (a save state)",
-                     sixty ? 60 : 30, sixty ? 30 : 60);
+                     run == K60::Run::At60 ? 60 : 30, run == K60::Run::At60 ? 30 : 60);
         } else if (turned == K60::Turned::Differs) {
             s.sixty_off = true; // the loader's line says where, or a mod did it
         }
     }
     static bool said = false; // emulation thread
     const bool other = SixtyWanted() != sixty;
-    if (other != said && !s.sixty_off) {
+    if (other != said && !s.sixty_off && run != K60::Run::Leave) {
         said = other;
         if (other) {
             ShowToastText(sixty ? Menu::kKiu60FpsOffToast : Menu::kKiu60FpsOnToast,

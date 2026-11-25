@@ -40,6 +40,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -226,6 +227,25 @@ inline std::optional<uint32_t> ReadWord(std::span<const uint8_t> code, uint32_t 
            static_cast<uint32_t>(p[2]) << 16 | static_cast<uint32_t>(p[3]) << 24;
 }
 
+/// The patch itself: every changed word of the table and nothing else (also the mod's code.ips,
+/// made by the test [kiu60mod]).
+inline std::vector<uint8_t> MakeIps(const Build& build) {
+    // "PATCH", then {offset: 3 bytes, size: 2 bytes, data}, big endian, then "EOF".
+    std::vector<uint8_t> ips{'P', 'A', 'T', 'C', 'H'};
+    for (const Word& w : build.words) {
+        if (w.game == w.ours) {
+            continue;
+        }
+        const uint32_t offset = w.address - kCodeBase;
+        for (const uint32_t b : {offset >> 16, offset >> 8, offset, 0u, 4u, w.ours, w.ours >> 8,
+                                 w.ours >> 16, w.ours >> 24}) {
+            ips.push_back(static_cast<uint8_t>(b));
+        }
+    }
+    ips.insert(ips.end(), {'E', 'O', 'F'});
+    return ips;
+}
+
 /// The patch for this game's code (code.bin as loaded, mods applied), all words or none.
 inline Patch Make(uint64_t title, std::span<const uint8_t> code) {
     Patch out;
@@ -240,19 +260,7 @@ inline Patch Make(uint64_t title, std::span<const uint8_t> code) {
         out.found = look.found;
         return out;
     }
-    // IPS: "PATCH", then {offset: 3 bytes, size: 2 bytes, data}, big endian, then "EOF".
-    out.ips = {'P', 'A', 'T', 'C', 'H'};
-    for (const Word& w : out.build->words) {
-        if (w.game == w.ours) {
-            continue;
-        }
-        const uint32_t offset = w.address - kCodeBase;
-        for (const uint32_t b : {offset >> 16, offset >> 8, offset, 0u, 4u, w.ours, w.ours >> 8,
-                                 w.ours >> 16, w.ours >> 24}) {
-            out.ips.push_back(static_cast<uint8_t>(b));
-        }
-    }
-    out.ips.insert(out.ips.end(), {'E', 'O', 'F'});
+    out.ips = MakeIps(*out.build);
     out.result = Outcome::Made;
     return out;
 }
@@ -263,6 +271,22 @@ constexpr bool Wanted(std::optional<std::string_view> value, bool setting) {
         return *value == "1";
     }
     return setting;
+}
+
+/// What the running game was started at, after the loader's patch (the loader writes it, the
+/// VBlank hook reads it): a save state made at the other rate is brought to it.
+enum class Run {
+    Leave, ///< the code is neither (a mod's, another version): never touched
+    At30,
+    At60, ///< ours, or a mod's that is the same
+};
+inline std::atomic<Run> g_run{Run::Leave};
+
+/// Where the loader's code stands for the rest of the run: `code` as it looked before the patch,
+/// `patched` true when it was put on.
+constexpr Run RunFor(Code code, bool patched) {
+    return code == Code::Differs ? Run::Leave
+                                 : (patched || code == Code::Ours ? Run::At60 : Run::At30);
 }
 
 /// An update's share of one at 30, from the frame counter's length (its bits): 0.5 at 60.
