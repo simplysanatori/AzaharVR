@@ -6,11 +6,13 @@
 // Licensed under GPLv2 or any later version
 // Refer to the misc/licenses/gplv2.txt file included.
 
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 #include <QDir>
+#include <QStringList>
 #include <QFileInfo>
 #include "citra_qt/compatibility_list.h"
 #include "citra_qt/game_list.h"
@@ -24,7 +26,6 @@
 #include "core/loader/loader.h"
 #ifdef ENABLE_ALT_CORES
 #include "frame_cores/rom_info.h"
-#include "frame_cores/second_screen.h"
 #endif
 
 namespace {
@@ -79,19 +80,31 @@ void GameListWorker::AddFstEntriesToGameList(const std::string& dir_path, unsign
                     break;
                 }
                 const FrameCores::GameSystem system = FrameCores::SystemOf(*info);
+                const QString name =
+                    QString::fromStdString(FrameCores::DisplayTitle(*info, physical_name));
                 auto* path_item = new GameListItemPath(
-                    QString::fromStdString(physical_name), QString::fromStdString(info->title),
+                    QString::fromStdString(physical_name), name,
                     info->icon_rgba, info->icon_w, info->icon_h, info->title_id, media_type);
                 path_item->setData(static_cast<int>(system), GameListItemPath::SystemRole);
-                if (FrameCores::HasTwoScreens(info->kind, info->game_code)) {
-                    path_item->setData(true, GameListItemPath::TwoScreensRole);
-                    path_item->setData(QObject::tr("Two Screens"), Qt::ToolTipRole);
+                path_item->SetBadges(FrameCores::BadgesOf(*info, physical_name));
+                path_item->SetTile(name, info->icon_rgba, info->icon_w, info->icon_h);
+                // A DS game's code says its region, a GBA or Game Boy game's file name
+                std::vector<const char*> regions = FrameCores::RegionsOfName(
+                    std::filesystem::path(physical_name).filename().string());
+                if (const char* code_region = FrameCores::RegionOf(*info); *code_region) {
+                    regions = {code_region};
+                }
+                QStringList region_names;
+                for (const char* region : regions) {
+                    region_names << QCoreApplication::translate("GameRegion", region);
                 }
                 emit EntryReady(
                     {
                         path_item,
                         new GameListItemCompat(QStringLiteral("99")),
-                        new GameListItem(QString::fromLatin1(type_label)),
+                        new GameListItem(region_names.join(
+                            UISettings::values.game_list_single_line_mode ? QStringLiteral(", ")
+                                                                          : QStringLiteral("\n"))),
                         new GameListItem(QString::fromLatin1(type_label)),
                         new GameListItemSize(FileUtil::GetSize(physical_name)),
                         new GameListItemPlayTime(play_time_manager.GetPlayTime(info->title_id)),

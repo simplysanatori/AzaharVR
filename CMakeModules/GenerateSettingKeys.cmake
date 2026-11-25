@@ -258,6 +258,7 @@ if (ENABLE_QT)
         "show_play_time_column"
         "show_system_column"
         "game_list_system_filter"
+        "download_covers"
         "screenshot_resolution_factor"
         "screenshotPath"
         "calloutFlags"

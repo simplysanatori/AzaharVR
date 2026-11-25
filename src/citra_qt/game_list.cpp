@@ -21,6 +21,8 @@
 #include <QMessageBox>
 #include <QModelIndex>
 #include <QPainter>
+#include <QPainterPath>
+#include <QRegularExpression>
 #include <QScreen>
 #include <QStandardItem>
 #include <QStandardItemModel>
@@ -44,6 +46,9 @@
 #include "common/settings.h"
 #include "core/core.h"
 #include "core/loader/loader.h" // AzaharFrame texparts
+#ifdef ENABLE_ALT_CORES
+#include "frame_xr/menu/badge_seal.h"
+#endif
 #include "core/file_sys/archive_extsavedata.h"
 #include "core/file_sys/archive_source_sd_savedata.h"
 #include "core/hle/service/am/am.h"
@@ -433,35 +438,78 @@ public:
             painter->drawPixmap(pmRect, pixmap);
         }
 
+#ifdef ENABLE_ALT_CORES
+        // The badges from the row's right edge, Two Screens first
+        int right = opt.rect.right() - 12;
         if (index.data(GameListItemPath::TwoScreensRole).toBool()) {
-            DrawTwoScreensGlyph(painter, opt);
+            right = DrawTwoScreensGlyph(painter, opt, right);
         }
+        if (index.data(GameListItemPath::PokeDaisyRole).toBool()) {
+            DrawPokeDaisySeal(painter, opt, right);
+        }
+#endif
     }
 
+#ifdef ENABLE_ALT_CORES
 private:
-    /// Two stacked rectangles at the right edge of the row.
-    static void DrawTwoScreensGlyph(QPainter* painter, const QStyleOptionViewItem& opt) {
-        const int total_h = std::min(20, opt.rect.height() - 4);
+    static QColor InkOf(const QStyleOptionViewItem& opt) {
+        return opt.palette.color(opt.state & QStyle::State_Selected ? QPalette::HighlightedText
+                                                                    : QPalette::Text);
+    }
+    static int BadgeHeight(const QStyleOptionViewItem& opt) {
+        return std::min(20, opt.rect.height() - 4);
+    }
+
+    /// Two stacked rectangles ending at `right`. Returns where the badge before them ends.
+    static int DrawTwoScreensGlyph(QPainter* painter, const QStyleOptionViewItem& opt, int right) {
+        const int total_h = BadgeHeight(opt);
         if (total_h < 8) {
-            return;
+            return right;
         }
         const int gap = 2;
         const int rect_h = (total_h - gap) / 2;
         const int rect_w = rect_h * 4 / 3;
-        const int margin = 12;
-        const int x = opt.rect.right() - margin - rect_w;
+        const int x = right - rect_w;
         const int y = opt.rect.center().y() - total_h / 2;
-        const QColor color = opt.palette.color(opt.state & QStyle::State_Selected
-                                                   ? QPalette::HighlightedText
-                                                   : QPalette::Text);
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing);
-        painter->setPen(QPen(color, 1.5));
+        painter->setPen(QPen(InkOf(opt), 1.5));
         painter->setBrush(Qt::NoBrush);
         painter->drawRoundedRect(QRectF(x, y, rect_w, rect_h), 2, 2);
         painter->drawRoundedRect(QRectF(x, y + rect_h + gap, rect_w, rect_h), 2, 2);
         painter->restore();
+        return x - 8;
     }
+
+    /// The PokeDaisy badge (menu/badge_seal.h), ending at `right`.
+    static void DrawPokeDaisySeal(QPainter* painter, const QStyleOptionViewItem& opt, int right) {
+        namespace Seal = FrameXr::Menu::Seal;
+        const qreal size = BadgeHeight(opt);
+        if (size < 12) {
+            return;
+        }
+        const qreal r = size / 2;
+        const QPointF c(right - r, opt.rect.center().y() + 0.5);
+        const auto circle = [&c](qreal radius, QPointF at = {}) {
+            QPainterPath path;
+            path.addEllipse(c + at, radius, radius);
+            return path;
+        };
+        QPainterPath seal = circle(r * Seal::kBody);
+        for (int i = 0; i < Seal::kLobes; ++i) {
+            const auto [x, y] = Seal::Lobe(i);
+            seal = seal.united(circle(r * Seal::kLobe, {r * x, r * y}));
+        }
+        QPainterPath cut;
+        cut.addRect(QRectF(c.x() - r * Seal::kBody, c.y() - r * Seal::kBand / 2,
+                           r * Seal::kBody * 2, r * Seal::kBand));
+        cut = cut.united(circle(r * Seal::kButtonGap)).subtracted(circle(r * Seal::kButton));
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+        painter->fillPath(seal.subtracted(cut), InkOf(opt));
+        painter->restore();
+    }
+#endif
 };
 
 GameList::GameList(PlayTime::PlayTimeManager& play_time_manager_, GMainWindow* parent)
@@ -1545,6 +1593,44 @@ void GameList::AltGameStopped(u64 program_id) {
         }
     }
     RefreshIfPending();
+}
+#endif
+
+#ifdef ENABLE_ALT_CORES
+std::vector<FrameXr::Menu::GameEntry> GameList::TabRows() const {
+    std::vector<FrameXr::Menu::GameEntry> rows;
+    for (int i = 1; i < item_model->rowCount(); ++i) { // row 0 is Favorites, copies of the others
+        const QStandardItem* folder = item_model->item(i, 0);
+        for (int j = 0; folder != nullptr && j < folder->rowCount(); ++j) {
+            const QStandardItem* item = folder->child(j, 0);
+            if (item == nullptr || item->type() != static_cast<int>(GameListItemType::Game)) {
+                continue;
+            }
+            const auto text = [item](int role) { return item->data(role).toString().toStdString(); };
+            FrameXr::Menu::GameEntry g;
+            const QString path = item->data(GameListItemPath::FullPathRole).toString();
+            g.path = path.toStdString();
+            g.real_path = text(GameListItemPath::RealPathRole);
+            g.title = text(GameListItemPath::TileTitleRole);
+            if (g.title.empty()) {
+                g.title = item->data(GameListItemPath::TitleRole).toString().simplified().toStdString();
+            }
+            g.file_name = QFileInfo(path).completeBaseName().toStdString();
+            const QStandardItem* region = folder->child(j, COLUMN_REGION);
+            if (region != nullptr && !region->text().contains(QRegularExpression(
+                                         QStringLiteral("[\n,]")))) { // one region only
+                g.region = region->text().toStdString();
+            }
+            g.key = item->data(GameListItemPath::ProgramIdRole).toULongLong();
+            g.system = static_cast<Common::GameSystem>(
+                item->data(GameListItemPath::SystemRole).toInt());
+            g.two_screens = item->data(GameListItemPath::TwoScreensRole).toBool();
+            g.pokedaisy = item->data(GameListItemPath::PokeDaisyRole).toBool();
+            g.icon = item->data(GameListItemPath::TileIconRole).value<GameListItemPath::TileIcon>();
+            rows.push_back(std::move(g));
+        }
+    }
+    return rows;
 }
 #endif
 

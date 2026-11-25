@@ -18,6 +18,8 @@
 
 #include <fmt/format.h>
 
+#include "common/string_util.h"
+
 extern "C" {
 #include <mgba-util/vfs.h>
 }
@@ -684,20 +686,153 @@ GameSystem SystemOf(const RomInfo& info) {
     }
 }
 
-bool FilterMatches(SystemFilter filter, GameSystem system) {
-    switch (filter) {
-    case SystemFilter::All:
-        return true;
-    case SystemFilter::N3DS:
-        return system == GameSystem::N3DS;
-    case SystemFilter::DS:
-        return system == GameSystem::DS;
-    case SystemFilter::GBA:
-        return system == GameSystem::GBA;
-    case SystemFilter::GB:
-        return system == GameSystem::GB || system == GameSystem::GBC;
+namespace {
+
+/// A region tag's word as the list's region names have it ("" none).
+const char* RegionWord(std::string_view word) {
+    static constexpr std::array<std::pair<std::string_view, const char*>, 20> kWords{{
+        {"USA", "North America"},  {"Canada", "North America"}, {"U", "North America"},
+        {"Japan", "Japan"},        {"J", "Japan"},              {"Europe", "Europe"},
+        {"E", "Europe"},           {"Germany", "Europe"},       {"France", "Europe"},
+        {"Spain", "Europe"},       {"Italy", "Europe"},         {"Netherlands", "Europe"},
+        {"Sweden", "Europe"},      {"UK", "Europe"},            {"Scandinavia", "Europe"},
+        {"Australia", "Australia"}, {"Korea", "Korea"},         {"China", "China"},
+        {"Taiwan", "Taiwan"},      {"World", "Region free"},
+    }};
+    for (const auto& [tag, region] : kWords) {
+        if (word == tag) {
+            return region;
+        }
     }
-    return true;
+    return "";
+}
+
+} // namespace
+
+const char* RegionOf(const RomInfo& info) {
+    if (!Common::AltCore::IsDs(info.kind) || info.game_code.size() < 4) {
+        return "";
+    }
+    switch (info.game_code[3]) {
+    case 'J':
+        return "Japan";
+    case 'E':
+        return "North America";
+    case 'P': // English and more
+    case 'D': // German
+    case 'F': // French
+    case 'H': // Dutch
+    case 'I': // Italian
+    case 'S': // Spanish
+    case 'X':
+    case 'Y':
+    case 'Z':
+        return "Europe";
+    case 'U':
+        return "Australia";
+    case 'K':
+        return "Korea";
+    case 'C':
+        return "China";
+    default:
+        return "";
+    }
+}
+
+std::vector<const char*> RegionsOfName(const std::string& name) {
+    for (std::size_t open = name.find('('); open != std::string::npos;
+         open = name.find('(', open + 1)) {
+        const std::size_t close = name.find(')', open);
+        if (close == std::string::npos) {
+            break;
+        }
+        const std::string_view tag = std::string_view(name).substr(open + 1, close - open - 1);
+        std::vector<const char*> regions;
+        bool all = !tag.empty();
+        const auto add = [&regions](const char* region) {
+            if (std::find(regions.begin(), regions.end(), std::string_view(region)) ==
+                regions.end()) {
+                regions.push_back(region);
+            }
+        };
+        if (tag.size() <= 3 && tag.find_first_not_of("UEJ") == std::string_view::npos) {
+            for (const char c : tag) { // GoodTools: (U), (E), (J), (UE), (JU)...
+                add(RegionWord(std::string_view(&c, 1)));
+            }
+        } else {
+            for (std::size_t at = 0; at <= tag.size();) {
+                std::size_t end = std::min(tag.find(',', at), tag.size());
+                std::string_view word = tag.substr(at, end - at);
+                while (!word.empty() && word.front() == ' ') {
+                    word.remove_prefix(1);
+                }
+                const char* region = word.size() > 1 ? RegionWord(word) : "";
+                all = all && *region != 0;
+                if (*region) {
+                    add(region);
+                }
+                at = end + 1;
+            }
+        }
+        if (all && !regions.empty()) {
+            return regions;
+        }
+    }
+    return {};
+}
+
+std::string CleanName(std::string name) {
+    // the tags
+    std::string out;
+    int depth = 0;
+    for (const char c : name) {
+        if (c == '(' || c == '[') {
+            depth++;
+        } else if ((c == ')' || c == ']') && depth > 0) {
+            depth--;
+        } else if (depth == 0 && !(c == ' ' && (out.empty() || out.back() == ' '))) {
+            out.push_back(c);
+        }
+    }
+    // "Name, The - More" as "The Name - More"
+    const std::size_t dash = out.find(" - ");
+    std::string first = out.substr(0, dash);
+    const auto trim = [](std::string& s) {
+        while (!s.empty() && s.back() == ' ') {
+            s.pop_back();
+        }
+        s.erase(0, std::min(s.find_first_not_of(' '), s.size()));
+    };
+    trim(first);
+    for (const std::string_view article : {"The", "A", "An"}) {
+        const std::string tail = ", " + std::string(article);
+        if (first.size() > tail.size() && first.ends_with(tail)) {
+            first = std::string(article) + " " + first.substr(0, first.size() - tail.size());
+            break;
+        }
+    }
+    out = dash == std::string::npos ? first : first + out.substr(dash);
+    trim(out);
+    return out;
+}
+
+std::string NameOfFile(const std::string& path) {
+    std::filesystem::path file = std::filesystem::path(path).stem();
+    static constexpr std::array<std::string_view, 6> kRoms{".gba", ".gb", ".gbc", ".nds", ".dsi",
+                                                           ".srl"};
+    const std::string inner = Common::ToLower(file.extension().string()); // "Game.gba.zip"
+    if (std::find(kRoms.begin(), kRoms.end(), inner) != kRoms.end()) {
+        file = file.stem();
+    }
+    return CleanName(file.string());
+}
+
+std::string DisplayTitle(const RomInfo& info, const std::string& path) {
+    if (info.kind != Common::AltCore::CoreKind::GBA && info.kind != Common::AltCore::CoreKind::GB) {
+        return info.title; // a DS game's banner names it well
+    }
+    const std::string name = NameOfFile(path);
+    return name.empty() ? info.title : name;
 }
 
 const char* CoreFolder(Common::AltCore::CoreKind kind) {

@@ -15,6 +15,14 @@ add_library(frame_xr_menu STATIC
     angels_aim_tab.cpp # AzaharFrame kiufix
     ctgp7_tab.h
     angels_aim_tab.h # AzaharFrame kiufix
+    badge_seal.h # AzaharVR: the Games tab
+    cover_art.cpp
+    cover_art.h
+    games_snapshot.cpp
+    games_snapshot.h
+    games_tab.cpp
+    games_tab.h
+    grid_focus.h
     homebrew_tab.cpp # AzaharFrame emerald
     homebrew_tab.h
     list_scroll.cpp # AzaharFrame scroll

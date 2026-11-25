@@ -119,6 +119,13 @@ private:
     void SetSetting(Menu::Id id, int value, Host& host);
     /// AzaharFrame useglobal: the row's setting follows the global value again (its chip).
     void UseGlobal(Menu::Id id, Host& host);
+    /// The Games tab (games_tab.h): before the press, the left stick and the D-pad move its focus
+    /// and A presses it. Returns whether A was the focus's.
+    bool GamesInput(const Input::InputFrame& in, bool enabled, bool on_panel, float x, float y,
+                    bool a_edge, Host& host);
+    bool GamesClick(Menu::Target t, Host& host); ///< its part of Click: whether it was its own
+    void GamesAction(int item, Host& host);      ///< an item of a tile's Options
+    void GamesTitleScroll(float dt);             ///< the pointed at tile's cut title
     void Worker();
     void BeginEdit();
     void EditChanged(Menu::Remap::Event e, Host& host);
@@ -145,6 +152,15 @@ private:
     Menu::Scrolling::StickScroll stick_scroll;
     Menu::Scrolling::BarPress bar_press;
     Menu::Scrolling::DragScroll list_drag;
+    // The Games tab's focus: a held direction, and where the beam was as it last moved.
+    Menu::Focus::DirRepeat games_dir;
+    bool games_shown = false;
+    bool games_x_down = true;
+    Menu::Target games_pointed;  ///< the tile whose cut title scrolls by, and for how long
+    float games_pointed_s = 0.0f;
+    float games_x = 0.0f, games_y = 0.0f;
+    Menu::GamesTabModel games_seen;
+    Menu::GamesView games_view_seen;
     float press_s = 0.0f; ///< seconds the press has held (the drag's clock)
     Menu::Tab scroll_tab = Menu::Tab::Main;
     float scroll_seen = 0.0f; ///< the scroll as the last frame left it

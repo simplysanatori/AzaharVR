@@ -161,6 +161,24 @@ void Kit::Image(const uint8_t* rgba, int w, int h, const Rect& r) {
     cv->BlitRGBA(rgba, w, h, D(r.x0), D(r.y0), D(r.x1), D(r.y1), true);
 }
 
+Rect Kit::ImageFit(const uint8_t* rgba, int w, int h, const Rect& r, float radius, float opacity) {
+    const float scale = std::min(r.W() / static_cast<float>(w), r.H() / static_cast<float>(h));
+    const float hw = static_cast<float>(w) * scale * 0.5f, hh = static_cast<float>(h) * scale * 0.5f;
+    const Rect at{r.Cx() - hw, r.Cy() - hh, r.Cx() + hw, r.Cy() + hh};
+    cv->BlitRGBA(rgba, w, h, D(at.x0), D(at.y0), D(at.x1), D(at.y1), true, D(radius), opacity);
+    return at;
+}
+
+Rect Kit::ImageWhole(const uint8_t* rgba, int w, int h, const Rect& r, float radius,
+                     float opacity) {
+    const float fit = std::floor(std::min(D(r.W()) / static_cast<float>(w), D(r.H()) / static_cast<float>(h)));
+    const float scale = std::max(1.0f, fit);
+    const float pw = static_cast<float>(w) * scale, ph = static_cast<float>(h) * scale;
+    const float x0 = std::round(D(r.Cx()) - pw * 0.5f), y0 = std::round(D(r.Cy()) - ph * 0.5f);
+    cv->BlitRGBA(rgba, w, h, x0, y0, x0 + pw, y0 + ph, false, D(radius), opacity);
+    return {x0 / s, y0 / s, (x0 + pw) / s, (y0 + ph) / s};
+}
+
 void Kit::StateLayer(const Rect& r, float radius, uint32_t rgb, State state) {
     if (state == State::Hover) {
         Fill(r, radius, rgb, kHoverLayer);

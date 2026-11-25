@@ -32,6 +32,7 @@
 #include "frame_xr/input/mouse.h"   // AzaharFrame mouse: its one-time toast
 #include "frame_xr/input/reticle.h" // AzaharFrame mouse
 #include "frame_xr/mem_watch.h"     // AzaharFrame memwarn
+#include "frame_xr/menu/cover_art.h"
 #include "frame_xr/menu/edit_devices.h"
 #include "frame_xr/menu/md3.h"
 #include "frame_xr/menu/md3_fonts.h" // AzaharFrame useglobal: the option B mock's icon
@@ -326,6 +327,93 @@ inline CheatsModel ReadmeCheatsOot3d() { // Sharkive 0004000000033500.txt, file 
     c.status = "50 cheats added";
     return c;
 }
+// AzaharVR: the Games tab: a made-up cover, a DS box or a square one
+GameIcon SampleCover(int n, Common::GameSystem system) {
+    GameIcon out;
+    out.w = system == Common::GameSystem::DS ? 320 : 280;
+    out.h = 280;
+    for (int y = 0; y < out.h; y++) {
+        for (int x = 0; x < out.w; x++) {
+            const int dx = x - 180, dy = y - 130;
+            const bool round = dx * dx + dy * dy < 90 * 90;
+            const bool title = y > 20 && y < 60 && x > 40 && x < out.w - 40 && x / 14 % 3 != 0;
+            const auto c = [&](int k) {
+                const int base = 40 + n * k % 90;
+                return static_cast<uint8_t>(title ? 235 : round ? base + 70 : base + y / 12);
+            };
+            out.rgba.insert(out.rgba.end(), {c(53), c(91), c(37), 255});
+        }
+    }
+    return out;
+}
+
+// AzaharVR: the Games tab: plain made-up icons of each system's size
+GamesTabModel SampleGames() {
+    using S = Common::GameSystem;
+    const auto icon = [](S system, int n) {
+        auto out = std::make_shared<GameIcon>();
+        out->w = out->h = system == S::N3DS ? 48 : 32;
+        for (int y = 0; y < out->h; y++) {
+            for (int x = 0; x < out->w; x++) {
+                const bool light = ((x / 4 + y / 4) & 1) != 0;
+                out->rgba.push_back(static_cast<uint8_t>(40 + n * 47 % 160 + (light ? 24 : 0)));
+                out->rgba.push_back(static_cast<uint8_t>(50 + n * 83 % 130 + (light ? 24 : 0)));
+                out->rgba.push_back(static_cast<uint8_t>(60 + n * 31 % 150 + (light ? 24 : 0)));
+                out->rgba.push_back(255);
+            }
+        }
+        return out;
+    };
+    struct Row {
+        const char* title;
+        S system;
+        const char* region;
+        bool favorite, two_screens, pokedaisy, missing;
+    };
+    const Row rows[] = {
+        {"Pokémon Emerald Version", S::GBA, "North America", true, true, true, false},
+        {"Kid Icarus: Uprising", S::N3DS, "North America", true, false, false, false},
+        {"Castlevania: Dawn of Sorrow", S::DS, "Europe", false, false, false, false},
+        {"The Legend of Zelda: A Link to the Past and Four Swords", S::GBA, "Japan", false, true,
+         false, false},
+        {"Pokémon Crystal", S::GBC, "North America", false, true, true, false},
+        {"Pokémon Yellow Version: Special Pikachu Edition", S::GB, "North America", true, true,
+         true, false},
+        {"Tetris", S::GB, "Japan", false, false, false, false},
+        {"Metroid Fusion", S::GBA, "Europe", true, true, false, false},
+        {"Mario Kart DS", S::DS, "Germany", false, false, false, true},
+        {"Pokémon Lazarus", S::GBA, "", false, true, false, false},
+        {"Pokémon Heart and Soul", S::GBA, "", true, true, false, false},
+        {"Dragon Quest IX: Sentinels of the Starry Skies", S::DS, "North America", true, false,
+         false, false},
+        {"Harry Potter and the Sorcerer's Stone", S::GBC, "", false, false, false, false},
+        {"Ocarina of Time 3D", S::N3DS, "Europe", false, false, false, false},
+    };
+    std::vector<GameEntry> list;
+    std::vector<std::string> order;
+    int n = 0;
+    for (const Row& r : rows) {
+        GameEntry g;
+        g.title = g.file_name = g.path = r.title;
+        g.system = r.system;
+        g.region = r.region;
+        g.favorite = r.favorite;
+        g.two_screens = r.two_screens;
+        g.pokedaisy = r.pokedaisy;
+        g.missing = r.missing;
+        g.icon = icon(r.system, n++);
+        if (r.system != S::N3DS && r.region[0] != 0) { // the others show their icon
+            g.cover = std::make_shared<const GameIcon>(ComposeCover(SampleCover(n, r.system)));
+        }
+        order.push_back(g.path);
+        list.push_back(std::move(g));
+    }
+    GamesTabModel m;
+    m.list = std::make_shared<const GamesSnapshot>(MakeSnapshot(std::move(list), order));
+    m.running = rows[1].title;
+    return m;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -3093,6 +3181,36 @@ int main(int argc, char** argv) {
         rv.mods_segment = ModsSegment::Textures;
         rv.textures_page = TexturesPage::Download;
         ok &= shot("readme-textures", rm, rv);
+    }
+    { // AzaharVR: the Games tab (--only games-)
+        MenuModel gm = m;
+        gm.games = SampleGames();
+        MenuView gv{};
+        gv.tab = Tab::Games;
+        gv.hover = {Id::GameTile, 5};
+        ok &= shot("games-1-all", gm, gv);
+        gv = {};
+        gv.tab = Tab::Games;
+        gv.open_menu = Id::GameOption;
+        gv.games.menu_game = gm.games.list->games[0].path;
+        ok &= shot("games-5-options", gm, gv);
+        gv = {};
+        gv.tab = Tab::Games;
+        gv.games.chip = Common::SystemFilter::GBA;
+        gv.games.focus.shown = true;
+        gv.games.focus.tile = 1;
+        gv.open_menu = Id::GamesSort;
+        gv.open_menu = Id::None;
+        ok &= shot("games-2-gba", gm, gv);
+        gv.games = {};
+        gv.games.focus.shown = true;
+        gv.games.focus.tile = 6;
+        gv.scroll[static_cast<std::size_t>(Tab::Games)] = kGameRow;
+        gm.games.search = "e";
+        ok &= shot("games-3-search", gm, gv);
+        gm.games.search = "wind";
+        gv.scroll[static_cast<std::size_t>(Tab::Games)] = 0.0f;
+        ok &= shot("games-4-no-matches", gm, gv);
     }
     v = {};
     v.tab = Tab::Main;

@@ -295,6 +295,9 @@ enum class MenuCommand {
     DsLidToggle, ///< toggle DS lid closed (`value`: 1 closed, 0 open)
     ImportSave,  ///< open file picker to import a .sav / .dsv save file
     DriverOption, ///< MenuRequest::option to `value`: the Secondary Screen's, kept by its driver
+    PlayGame, ///< the Games tab: `text` the game's path (citra_qt/frame_games.cpp)
+    AddGameFolder, ///< the same: Azahar's window with its folder dialog
+    FavouriteGame, ///< the same: in Favourites or out of them
 };
 enum class MenuSetting {
     HideBottomScreen,
@@ -592,6 +595,7 @@ struct HomebrewTabModel; // AzaharFrame emerald
 struct AutosaveCard;     // AzaharFrame autosave
 struct Ctgp7Model;       // AzaharFrame ctgp7
 struct AngelsAimModel;   // AzaharFrame kiufix
+struct GamesSnapshot;    // AzaharVR: the Games tab
 } // namespace Menu
 void SetInGameMenuCheats(const Menu::CheatsModel& cheats); ///< citra_qt/frame_cheats.cpp
 void SetInGameMenuModsList(const Menu::ModsListModel& mods); ///< citra_qt/frame_mods.cpp
@@ -604,6 +608,10 @@ void SetInGameMenuCtgp7(const Menu::Ctgp7Model& ctgp7); ///< citra_qt/frame_ctgp
 void SetInGameMenuAngelsAim(const Menu::AngelsAimModel& angels_aim); ///< citra_qt/frame_mods.cpp
 /// AzaharFrame emerald: the Mods tab's Homebrew segment's rows (frame_xr/menu/homebrew_tab.h). Any thread.
 void SetInGameMenuHomebrew(const Menu::HomebrewTabModel& homebrew); ///< citra_qt/frame_homebrew.cpp
+/// AzaharVR: the Games tab's list (frame_xr/menu/games_snapshot.h) and the running game's path in
+/// it ("" none). Any thread.
+void SetInGameMenuGames(std::shared_ptr<const Menu::GamesSnapshot> games,
+                        const std::string& running); ///< citra_qt/frame_games.cpp
 /// AzaharFrame autosave: the running game's autosaves for Load State's card (newest first), and
 /// the Undo Load snackbar's text ("" none). Any thread.
 void SetInGameMenuAutosaves(const std::vector<Menu::AutosaveCard>& autosaves,

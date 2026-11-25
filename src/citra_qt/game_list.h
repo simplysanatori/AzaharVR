@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <vector>
 #include <QMenu>
 #include <QPushButton>
 #include <QString>
@@ -15,6 +16,7 @@
 #include "uisettings.h"
 #ifdef ENABLE_ALT_CORES
 #include "frame_cores/rom_info.h"
+#include "frame_xr/menu/games_snapshot.h"
 #endif
 
 namespace Service::FS {
@@ -103,6 +105,8 @@ public:
     void SetAltGameRunning(bool running);
     /// That game stopped: its play time in the rows again, and the scan a folder change asked for.
     void AltGameStopped(u64 program_id);
+    /// The games found, for the VR menu's Games tab (after PopulatingCompleted).
+    std::vector<FrameXr::Menu::GameEntry> TabRows() const;
 #endif
 
     void ToggleFavorite(u64 program_id);

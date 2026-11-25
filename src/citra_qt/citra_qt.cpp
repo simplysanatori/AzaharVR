@@ -185,6 +185,9 @@ Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin);
 #include "citra_qt/frame_cheats.h" // AzaharFrame cheatstab
 #include "citra_qt/frame_homebrew.h" // AzaharFrame emerald
 #include "citra_qt/frame_ctgp7.h"    // AzaharFrame ctgp7
+#ifdef ENABLE_ALT_CORES
+#include "citra_qt/frame_games.h" // AzaharVR: the Games tab
+#endif
 #include "core/hle/service/hid/hid.h" // AzaharFrame ctgp7: the installer's A
 #include "citra_qt/frame_mirror.h"
 #include "citra_qt/frame_mods.h"
@@ -439,6 +442,9 @@ Mods::Compat::Game FrameGameInfoOf(Core::System& system, const std::string& game
 QPointer<FrameCheats> g_frame_cheats;
 QPointer<FrameHomebrew> g_frame_homebrew; // AzaharFrame emerald
 QPointer<FrameCtgp7> g_frame_ctgp7;       // AzaharFrame ctgp7
+#ifdef ENABLE_ALT_CORES
+QPointer<FrameGames> g_frame_games; // AzaharVR: the Games tab
+#endif
 // Opens (pausing the game) or closes (resuming it) the in-game menu: the home panel in a game.
 std::function<void(bool open)> g_frame_xr_set_menu;
 // Quick Save / Quick Load as the Emulation menu does them, with a message (the in-game menu's
@@ -3211,6 +3217,9 @@ void GMainWindow::ConnectWidgetEvents() {
             g_frame_homebrew->CheckForUpdates();
         }
     });
+#ifdef ENABLE_ALT_CORES // AzaharVR: the Games tab
+    FrameMakeGamesTab();
+#endif
     {
         // AzaharFrame texparts: Customize Texture Pack for the running game, under Configure
         // Current Game (the game list menu has it for any game); applies at the next start.
@@ -3720,6 +3729,7 @@ bool GMainWindow::BootAltGame(const QString& filename) {
         return false;
     }
     const FrameCores::RomInfo& info = *info_opt;
+    const std::string name = FrameCores::DisplayTitle(info, path); // AzaharVR: not the header's
 
     StoreRecentFile(filename);
     const std::string config_file_name = fmt::format("{:016X}", info.title_id);
@@ -3744,7 +3754,7 @@ bool GMainWindow::BootAltGame(const QString& filename) {
         LOG_CRITICAL(Frontend, "Failed to load application!");
         AltWindowClose();
         AltStartFailed(tr("Unable to Start Game"),
-                       tr("Failed to start %1.").arg(QString::fromStdString(info.title)));
+                       tr("Failed to start %1.").arg(QString::fromStdString(name)));
 #ifdef ENABLE_FRAME_XR
         g_frame_game_config_name.clear();
 #endif
@@ -3753,12 +3763,12 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     }
 
     game_path = filename;
-    game_title = QString::fromStdString(info.title);
+    game_title = QString::fromStdString(name);
     emulation_running = true;
     ApplyAltSettings();
     FrameAutosaveBoot();
 #ifdef ENABLE_FRAME_XR
-    Common::FrameCrash::NoteGame(info.title_id, info.title, Core::CrashReport::SettingsSummary(),
+    Common::FrameCrash::NoteGame(info.title_id, name, Core::CrashReport::SettingsSummary(),
                                  FrameXr::IsStarted() && FrameXr::VrShowing());
     if (g_frame_mirror) {
         g_frame_mirror->SetGameRunning(true);
@@ -4423,13 +4433,28 @@ void GMainWindow::StoreRecentFile(const QString& filename) {
     UpdateRecentFiles();
 }
 
+// AzaharVR: a GBA or Game Boy game by its name (FrameCores::NameOfFile), as the game list has it;
+// others by the file's name, as before.
+QString GMainWindow::RecentFileName(const QString& path) {
+#ifdef ENABLE_ALT_CORES
+    const auto kind = FrameCores::DetectCoreKind(path.toStdString());
+    if (kind == Common::AltCore::CoreKind::GBA || kind == Common::AltCore::CoreKind::GB) {
+        const std::string name = FrameCores::NameOfFile(path.toStdString());
+        if (!name.empty()) {
+            return QString::fromStdString(name);
+        }
+    }
+#endif
+    return QFileInfo(path).fileName();
+}
+
 void GMainWindow::UpdateRecentFiles() {
     const int num_recent_files =
         std::min(static_cast<int>(UISettings::values.recent_files.size()), max_recent_files_item);
 
     for (int i = 0; i < num_recent_files; i++) {
         const QString text = QStringLiteral("&%1. %2").arg(i + 1).arg(
-            QFileInfo(UISettings::values.recent_files[i]).fileName());
+            RecentFileName(UISettings::values.recent_files[i]));
         actions_recent_files[i]->setText(text);
         actions_recent_files[i]->setData(UISettings::values.recent_files[i]);
         actions_recent_files[i]->setToolTip(UISettings::values.recent_files[i]);
@@ -4967,7 +4992,10 @@ void GMainWindow::OnGameListOpenDirectory(const QString& directory) {
 }
 
 void GMainWindow::OnGameListAddDirectory() {
-    const QString dir_path = QFileDialog::getExistingDirectory(this, tr("Select Directory"));
+    AddGameDirectory(QFileDialog::getExistingDirectory(this, tr("Select Directory")));
+}
+
+void GMainWindow::AddGameDirectory(const QString& dir_path) {
     if (dir_path.isEmpty())
         return;
     UISettings::GameDir game_dir{dir_path, false, true};
@@ -5705,6 +5733,32 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
                                       r.command == FrameXr::MenuCommand::HomebrewUpdate);
             }
         });
+        return;
+    case C::AddGameFolder: // AzaharVR: the Games tab
+#ifdef ENABLE_ALT_CORES
+        g_frame_mirror->SetMenuWindow(true);
+        QTimer::singleShot(0, this, [this] {
+            // Qt's own dialog: Azahar's window shows it in VR, the system's is out of sight
+            AddGameDirectory(QFileDialog::getExistingDirectory(
+                this, tr("Select Directory"), QDir::homePath(),
+                QFileDialog::ShowDirsOnly | QFileDialog::DontUseNativeDialog));
+            if (g_frame_mirror) {
+                g_frame_mirror->SetMenuWindow(false); // back to the menu
+            }
+        });
+#endif
+        return;
+    case C::PlayGame: // AzaharVR: the Games tab
+    case C::FavouriteGame:
+#ifdef ENABLE_ALT_CORES
+        QTimer::singleShot(0, this, [r] {
+            if (g_frame_games && r.command == C::PlayGame) {
+                g_frame_games->Play(QString::fromStdString(r.text));
+            } else if (g_frame_games) {
+                g_frame_games->ToggleFavourite(r.text);
+            }
+        });
+#endif
         return;
     case C::HomebrewCheck: // AzaharFrame ui3: Check for Updates; the result as a toast
         QTimer::singleShot(0, this, [r] {
@@ -6833,8 +6887,71 @@ void GMainWindow::FramePushMenuInfo() {
     }
     FrameXr::SetInGameMenuInfo(game_title.toStdString(), menu_slots,
                                states && states->id != 0 && !g_frame_game_config_name.empty());
+#ifdef ENABLE_ALT_CORES
+    if (g_frame_games) { // AzaharVR: the Games tab
+        g_frame_games->Publish();
+    }
+#endif
 #endif
 }
+
+#ifdef ENABLE_ALT_CORES
+// AzaharVR: the Games tab and what it needs of the window (frame_games.h).
+void GMainWindow::FrameMakeGamesTab() {
+    FrameGames::Hooks h;
+    h.rows = [this] { return game_list->TabRows(); };
+    h.played = [this](std::uint64_t key) { return play_time_manager->GetPlayTime(key); };
+    h.toggle_favourite = [this](std::uint64_t key) { game_list->ToggleFavorite(key); };
+    h.running_path = [this] { return emulation_running ? game_path : QString{}; };
+    h.running_title = [this] { return game_title; };
+    h.can_save = [this] {
+        const auto states = FrameRunningStates();
+        return states && states->id != 0;
+    };
+    h.autosaves = [this, h] { return h.can_save() && Settings::values.autosave_enabled.GetValue(); };
+    h.save = [this] { // as g_frame_xr_quick_save, without its toast: the game closes
+        UpdateSaveStates();
+        if (!FrameSaveStateAsk(true, 0)) {
+            ui->action_Quick_Save->trigger();
+        }
+    };
+    h.saved = [this](quint64 since) {
+        const auto states = FrameRunningStates();
+        if (!states) {
+            return false;
+        }
+        const auto info = Core::GetSaveStateInfoIn(states->dir, states->id, states->movie, 0);
+        return info.slot == 0 && info.time + 1 >= since;
+    };
+    h.save_failures = [this] { return frame_save_failures; };
+    h.asking = [this] { return static_cast<bool>(frame_notice_answer); };
+    h.ask = [this](const QString& title, const QString& body, const QString& confirm,
+                   const QString& cancel, const QString& extra, std::function<void(int)> answer) {
+        // As FrameAsk, with a third button; only the open in-game menu asks
+        if (frame_notice_answer) {
+            std::exchange(frame_notice_answer, {})(0);
+        }
+        frame_notice_answer = [answer = std::move(answer)](int choice) {
+            if (answer) {
+                answer(choice);
+            }
+        };
+        FrameXr::SetInGameMenuNotice(title.toStdString(), body.toStdString(), confirm.toStdString(),
+                                     cancel.toStdString(), extra.toStdString());
+    };
+    h.close_menu = [] {
+        if (g_frame_xr_set_menu) {
+            g_frame_xr_set_menu(false);
+        }
+    };
+    h.boot = [this](const QString& path) { BootGame(path); };
+    h.covers_on = [] { return UISettings::values.download_covers.GetValue(); };
+    h.covers_dir = FileUtil::GetUserPath(FileUtil::UserPath::CacheDir) + "covers/";
+    g_frame_games = new FrameGames(std::move(h), this);
+    connect(game_list, &GameList::PopulatingCompleted, g_frame_games,
+            [] { g_frame_games->Listed(); });
+}
+#endif
 
 void GMainWindow::FrameAskLoadAnyway(u32 slot, const std::string& version) {
     const std::string full = Common::g_build_fullname;

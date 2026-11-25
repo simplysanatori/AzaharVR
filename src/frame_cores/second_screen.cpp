@@ -4,6 +4,12 @@
 
 #include "frame_cores/second_screen.h"
 
+#include <algorithm>
+#include <array>
+#include <string_view>
+
+#include "frame_cores/frame_driver.h"
+
 extern "C" {
 #include "profiles.h"
 }
@@ -66,13 +72,40 @@ bool HasTwoScreens(Common::AltCore::CoreKind kind, const std::string& game_code)
         return GbaDsScreenAvailable(facts, false);
 #endif
     }
-    case Common::AltCore::CoreKind::GB:
-        // A companion-profile rule for Game Boy and Pokemon games goes here, and in a GBA
-        // case above, as "companion found OR the rule above".
-        return false;
     default:
-        return false; // 3DS and DS games already have two screens
+        return false; // Game Boy games have no gba-ds picture; 3DS and DS games have two screens
     }
+}
+
+GameBadges BadgeRule(Common::AltCore::CoreKind kind, bool pokedaisy, bool gbads) {
+    if (kind != Common::AltCore::CoreKind::GBA && kind != Common::AltCore::CoreKind::GB) {
+        return {};
+    }
+    return {.two_screens = pokedaisy || gbads, .pokedaisy = pokedaisy};
+}
+
+bool MayBePokeDaisy(const RomInfo& info) {
+    if (info.kind == Common::AltCore::CoreKind::GB) {
+        return true;
+    }
+    if (info.kind != Common::AltCore::CoreKind::GBA) {
+        return false;
+    }
+    // Ruby, Sapphire, FireRed, LeafGreen and Emerald in any language; hacks keep the code or title
+    constexpr std::array<std::string_view, 5> kCodes{"AXV", "AXP", "BPR", "BPG", "BPE"};
+    const std::string_view code = std::string_view(info.game_code).substr(0, 3);
+    return std::find(kCodes.begin(), kCodes.end(), code) != kCodes.end() ||
+           info.title.starts_with("POKEMON");
+}
+
+GameBadges BadgesOf(const RomInfo& info, const std::string& path) {
+    bool pokedaisy = false;
+#ifdef HAVE_POKEDAISY
+    pokedaisy = MayBePokeDaisy(info) && PokeDaisyKnows(path);
+#else
+    (void)path;
+#endif
+    return BadgeRule(info.kind, pokedaisy, HasTwoScreens(info.kind, info.game_code));
 }
 
 } // namespace FrameCores

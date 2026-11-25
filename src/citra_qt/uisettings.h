@@ -127,6 +127,8 @@ struct Values {
     Settings::Setting<bool> show_system_column{true, Settings::Keys::show_system_column};
     /// FrameCores::SystemFilter of the list's chips
     Settings::Setting<int> game_list_system_filter{0, Settings::Keys::game_list_system_filter};
+    /// AzaharVR: covers for the VR Games tab (core/frame_covers.h), off until turned on
+    Settings::Setting<bool> download_covers{false, Settings::Keys::download_covers};
 #endif
 
     Settings::Setting<u16> screenshot_resolution_factor{
