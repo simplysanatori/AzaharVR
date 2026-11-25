@@ -418,6 +418,11 @@ TEST_CASE("Sections: a 3DS game's rows, in order", "[frame_xr][tabmenu]") {
     const std::vector<Id> first = AngelsAimFirstPersonRows(m);
     REQUIRE(!first.empty());
     angels.insert(angels.begin() + 1, first.begin(), first.end());
+    m.kiu_hud = 0; // the game's own HUD
+    CHECK(RowIds(Tab::Settings, m, SettingsSection::Immersive) == angels);
+    m.kiu_hud = 1; // In View: HUD Spacing has nothing to move
+    std::erase(angels, Id::HudSpacingX);
+    std::erase(angels, Id::HudSpacingY);
     CHECK(RowIds(Tab::Settings, m, SettingsSection::Immersive) == angels);
 }
 
@@ -520,7 +525,8 @@ TEST_CASE("Sections: the scope's count follows the rows", "[frame_xr][tabmenu][s
     m.motion_clarity_immersive = m.motion_clarity_normal = true;
     m.scale_mode = 0;
     CHECK(GameValueRows(m, Tab::Position) ==
-          std::vector<Id>{Id::ScreenLayout, Id::HideBottomScreen, Id::ScreenShape});
+          std::vector<Id>{Id::ScreenLayout, Id::ScreenGap, Id::HideBottomScreen,
+                          Id::ScreenShape});
     CHECK(GameValueRows(m, Tab::Settings, SettingsSection::General) ==
           std::vector<Id>{Id::FastForwardAudio, Id::Autosave, Id::AutosaveEvery,
                           Id::AutosaveKeep});
