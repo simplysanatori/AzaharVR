@@ -436,6 +436,19 @@ void SetMenu(int menu, bool panel) {
     g_menu_panel.store(panel, std::memory_order_relaxed);
     g_menu.store(menu, std::memory_order_relaxed);
 }
+bool PortraitsWanted() {
+    const auto text = Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_PORTRAITS");
+    return PortraitsWantedFor(text ? text->c_str() : nullptr,
+                              Settings::values.vr_kiu_talk_portraits.GetValue());
+}
+bool TalkTopWanted() {
+    const auto text = Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_TALK_TOP");
+    return TalkTopFor(text ? text->c_str() : nullptr, PortraitsWanted(),
+                      BottomScreenNow().mode == BottomScreen::Persistent);
+}
+float PortraitAlpha() {
+    return BottomAlphaFor(Settings::values.vr_kiu_talk_portraits_opacity.GetValue());
+}
 void SetWeaponHidden(bool hidden) {
     g_weapon_hidden.store(hidden, std::memory_order_relaxed);
 }

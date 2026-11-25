@@ -578,6 +578,23 @@ inline PanelInView PersistentInView(float right_deg, float down_deg, float width
     return p;
 }
 
+/// AzaharFrame kiu1s: the card is asked for: its setting (vr_kiu_talk_portraits), or the test
+/// switch AZAHARFRAME_KIU_PORTRAITS when set ("1" on, anything else off).
+constexpr bool PortraitsWantedFor(const char* switch_text, bool setting) {
+    return switch_text ? std::string_view{switch_text} == "1" : setting;
+}
+/// The words on the Primary Screen too (the "talk on top" group): AZAHARFRAME_KIU_TALK_TOP when set
+/// ("1" on, anything else off), else with the card unless the Secondary Screen is in the view
+/// (Persistent): the card leaves the words out (rows 0 to 41), and on land the game has them on
+/// the Secondary Screen only, so without this there would be faces and no words.
+constexpr bool TalkTopFor(const char* switch_text, bool portraits, bool persistent) {
+    return switch_text ? std::string_view{switch_text} == "1" : portraits && !persistent;
+}
+/// The two above from the switches and settings now, and the card's opacity
+/// (vr_kiu_talk_portraits_opacity, 20 to 100 percent; live). Any thread.
+bool PortraitsWanted();
+bool TalkTopWanted();
+float PortraitAlpha();
 /// AzaharFrame kiu1s: where the portraits' card is, in the head's frame: the one place to change
 /// (the owner would later have it by the off hand itself). `right`: the off hand is the right one.
 inline PanelInView PortraitPlace(bool right) {

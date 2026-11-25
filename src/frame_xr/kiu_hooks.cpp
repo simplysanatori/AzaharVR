@@ -68,9 +68,7 @@ constexpr const char* kSwitchTrace = "AZAHARFRAME_KIU_HOOK_TRACE";
 // AzaharFrame kiu1s: the single screen's, all off by default (KIU_HOOKS.md, "Single screen").
 constexpr const char* kSwitchPage = "AZAHARFRAME_KIU_PAGE";
 constexpr const char* kSwitchHudExact = "AZAHARFRAME_KIU_HUD_EXACT";
-constexpr const char* kSwitchTalkTop = "AZAHARFRAME_KIU_TALK_TOP";
 constexpr const char* kSwitchPausePanel = "AZAHARFRAME_KIU_PAUSE_PANEL";
-constexpr const char* kSwitchPortraits = "AZAHARFRAME_KIU_PORTRAITS";
 constexpr const char* kSwitchMenuScreens = "AZAHARFRAME_KIU_MENU_SCREENS";
 constexpr const char* kSwitchMenuPanel = "AZAHARFRAME_KIU_MENU_PANEL";
 constexpr const char* kSwitchUiTrace = "AZAHARFRAME_KIU_UI_TRACE";
@@ -493,7 +491,7 @@ void UiQuiet(State& s) {
 void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
     const bool page = SwitchIs(kSwitchPage, "1"), exact = SwitchIs(kSwitchHudExact, "1"),
                pause = SwitchIs(kSwitchPausePanel, "1"), trace = SwitchIs(kSwitchUiTrace, "1"),
-               portraits = SwitchIs(kSwitchPortraits, "1"),
+               portraits = Kiu::FirstPerson::PortraitsWanted(),
                menu_panel = SwitchIs(kSwitchMenuPanel, "1"),
                menu_screens = menu_panel || SwitchIs(kSwitchMenuScreens, "1");
     const bool usa = s.build == &Input::KiuTurn::kBuildUsaRev1;
@@ -892,7 +890,7 @@ void Hook(int64_t ticks) {
                             (want_aim_hold ? KH::Bit(KH::Group::AimHold) : 0u) |
                             (want_aim_box ? KH::Bit(KH::Group::AimBox) : 0u) |
                             (want_player_shadow ? KH::Bit(KH::Group::PlayerShadow) : 0u) |
-                            (first_person && SwitchIs(kSwitchTalkTop, "1")
+                            (first_person && Kiu::FirstPerson::TalkTopWanted()
                                  ? KH::Bit(KH::Group::TalkTop)
                                  : 0u) | // AzaharFrame kiu1s
                             (mailbox.wide_node != 0 ? KH::Bit(KH::Group::WideCamera) : 0u);

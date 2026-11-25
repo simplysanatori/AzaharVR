@@ -109,6 +109,8 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_kiu_bottom_screen); // AzaharFrame kiu131
     f(v.vr_kiu_bottom_size);
     f(v.vr_kiu_bottom_opacity);
+    f(v.vr_kiu_talk_portraits); // AzaharFrame kiu1s
+    f(v.vr_kiu_talk_portraits_opacity);
     f(v.vr_kiu_bottom_x);
     f(v.vr_kiu_bottom_y);
     f(v.vr_kiu_wrist_angle); // AzaharFrame kiu140

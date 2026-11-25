@@ -1168,9 +1168,13 @@ in both builds by its code; no code or layout of it is used.
   V: START: up in the same frame, 6 layers before and after; head turned 25 left and 12 down: the panel 24.6 left, 16 down;
   Resume, Retreat and Yes by the beam and the trigger (246,83 and 225,171 asked and touched, ZL, ZR and L 0), the hub after.
   Not run: the Options pages, a re-centre while paused. The mock does not composite, so the panel over the picture was not seen.
+- **Talk Portraits** (`vr_kiu_talk_portraits`, off; `vr_kiu_talk_portraits_opacity`, 20 to 100, per game, live; no menu rows yet).
+  The setting asks for the card below; `AZAHARFRAME_KIU_PORTRAITS`, when set, wins (1 on, else off). The card is at its own opacity,
+  blended as the Bottom Screen's. With the card and no `AZAHARFRAME_KIU_TALK_TOP` set, the words go on the Primary Screen too
+  (`TalkTopFor`) unless Bottom Screen is Persistent: the card leaves the words out, and on land the game has them below only.
 - **`AZAHARFRAME_KIU_PORTRAITS=1`.** While the game draws the talk's portraits (or an illustration), that part of the Secondary
   Screen's own picture (rows 42 to 240 of 320 x 240, `kPortraitCut`; a plain card) is a quad with the head, 25 degrees to the off
-  hand's side, 7.5 below, 16 wide, to look at only, at Bottom Screen Opacity. No code patch. All through a battle the quad is there,
+  hand's side, 7.5 below, 16 wide, to look at only. No code patch. All through a battle the quad is there,
   shrunk to nothing between the lines and while paused, so a line changes neither the number of layers nor how the bottom screen is
   drawn. Not while the Secondary Screen is on view anyway (Persistent, the wrist, the pause panel). V: an air battle: up with the
   portraits, the rect 1280 x 792 at 0,168 of 1280 x 960, away while paused and 0.35 s after the words, 6 layers all the time. The

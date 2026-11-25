@@ -2419,7 +2419,7 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
             out.bottom_cut = cut;
             out.show_bottom = true;
             out.bottom_pointable = false;
-            out.bottom_alpha = bottom.alpha;
+            out.bottom_alpha = Kiu::FirstPerson::PortraitAlpha(); // its own opacity
             bottom_as_drawn = true;
         }
         out.head_driven = true; // AzaharFrame flash

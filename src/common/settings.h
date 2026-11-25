@@ -1148,6 +1148,11 @@ struct Values {
     // Its size and opacity in percent (Persistent and Wrist alike).
     SwitchableSetting<u32, true> vr_kiu_bottom_size{100, 50, 200, "vr_kiu_bottom_size"};
     SwitchableSetting<u32, true> vr_kiu_bottom_opacity{100, 20, 100, "vr_kiu_bottom_opacity"};
+    // AzaharFrame kiu1s: the talk's portraits as a card in Angel's Aim's view, and its opacity in
+    // percent.
+    SwitchableSetting<bool> vr_kiu_talk_portraits{false, "vr_kiu_talk_portraits"};
+    SwitchableSetting<u32, true> vr_kiu_talk_portraits_opacity{100, 20, 100,
+                                                               "vr_kiu_talk_portraits_opacity"};
     // AzaharFrame kiu140: HUD in Angel's Aim: 0 where the game puts it, 1 in the view, its size in
     // percent; the health bar and the score side by side as one (linked), where that is (degrees
     // to the right and up from straight ahead), or each with a place of its own.
