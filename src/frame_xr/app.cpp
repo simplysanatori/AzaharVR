@@ -1571,7 +1571,9 @@ void Runtime::FrameLoop() {
             VideoCore::KiuTalk::g_live.shown.store(shown.bottom_talk, std::memory_order_relaxed);
             { // AzaharFrame kiupowers
                 powers_in.playing = !draw.swapped && shown.head_driven && shown.show_top;
-                powers_in.bottom_shown = shown.show_bottom && draw.bottom_visible;
+                // (kiutalk: the talk card without its backdrop has no power bar)
+                powers_in.bottom_shown =
+                    shown.show_bottom && draw.bottom_visible && !shown.bottom_talk;
                 powers_in.bottom_persistent = shown.bottom_persistent;
                 powers_in.top_pose[0] = shown.top_pose[0];
                 powers_in.top_pose[1] = shown.top_pose[1];
