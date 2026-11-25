@@ -415,23 +415,30 @@ public:
 
         QStyle* style = opt.widget ? opt.widget->style() : QApplication::style();
 
-        // Draw the default item (background, text, selection, etc.)
-        style->drawControl(QStyle::CE_ItemViewItem, &opt, painter, opt.widget);
+        // Draw the default item (background, text, selection, etc.), the text only as far as what
+        // is drawn at the row's right edge
+        const int reserved = ReservedWidth(index, opt);
+        if (reserved > 0) {
+            QStyleOptionViewItem row(opt);
+            row.text.clear();
+            row.icon = QIcon();
+            row.features &=
+                ~(QStyleOptionViewItem::HasDisplay | QStyleOptionViewItem::HasDecoration);
+            style->drawControl(QStyle::CE_ItemViewItem, &row, painter, opt.widget);
+            QStyleOptionViewItem text(opt);
+            text.rect.setRight(std::max(opt.rect.left(), opt.rect.right() - reserved));
+            style->drawControl(QStyle::CE_ItemViewItem, &text, painter, opt.widget);
+        } else {
+            style->drawControl(QStyle::CE_ItemViewItem, &opt, painter, opt.widget);
+        }
 
         // Draw cartridge inserted icon
-        quint32 can_insert = index.data(GameListItemPath::CanInsertRole).value<quint32>();
-        QString game_path = index.data(GameListItemPath::FullPathRole).value<QString>();
-
-        bool is_inserted = can_insert && UISettings::values.inserted_cartridge.GetValue() ==
-                                             game_path.toStdString();
-
-        if (is_inserted) {
+        if (HasCartridge(index)) {
             QPixmap pixmap = QIcon::fromTheme(QStringLiteral("cartridge")).pixmap(24);
 
-            const int margin = 12;
             QSize pmSize = pixmap.size() / pixmap.devicePixelRatio();
 
-            QRect pmRect(opt.rect.right() - pmSize.width() - margin,
+            QRect pmRect(opt.rect.right() - pmSize.width() - kMargin,
                          opt.rect.center().y() - pmSize.height() / 2, pmSize.width(),
                          pmSize.height());
 
@@ -440,7 +447,7 @@ public:
 
 #ifdef ENABLE_ALT_CORES
         // The badges from the row's right edge, Two Screens first
-        int right = opt.rect.right() - 12;
+        int right = opt.rect.right() - kMargin;
         if (index.data(GameListItemPath::TwoScreensRole).toBool()) {
             right = DrawTwoScreensGlyph(painter, opt, right);
         }
@@ -450,8 +457,40 @@ public:
 #endif
     }
 
-#ifdef ENABLE_ALT_CORES
 private:
+    static constexpr int kMargin = 12; ///< from the row's right edge
+    static constexpr int kGap = 8;     ///< between the badges, and to the text
+
+    static bool HasCartridge(const QModelIndex& index) {
+        return index.data(GameListItemPath::CanInsertRole).value<quint32>() &&
+               UISettings::values.inserted_cartridge.GetValue() ==
+                   index.data(GameListItemPath::FullPathRole).value<QString>().toStdString();
+    }
+
+    /// The room that what is drawn at the row's right edge takes, with the gap to the text; 0
+    /// without any.
+    static int ReservedWidth(const QModelIndex& index, const QStyleOptionViewItem& opt) {
+        int width = 0;
+        if (HasCartridge(index)) {
+            width = std::max(width, 24 + kMargin + kGap);
+        }
+#ifdef ENABLE_ALT_CORES
+        const int badge = BadgeHeight(opt);
+        int badges = 0;
+        if (badge >= 8 && index.data(GameListItemPath::TwoScreensRole).toBool()) {
+            badges += (badge - 2) / 2 * 4 / 3 + kGap;
+        }
+        if (badge >= 12 && index.data(GameListItemPath::PokeDaisyRole).toBool()) {
+            badges += badge + kGap;
+        }
+        if (badges > 0) {
+            width = std::max(width, badges + kMargin);
+        }
+#endif
+        return width;
+    }
+
+#ifdef ENABLE_ALT_CORES
     static QColor InkOf(const QStyleOptionViewItem& opt) {
         return opt.palette.color(opt.state & QStyle::State_Selected ? QPalette::HighlightedText
                                                                     : QPalette::Text);
@@ -478,7 +517,7 @@ private:
         painter->drawRoundedRect(QRectF(x, y, rect_w, rect_h), 2, 2);
         painter->drawRoundedRect(QRectF(x, y + rect_h + gap, rect_w, rect_h), 2, 2);
         painter->restore();
-        return x - 8;
+        return x - kGap;
     }
 
     /// The PokeDaisy badge (menu/badge_seal.h), ending at `right`.
