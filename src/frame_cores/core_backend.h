@@ -43,6 +43,7 @@ struct CoreBootOptions {
     std::string gba_slot_rom;      ///< Optional Slot-2 GBA ROM path (DS mode)
     bool rumble_pak = false;       ///< Insert DS Rumble Pak in Slot-2 when no GBA ROM
     uint32_t second_screen = 0;    ///< SecondScreen (GBA and Game Boy games)
+    uint32_t layer_depth = 0;      ///< 0 off, 1 to 3: how far back the layers go
     DriverOverride driver;
 };
 
@@ -55,6 +56,9 @@ struct CheatEntry {
 struct FrameOutput {
     Vulkan::AltScreenImage primary{};
     Vulkan::AltScreenImage secondary{};
+    /// The Primary Screen for the right eye (Layer Depth); none: both eyes see `primary`. The same
+    /// size as `primary`.
+    Vulkan::AltScreenImage primary_right{};
     Vulkan::AltScreenImage overlay{}; ///< over the whole Primary Screen, alpha premultiplied
     std::vector<int16_t> audio_pcm; ///< Interleaved stereo PCM16 (L, R, L, R, ...)
     float rumble = 0.0f;            ///< Haptic motor intensity [0.0, 1.0]

@@ -17,6 +17,7 @@
 #include "frame_cores/cheat_store.h"
 #include "frame_cores/driver_runner.h"
 #include "frame_cores/second_screen.h"
+#include "frame_cores/shadow_eye.h"
 
 extern "C" {
 #include "cheats.h"
@@ -86,6 +87,7 @@ struct GbaCore::Impl {
 
     Common::AltCore::InputState input{};
     DriverRunner driver;
+    ShadowEye shadow;
 
     // Cheats state (gba-ds .cht loader + runtime user-added cheats)
     Cheats cheats{};
@@ -98,7 +100,10 @@ struct GbaCore::Impl {
         DriverServices services;
         services.core = emu.core;
         services.emu = &emu;
-        services.step = [this](uint32_t keys) { emu_frame(&emu, keys & 0x3FFu); };
+        services.step = [this](uint32_t keys) {
+            shadow.Run(keys & 0x3FFu);
+            emu_frame(&emu, keys & 0x3FFu);
+        };
         services.drain_audio = [this](int16_t* out, std::size_t max_frames) -> std::size_t {
             return emu_audio_read(&emu, out, max_frames);
         };
@@ -116,6 +121,11 @@ struct GbaCore::Impl {
         const auto known = DriverRunner::WhatKnows(rom_path, gbads_known);
         driver.Start(DriverRunner::Choose(opts, known), known, std::move(services), info, opts,
                      save_path, caps);
+
+        shadow.SetDepth(opts.layer_depth);
+        if (opts.layer_depth > 0 && driver.PrimaryIsGame()) {
+            shadow.Start(emu.core, kGbaWidth, kGbaHeight);
+        }
     }
 
     void ApplyAllCheats() {
@@ -219,6 +229,7 @@ void GbaCore::Unload() {
     if (!impl) {
         return;
     }
+    impl->shadow.Stop();
     impl->driver.Stop();
 
     cheats_free(&impl->cheats);
@@ -245,6 +256,7 @@ void GbaCore::SetInput(const Common::AltCore::InputState& input) {
 
 void GbaCore::RunFrame(FrameOutput& out) {
     impl->driver.RunFrame(impl->input, out, impl->caps);
+    impl->driver.SetRightEye(impl->shadow.Picture(), out);
 }
 
 uint32_t GbaCore::AudioSampleRate() const {

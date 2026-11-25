@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <span>
 #include <string>
 #include <thread>
@@ -29,7 +30,9 @@
 #include "frame_cores/alt_core_host.h"
 #include "frame_cores/audio_resampler.h"
 #include "frame_cores/cheat_store.h"
+#include "frame_cores/driver_runner.h"
 #include "frame_cores/frame_driver.h"
+#include "frame_cores/gb_core.h"
 #include "frame_cores/gba_core.h"
 #include "frame_cores/nds_core.h"
 #include "frame_cores/rom_info.h"
@@ -180,6 +183,181 @@ std::vector<uint8_t> MakeBatteryGbRom() {
     };
     std::memcpy(&rom[0x150], kCode, sizeof(kCode));
     return rom;
+}
+
+/// A GBA ROM with two text backgrounds of `priority0` and `priority1`, drawn `right0` and
+/// `right1` pixels to the right of where they scroll. They scroll every frame and change in the
+/// middle of it; sound channel 1 plays.
+std::vector<uint8_t> MakeLayersGbaRom(uint32_t priority0, uint32_t priority1, uint32_t right0 = 0,
+                                      uint32_t right1 = 0) {
+    std::vector<uint8_t> rom = MakeHomebrewGbaRom();
+    const uint32_t code[] = {
+        0xE3A00301u,          // mov r0, #0x04000000
+        0xE3A01080u,          // mov r1, #0x80
+        0xE1C010B0u,          // strh r1, [r0]            forced blank
+        0xE1C018B4u,          // strh r1, [r0, #0x84]     sound on
+        0xE59F30F4u,          // ldr r3, =0x00021177
+        0xE5803080u,          // str r3, [r0, #0x80]
+        0xE59F30F0u,          // ldr r3, =0xF0800000
+        0xE5803060u,          // str r3, [r0, #0x60]
+        0xE3A02405u,          // mov r2, #0x05000000
+        0xE59F30CCu,          // ldr r3, =0x03FF0000
+        0xE5823000u,          // str r3, [r2]             colours 0 and 1
+        0xE59F30C8u,          // ldr r3, =0x7C1F001F
+        0xE5823004u,          // str r3, [r2, #4]         2 and 3
+        0xE3A02406u,          // mov r2, #0x06000000
+        0xE59F30C0u,          // ldr r3, =0x1234567B
+        0xE59F60C0u,          // ldr r6, =0x33333333
+        0xE3A04C02u,          // mov r4, #0x200
+        0xE08333E3u,          // add r3, r3, r3, ror #7   16 tiles of noise
+        0xE0035006u,          // and r5, r3, r6
+        0xE4825004u,          // str r5, [r2], #4
+        0xE2544004u,          // subs r4, r4, #4
+        0x1AFFFFFAu,          // bne -4
+        0xE3A02406u,          // mov r2, #0x06000000
+        0xE2822901u,          // add r2, r2, #0x4000
+        0xE3A04000u,          // mov r4, #0
+        0xE0845104u,          // add r5, r4, r4, lsl #2   the maps, 0x4000 and 0x4800
+        0xE0855324u,          // add r5, r5, r4, lsr #6
+        0xE205500Fu,          // and r5, r5, #15
+        0xE1C250B0u,          // strh r5, [r2]
+        0xE2826B02u,          // add r6, r2, #0x800
+        0xE02550A4u,          // eor r5, r5, r4, lsr #1
+        0xE205500Fu,          // and r5, r5, #15
+        0xE1C650B0u,          // strh r5, [r6]
+        0xE2822002u,          // add r2, r2, #2
+        0xE2844001u,          // add r4, r4, #1
+        0xE3540B01u,          // cmp r4, #0x400
+        0x3AFFFFF3u,          // blo -11
+        0xE59F306Cu,          // ldr r3, =BG0CNT, BG1CNT
+        0xE5803008u,          // str r3, [r0, #8]
+        0xE3A01C03u,          // mov r1, #0x300
+        0xE1C010B0u,          // strh r1, [r0]            mode 0
+        0xE3A08000u,          // mov r8, #0
+        0xE1D010B6u,          // ldrh r1, [r0, #6]        until line 160
+        0xE35100A0u,          // cmp r1, #160
+        0x1AFFFFFCu,          // bne -2
+        0xE2888001u,          // add r8, r8, #1
+        0xE1A070A8u,          // lsr r7, r8, #1
+        0xE2481000u | right0, // sub r1, r8, #right0
+        0xE1C011B0u,          // strh r1, [r0, #0x10]     BG0HOFS
+        0xE2471000u | right1, // sub r1, r7, #right1
+        0xE1C011B4u,          // strh r1, [r0, #0x14]     BG1HOFS
+        0xE1C071B2u,          // strh r7, [r0, #0x12]     BG0VOFS
+        0xE20810FFu,          // and r1, r8, #0xFF
+        0xE3811B21u,          // orr r1, r1, #0x8400
+        0xE1C016B4u,          // strh r1, [r0, #0x64]     the note
+        0xE1D010B6u,          // ldrh r1, [r0, #6]        until line 80
+        0xE3510050u,          // cmp r1, #80
+        0x1AFFFFFCu,          // bne -2
+        0xE1C081B6u,          // strh r8, [r0, #0x16]     BG1VOFS
+        0xE2877003u,          // add r7, r7, #3
+        0xE1C071B2u,          // strh r7, [r0, #0x12]
+        0xEAFFFFEBu,          // b line 160
+        0x03FF0000u,
+        0x7C1F001Fu,
+        0x1234567Bu,
+        0x33333333u,
+        0x09000800u | priority1 << 16 | priority0,
+        0x00021177u,
+        0xF0800000u,
+    };
+    size_t pc = 0xC0;
+    for (const uint32_t word : code) {
+        PutLE32(rom, pc, word);
+        pc += 4;
+    }
+    return rom;
+}
+
+/// A Game Boy ROM whose background scrolls and changes its colours every frame, drawn `right`
+/// pixels to the right of where it scrolls; `window`: the window covers it. Sound channel 1 plays.
+std::vector<uint8_t> MakeLayersGbRom(bool window, uint8_t right = 0) {
+    std::vector<uint8_t> rom = MakeHomebrewGbRom();
+    const uint8_t lcdc = window ? 0xF1 : 0x91;
+    const uint8_t code[] = {
+        0xAF, 0xE0, 0x40,                         // xor a; ldh (0x40), a       screen off
+        0x21, 0x10, 0x80, 0x06, 0xF0, 0x3E, 0x5B, // ld hl, 0x8010; ld b, 0xF0; ld a, 0x5B
+        0x22, 0x07, 0xC6, 0x1D, 0x05, 0x20, 0xF9, // the tiles: ld (hl+), a; rlca; add a, 0x1D ...
+        0x21, 0x00, 0x98, 0x01, 0x00, 0x08,       // ld hl, 0x9800; ld bc, 0x0800
+        0x7D, 0x84, 0xE6, 0x0F, 0x22,             // both maps: ld a, l; add a, h; and 15; ...
+        0x0B, 0x78, 0xB1, 0x20, 0xF6,             // dec bc; ld a, b; or c; jr nz
+        0x3E, 0x07, 0xE0, 0x4B, 0xAF, 0xE0, 0x4A, // the window at 0, 0
+        0x3E, 0x80, 0xE0, 0x26, 0x3E, 0x77, 0xE0, 0x24, // sound on
+        0x3E, 0xFF, 0xE0, 0x25, 0x3E, 0xF0, 0xE0, 0x12,
+        0x3E, lcdc, 0xE0, 0x40, 0x16, 0x00, // screen on; ld d, 0
+        // loop (0x18E):
+        0xF0, 0x44, 0xFE, 0x90, 0x20, 0xFA,             // until line 144
+        0x14, 0x7A, 0xE0, 0x47, 0xE0, 0x42, 0xE0, 0x13, // inc d: the palette, SCY, the note
+        0xD6, right, 0xE0, 0x43, 0x3E, 0x87, 0xE0, 0x14, // SCX
+        0xF0, 0x44, 0xFE, 0x90, 0x28, 0xFA,             // until the next line
+        0xC3, 0x8E, 0x01,                               // jp loop
+    };
+    std::memcpy(&rom[0x150], code, sizeof(code));
+    return rom;
+}
+
+using Pixels = std::vector<uint32_t>;
+
+Pixels Copy(const Vulkan::AltScreenImage& image) {
+    if (!image.HasPicture()) {
+        return {};
+    }
+    const uint32_t stride = image.stride_pixels ? image.stride_pixels : image.width;
+    Pixels pixels;
+    for (uint32_t y = 0; y < image.height; ++y) {
+        const uint32_t* row = image.pixels + static_cast<size_t>(y) * stride;
+        pixels.insert(pixels.end(), row, row + image.width);
+    }
+    return pixels;
+}
+
+/// A GBA or Game Boy game without its host.
+struct DepthGame {
+    TempDir tmp;
+    std::unique_ptr<FrameCores::CoreBackend> core;
+    FrameCores::FrameOutput out;
+
+    DepthGame(bool gba, const std::vector<uint8_t>& rom, uint32_t layer_depth,
+              FrameCores::CoreBootOptions opts = {})
+        : tmp("depth") {
+        const fs::path path = tmp.path / (gba ? "hb.gba" : "hb.gb");
+        WriteFile(path, rom);
+        FrameCores::CorePaths paths;
+        paths.data_dir = tmp.path.string();
+        paths.game_dir = (tmp.path / "game").string();
+        paths.cheat_dir = (tmp.path / "cheats").string();
+        opts.use_bios = false;
+        opts.second_screen = 2; // off
+        opts.layer_depth = layer_depth;
+        if (gba) {
+            core = std::make_unique<FrameCores::GbaCore>();
+        } else {
+            core = std::make_unique<FrameCores::GbCore>();
+        }
+        REQUIRE(core->Load(path.string(), paths, opts));
+    }
+
+    void Run(uint32_t buttons = 0) {
+        Common::AltCore::InputState in{};
+        in.buttons = buttons;
+        core->SetInput(in);
+        core->RunFrame(out);
+    }
+    Pixels Left() const {
+        return Copy(out.primary);
+    }
+    Pixels Right() const {
+        return Copy(out.primary_right);
+    }
+};
+
+/// Pictures where nothing is to be nearer or farther.
+std::vector<uint8_t> MakeFlatRom(bool gba) {
+    return gba ? MakeLayersGbaRom(0, 0) : MakeLayersGbRom(true);
+}
+std::vector<uint8_t> MakeDeepRom(bool gba) {
+    return gba ? MakeLayersGbaRom(1, 3) : MakeLayersGbRom(false);
 }
 
 uint8_t FirstByte(const fs::path& p) {
@@ -1614,4 +1792,206 @@ TEST_CASE("Stopping a game clears the running title id", "[frame_cores]") {
     CHECK(last != 0);
     host.Stop();
     CHECK(last == 0);
+}
+
+TEST_CASE("Layer Depth off: no right picture", "[frame_cores]") {
+    const bool gba = GENERATE(true, false);
+    DepthGame game(gba, MakeDeepRom(gba), 0);
+    for (int i = 0; i < 30; ++i) {
+        game.Run();
+        REQUIRE(game.out.primary.HasPicture());
+        REQUIRE(!game.out.primary_right.HasPicture());
+    }
+}
+
+TEST_CASE("Layer Depth: with nothing moved both eyes see the same", "[frame_cores]") {
+    const bool gba = GENERATE(true, false);
+    DepthGame game(gba, MakeFlatRom(gba), 1);
+    Pixels last;
+    int changes = 0;
+    for (int i = 0; i < 600; ++i) {
+        INFO("frame " << i);
+        game.Run(i % 7 == 0 ? Common::AltCore::BtnA : 0);
+        const Pixels left = game.Left();
+        REQUIRE(game.out.primary_right.width == game.out.primary.width);
+        REQUIRE(game.out.primary_right.height == game.out.primary.height);
+        REQUIRE(!game.out.primary_right.bgra);
+        // Byte for byte, the first frame after the copy too
+        REQUIRE((left == game.Right()));
+        changes += left != last;
+        last = left;
+    }
+    CHECK(changes > 500);
+}
+
+TEST_CASE("Layer Depth: lines mGBA left undrawn at the start", "[frame_cores]") {
+    // At line 0 forced blank goes off and no register was ever set to anything but 0. mGBA takes
+    // the lines of its first, short frame as unchanged and leaves them blank; the right eye's
+    // are drawn afresh after the copy. It ends with the first register the game sets.
+    std::vector<uint8_t> rom = MakeHomebrewGbaRom();
+    const uint32_t code[] = {
+        0xE3A00301u, // mov r0, #0x04000000
+        0xE1D010B6u, // ldrh r1, [r0, #6]
+        0xE3510000u, // cmp r1, #0
+        0x1AFFFFFCu, // bne -2
+        0xE1C010B0u, // strh r1, [r0]
+        0xEAFFFFFEu, // b .
+    };
+    size_t pc = 0xC0;
+    for (const uint32_t word : code) {
+        PutLE32(rom, pc, word);
+        pc += 4;
+    }
+    DepthGame game(true, rom, 1);
+    game.Run();
+    CHECK((game.Right() == game.Left()));
+    for (int i = 0; i < 3; ++i) {
+        game.Run();
+    }
+    const Pixels left = game.Left();
+    const Pixels right = game.Right();
+    constexpr size_t kFirst = 126 * 240; // VCOUNT at the start
+    CHECK(std::equal(left.begin(), left.begin() + kFirst, right.begin()));
+    CHECK(std::all_of(right.begin(), right.end(), [](uint32_t p) { return p == 0xFF000000u; }));
+    CHECK(std::none_of(left.begin() + kFirst, left.end(),
+                       [](uint32_t p) { return p == 0xFF000000u; }));
+}
+
+TEST_CASE("Layer Depth: each layer moves by its priority", "[frame_cores]") {
+    const uint32_t level = GENERATE(1u, 2u, 3u);
+    const bool gba = GENERATE(true, false);
+    // The expected right eye: the same game with its layers drawn there
+    const auto moved = gba ? MakeLayersGbaRom(1, 3, level, level * 3)
+                           : MakeLayersGbRom(false, static_cast<uint8_t>(level * 2));
+    DepthGame game(gba, MakeDeepRom(gba), level);
+    DepthGame expected(gba, moved, 0);
+    for (int i = 0; i < 120; ++i) {
+        INFO("frame " << i);
+        game.Run();
+        expected.Run();
+        if (i < 20) {
+            continue; // until the game has scrolled
+        }
+        REQUIRE((game.Right() == expected.Left()));
+        REQUIRE((game.Right() != game.Left()));
+    }
+}
+
+TEST_CASE("Layer Depth leaves the game's picture and sound alone", "[frame_cores]") {
+    const bool gba = GENERATE(true, false);
+    DepthGame with(gba, MakeDeepRom(gba), 3);
+    DepthGame without(gba, MakeDeepRom(gba), 0);
+    bool heard = false;
+    for (int i = 0; i < 300; ++i) {
+        INFO("frame " << i);
+        const uint32_t buttons = i % 5 == 0 ? Common::AltCore::BtnA : 0;
+        with.Run(buttons);
+        without.Run(buttons);
+        REQUIRE((with.out.audio_pcm == without.out.audio_pcm));
+        REQUIRE((with.Left() == without.Left()));
+        REQUIRE(with.out.rumble == without.out.rumble);
+        const auto& pcm = with.out.audio_pcm;
+        heard |= std::any_of(pcm.begin(), pcm.end(), [](int16_t v) { return v != 0; });
+    }
+    CHECK(heard);
+}
+
+TEST_CASE("Layer Depth after a reset, a state and the next game", "[frame_cores]") {
+    const bool gba = GENERATE(true, false);
+    DepthGame game(gba, MakeFlatRom(gba), 1);
+    const auto same = [&game](int frames) {
+        for (int i = 0; i < frames; ++i) {
+            INFO("frame " << i);
+            game.Run();
+            REQUIRE((game.Right() == game.Left()));
+            REQUIRE(game.out.primary_right.HasPicture());
+        }
+    };
+    same(40);
+    std::vector<uint8_t> state;
+    REQUIRE(game.core->SaveStateToMemory(state));
+    same(20);
+    game.core->Reset();
+    same(40);
+    REQUIRE(game.core->LoadStateFromMemory(state.data(), state.size()));
+    game.core->AfterStateLoad();
+    same(20);
+
+    const fs::path save = game.tmp.path / "import.sav";
+    WriteFile(save, std::vector<uint8_t>(0x8000, 0x5A));
+    REQUIRE(game.core->ImportBatterySave(save.string()));
+    same(20);
+
+    game.core->Unload();
+    game.Run();
+    CHECK(!game.out.primary.HasPicture());
+    CHECK(!game.out.primary_right.HasPicture());
+}
+
+TEST_CASE("Layer Depth goes by the driver", "[frame_cores]") {
+    using FrameCores::DriverKind;
+    Job job;
+    {
+        // A held frame keeps the picture
+        DepthGame game(true, MakeDeepRom(true), 2, WithJob(job));
+        for (int i = 0; i < 30; ++i) {
+            game.Run();
+        }
+        const Pixels right = game.Right();
+        REQUIRE(!right.empty());
+        CHECK((right != game.Left()));
+        job.held = true;
+        for (int i = 0; i < 3; ++i) {
+            game.Run();
+            CHECK(game.out.held);
+            CHECK((game.Right() == right));
+        }
+        job.held = false;
+        game.Run();
+        CHECK((game.Right() != right));
+    }
+    {
+        auto opts = WithJob(job);
+        opts.driver.kind = DriverKind::GbaDs;
+        DepthGame game(true, MakeDeepRom(true), 2, opts);
+        for (int i = 0; i < 30; ++i) {
+            game.Run();
+        }
+        CHECK(game.out.primary.HasPicture());
+        CHECK(!game.out.primary_right.HasPicture());
+    }
+
+    // The runner: the step stays one a frame, the picture goes out only where it belongs
+    uint32_t steps = 0;
+    const Pixels pixels(16 * 8, 0xFF112233u);
+    FrameCores::DriverServices services;
+    services.step = [&steps](uint32_t) { ++steps; };
+    services.picture = [&pixels] {
+        return FrameCores::DriverPicture{pixels.data(), 16, 8, 16};
+    };
+    auto caps = Common::AltCore::Capabilities::ForGBA();
+    FrameCores::DriverRunner runner;
+    FrameCores::FrameOutput out;
+    CHECK(!runner.PrimaryIsGame());
+    for (const auto kind : {DriverKind::Plain, DriverKind::PokeDaisy, DriverKind::GbaDs}) {
+        const bool plain = kind == DriverKind::Plain;
+        steps = 0;
+        runner.Start(kind, {}, services, {}, WithJob(job), {}, caps);
+        CHECK(runner.PrimaryIsGame() == plain);
+        for (int i = 0; i < 5; ++i) {
+            runner.RunFrame({}, out, caps);
+            CHECK(!out.primary_right.HasPicture());
+            runner.SetRightEye({pixels.data(), 16, 8, 16}, out);
+            CHECK(out.primary_right.HasPicture() == plain);
+        }
+        runner.RunFrame({}, out, caps);
+        runner.SetRightEye({pixels.data(), 8, 8, 16}, out); // another size
+        CHECK(!out.primary_right.HasPicture());
+        runner.SetRightEye({}, out);
+        CHECK(!out.primary_right.HasPicture());
+        CHECK(steps == 6);
+        CHECK(runner.Missteps() == 0);
+        runner.Stop();
+        CHECK(!runner.PrimaryIsGame());
+    }
 }

@@ -24,7 +24,8 @@ Vulkan::AltScreenImage ToImage(const DriverPicture& picture) {
     return image;
 }
 
-std::unique_ptr<FrameDriver> MakeDriver(DriverKind kind, const DriverServices& services,
+/// `kind` becomes what was made.
+std::unique_ptr<FrameDriver> MakeDriver(DriverKind& kind, const DriverServices& services,
                                         const RomInfo& info, const CoreBootOptions& opts) {
     if (opts.driver.make) {
         if (auto driver = opts.driver.make(services)) {
@@ -48,7 +49,7 @@ std::unique_ptr<FrameDriver> MakeDriver(DriverKind kind, const DriverServices& s
                   services.rom_path);
     }
 #endif
-    (void)kind;
+    kind = DriverKind::Plain;
     return MakePlainDriver(services, info);
 }
 
@@ -135,6 +136,7 @@ void DriverRunner::Start(DriverKind kind, const Known& known, DriverServices ser
         return backed_up;
     };
     driver = MakeDriver(kind, services, info, opts);
+    primary_is_game = kind == DriverKind::Plain;
     driver->SetEditing(editing);
     caps.has_touch = driver->HasTouch();
     caps.second_screen_choices = known.Choices();
@@ -146,6 +148,7 @@ void DriverRunner::Start(DriverKind kind, const Known& known, DriverServices ser
 
 void DriverRunner::Stop() {
     driver.reset();
+    primary_is_game = false;
     if (missteps > 0) {
         LOG_ERROR(Core, "DriverRunner: {} frames did not step the game once", missteps);
     }
@@ -159,6 +162,7 @@ void DriverRunner::Stop() {
 void DriverRunner::RunFrame(const Common::AltCore::InputState& input, FrameOutput& out,
                             Common::AltCore::Capabilities& caps) {
     out.primary = {};
+    out.primary_right = {};
     out.secondary = {};
     out.overlay = {};
     out.held = false;
@@ -231,6 +235,13 @@ void DriverRunner::SetEditing(bool on) {
 void DriverRunner::TurnPage() {
     if (driver) {
         driver->TurnPage();
+    }
+}
+
+void DriverRunner::SetRightEye(const DriverPicture& picture, FrameOutput& out) const {
+    if (primary_is_game && picture.pixels && out.primary.HasPicture() &&
+        picture.width == out.primary.width && picture.height == out.primary.height) {
+        out.primary_right = ToImage(picture);
     }
 }
 

@@ -24,6 +24,8 @@ add_library(frame_cores STATIC EXCLUDE_FROM_ALL
     rom_info.h
     second_screen.cpp
     second_screen.h
+    shadow_eye.cpp
+    shadow_eye.h
 )
 
 create_target_directory_groups(frame_cores)
