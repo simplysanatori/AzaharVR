@@ -41,6 +41,7 @@ struct Capabilities {
     bool has_alt_cheats = false;
     bool has_flat_mode = true;
     bool has_bfi = true;
+    bool has_internal_resolution = true;
     bool has_dynamic_resolution = true;
     bool has_render_margin = true;
     bool has_solar_sensor = false;
@@ -75,6 +76,7 @@ struct Capabilities {
         c.has_3ds_cheats = false;
         c.has_alt_cheats = true;
         c.has_bfi = false;
+        c.has_internal_resolution = false;
         c.has_dynamic_resolution = false;
         c.has_render_margin = false;
         c.has_solar_sensor = true;
@@ -114,6 +116,7 @@ struct Capabilities {
         c.has_3ds_cheats = false;
         c.has_alt_cheats = true;
         c.has_bfi = false;
+        c.has_internal_resolution = false;
         c.has_dynamic_resolution = false;
         c.has_render_margin = false;
         c.has_mic_blow = true;

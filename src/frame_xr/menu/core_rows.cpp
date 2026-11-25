@@ -122,7 +122,7 @@ bool Has(Need need, const CoreCaps& core) {
     case Need::DynamicResolution:
         return core.has_dynamic_resolution;
     case Need::InternalResolution:
-        return kAltInternalResolution;
+        return core.has_internal_resolution;
     case Need::TextureFilter:
         return kAltTextureFilter;
     case Need::Autosave:
