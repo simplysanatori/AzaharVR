@@ -240,7 +240,7 @@ inline constexpr const char* kKiuStickClickTip =
 /// (the setting changed while the game runs: it counts from the next start).
 inline constexpr const char* kKiu60FpsRow = "60 FPS";
 inline constexpr const char* kKiu60FpsTip =
-    "Runs the game at 60 FPS. Needs more power. Restart the game to change it.";
+    "Patches the game to 60 FPS when it starts, at normal speed. Higher CPU and GPU load.";
 inline constexpr const char* kKiu60FpsOnToast = "Restart the Game for 60 FPS";
 inline constexpr const char* kKiu60FpsOffToast = "Restart the Game for 30 FPS";
 inline constexpr const char* kOverShoulderRow = "Third Person";

@@ -1062,7 +1062,7 @@ TEST_CASE("Angel's Aim page: 60 FPS", "[frame_xr][kiuaim][kiu60]") {
     CHECK(LabelFor(Id::Kiu60Fps) == "60 FPS");
     CHECK(OptionsFor(Id::Kiu60Fps) == std::vector<std::string>{"Off", "On"}); // stored order
     CHECK(ExplainFor(Id::Kiu60Fps) ==
-          "Runs the game at 60 FPS. Needs more power. Restart the game to change it.");
+          "Patches the game to 60 FPS when it starts, at normal speed. Higher CPU and GPU load.");
     Kit kit{1.0f};
     CHECK(kit.TextWidth(Type::Tooltip, kKiu60FpsTip) + 28.0f <= 2.0f * kPanelW * 0.7f);
     CHECK(MenuModel{}.kiu_60fps == 0);
