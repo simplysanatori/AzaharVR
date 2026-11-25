@@ -1177,6 +1177,9 @@ in both builds by its code; no code or layout of it is used.
   card at 13 below (the plan) was over the words' left end at their usual size, so it is above them. On land the same (25.3 left,
   7.2 below in the trace), away with Bottom Screen: Persistent. An illustration is in the same cut (rows 55 to 184) and shows in
   the card. A boss's card is not shown.
+- **The weapon in the hand** (no switch, first person): not drawn, nor Pit's arm and the muzzle's effects, while one of the game's
+  menus is up outside a battle (`WeaponHiddenFor`, by its own `SteadyMenu`: the one-frame gaps between menus do not count). The
+  Practice Range's shooting is a battle with no menu and the pause screen is none either: the weapon stays there.
 - **`AZAHARFRAME_KIU_MENU_SCREENS=1`.** While one of the game's menus is up (`SteadyMenu`, MENUID 0 to 58, two VBlanks; gone
   after 12 with none), the normal two screens instead of the view (`ScreenState::game_menu`; the bottom one whatever was chosen
   for it, and its hide button does nothing). V: the title (0), the Cauldron (5), off into the battle (none 0.8 s before its UI is

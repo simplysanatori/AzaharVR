@@ -2411,10 +2411,7 @@ ScreenLayers Screens(XrSpace local_space, XrSpace view_space, const ScreenPlacem
             const Kiu::FirstPerson::Cut& cut = Kiu::FirstPerson::kPortraitCut;
             const bool right = Vis::WristScreenHand(Settings::values.vr_motion_controls.GetValue()) ==
                                Input::Hand::Right;
-            const Kiu::FirstPerson::PanelInView p = Kiu::FirstPerson::PersistentInView(
-                Kiu::FirstPerson::kPortraitSideDeg * (right ? 1.0f : -1.0f),
-                Kiu::FirstPerson::kPortraitDownDeg, Kiu::FirstPerson::kPortraitWidthDeg,
-                static_cast<float>(cut.width) / static_cast<float>(cut.height));
+            const Kiu::FirstPerson::PanelInView p = Kiu::FirstPerson::PortraitPlace(right);
             out.bottom_pose =
                 Compose(g.view.head, XrPosef{{p.qx, p.qy, p.qz, p.qw}, {p.x, p.y, p.z}});
             const float size = portraits_up ? 1.0f : Kiu::FirstPerson::kPortraitShrunk;

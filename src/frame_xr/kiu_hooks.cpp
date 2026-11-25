@@ -185,6 +185,7 @@ struct State {
     Ui::State ui;
     Ui::Steady ui_page, ui_pause, ui_pictures;
     Ui::SteadyMenu ui_menu;
+    Ui::SteadyMenu ui_weapon_menu; ///< the same, read whatever the switches say (the weapon)
     int menu_up = Ui::kNoMenu; ///< as said to the view
     Kiu::EventWatch event_watch;
     bool cutscene = false;
@@ -468,9 +469,16 @@ void TraceFirstPerson(State& s, const KH::GameMemory& mem, const KH::Player& p,
     LOG_INFO(Frontend, "xr: Kid Icarus first person: {}", line);
 }
 
-/// AzaharFrame kiu1s: the battle UI not read: nothing said of it.
+/// AzaharFrame kiu1s: nothing asked of the battle UI: nothing said of it.
+void UiQuiet(State& s);
+/// AzaharFrame kiu1s: the battle UI not read (no first person): the menu neither.
 void UiOff(State& s) {
     s.ui_code = -1;
+    s.ui_weapon_menu = {};
+    Kiu::FirstPerson::SetWeaponHidden(false);
+    UiQuiet(s);
+}
+void UiQuiet(State& s) {
     s.ui = {};
     s.ui_page = s.ui_pause = s.ui_pictures = {};
     s.ui_menu = {};
@@ -488,15 +496,27 @@ void ReadUi(State& s, const KH::GameMemory& mem, bool battle) {
                portraits = SwitchIs(kSwitchPortraits, "1"),
                menu_panel = SwitchIs(kSwitchMenuPanel, "1"),
                menu_screens = menu_panel || SwitchIs(kSwitchMenuScreens, "1");
-    if (!page && !exact && !pause && !trace && !portraits && !menu_screens) {
-        UiOff(s);
-        return;
-    }
     const bool usa = s.build == &Input::KiuTurn::kBuildUsaRev1;
     if (s.ui_code < 0) {
         s.ui_code = Ui::CodeMatches(mem, usa) ? 1 : 0;
         LOG_INFO(Frontend, "xr: Kid Icarus hooks: the battle UI: {}",
                  s.ui_code != 0 ? "its code matches" : "off: the game's code differs");
+    }
+    // The menu, whatever the switches say: no weapon in the hand in one (WeaponHiddenFor).
+    {
+        const int raw =
+            s.ui_code != 0 ? Ui::Menu(mem, usa ? Ui::kMenuUsaRev1 : Ui::kMenuEur) : Ui::kNoMenu;
+        const bool hidden =
+            Kiu::FirstPerson::WeaponHiddenFor(s.ui_weapon_menu.Update(raw), battle);
+        if (hidden != Kiu::FirstPerson::WeaponHidden()) {
+            LOG_INFO(Frontend, "xr: Kid Icarus hooks: the weapon in the hand {}",
+                     hidden ? "hidden (a menu of the game)" : "shown again");
+        }
+        Kiu::FirstPerson::SetWeaponHidden(hidden);
+    }
+    if (!page && !exact && !pause && !trace && !portraits && !menu_screens) {
+        UiQuiet(s);
+        return;
     }
     const Ui::State now =
         s.ui_code != 0 ? Ui::Read(mem, usa ? Ui::kMenuUsaRev1 : Ui::kMenuEur) : Ui::State{};

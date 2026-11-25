@@ -533,6 +533,17 @@ inline float MenuGapDeg(const MenuPlace& p, float top_aspect = 400.0f / 240.0f) 
 constexpr float LetterDeg(float width_deg, float pixels) {
     return 9.0f * width_deg / pixels;
 }
+/// AzaharFrame kiu1s: no weapon in the hand (nor the arm and effects that go with it) while one of
+/// the game's menus is up outside a battle: the goddess's room, the Cauldron, the page after a
+/// fall. `menu` is the steady one (Ui::SteadyMenu: the game's one-frame gaps between menus do not
+/// count, and it is gone 0.2 s after the last); a battle's camera in brings the weapon back at
+/// once. The Practice Range's shooting is a battle with no menu (seen), so it keeps the weapon;
+/// so does the pause screen. First person, no switch. Set each VBlank by the hooks; any thread.
+constexpr bool WeaponHiddenFor(int menu, bool battle) {
+    return menu >= 0 && !battle;
+}
+void SetWeaponHidden(bool hidden);
+bool WeaponHidden();
 bool CutscenesOnScreen();
 /// AzaharFrame kiu140: the HUD moved into the view (HUD, vr_kiu_hud, or AZAHARFRAME_KIU_HUD=0|1).
 bool HudInView();
@@ -565,6 +576,15 @@ inline PanelInView PersistentInView(float right_deg, float down_deg, float width
     p.width = 2.0f * distance * std::tan(0.5f * width_deg * kDeg);
     p.height = aspect > 0.1f ? p.width / aspect : p.width * 0.75f;
     return p;
+}
+
+/// AzaharFrame kiu1s: where the portraits' card is, in the head's frame: the one place to change
+/// (the owner would later have it by the off hand itself). `right`: the off hand is the right one.
+inline PanelInView PortraitPlace(bool right) {
+    return PersistentInView(kPortraitSideDeg * (right ? 1.0f : -1.0f), kPortraitDownDeg,
+                            kPortraitWidthDeg,
+                            static_cast<float>(kPortraitCut.width) /
+                                static_cast<float>(kPortraitCut.height));
 }
 
 /// AzaharFrame kiuview: AZAHARFRAME_KIU_FP_FIELD, a share of the view's angle (0.5 to 1).

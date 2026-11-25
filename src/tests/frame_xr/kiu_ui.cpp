@@ -460,3 +460,26 @@ TEST_CASE("Kid Icarus UI: the panels' layer is kept while the view is on", "[fra
     CHECK(PausePanelShown(true, false));
     CHECK_FALSE(PausePanelShown(true, true));
 }
+
+TEST_CASE("Kid Icarus UI: no weapon in the hand in the game's menus", "[frame_xr][kiu1s]") {
+    using namespace FirstPerson;
+    CHECK(WeaponHiddenFor(3, false));             // the goddess's room
+    CHECK(WeaponHiddenFor(Ui::kMenuCauldron, false));
+    CHECK(WeaponHiddenFor(0, false));             // the title
+    CHECK(WeaponHiddenFor(51, false));            // the page after a fall
+    CHECK_FALSE(WeaponHiddenFor(Ui::kNoMenu, true));  // a battle, the Practice Range's shooting
+    CHECK_FALSE(WeaponHiddenFor(Ui::kNoMenu, false)); // the dark before a battle, a pause
+    CHECK_FALSE(WeaponHiddenFor(3, true));        // the battle's camera in: back at once
+    // Through the hub's rooms the game is one VBlank without a menu: hidden all the while; into a
+    // battle it is back 12 VBlanks after the menu, before the battle's camera.
+    Ui::SteadyMenu m;
+    m.Update(3);
+    CHECK(WeaponHiddenFor(m.Update(3), false));
+    CHECK(WeaponHiddenFor(m.Update(Ui::kNoMenu), false));
+    CHECK(WeaponHiddenFor(m.Update(1), false));
+    CHECK(WeaponHiddenFor(m.Update(1), false));
+    for (int i = 0; i < 11; ++i) {
+        CHECK(WeaponHiddenFor(m.Update(Ui::kNoMenu), false));
+    }
+    CHECK_FALSE(WeaponHiddenFor(m.Update(Ui::kNoMenu), false));
+}

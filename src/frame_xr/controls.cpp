@@ -2429,7 +2429,8 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
             }
         }
         // AzaharFrame kiu140: no weapon over a cutscene.
-        if (id >= 0 && !Kiu::FirstPerson::Cutscene()) {
+        // AzaharFrame kiu1s: nor in the game's menus (the arm and the effects go with it).
+        if (id >= 0 && !Kiu::FirstPerson::Cutscene() && !Kiu::FirstPerson::WeaponHidden()) {
             // AzaharFrame kiuopacity: Weapon Opacity, or AZAHARFRAME_KIU_OPACITY's (live).
             const Vis::OpacityTune see = Vis::ParseOpacityTune(
                 Common::FrameTestSwitches::Value("AZAHARFRAME_KIU_OPACITY"));

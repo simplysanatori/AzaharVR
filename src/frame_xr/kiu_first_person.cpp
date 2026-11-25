@@ -396,6 +396,7 @@ std::atomic<bool> g_battle_page{false}, g_pause_panel{false}; // AzaharFrame kiu
 std::atomic<bool> g_menu_panel{false};
 std::atomic<PortraitState> g_portraits{PortraitState::Off};
 std::atomic<int> g_menu{-1};
+std::atomic<bool> g_weapon_hidden{false};
 } // namespace
 
 void SetCutscene(bool on, float tan_half_y) {
@@ -434,6 +435,12 @@ PortraitState Portraits() {
 void SetMenu(int menu, bool panel) {
     g_menu_panel.store(panel, std::memory_order_relaxed);
     g_menu.store(menu, std::memory_order_relaxed);
+}
+void SetWeaponHidden(bool hidden) {
+    g_weapon_hidden.store(hidden, std::memory_order_relaxed);
+}
+bool WeaponHidden() {
+    return g_weapon_hidden.load(std::memory_order_relaxed);
 }
 int MenuUp() {
     return g_menu.load(std::memory_order_relaxed);
