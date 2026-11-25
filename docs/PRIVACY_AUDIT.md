@@ -102,7 +102,7 @@ What it writes is checked by the program before anything is installed: the pack'
 
 ### Covers (Games tab)
 
-No cover is asked for until the player presses Download in "Download Thumbnails?" (which the Download Thumbnails button and Choose Another Cover open, and which shows after a scan of the game list found files that were not in it before, once for these files; it says what the source sees), or turns Download Game Covers on (off by default; its tooltip says the same). Download asks once, for the games it names, and does not turn the setting on. With the setting on, the games in the list without a cover are asked for one at a time, when the list was read, and not once it is off again; Choose Another Cover then asks without the question. Covers on disk show whatever the setting says (`src/core/frame_covers.*`, `src/citra_qt/frame_games.cpp`).
+No cover is asked for until the player presses Download in "Download Thumbnails?" (which the Download Thumbnails button and Choose Another Cover open, and which shows after a scan of the game list found files that were not in it before, once for these files), or turns Download Game Covers on (off by default). Download asks once, for the games it names, and does not turn the setting on. With the setting on, the games in the list without a cover are asked for one at a time, when the list was read, and not once it is off again; Choose Another Cover then asks without the question. Covers on disk show whatever the setting says (`src/core/frame_covers.*`, `src/citra_qt/frame_games.cpp`).
 
 | Host | Request | Why |
 | --- | --- | --- |
