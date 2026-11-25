@@ -33,7 +33,7 @@ std::uint64_t g_key = 0;
 DownloadState g_state = DownloadState::Idle;
 std::string g_status;
 
-Db::System SystemOf(const FrameCores::RomInfo& info) {
+Db::System CheatSystemOf(const FrameCores::RomInfo& info) {
     using Common::AltCore::CoreKind;
     switch (info.kind) {
     case CoreKind::GBA:
@@ -169,7 +169,7 @@ void Add(FrameCores::AltCoreHost& host, std::function<FrameCores::AltCoreHost*()
         return;
     }
     const FrameCores::RomInfo info = host.GetRomInfo();
-    const Db::System system = SystemOf(info);
+    const Db::System system = CheatSystemOf(info);
     if (!FrameXr::VrShowing()) {
         AddFlat(running, changed, info.title_id, system);
         return;
@@ -192,7 +192,7 @@ void Start(FrameCores::AltCoreHost& host, std::function<FrameCores::AltCoreHost*
     g_status.clear();
     LOG_INFO(Frontend, "xr: in-game menu: downloading cheats (alt core)");
     const std::uint64_t key = g_key;
-    const Db::System system = SystemOf(info);
+    const Db::System system = CheatSystemOf(info);
     const std::string code = info.game_code;
     const std::string stem = std::filesystem::path(rom_path).stem().string();
     std::thread([=] {
