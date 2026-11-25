@@ -229,7 +229,7 @@ file(GLOB_RECURSE THEMES ${PROJECT_SOURCE_DIR}/dist/qt_themes/*)
 
 if (ENABLE_QT_UPDATE_CHECKER)
     target_link_libraries(citra_qt PRIVATE httplib json-headers)
-    target_sources(citra_qt PRIVATE update_checker.cpp)
+    target_sources(citra_qt PRIVATE update_checker.cpp update_version.cpp update_prompt.cpp)
     target_compile_definitions(citra_qt PUBLIC ENABLE_QT_UPDATE_CHECKER)
 endif()
 
@@ -386,6 +386,7 @@ endif()
 # platform (tests/frame_xr/offscreen_modal.cpp).
 if (ENABLE_FRAME_XR AND ENABLE_TESTS AND NOT WIN32)
     add_executable(frame_qt_tests ../tests/frame_xr/offscreen_modal.cpp frame_offscreen.cpp
+                                  ../tests/frame_xr/update_prompt.cpp update_prompt.cpp # AzaharVR updatecheck
                                   frame_offscreen.h
                                   ../tests/frame_xr/per_game_ini.cpp # AzaharFrame useglobal
                                   configuration/frame_per_game_ini.h
