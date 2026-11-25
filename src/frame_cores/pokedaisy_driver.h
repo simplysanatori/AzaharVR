@@ -17,6 +17,8 @@
 
 #include "common/alt_core_types.h"
 
+struct mCore;
+
 namespace FrameCores {
 class FrameDriver;
 }
@@ -276,6 +278,13 @@ struct HeldSettings {
 };
 /// For tests: PokeDaisy's defaults, as the driver holds them.
 HeldSettings DefaultSettings();
+
+/// The game's ROM as mGBA holds it; null for another platform.
+std::pair<const uint8_t*, std::size_t> RomOf(mCore* core);
+
+/// Makes mGBA's own copy of the ROM now. mGBA makes it at the first write to the cartridge (a
+/// debug print as in FireRed, a cheat) and frees the one it had, which PokeDaisy would keep reading.
+void SettleRom(mCore* core);
 
 /// A way in beside the quick menu, through the same gate. Only between RunFrame calls.
 class Actions {
