@@ -56,7 +56,7 @@ private:
     QComboBox* background_combo;
     QWidget* window_scale_row; ///< global only
     QComboBox* window_scale_combo;
-    QWidget* curve_row; ///< AzaharFrame curve, global only
+    QWidget* curve_row; ///< AzaharFrame curve; AzaharVR: per game too
     QComboBox* curve_combo;
     QWidget* screen_layout_row; ///< AzaharFrame layout, global only
     QComboBox* screen_layout_combo;
