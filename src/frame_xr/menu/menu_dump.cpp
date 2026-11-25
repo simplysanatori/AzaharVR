@@ -1645,7 +1645,7 @@ int main(int argc, char** argv) {
         kc.recoil = kc.weapon_in_hand = kc.muzzle_flash = kc.projectiles = true;
         MenuView cv;
         cv.tab = Tab::Controls;
-        cv.scroll[static_cast<int>(Tab::Controls)] = 330.0f;
+        cv.controls_section = ControlsSection::Motion;
         ok &= shot("kiuaim-33-controls-aiming", kc, cv);
         cv.scroll[static_cast<int>(Tab::Controls)] = 1.0e5f;
         ok &= shot("kiuaim-34-controls-aiming-end", kc, cv);
@@ -3234,11 +3234,17 @@ int main(int argc, char** argv) {
             av.aim_more = false;
             char num[8];
             std::snprintf(num, sizeof(num), "%02d", n++);
-            ok &= shot(std::string("kiuaim-") + num + "-" + name, ka, av);
+            MenuModel page = ka;
+            page.kiu_power_menu = 0; // Off, the default, on the HUD's front page
+            ok &= shot(std::string("kiuaim-") + num + "-" + name,
+                       group == AimGroup::Hud ? page : ka, av);
             if (!AimPageRows(ka, group).more.empty()) {
+                MenuModel more = ka;
+                more.kiu_talk_portraits = 1; // Shown: its rows are on the More page
                 av.aim_more = true;
                 std::snprintf(num, sizeof(num), "%02d", n++);
-                ok &= shot(std::string("kiuaim-") + num + "-" + name + "-more", ka, av);
+                ok &= shot(std::string("kiuaim-") + num + "-" + name + "-more",
+                           group == AimGroup::BottomScreen ? more : ka, av);
             }
         }
         // The rows that wait: Gyro Aim, In View moved, the weapon's switches off; a More page
