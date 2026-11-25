@@ -576,6 +576,8 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
         INFO(key);
         CHECK(std::find(labels.begin(), labels.end(), key) != labels.end());
     }
+    CHECK(Settings::values.vr_kiu_stick_click.GetDefault() == 0u); // AzaharFrame kiucam
+    CHECK(std::find(labels.begin(), labels.end(), "vr_kiu_stick_click") != labels.end());
     CHECK(Settings::values.vr_wrist_side.GetDefault() == 0u); // Back
     CHECK(Settings::values.vr_kiu_reticle_size.GetDefault() == 100u);
     for (const char* key : {"vr_kiu_bottom_x", "vr_kiu_bottom_y", "vr_kiu_wrist_screen",
