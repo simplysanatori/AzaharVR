@@ -154,6 +154,10 @@ public:
     /// is not ready). Cleared by TakeInput; GameFrame sets it. AzaharFrame kiuopacity:
     /// `opacity`, Weapon Opacity (0.2 to 1; see_through.h).
     void SetWeapon(int hand, int id, float opacity = 1.0f);
+    /// AzaharFrame kiuhands: `hand` (-1: none) is not drawn this frame, whatever would be in its
+    /// place (Pit's arm, the game's, the controller); where its arm would be stays known
+    /// (PitForearm). Set each frame, after TakeInput.
+    void SetHiddenHand(int hand);
     /// AzaharFrame kiu140: Pit's hand and forearm (pit_hand.h) in place of `hand`'s controller,
     /// while the weapon is drawn in the other. Cleared by TakeInput; GameFrame sets it.
     void SetPitArm(int hand);

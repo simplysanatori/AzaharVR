@@ -195,7 +195,9 @@ PitHandPose PitHandPoseFromJoints(std::span<const PitJointPose, kPitXrJoints> jo
 inline constexpr const char* kFingersPalmSwitch = "AZAHARFRAME_KIU_FINGERS_PALM";
 /// What the runtime says each finger does, thumb to little, from its joints alone (wherever the
 /// hand is): `bend` the sum of the turns from its metacarpal to its last bone, `side` the first
-/// bone's turn to the side as seen from the wrist (degrees, right positive). For the log.
+/// bone's turn to the side as seen from the wrist (degrees, right positive). For the log. The wrist
+/// joint is not the palm: on SteamVR's hands these are 24 degrees to the little finger's side
+/// (pit_model.h, tracked fingers).
 struct PitFingerAngles {
     std::array<float, 5> bend{}, side{};
 };

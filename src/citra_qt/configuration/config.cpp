@@ -695,6 +695,7 @@ void QtConfig::ReadVrValues() {
     ReadGlobalSetting(Settings::values.vr_kiu_score_height); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_subtitle_height); // AzaharFrame kiu140
     ReadGlobalSetting(Settings::values.vr_kiu_subtitle_size); // AzaharFrame kiu140
+    ReadGlobalSetting(Settings::values.vr_kiu_hide_off_hand); // AzaharFrame kiuhands
     ReadGlobalSetting(Settings::values.vr_kiu_reticle_size);
     ReadGlobalSetting(Settings::values.vr_kiu_game_camera); // AzaharFrame kiu133
     ReadGlobalSetting(Settings::values.vr_kiu_pit_opacity);
@@ -1463,6 +1464,7 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.vr_kiu_score_height); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_subtitle_height); // AzaharFrame kiu140
     WriteGlobalSetting(Settings::values.vr_kiu_subtitle_size); // AzaharFrame kiu140
+    WriteGlobalSetting(Settings::values.vr_kiu_hide_off_hand); // AzaharFrame kiuhands
     WriteGlobalSetting(Settings::values.vr_kiu_reticle_size);
     WriteGlobalSetting(Settings::values.vr_kiu_game_camera); // AzaharFrame kiu133
     WriteGlobalSetting(Settings::values.vr_kiu_pit_opacity);

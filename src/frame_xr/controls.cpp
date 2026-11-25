@@ -1508,6 +1508,8 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
     if (have_input && pit_arm_hand >= 0) { // AzaharFrame kiu140: the arm's fingers
         hand_joints.Locate(pit_arm_hand, info.local_space, info.display_time,
                            in.joints[static_cast<std::size_t>(pit_arm_hand)]);
+        hand_joints.LogRaw(pit_arm_hand, info.local_space, info.display_time,
+                           in.hand[static_cast<std::size_t>(pit_arm_hand)]);
     }
     // AzaharVR: the controller scheme of the profile in use, looked up when it changes (PC
     // builds; the Frame's build keeps the Frame's scheme whatever the profile).
@@ -2427,6 +2429,10 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     Kiu::SetWanted(weapon_on, kiu && (recoil_on || flash_on || projectiles_on), kiu);
     // AzaharFrame kiu140: no controllers over a cutscene; with the menu open they are to point.
     visuals.HideControllers(Kiu::FirstPerson::Cutscene() && !menu_open);
+    if (kiu && Kiu::FirstPerson::AngelsAim() &&
+        Settings::values.vr_kiu_hide_off_hand.GetValue()) { // AzaharFrame kiuhands
+        visuals.SetHiddenHand(gyro_aim_hand ^ 1);
+    }
     if (weapon_on) {
         FrameWeapons::Request(); // made the first time they are wanted (once a boot)
         // AZAHARFRAME_KIU_WEAPON=<id> (live): that weapon, for tuning its class's fit.

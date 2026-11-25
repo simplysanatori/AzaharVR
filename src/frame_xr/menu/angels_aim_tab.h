@@ -199,6 +199,9 @@ inline constexpr const char* kKiuSubtitleHeightTip =
 inline constexpr const char* kKiuSubtitleSizeRow = "Subtitle Size"; // AzaharFrame kiu140 PROPOSED
 inline constexpr const char* kKiuSubtitleSizeTip =
     "How big the subtitles are.";
+inline constexpr const char* kKiuHideOffHandRow = "Free Hand"; // AzaharFrame kiuhands (the owner's choice)
+inline constexpr const char* kKiuHideOffHandTip =
+    "Your free hand isn't drawn when Hidden. The Bottom Screen on your wrist stays.";
 inline constexpr const char* kOverShoulderRow = "Over the Shoulder";
 inline constexpr const char* kOverShoulderTip =
     "Moves your view behind and above Pit, so you can see him.";

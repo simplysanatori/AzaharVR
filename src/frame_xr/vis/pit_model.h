@@ -89,6 +89,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -153,6 +154,74 @@ inline constexpr float kPitModelPress = 0.92f;
 /// fist round the handle. False: the pose as it is.
 std::vector<PitMat34> PitModelEvaluate(const PitModel& model, const PitHandPose* pose,
                                        const PitVec3* elbow = nullptr, bool clear_handle = true);
+
+// ---- tracked fingers ----
+//
+// A tracked hand's fingers on the file's own bones. The runtime's wrist joint says nothing of the
+// palm: OpenXR has its -Z on the line to the middle finger's METACARPAL joint, which lies toward
+// the thumb's side of the palm, so on SteamVR's hands it is 24 degrees off the line the fingers
+// lie along. The palm is therefore taken from where the knuckles are (the index, the middle and
+// the ring finger's proximal joints and the wrist), on the tracked hand as on the file. Each
+// finger's first bone takes its joint's turn from the tracked palm, corrected by what a flat hand
+// shows on both (kPitTrackedRest), each bone after it its own joint's turn from the one before.
+// No finger's joints are used for another finger.
+
+/// The runtime's 26 joints as turns, of a left hand (a right hand's are mirrored): the four
+/// fingers' first bones and the thumb's from the palm, every other joint from its parent.
+struct PitTracked {
+    std::array<PitQuat, kPitXrJoints> turn{};
+};
+/// False when the joints make no palm (all in one place): nothing to show.
+bool PitTrackedFromJoints(std::span<const PitJointPose, kPitXrJoints> joints, bool right_hand,
+                          PitTracked& out);
+PitTracked PitTrackedEase(const PitTracked& previous, const PitTracked& target, float dt_s,
+                          float tau_s);
+bool PitTrackedDiffers(const PitTracked& a, const PitTracked& b, float degrees = 0.05f);
+/// A flat hand's fingers, as the runtime has them, against the palm: turned down at the knuckles
+/// and toward the little finger (degrees), in the same place on the file's hand.
+inline constexpr float kPitTrackedRestDown = 5.0f, kPitTrackedRestSide = 7.0f;
+/// Neighbouring fingers' least gap in metres when they are straight (bent, they may touch: a fist's
+/// fingers lie against each other), and the most a finger is turned aside for it, in degrees.
+inline constexpr float kPitFingerGap = 0.0015f, kPitFingerPress = 0.002f, kPitFingerAside = 8.0f;
+/// PitModelEvaluate for tracked fingers. The palm stays as the file has it; nothing is opened off
+/// the handle. `gap`: neighbouring fingers are held apart (kPitFingerGap).
+std::vector<PitMat34> PitModelEvaluateTracked(const PitModel& model, const PitTracked& tracked,
+                                              const PitVec3* elbow = nullptr, bool gap = true);
+/// The same into `bones` (kept by the caller: nothing is allocated once it has its size).
+void PitModelEvaluateTracked(const PitModel& model, const PitTracked& tracked, const PitVec3* elbow, bool gap,
+                             std::vector<PitMat34>& bones);
+/// How far each pair of neighbouring fingers (index and middle, middle and ring, ring and little)
+/// is into one another beyond the knuckles with these bones, in metres (below 0: the gap).
+std::array<float, 3> PitModelFingerOverlap(const PitModel& model, std::span<const PitMat34> bones);
+
+/// Test switches (live): "1": the fingers as before 2026-11-25 (PitHandPoseFromJoints: turns from
+/// the runtime's wrist); "0": neighbouring fingers are not held apart; the fingers' width in
+/// percent of the file's (60 to 100; without it kPitFingerWidth).
+inline constexpr const char* kFingersOldSwitch = "AZAHARFRAME_KIU_FINGERS_OLD";
+inline constexpr const char* kFingersGapSwitch = "AZAHARFRAME_KIU_FINGERS_GAP";
+inline constexpr const char* kFingersWidthSwitch = "AZAHARFRAME_KIU_FINGERS_WIDTH";
+/// 92: a fist's fingers read as four and still close on each other (at 100 they touch at rest and a
+/// fist is a mitten; at 85 a fist's middle and ring fingers stand 5 mm apart).
+inline constexpr int kPitFingerWidth = 92;
+int PitFingerWidth(const std::optional<std::string>& value);
+/// Seconds tracked fingers are eased over: the runtime has them smooth already.
+inline constexpr float kFingersEase = 0.015f;
+/// Seconds the last tracked fingers stay when the runtime has none for a moment (a frame without
+/// joints is not a jump to the controller's pose and back).
+inline constexpr float kFingersHold = 0.25f;
+/// What draws the fingers this frame: the runtime's joints, the ones before them (held), or neither.
+/// `lost_s`: how long there have been none, kept by the caller.
+enum class PitFingersFrom { Joints, Held, None };
+PitFingersFrom PitFingersKeep(bool tracked, bool had, float dt_s, float& lost_s);
+
+/// Vertices in one place whose normals are less than kPitSeamDegrees apart (a mirrored half's
+/// edge, where a model's normals do not meet) share one: no crease is drawn there. How many.
+inline constexpr float kPitSeamDegrees = 35.0f;
+uint32_t PitModelSmoothSeams(PitModel& model);
+/// The model with its four fingers `width` (under 1) times as wide, from past the knuckles to the
+/// tips, and the joints' thickness with them; without its images.
+PitModel PitModelThinned(const PitModel& model, float width);
+
 /// The vertices in a pose: kPitVertexFloats each, model.vertex_count of them into `out`.
 void PitModelSkin(const PitModel& model, std::span<const PitMat34> bones, std::span<float> out);
 /// The hand on the Steam Frame controller: arm space to the controller's aim space; `scale`

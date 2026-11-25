@@ -5164,3 +5164,21 @@ TEST_CASE("Tab menu: Angel's Aim's Camera and Pit Opacity", "[frame_xr][tabmenu]
     usa.kiu_view = 2;
     CHECK_FALSE(Has(AngelsAimFirstPersonRows(usa), Id::KiuPitOpacity));
 }
+
+// AzaharFrame kiuhands: Free Hand (Shown, Hidden), with the view's rows in Angel's Aim, Shown by default.
+TEST_CASE("Tab menu: Hide Off Hand", "[frame_xr][tabmenu][kiuhands]") {
+    CHECK(PerGameSetting(Id::KiuHideOffHand));
+    CHECK(SectionOf(Id::KiuHideOffHand) == SettingsSection::Immersive);
+    CHECK(LabelFor(Id::KiuHideOffHand) == "Free Hand");
+    CHECK(OptionsFor(Id::KiuHideOffHand) == std::vector<std::string>{"Shown", "Hidden"}); // 0: not hidden
+    CHECK_FALSE(ExplainFor(Id::KiuHideOffHand).empty());
+    CHECK(MenuModel{}.kiu_hide_off_hand == 0);
+    MenuModel m = KiuModel(true, 4);
+    CHECK(Has(AngelsAimFirstPersonRows(m), Id::KiuHideOffHand));
+    const auto groups = AngelsAimGroups(m);
+    REQUIRE(groups.size() == 4);
+    CHECK(groups[1].rows.back() == Id::KiuHideOffHand); // View's last
+    m.mods.angels_aim.mapped = false; // not the European game
+    CHECK_FALSE(Has(AngelsAimFirstPersonRows(m), Id::KiuHideOffHand));
+    CHECK_FALSE(Has(AngelsAimFirstPersonRows(KiuModel(true, 1)), Id::KiuHideOffHand));
+}

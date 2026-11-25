@@ -254,6 +254,9 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
         f(v.vr_kiu_subtitle_size);
         return true;
+    case Id::KiuHideOffHand: // AzaharFrame kiuhands
+        f(v.vr_kiu_hide_off_hand);
+        return true;
     case Id::KiuReticleSize:
         f(v.vr_kiu_reticle_size);
         return true;

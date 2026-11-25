@@ -1169,6 +1169,9 @@ struct Values {
     SwitchableSetting<s32, true> vr_kiu_score_height{22, -40, 40, "vr_kiu_score_height"};
     // AzaharFrame kiu140: Pit's Arm on the free hand.
     SwitchableSetting<u32, true> vr_kiu_arm{1, 0, 1, "vr_kiu_arm"};
+    // AzaharFrame kiuhands: the hand without the weapon is not drawn in Angel's Aim (Pit's arm, the
+    // game's arm or the controller there).
+    SwitchableSetting<bool> vr_kiu_hide_off_hand{false, "vr_kiu_hide_off_hand"};
     // AzaharFrame kiu140: Cutscenes in Angel's Aim: 0 in the view, 1 on the Primary Screen.
     SwitchableSetting<u32, true> vr_kiu_cutscenes{0, 0, 1, "vr_kiu_cutscenes"};
     // AzaharFrame kiu140: the Wrist's place: degrees round the wrist from Wrist Side's, and

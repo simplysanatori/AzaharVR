@@ -547,6 +547,7 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
                                                        {Id::KiuBottomOpacity, "vr_kiu_bottom_opacity"},
                                                        {Id::KiuReticleSize, "vr_kiu_reticle_size"},
                                                        {Id::KiuPitOpacity, "vr_kiu_pit_opacity"},
+                                                       {Id::KiuHideOffHand, "vr_kiu_hide_off_hand"},
                                                        {Id::KiuSnapTurn, "vr_kiu_snap_turn"}};
     for (const auto& [id, key] : rows) {
         INFO(key);
@@ -559,6 +560,7 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
           std::vector<std::string>{"vr_kiu_over_shoulder", "vr_kiu_game_camera"});
     CHECK(std::find(labels.begin(), labels.end(), "vr_kiu_game_camera") != labels.end());
     CHECK_FALSE(Settings::values.vr_kiu_game_camera.GetDefault());
+    CHECK_FALSE(Settings::values.vr_kiu_hide_off_hand.GetDefault());
     CHECK(Settings::values.vr_kiu_pit_opacity.GetDefault() == 100u);
     CHECK_FALSE(Settings::values.vr_kiu_wrist_screen.GetDefault());
     CHECK_FALSE(Settings::values.vr_kiu_talk_panel.GetDefault());
