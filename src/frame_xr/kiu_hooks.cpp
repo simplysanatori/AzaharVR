@@ -169,6 +169,7 @@ struct State {
     int64_t fp_trace_ns = 0; ///< AzaharFrame kiuvr
     /// AzaharFrame kiu140: cutscenes told by the angle drawn, and the trace's counts.
     Kiu::CutsceneWatch cutscene_watch;
+    Kiu::WideAngle wide_angle;
     Kiu::EventWatch event_watch;
     bool cutscene = false;
     uint32_t angle_match = 0, angle_other = 0;
@@ -454,6 +455,7 @@ void TraceFirstPerson(State& s, const KH::GameMemory& mem, const KH::Player& p,
 /// AzaharFrame kiu140: no game of this kind, or nothing asked for: no cutscene and nothing counted.
 void CutsceneOff(State& s) {
     s.cutscene_watch = {};
+    s.wide_angle = {};
     s.event_watch = {};
     s.cutscene = false;
     Kiu::FirstPerson::SetCutscene(false);
@@ -801,11 +803,14 @@ void Hook(int64_t ticks) {
                                  KH::GroupState::In;
         const uint32_t match = drawn.match.exchange(0, std::memory_order_relaxed);
         const uint32_t other = drawn.other.exchange(0, std::memory_order_relaxed);
-        drawn.want.store(wide_in ? std::tan(0.5f * mailbox.wide_fov_y) : 0.0f,
+        const bool counted =
+            s.wide_angle.Update(wide_in, mailbox.wide_fov_y, fp_now.scene.ok,
+                                fp_now.scene.ok ? fp_now.scene.projection.fov_y : 0.0f);
+        drawn.want.store(counted ? std::tan(0.5f * s.wide_angle.Fov()) : 0.0f,
                          std::memory_order_relaxed);
-        drawn.reg.store(wide_in ? Kiu::FirstPerson::kViewRegister : 0u, std::memory_order_relaxed);
+        drawn.reg.store(counted ? Kiu::FirstPerson::kViewRegister : 0u, std::memory_order_relaxed);
         // In a cutscene with a camera of its own the view follows the angle that one draws.
-        const bool own_camera = s.cutscene_watch.Update(wide_in, match, other, event_cutscene);
+        const bool own_camera = s.cutscene_watch.Update(counted, match, other, event_cutscene);
         cutscene = own_camera || event_cutscene;
         Kiu::FirstPerson::SetBattle(wide_in);
         if (cutscene != s.cutscene) {

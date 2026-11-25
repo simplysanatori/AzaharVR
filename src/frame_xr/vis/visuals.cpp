@@ -355,6 +355,7 @@ struct Visuals::Impl {
     int weapon_id = -1;
     float weapon_opacity = 1.0f; ///< AzaharFrame kiuopacity
     int pit_hand = -1;           ///< AzaharFrame kiu140: Pit's hand
+    bool hide_controllers = false; ///< AzaharFrame kiu140: this frame
     FlashFrame flash;          ///< AzaharFrame kiuflash: its muzzle flash, this frame
     int shots_hand = -1;       ///< AzaharFrame kiuflash: the projectiles' hand and signal
     ShotSignal shots;
@@ -522,6 +523,7 @@ void Visuals::TakeInput(const FrameInfo& info, Where where, Input::InputFrame& i
     m.aim_target = false; // AzaharFrame kiuaim2: the same
     m.weapon_hand = -1; // AzaharFrame kiuguns: the same
     m.pit_hand = -1;    // AzaharFrame kiu140: the same
+    m.hide_controllers = false; // the same
     m.flash = {};       // AzaharFrame kiuflash: the same
     m.shots_hand = -1;
     m.hide_hand = -1;
@@ -1139,7 +1141,8 @@ void Visuals::Frame(Runtime& rt, const FrameInfo& info, Where where, const Windo
         info.should_render) {
         for (int h = 0; h < Input::kNumHands; h++) {
             auto& out = hands[static_cast<std::size_t>(h)];
-            out.shown = m.activity[h].Tracked() && m.activity[h].Model() > 0.02f &&
+            out.shown = !m.hide_controllers && m.activity[h].Tracked() &&
+                        m.activity[h].Model() > 0.02f &&
                         !in.hand[static_cast<std::size_t>(h)].mouse; // AzaharFrame padsui
             out.tracked = m.activity[h].Tracked(); // AzaharFrame fixc: the flicker count
             out.aim = m.activity[h].PoseAhead(); // AzaharFrame ctrlglitch: when it is on view
@@ -1197,6 +1200,10 @@ void Visuals::SetWeapon(int hand, int id, float opacity) {
     impl->weapon_hand = hand;
     impl->weapon_id = id;
     impl->weapon_opacity = opacity; // AzaharFrame kiuopacity
+}
+
+void Visuals::HideControllers(bool hide) {
+    impl->hide_controllers = hide;
 }
 
 void Visuals::SetPitArm(int hand) { // AzaharFrame kiu140

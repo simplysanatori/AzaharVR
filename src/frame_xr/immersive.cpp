@@ -1649,6 +1649,11 @@ void OnFrame(const FrameInfo& info) {
                 }
             }
             const float fp_max = Kiu::FirstPerson::FactorMax();
+            // AzaharFrame kiu140: no edge of the picture in a close shot.
+            if (Kiu::FirstPerson::Cutscene() || !Kiu::FirstPerson::Battle()) {
+                fp_fov = std::max(fp_fov, L::KiuNarrowestDeg(fp_aspect, g.view_fov, eye_shift, fp_max,
+                                                             Kiu::FirstPerson::FieldShare()));
+            }
             // AzaharFrame kiuview: AZAHARFRAME_KIU_FP_FIELD, the share of the view covered.
             g.solved = L::SolveKiuFirstPerson(fp_fov, fp_aspect, g.view_fov, eye_shift, fp_max,
                                               g.head_place.distance,

@@ -873,6 +873,12 @@ HeadLocked SolveKiuFirstPerson(float game_fov_y_deg, float aspect, const ViewFov
                                float eye_shift = 0.0f, float factor_max = kKiuFpFactorMax,
                                float distance = kDefaultHeadDistance, float field = 1.0f);
 
+/// AzaharFrame kiu140: the narrowest angle (degrees, up and down) SolveKiuFirstPerson still fills
+/// the view with, both axes: a cutscene's closer shot is shown as this one (nearer than it is,
+/// for no edge of the picture in view).
+float KiuNarrowestDeg(float aspect, const ViewFov& view, float eye_shift = 0.0f,
+                      float factor_max = kKiuFpFactorMax, float field = 1.0f);
+
 /// AzaharFrame kiuwide: Kid Icarus: Uprising's first person with the game's own camera widened
 /// (AZAHARFRAME_KIU_FP_WIDE): the game camera's angle up and down and its shape that make the
 /// game's own frame exactly what SolveKiuFirstPerson fills the view with (the same cover: what

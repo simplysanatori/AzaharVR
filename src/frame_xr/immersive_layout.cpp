@@ -736,6 +736,17 @@ HeadLocked SolveKiuFirstPerson(float game_fov_y_deg, float aspect, const ViewFov
     return s;
 }
 
+float KiuNarrowestDeg(float aspect, const ViewFov& view, float eye_shift, float factor_max,
+                      float field) {
+    const Cover cover = ShareCover(DefaultCover(view, ViewMiddlePitch(view), eye_shift), field);
+    const float a = std::isfinite(aspect) && aspect > 0.1f ? aspect : 5.0f / 3.0f;
+    const float hi = std::isfinite(factor_max)
+                         ? std::clamp(factor_max, kFactorMin, kKiuFpFactorCeiling)
+                         : kKiuFpFactorMax;
+    const float t = std::max(cover.tan_x / (a * hi), cover.tan_y / hi);
+    return std::isfinite(t) && t > 0.0f ? 2.0f * std::atan(t) / kDegToRad : 0.0f;
+}
+
 KiuWide KiuWideCamera(const ViewFov& view, float eye_shift, float keep_aspect, float field) {
     KiuWide w;
     const Cover cover = ShareCover(DefaultCover(view, ViewMiddlePitch(view), eye_shift), field);
