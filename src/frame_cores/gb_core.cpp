@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "common/logging/log.h"
+#include "frame_cores/cheat_merge.h"
 #include "frame_cores/cheat_store.h"
 #include "frame_cores/driver_runner.h"
 #include "frame_cores/rom_info.h"
@@ -484,6 +485,18 @@ bool GbCore::AddCheat(const std::string& name, const std::string& code) {
     SaveCustomCheats(impl->custom_cheats_path, impl->custom_cheats);
     impl->ApplyCheats();
     return true;
+}
+
+int GbCore::ImportCheats(const std::vector<CheatEntry>& cheats) {
+    if (!impl->core) {
+        return 0;
+    }
+    const int added = CheatDb::MergeImported(impl->custom_cheats, cheats);
+    if (added > 0) {
+        SaveCustomCheats(impl->custom_cheats_path, impl->custom_cheats);
+        impl->ApplyCheats();
+    }
+    return added;
 }
 
 bool GbCore::ImportBatterySave(const std::string& sav_path) {

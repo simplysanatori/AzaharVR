@@ -1569,7 +1569,8 @@ TEST_CASE("Toasts: the mouse and the reticle's one-time toasts fit", "[frame_xr]
     CHECK(ui::TextWidth(ui::kFontLarge, FrameXr::Input::kMouseHint) <= kOneLine);
 }
 
-// A DS or GBA game's Cheats tab has no buttons for 3DS cheats: their handlers need a 3DS game.
+// A DS or GBA game's Cheats tab has no buttons for 3DS cheats (their handlers need a 3DS game), and
+// has Download (libretro-database's cheats, lane/cheats-dl).
 TEST_CASE("Tab menu: no 3DS cheat buttons for a DS or GBA game", "[frame_xr][tabmenu]") {
     Drawn d;
     MenuModel m = Sample();
@@ -1585,7 +1586,7 @@ TEST_CASE("Tab menu: no 3DS cheat buttons for a DS or GBA game", "[frame_xr][tab
         CHECK(HasHit(d, Id::AddCheat, -1));
         CHECK(HasHit(d, Id::Cheat, 0) == list);
         CHECK(!HasHit(d, Id::CheatsWindow, -1));
-        CHECK(!HasHit(d, Id::DownloadCheats, -1));
+        CHECK(HasHit(d, Id::DownloadCheats, -1));
         CHECK(!HasHit(d, Id::InstallCheatFile, -1));
         CheckTargets(d);
     }

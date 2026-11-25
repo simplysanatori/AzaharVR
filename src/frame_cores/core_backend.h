@@ -109,6 +109,11 @@ public:
     virtual bool AddCheat(const std::string& /*name*/, const std::string& /*code*/) {
         return false;
     }
+    /// Downloaded cheats (cheat_db.h): added off, those already there left out, saved with the
+    /// game's own. Returns how many were added.
+    virtual int ImportCheats(const std::vector<CheatEntry>& /*cheats*/) {
+        return 0;
+    }
 
     // Core-specific controls
     virtual void SetSolarLevel(int /*level*/) {}

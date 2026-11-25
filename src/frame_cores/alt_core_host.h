@@ -209,6 +209,10 @@ public:
     std::vector<CheatEntry> ListCheats() const;
     bool SetCheatEnabled(std::size_t idx, bool on);
     bool AddCheat(const std::string& name, const std::string& code);
+    /// Downloaded cheats, off (CoreBackend::ImportCheats); returns how many were added.
+    int ImportCheats(const std::vector<CheatEntry>& cheats);
+    /// The ROM file the game runs from ("" when none runs).
+    std::string RomPath() const;
 
     /// The microphone's settings changed.
     void ReloadMicrophone();
