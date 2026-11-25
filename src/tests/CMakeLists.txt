@@ -223,21 +223,14 @@ if (TARGET frame_cores)
         frame_cores/pokedaisy_driver_tests.cpp frame_cores/cheat_db_tests.cpp
         frame_cores/widescreen_tests.cpp)
     target_link_libraries(tests PRIVATE frame_cores)
-    # An object of its own: the tests have no melonDS headers
-    add_library(nds_resolution_tests OBJECT EXCLUDE_FROM_ALL frame_cores/nds_resolution_tests.cpp)
-    target_link_libraries(nds_resolution_tests PRIVATE frame_cores melonds_core citra_common catch2
-        Threads::Threads)
-    # melonDS's shaders, as melonds_hires has them
-    target_include_directories(nds_resolution_tests PRIVATE
-        ${CMAKE_BINARY_DIR}/externals/melonds_cmake/hires)
-    add_dependencies(nds_resolution_tests melonds_hires)
+    if (WIN32) # AzaharVR: a directory of their own, the compiler is another one
+        add_subdirectory(frame_cores)
+    else()
+        include(frame_cores/core_header_tests.cmake)
+    endif()
     target_sources(tests PRIVATE $<TARGET_OBJECTS:nds_resolution_tests>)
 endif()
 if (TARGET gbads_game)
-    # An object of its own: gba-ds's header names (config.h, emu.h, ui.h) stay out of the others
-    add_library(gbads_driver_tests OBJECT EXCLUDE_FROM_ALL frame_cores/gbads_driver_tests.cpp)
-    target_link_libraries(gbads_driver_tests PRIVATE frame_cores gbads_game citra_common catch2
-        Threads::Threads)
     target_sources(tests PRIVATE $<TARGET_OBJECTS:gbads_driver_tests>)
 endif()
 target_link_libraries(tests PRIVATE input_common) # AzaharFrame

@@ -19,6 +19,12 @@
 #include <thread>
 #include <vector>
 
+#ifdef _WIN32 // AzaharVR
+#include <windows.h>
+#undef near
+#undef far
+#endif
+
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -39,6 +45,7 @@
 #include "frame_cores/nds_core.h"
 #include "frame_cores/pokedaisy_driver.h"
 #include "frame_cores/rom_info.h"
+#include "frame_cores/utf8_path.h"
 
 namespace {
 
@@ -768,6 +775,30 @@ void TestPriorSegvHandler(int sig, siginfo_t* info, void* ctx) {
         signal(sig, SIG_DFL);
         raise(sig);
     }
+}
+#else
+// AzaharVR: not the function with the __try: Clang catches what a call in it raises
+__declspec(noinline) void ReadFrom(volatile int* bad) {
+    (void)*bad;
+}
+
+bool FaultReachesOurHandler(volatile int* bad) {
+    __try {
+        ReadFrom(bad);
+    } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER
+                                                                 : EXCEPTION_CONTINUE_SEARCH) {
+        return true;
+    }
+    return false;
+}
+
+std::atomic<int> g_later_handler_hits{0};
+
+LONG CALLBACK LaterVectoredHandler(EXCEPTION_POINTERS* info) {
+    if (info->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
+        g_later_handler_hits.fetch_add(1);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
 }
 #endif
 
@@ -1779,7 +1810,58 @@ TEST_CASE("S1 melonDS fault handler chains non-DS faults during and after DS run
     // Restore original SIGSEGV handler
     sigaction(SIGSEGV, &g_saved_prev_segv, nullptr);
 }
+#else
+TEST_CASE("S1 melonDS fault handler passes on faults that are not its own during and after DS run",
+          "[frame_cores]") {
+    TempDir tmp("s1crash");
+    const fs::path rom_path = tmp.path / "hb.nds";
+    WriteFile(rom_path, MakeHomebrewNdsRom(false));
+
+    void* later = AddVectoredExceptionHandler(0, &LaterVectoredHandler);
+    REQUIRE(later != nullptr);
+    g_later_handler_hits.store(0);
+
+    FrameCores::AltCoreHost host;
+    REQUIRE(host.Boot(rom_path.string(), (tmp.path / "data").string(), /*headless_for_test=*/true));
+    REQUIRE(host.StepFrames(5));
+
+    // 1. Deliberate fault on ANOTHER thread WHILE DS is actively running
+    std::atomic<bool> worker_recovered{false};
+    std::thread worker(
+        [&] { worker_recovered = FaultReachesOurHandler(reinterpret_cast<int*>(0x1000)); });
+    worker.join();
+    CHECK(worker_recovered.load());
+    CHECK(g_later_handler_hits.load() == 1);
+
+    // 2. Stop DS, then trigger a fault on main thread
+    host.Stop();
+    CHECK(FaultReachesOurHandler(reinterpret_cast<int*>(0x2000)));
+    CHECK(g_later_handler_hits.load() == 2);
+
+    RemoveVectoredExceptionHandler(later);
+}
 #endif
+
+TEST_CASE("A game and its data in folders with letters of other languages", "[frame_cores]") {
+    TempDir tmp("names");
+    const fs::path folder = tmp.path / fs::path(std::u8string(u8"Jos\u00e9 \u65e5\u672c\u8a9e"));
+    fs::create_directories(folder);
+    const fs::path rom_path = folder / fs::path(std::u8string(u8"Pok\u00e9mon.nds"));
+    WriteFile(rom_path, MakeHomebrewNdsRom(false));
+    const std::string rom = FrameCores::FsUtf8(rom_path);
+    const std::string data = FrameCores::FsUtf8(folder / "data");
+    CHECK(FrameCores::FsPath(rom) == rom_path);
+
+    const auto info = FrameCores::ProbeRom(rom);
+    REQUIRE(info);
+    FrameCores::AltCoreHost host;
+    REQUIRE(host.Boot(rom, data, /*headless_for_test=*/true));
+    REQUIRE(host.StepFrames(2));
+    const fs::path games = FrameCores::FsPath(FrameCores::GameFolder(data, *info));
+    host.Stop();
+    CHECK(fs::is_directory(games));
+    CHECK(fs::is_directory(folder / "data"));
+}
 
 namespace {
 
