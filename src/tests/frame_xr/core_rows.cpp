@@ -759,8 +759,7 @@ TEST_CASE("Core rows: Layer Depth", "[frame_xr][tabmenu]") {
     // Under the Experimental subheader; a DS game has a Graphics section for it
     CHECK(SectionOf(Id::LayerDepth) == SettingsSection::Graphics);
     CHECK(SectionOf(Id::InvertDepth) == SettingsSection::Graphics);
-    CHECK(Drawn(Game(gba), SettingsView(SettingsSection::Graphics))
-              .contains(Id::ExperimentalHeader));
+    CHECK(RowApplies(Id::ExperimentalHeader, gba)); // (a header is no target)
     CoreCaps ds = CoreCaps::ForNDS();
     ds.layer_depth = true;
     CHECK(SectionShown(SettingsSection::Graphics, Game(ds)));
