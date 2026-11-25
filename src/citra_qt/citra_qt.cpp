@@ -3735,6 +3735,7 @@ bool GMainWindow::BootAltGame(const QString& filename) {
     options.force_dsi = console == Common::AltCore::DsConsoleDSi;
     options.second_screen = Settings::values.gba_second_screen.GetValue();
     options.layer_depth = Settings::RunningGraphics().layer_depth.GetValue();
+    options.depth_on = Settings::RunningGraphics().depth_on.GetValue();
     Common::LayerDepth::Get().inverted = Settings::RunningGraphics().invert_depth.GetValue();
     if (!AltWindowOpen(info) ||
         !alt_core_host->Boot(path, data_dir, /*headless_for_test=*/false, options)) {
@@ -3867,6 +3868,7 @@ void GMainWindow::ApplyAltSettings() {
     alt_core_host->SetDriverOption(Option::MapRefresh, v.gba_map_refresh.GetValue());
     if (caps.layer_depth) {
         Common::LayerDepth::Get().inverted = Settings::RunningGraphics().invert_depth.GetValue();
+        alt_core_host->SetDepthOn(Settings::RunningGraphics().depth_on.GetValue());
         alt_core_host->SetLayerDepth(Settings::RunningGraphics().layer_depth.GetValue());
     }
 }
@@ -6432,6 +6434,9 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         break;
     case S::InvertDepth:
         set(Settings::RunningGraphics().invert_depth, r.value != 0);
+        break;
+    case S::DepthOn:
+        set(Settings::RunningGraphics().depth_on, std::min<u32>(u, 2));
         break;
     }
 #ifdef ENABLE_ALT_CORES

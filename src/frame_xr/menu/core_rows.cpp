@@ -41,6 +41,7 @@ enum class Need {
     GbaDsGroup,
     PokeDaisyGroup,
     LayerDepth,
+    DepthPerScreen,
 };
 
 struct Rule {
@@ -66,6 +67,7 @@ constexpr Rule kRules[] = {
     {Id::GbaDsHeader, Need::GbaDsGroup},
     {Id::PokeDaisyHeader, Need::PokeDaisyGroup},
     {Id::LayerDepth, Need::LayerDepth},
+    {Id::DepthOn, Need::DepthPerScreen},
     {Id::InvertDepth, Need::LayerDepth},
     {Id::DsTouchEnabled, Need::DsTouch},
     {Id::DsMicBlow, Need::MicBlow},
@@ -81,7 +83,7 @@ constexpr Rule kRules[] = {
     {Id::AutosaveEvery, Need::Autosave},
     {Id::AutosaveKeep, Need::Autosave},
     {Id::AutosaveCard, Need::Autosave}, // Load State's
-    {Id::GamesHeader, Need::Any}, // the covers' rows, while there is a Games tab
+    {Id::GamesHeader, Need::Any},       // the covers' rows, while there is a Games tab
     {Id::DownloadGameCovers, Need::Any},
     {Id::DownloadThumbnails, Need::Any},
     {Id::MoreSettings, Need::Any},
@@ -170,6 +172,8 @@ bool Has(Need need, const CoreCaps& core) {
         return core.driver == DriverName::PokeDaisy && core.driver_options != 0;
     case Need::LayerDepth:
         return core.layer_depth;
+    case Need::DepthPerScreen:
+        return core.layer_depth && core.depth_per_screen;
     }
     return false;
 }

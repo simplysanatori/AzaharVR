@@ -314,4 +314,21 @@ bool NdsRight3D::CopyPolygon(const melonDS::Polygon& from, melonDS::Polygon& to,
     return true;
 }
 
+std::array<bool, 2> ShownDepth::Note(const NdsDepth::Depth& depth, const melonDS::GPU& gpu,
+                                     bool a_on_top, bool captures) {
+    for (const melonDS::GPU2D* engine : {&gpu.GPU2D_A, &gpu.GPU2D_B}) {
+        const int screen = (engine->Num == 0) == a_on_top ? 0 : 1;
+        bool& shown = shows[static_cast<std::size_t>(screen)];
+        if (!depth.on || !depth.screens[screen]) {
+            shown = false;
+        } else if (!shown) {
+            melonDS::u16 oam[512];
+            std::memcpy(oam, &gpu.OAM[engine->Num != 0 ? 0x400 : 0], sizeof(oam));
+            shown = screen == 0 || NdsDepth::HasDepth(engine->DispCnt, engine->Num == 0,
+                                                      engine->BGCnt, oam, depth.layers, captures);
+        }
+    }
+    return {(*this)[a_on_top ? 0 : 1], (*this)[a_on_top ? 1 : 0]};
+}
+
 } // namespace FrameCores

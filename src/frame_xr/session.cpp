@@ -805,13 +805,13 @@ void Runtime::ReleaseFrame(bool gpu_finished, const VideoCore::XrContentPose& co
             chain.has_image = true;
             chain.frame_serial = serial;
             chain.shown_index = chain.index; // AzaharFrame projscreen
-            chain.layer_shift = content.layer_shift;
+            chain.NoteContent(content, i == static_cast<std::size_t>(VideoCore::XrScreen::Bottom));
         } else {
             std::scoped_lock lock{screens_mutex};
             chain.has_image = true;
             chain.frame_serial = serial;
             chain.shown_index = chain.index;
-            chain.layer_shift = content.layer_shift;
+            chain.NoteContent(content, i == static_cast<std::size_t>(VideoCore::XrScreen::Bottom));
         }
         // A packed top screen counts for both eyes (the log line keeps its meaning).
         const bool both = packed_top && top_stereo.load(std::memory_order_relaxed) &&

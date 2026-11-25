@@ -191,9 +191,8 @@ StereoSoft::StereoSoft(melonDS::NDS& nds) : melonDS::SoftRenderer(nds) {}
 
 StereoSoft::~StereoSoft() = default;
 
-void StereoSoft::SetDepth(const NdsDepth::Depth& depth_, bool secondary_too) {
+void StereoSoft::SetDepth(const NdsDepth::Depth& depth_) {
     wanted = depth_;
-    wanted_secondary = secondary_too;
 }
 
 void StereoSoft::SetRenderSettings(melonDS::RendererSettings& settings) {
@@ -232,13 +231,13 @@ void StereoSoft::Start3DRendering() {
     }
     // Line 215, for the frame that begins at 262: by then the depth is the wanted one. The scene
     // is drawn if the screen engine A is on then has a right picture.
-    const bool top = watch.SceneNeeded(GPU.ScreenSwap);
+    const bool needed = watch.SceneNeeded(GPU.ScreenSwap, wanted.screens);
     const int screen = watch.NextOnTop() ? 0 : 1;
     if (!wanted.on) {
         right->Scene().Stop();
     } else if (!NdsDepth::ShowsScene(GPU.GPU2D_A.DispCnt)) {
         right->Scene().NoScene(screen);
-    } else if (top || wanted_secondary) {
+    } else if (needed) {
         right->Scene().Start(wanted, screen, threaded_3d);
     } else {
         right->Scene().Drop();
@@ -255,6 +254,10 @@ void StereoSoft::Restart3DRendering() {
 const u32* StereoSoft::Right(int screen) const {
     const Screen& of = screens[screen];
     return right && of.ready ? of.picture.data() : nullptr;
+}
+
+bool StereoSoft::ShowsDepth(int screen) const {
+    return shown_depth[screen];
 }
 
 int StereoSoft::RightShift(int screen) const {
@@ -284,6 +287,7 @@ void StereoSoft::Forget() {
         screen.scene_left.clear();
     }
     watch = {};
+    shown_depth = {};
     complete = false;
     lines = {};
     drawing = false; // until the next frame's first sprites
@@ -349,7 +353,6 @@ void StereoSoft::EndFrame() {
 
 void StereoSoft::BeginFrame() {
     depth = wanted;
-    secondary = wanted_secondary;
     lines = {};
     if (!depth.on) {
         right.reset();
@@ -364,10 +367,8 @@ void StereoSoft::BeginFrame() {
     a_on_top = watch.a_on_top;
     // An engine is drawn again if its screen has a right picture. Not engine B where the game has
     // 3D on both screens: its screen keeps the right picture of the frame before (EndFrame).
-    const int screen_a = a_on_top ? 0 : 1;
-    const int screen_b = 1 - screen_a;
-    draws[0] = screen_a == 0 || secondary;
-    draws[1] = (screen_b == 0 || secondary) && !screens[screen_b].kept;
+    draws = shown_depth.Note(depth, GPU, a_on_top, false);
+    draws[1] = draws[1] && !screens[a_on_top ? 1 : 0].kept;
     drawing = draws[0] || draws[1];
 }
 

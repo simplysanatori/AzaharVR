@@ -12,6 +12,7 @@
 #include "GPU_OpenGL.h"
 
 #include "frame_cores/nds_depth.h"
+#include "frame_cores/nds_stereo_3d.h"
 
 namespace FrameCores {
 
@@ -30,9 +31,9 @@ namespace FrameCores {
  * software renderer (NdsDepth::EdgeLayers): its compositor and its 3D's clear plane end there
  * (nds_gl_edge.h).
  *
- * Only the engine on the top screen is drawn for the right eye, unless the bottom screen is to have
- * a right picture too. A frame without all of its right picture (the first one, or one whose
- * engines changed screens in it) has none.
+ * Only an engine whose screen has depth (NdsDepth::Screens, ShownDepth) is drawn for the right eye.
+ * A frame without all of its right picture (the first one, or one whose engines changed screens in
+ * it) has none.
  */
 class StereoGl : public melonDS::GLRenderer {
 public:
@@ -41,11 +42,16 @@ public:
 
     /// Between frames, for the next one. False: there is no second renderer to be had, and there
     /// will be none.
-    bool SetDepth(const NdsDepth::Depth& depth, bool secondary_too = false);
+    bool SetDepth(const NdsDepth::Depth& depth);
 
     /// The last frame's right picture, as GetFramebuffers' of the left one. 0: none, the left one
     /// is for both eyes.
     GLuint Right(int screen) const;
+
+    /// The screen's picture is one for each eye, also in a frame without a right one (ShownDepth).
+    bool ShowsDepth(int screen) const {
+        return shown_depth[screen];
+    }
 
     /// The farthest layer's shift in it, in pixels: a picture is drawn a frame after SetDepth.
     int RightShift() const {
@@ -109,8 +115,8 @@ private:
     Unseen unseen{};
     melonDS::RendererSettings settings{};
     NdsDepth::Depth wanted{};
-    bool wanted_secondary = false;
     NdsDepth::TopWatch watch{};
+    ShownDepth shown_depth{};    ///< this frame's
     bool begun = false;          ///< a frame, none of whose lines is drawn yet
     bool a_on_top = false;       ///< engine A, this frame
     std::array<bool, 2> draws{}; ///< engine A, engine B: for the right eye too, this frame
@@ -128,8 +134,10 @@ private:
     int shown_shift = 0;     ///< the last frame's
     bool next_scene = false; ///< the coming frame's 3D is drawn for the right eye
     bool scene = false;      ///< this frame's is
+    bool no_scene = false;   ///< a line shows 3D, and it is not
     int lines = -1;          ///< of the right eye's, this frame; < 0: not all will be
-    bool complete = false;   ///< the frame that ends has all of them
+    /// The frame that ends has all of them, of a screen that has a right picture
+    std::array<bool, 2> complete{};
     bool saving = false;
     std::array<bool, 2> ready{}; ///< the last frame's
 };

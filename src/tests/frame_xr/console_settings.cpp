@@ -33,6 +33,7 @@ struct Group {
     TextureFilter filter{};
     u32 depth{};
     bool invert{};
+    u32 depth_on{};
     u32 layout{};
     u32 gap{};
     bool hide{};
@@ -47,8 +48,9 @@ Snapshot Take() {
         const auto g = Settings::Graphics(kGroups[i]);
         s[i] = {g.resolution_factor.GetValue(), g.texture_filter.GetValue(),
                 g.layer_depth.GetValue(),       g.invert_depth.GetValue(),
-                g.screen_layout.GetValue(),     g.screen_gap.GetValue(),
-                g.hide_bottom_screen.GetValue(), g.screen_curve.GetValue()};
+                g.depth_on.GetValue(),          g.screen_layout.GetValue(),
+                g.screen_gap.GetValue(),        g.hide_bottom_screen.GetValue(),
+                g.screen_curve.GetValue()};
     }
     return s;
 }
@@ -71,6 +73,9 @@ void SetOwn(ConsoleGroup group, bool per_game, u32 n) {
         set(g.layer_depth, 1 + n);
         set(g.invert_depth, true);
     }
+    if (group == ConsoleGroup::DS) {
+        set(g.depth_on, 1 + n % 2);
+    }
     set(g.screen_curve, 30 + 15 * n);
 }
 
@@ -87,6 +92,7 @@ void Reset() {
         reset(g.texture_filter);
         reset(g.layer_depth);
         reset(g.invert_depth);
+        reset(g.depth_on);
         reset(g.screen_layout);
         reset(g.screen_gap);
         reset(g.hide_bottom_screen);
@@ -219,6 +225,9 @@ TEST_CASE("Console settings: a game's own value is its group's alone, through Qt
             if (group != ConsoleGroup::N3DS) {
                 CHECK(g.layer_depth.UsingGlobal() == !mine);
                 CHECK(g.invert_depth.UsingGlobal() == !mine);
+            }
+            if (group == ConsoleGroup::DS) {
+                CHECK(g.depth_on.UsingGlobal() == !mine);
             }
             CHECK(g.screen_curve.UsingGlobal() == !mine);
         }

@@ -90,11 +90,11 @@ public:
         return DsGl::Healthy();
     }
 
-    bool SetDepth(const NdsDepth::Depth& depth, bool secondary_too) override {
+    bool SetDepth(const NdsDepth::Depth& depth) override {
         if (depth.on != HasRight()) {
             right_alive.reset();
         }
-        return StereoGl::SetDepth(depth, secondary_too) && DsGl::Healthy();
+        return StereoGl::SetDepth(depth) && DsGl::Healthy();
     }
 
     bool GetRight(int screen, Vulkan::AltScreenImage& right) override {
@@ -108,6 +108,10 @@ public:
         }
         Show(right, texture, static_cast<uint32_t>(screen), right_alive);
         return true;
+    }
+
+    bool ShowsDepth(int screen) const override {
+        return StereoGl::ShowsDepth(screen);
     }
 
     int RightShift() const override {

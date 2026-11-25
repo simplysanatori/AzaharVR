@@ -97,6 +97,7 @@ struct Capabilities {
     bool has_quick_menu = false; ///< BtnQuickMenu opens PokeDaisy's quick menu
     /// Layer Depth: the Primary Screen can have a right eye's picture of its own.
     bool layer_depth = false;
+    bool depth_per_screen = false; ///< of either screen, or both
     bool has_pages = false;      ///< a GBA game whose Secondary Screen BtnTurnPage may turn
     DriverName driver = DriverName::None; ///< the one running, whatever the choice is
     uint32_t driver_options = 0;    ///< DriverOptionBit of those it has for this game now

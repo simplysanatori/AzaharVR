@@ -12,14 +12,15 @@
 #include "GPU_Soft.h"
 
 #include "frame_cores/nds_depth.h"
+#include "frame_cores/nds_stereo_3d.h"
 
 namespace FrameCores {
 
 /**
  * Layer Depth for DS games: melonDS's software renderer, with a second one that draws every line
  * again with the backgrounds and sprites moved by their priority, for the right eye. The game and
- * the left picture never see it. Only the engine on the top screen is drawn again, unless the
- * bottom screen is to have a right picture too.
+ * the left picture never see it. Only an engine whose screen has depth (NdsDepth::Screens,
+ * ShownDepth) is drawn again.
  *
  * 3D is drawn again for the right eye from the game's polygons (nds_stereo_3d.h). Lines without
  * it (the frame after Layer Depth is turned on or a state is loaded) are the left eye's. Display
@@ -32,16 +33,18 @@ public:
     explicit StereoSoft(melonDS::NDS& nds);
     ~StereoSoft() override;
 
-    /// From the next frame. Not while a frame runs. `secondary_too`: the bottom screen has a right
-    /// picture as well (for a host that can show one; twice the 2D drawing otherwise saved).
-    void SetDepth(const NdsDepth::Depth& depth, bool secondary_too = false);
+    /// From the next frame. Not while a frame runs.
+    void SetDepth(const NdsDepth::Depth& depth);
 
     /// The right eye's last frame of a screen (0 the top one, 1 the bottom one), as
     /// GetFramebuffers gives the left one's: 256x192, 32-bit BGRA with alpha set, until the next
     /// RunFrame. None: the left eye's is for both.
     const melonDS::u32* Right(int screen) const;
-    /// The farthest layer's shift in it, in pixels: a picture is drawn a frame after SetDepth, or
-    /// kept for one more.
+    /// The screen's picture is one for each eye, also in a frame without a right one: in the
+    /// depth's `screens`, and the bottom one has had something to see.
+    bool ShowsDepth(int screen) const;
+    /// The farthest layer's shift in Right, in pixels: a picture is drawn a frame after SetDepth,
+    /// or kept for one more.
     int RightShift(int screen) const;
 
     NdsDepth::Lines LastLines() const;
@@ -81,13 +84,12 @@ private:
 
     std::unique_ptr<RightEye> right; ///< none while off
     NdsDepth::Depth wanted{};
-    bool wanted_secondary = false;
     NdsDepth::Depth depth{};  ///< this frame's
-    bool secondary = false;   ///< this frame's
     bool threaded_3d = false; ///< the left eye's 3D
     NdsDepth::TopWatch watch{};
     std::array<Screen, 2> screens{};
-    NdsDepth::Lines lines{}; ///< this frame's
+    ShownDepth shown_depth{}; ///< this frame's
+    NdsDepth::Lines lines{};  ///< this frame's
     NdsDepth::Lines last_lines{};
     bool drawing = false;        ///< the right eye's lines, this frame
     std::array<bool, 2> draws{}; ///< engine A, engine B: drawn again this frame

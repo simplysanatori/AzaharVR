@@ -426,17 +426,17 @@ ConsoleGraphics Graphics(ConsoleGroup group) {
     switch (group) {
     case ConsoleGroup::DS:
         return {v.ds_resolution_factor,  v.ds_texture_filter,      v.ds_layer_depth,
-                v.ds_invert_depth,       v.ds_vr_screen_layout,    v.ds_vr_screen_gap,
-                v.ds_vr_hide_bottom_screen, v.ds_vr_screen_curve};
+                v.ds_invert_depth,       v.ds_depth_on,            v.ds_vr_screen_layout,
+                v.ds_vr_screen_gap,      v.ds_vr_hide_bottom_screen, v.ds_vr_screen_curve};
     case ConsoleGroup::GBA:
         return {v.gba_resolution_factor,  v.gba_texture_filter,   v.layer_depth,
-                v.invert_depth,           v.gba_vr_screen_layout, v.gba_vr_screen_gap,
-                v.gba_vr_hide_bottom_screen, v.gba_vr_screen_curve};
+                v.invert_depth,           v.depth_on_unused,      v.gba_vr_screen_layout,
+                v.gba_vr_screen_gap,      v.gba_vr_hide_bottom_screen, v.gba_vr_screen_curve};
     case ConsoleGroup::N3DS:
         break;
     }
     return {v.resolution_factor,   v.texture_filter,    v.n3ds_layer_depth_unused,
-            v.n3ds_invert_depth_unused, v.vr_screen_layout, v.vr_screen_gap,
+            v.n3ds_invert_depth_unused, v.depth_on_unused, v.vr_screen_layout, v.vr_screen_gap,
             v.vr_hide_bottom_screen, v.vr_screen_curve};
 }
 

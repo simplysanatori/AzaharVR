@@ -374,8 +374,9 @@ void StereoGl::DropRight() {
         right.reset();
     }
     DsGl::FreeState();
+    shown_depth = {};
     ready = {};
-    complete = false;
+    complete = {};
 }
 
 /// A bank of the captures of one renderer to another's.
@@ -395,9 +396,8 @@ void StereoGl::CopyCaptures(const melonDS::GLRenderer& from, melonDS::GLRenderer
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-bool StereoGl::SetDepth(const NdsDepth::Depth& depth, bool secondary_too) {
+bool StereoGl::SetDepth(const NdsDepth::Depth& depth) {
     wanted = depth;
-    wanted_secondary = secondary_too;
     if (!depth.on) {
         DropRight();
         return true;
@@ -427,10 +427,11 @@ void StereoGl::Forget() {
         right->Scene().Cut();
     }
     watch = {};
+    shown_depth = {};
     begun = false;
-    next_scene = scene = false;
+    next_scene = scene = no_scene = false;
     lines = -1;
-    complete = false;
+    complete = {};
     ready = {};
 }
 
@@ -458,13 +459,13 @@ void StereoGl::SetRenderSettings(melonDS::RendererSettings& to) {
 
 /// Line 215, for the frame that begins at 262.
 void StereoGl::StartScene() {
-    const bool top = watch.SceneNeeded(GPU.ScreenSwap);
+    const bool needed = watch.SceneNeeded(GPU.ScreenSwap, wanted.screens);
     const int screen = watch.NextOnTop() ? 0 : 1;
     next_scene = false;
     const auto last = std::exchange(drawn, std::nullopt);
     if (!NdsDepth::ShowsScene(GPU.GPU2D_A.DispCnt)) {
         right->Scene().NoScene(screen);
-    } else if (top || wanted_secondary) {
+    } else if (needed) {
         NdsRight3D& of = right->Scene();
         const NdsDepth::SceneShift shift = of.Prepare(wanted, screen);
         // Where the clear plane ends on the screen, in the scene, whose lines are scrolled
@@ -500,8 +501,8 @@ void StereoGl::BeginFrame() {
     next_shift = wanted.layers[3];
     a_on_top = watch.a_on_top;
     lines = 0;
-    draws[0] = a_on_top || wanted_secondary;
-    draws[1] = !a_on_top || wanted_secondary;
+    no_scene = false;
+    draws = shown_depth.Note(wanted, GPU, a_on_top, true);
     const InRightState state;
     for (int engine = 0; engine < 2; ++engine) {
         right->Set(engine, draws[static_cast<std::size_t>(engine)], wanted.layers);
@@ -517,7 +518,10 @@ void StereoGl::DrawSprites(u32 line) {
     if (line == 0) {
         // At line 262, before SwapBuffers: sprites are drawn a line ahead, so a frame starts here
         if (!begun) {
-            complete = lines == kLines;
+            const bool all = lines == kLines;
+            const bool a = all && draws[0] && !no_scene;
+            const bool b = all && draws[1];
+            complete = {a_on_top ? a : b, a_on_top ? b : a};
         }
         BeginFrame();
     }
@@ -541,9 +545,8 @@ void StereoGl::DrawScanline(u32 line) {
     WriteWindows(GPU, after);
 
     const bool bg0_on = (GPU.GPU2D_A.LayerEnable & 1) != 0;
-    const bool no_scene =
-        draws[0] && !scene && NdsDepth::LineShowsScene(GPU.GPU2D_A.DispCnt, bg0_on);
-    if (GPU.ScreenSwap != a_on_top || no_scene || lines < 0) {
+    no_scene |= draws[0] && !scene && NdsDepth::LineShowsScene(GPU.GPU2D_A.DispCnt, bg0_on);
+    if (GPU.ScreenSwap != a_on_top || lines < 0) {
         lines = -1;
     } else {
         ++lines;
@@ -557,7 +560,7 @@ void StereoGl::VBlank() {
         return;
     }
     WithRight([](RightEye& eye) { eye.VBlank(); });
-    if (GPU.CaptureEnable && (!draws[0] || lines < 0)) {
+    if (GPU.CaptureEnable && (!draws[0] || no_scene || lines < 0)) {
         // The right eye has no picture of this frame's engine A
         const bool wide = ((GPU.CaptureCnt >> 20) & 3) != 0;
         CopyCaptures(*this, *right, (GPU.CaptureCnt >> 16) & 3, wide);
@@ -582,9 +585,8 @@ void StereoGl::SwapBuffers() {
     GLRenderer::SwapBuffers();
     if (right) {
         right->SwapBuffers();
-        ready = {complete, complete && wanted_secondary};
+        ready = std::exchange(complete, {});
         shown_shift = ended_shift;
-        complete = false;
     }
 }
 

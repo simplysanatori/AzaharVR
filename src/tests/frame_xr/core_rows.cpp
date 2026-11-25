@@ -27,7 +27,7 @@ const std::set<Id> kOthersOnly{Id::CoreHeader,     Id::GbaSolarLevel, Id::DsCons
                                Id::InstantText, Id::TradeEvolutions, Id::PokeHud,
                                Id::PokeDarkMode, Id::BattleInfo, Id::BattleHints,
                                Id::OneTapMoves, Id::BattleStyle, Id::QuickMenuStyle, Id::LayerDepth,
-                               Id::InvertDepth};
+                               Id::InvertDepth, Id::DepthOn};
 
 /// Every console's.
 const std::set<Id> kCommon{
@@ -788,6 +788,25 @@ TEST_CASE("Core rows: Invert Depth goes with Layer Depth", "[frame_xr][tabmenu]"
         core.layer_depth = true;
         CHECK(!pressable(0));
         CHECK(pressable(1));
+    }
+}
+
+TEST_CASE("Core rows: Depth On is the DS's, with Layer Depth", "[frame_xr][tabmenu]") {
+    CHECK(LabelFor(Id::DepthOn) == "Depth On");
+    CHECK(PerGameSetting(Id::DepthOn));
+    CHECK(SectionOf(Id::DepthOn) == SettingsSection::Graphics);
+    for (CoreCaps core : {CoreCaps::ForGBA(), CoreCaps::ForGB(), CoreCaps::ForNDS(),
+                          CoreCaps::ForNDS(true), CoreCaps::ForN3DS()}) {
+        const bool ds = Common::AltCore::IsDs(core.kind);
+        core.layer_depth = !Is3ds(core);
+        CHECK(!RowApplies(Id::DepthOn, core));
+        core.depth_per_screen = ds; // as NdsCore says it
+        CHECK(RowApplies(Id::DepthOn, core) == ds);
+        MenuModel m = Game(core);
+        m.layer_depth = 0;
+        CHECK(!Pressable(m, SettingsView(SettingsSection::Graphics), Id::DepthOn));
+        m.layer_depth = 1;
+        CHECK(Pressable(m, SettingsView(SettingsSection::Graphics), Id::DepthOn) == ds);
     }
 }
 

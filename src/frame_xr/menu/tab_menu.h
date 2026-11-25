@@ -383,6 +383,7 @@ enum class Id : int {
     DownloadThumbnails, ///< for the games the Games tab shows
     LayerDepth,       ///< a slider, 0 to 3 (layer_depth)
     InvertDepth,      ///< a switch (invert_depth), shown while Layer Depth is on
+    DepthOn,          ///< DS games: index: both screens, top, bottom (ds_depth_on), as that one
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -649,6 +650,7 @@ struct MenuModel {
     int gba_map_refresh = 1; ///< index of kMapRefreshFrames
     int layer_depth = 0;          ///< 0..3
     bool invert_depth = false;
+    int depth_on = 0;             ///< 0 both screens, 1 top, 2 bottom
     bool ds_touch_enabled = true; ///< DS touch input switch
     int ds_screen_rotation = 0;   ///< 0 = 0°, 1 = 90°, 2 = 270°
     bool ds_lid_closed = false;   ///< DS lid closed toggle

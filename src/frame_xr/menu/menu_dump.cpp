@@ -3384,12 +3384,16 @@ int main(int argc, char** argv) {
         MenuModel dm = pg;
         dm.core = CoreCaps::ForNDS();
         dm.core.layer_depth = true; // as NdsCore says it
+        dm.core.depth_per_screen = true;
         dm.game_title = "Mario Kart DS";
         dm.immersive_mode = 0;
         dm.layer_depth = 0;
         ok &= shot("depth-ds-1-off", dm, settings(SettingsSection::Graphics));
         dm.layer_depth = 2;
         ok &= shot("depth-ds-2-level-2", dm, settings(SettingsSection::Graphics));
+        dm.depth_on = 2;
+        ok &= shot("depth-ds-3-bottom", dm, settings(SettingsSection::Graphics));
+        dm.core.depth_per_screen = false;
         dm.core = CoreCaps::ForGBA();
         dm.core.layer_depth = true;
         dm.game_title = "Metroid Fusion";

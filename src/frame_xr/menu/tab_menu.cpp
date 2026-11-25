@@ -33,6 +33,10 @@ constexpr float kLabelGap = 24.0f; ///< between a row's label and its control
 constexpr float kStatRowH = 44.0f;
 constexpr int kSlots = 10;
 
+/// Which of the DS's screens Layer Depth is for, in the order of ds_depth_on.
+constexpr const char* kDepthOnLabel = "Depth On";
+const std::vector<std::string> kDepthOnChoices{"Both Screens", "Top Screen", "Bottom Screen"};
+
 struct TabInfo {
     const char* label;
     char32_t icon;
@@ -547,6 +551,7 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             layers.value = SliderText(Id::LayerDepth, lv);
             rows.push_back(layers);
             if (m.layer_depth > 0) { // drops down under it, as Match Bottom Screen's
+                rows.push_back(row(Id::DepthOn, RowKind::Segmented, std::clamp(m.depth_on, 0, 2)));
                 rows.push_back(row(Id::InvertDepth, RowKind::Switch, 0, m.invert_depth));
             }
             // AzaharFrame fixa: Motion Clarity in the Off and Wide modes (vr_motion_clarity_normal),
@@ -740,6 +745,7 @@ SettingsSection SectionOf(Id id) {
     case Id::TextureFilter:
     case Id::LayerDepth: // AzaharVR
     case Id::InvertDepth:
+    case Id::DepthOn:
     case Id::AccurateImageCopies: // AzaharFrame accxfer
     case Id::AsyncShaders:
     case Id::MotionClarityNormal: // AzaharFrame fixa
@@ -925,6 +931,7 @@ bool PerGameSetting(Id id) {
     case Id::ScreenGap:
     case Id::LayerDepth:
     case Id::InvertDepth:
+    case Id::DepthOn:
         return true;
     default:
         return false;
@@ -1364,6 +1371,8 @@ const std::vector<std::string>& OptionsFor(Id id) {
         static const std::vector<std::string> kDsRot{"0°", "90°", "270°"};
         return kDsRot;
     }
+    case Id::DepthOn:
+        return kDepthOnChoices;
     case Id::SecondScreen: {
         static const std::vector<std::string> kSecondScreen{"PokeDaisy", "GBA DS", "Off"};
         return kSecondScreen;
@@ -1868,6 +1877,8 @@ std::string LabelFor(Id id) {
         return "Layer Depth";
     case Id::InvertDepth:
         return "Invert Depth";
+    case Id::DepthOn:
+        return kDepthOnLabel;
     case Id::DsTouchEnabled:
         return "Touch Screen Input";
     case Id::DsMicBlow:
