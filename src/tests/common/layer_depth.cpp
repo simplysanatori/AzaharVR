@@ -80,6 +80,23 @@ TEST_CASE("LayerDepth: the eyes never turn outwards", "[common][layer_depth]") {
     }
 }
 
+TEST_CASE("LayerDepth: inverted, the layers are in the opposite order, as far apart",
+          "[common][layer_depth]") {
+    CHECK(!Get().inverted.load());
+    for (uint32_t level = 0; level <= kMaxLevel; ++level) {
+        const auto shift = [level](uint32_t step, bool inverted) {
+            return Directed(LayerShift(level, step, 3, 240, kNoLimit), inverted);
+        };
+        for (uint32_t step = 1; step <= 3; ++step) {
+            const int32_t apart = shift(step, false) - shift(step - 1, false);
+            CHECK(apart == static_cast<int32_t>(level));
+            CHECK(shift(step, true) - shift(step - 1, true) == -apart);
+        }
+    }
+    // The farthest layer is straight ahead either way
+    CHECK(Recentre(-9.0f / 240.0f, 2.0f) == -Recentre(9.0f / 240.0f, 2.0f));
+}
+
 TEST_CASE("LayerDepth: the farthest layer is straight ahead", "[common][layer_depth]") {
     CHECK(Recentre(0.0f, 2.4f) == 0.0f);
     for (const float ipd : {0.063f, 0.068f, 0.070f}) {

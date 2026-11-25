@@ -200,8 +200,10 @@ float ShadowEye::FarthestShift() const {
 }
 
 int32_t ShadowEye::BackgroundShift() const {
-    return static_cast<int32_t>(Common::LayerDepth::LayerShift(
-        depth, kBackgroundSteps, kBackgroundSteps, width, max_shift));
+    namespace LayerDepth = Common::LayerDepth;
+    return LayerDepth::Directed(
+        LayerDepth::LayerShift(depth, kBackgroundSteps, kBackgroundSteps, width, max_shift),
+        LayerDepth::Get().inverted.load(std::memory_order_relaxed));
 }
 
 bool ShadowEye::CopyGame() {
@@ -230,7 +232,7 @@ bool ShadowEye::CopyGame() {
     return true;
 }
 
-// To the right: farther than the screen. Loading a state put every offset back to 0.
+// To the right is farther than the screen. Loading a state put every offset back to 0.
 void ShadowEye::ShiftLayers() {
     core->adjustVideoLayer(core, GB_LAYER_BACKGROUND, BackgroundShift(), 0);
 }

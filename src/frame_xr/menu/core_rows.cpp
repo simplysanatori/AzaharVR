@@ -58,6 +58,7 @@ constexpr Rule kRules[] = {
     {Id::SecondScreen, Need::SecondScreen},
     {Id::AllowGameEditing, Need::EditGame},
     {Id::LayerDepth, Need::LayerDepth},
+    {Id::InvertDepth, Need::LayerDepth},
     {Id::DsTouchEnabled, Need::DsTouch},
     {Id::DsMicBlow, Need::MicBlow},
     {Id::DsLidToggle, Need::Lid},

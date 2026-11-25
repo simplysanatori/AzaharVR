@@ -158,10 +158,11 @@ struct GbaRightEye::Impl {
     }
 
     void UpdateShifts() {
+        const bool inverted = Common::LayerDepth::Get().inverted.load(std::memory_order_relaxed);
         std::array<int32_t, kPriorities> now;
         for (uint32_t i = 0; i < kPriorities; ++i) {
-            now[i] = static_cast<int32_t>(
-                Common::LayerDepth::LayerShift(depth, i, kFarthest, kWidth, max_shift));
+            now[i] = Common::LayerDepth::Directed(
+                Common::LayerDepth::LayerShift(depth, i, kFarthest, kWidth, max_shift), inverted);
         }
         if (now != shifts) {
             shifts = now;

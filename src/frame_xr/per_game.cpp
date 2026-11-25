@@ -128,6 +128,9 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::LayerDepth:
         f(v.layer_depth);
         return true;
+    case Id::InvertDepth:
+        f(v.invert_depth);
+        return true;
     case Id::TouchpadTouch: // AzaharFrame reticle: the Controls tab's rows
         f(v.vr_touchpad_touch);
         return true;

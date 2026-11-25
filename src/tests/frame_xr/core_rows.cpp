@@ -19,7 +19,7 @@ namespace {
 const std::set<Id> kOthersOnly{Id::CoreHeader,     Id::GbaSolarLevel, Id::DsConsoleMode,
                                Id::DsTouchEnabled, Id::DsMicBlow,     Id::DsLidToggle,
                                Id::ImportSave,     Id::DsScreenRotation, Id::SecondScreen,
-                               Id::AllowGameEditing, Id::LayerDepth};
+                               Id::AllowGameEditing, Id::LayerDepth, Id::InvertDepth};
 
 /// Every console's.
 const std::set<Id> kCommon{
@@ -95,6 +95,26 @@ MenuView SettingsView(SettingsSection section) {
     v.tab = Tab::Settings;
     v.section = section;
     return v;
+}
+
+/// The row can be changed, not only read.
+bool Pressable(const MenuModel& m, Id id) {
+    Kit kit{1.0f};
+    frame_xr::ui::Canvas canvas;
+    TabMenu menu;
+    MenuView v = SettingsView(SettingsSection::General);
+    for (float scroll = 0.0f; scroll <= 3000.0f; scroll += kRowH) {
+        v.scroll[static_cast<std::size_t>(v.tab)] = scroll;
+        canvas.Init(static_cast<int>(kPanelW), static_cast<int>(kPanelH));
+        kit.Begin(canvas);
+        menu.Draw(kit, m, v);
+        for (const auto& h : menu.Hits()) {
+            if (h.t.id == id && h.t.index != kLabelIndex) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 } // namespace
@@ -331,8 +351,10 @@ TEST_CASE("Core rows: Layer Depth", "[frame_xr][tabmenu]") {
                           CoreCaps::ForNDS(true), CoreCaps::ForN3DS()}) {
         CHECK(!core.layer_depth);
         CHECK(!RowApplies(Id::LayerDepth, core));
+        CHECK(!RowApplies(Id::InvertDepth, core));
         core.layer_depth = true;
         CHECK(RowApplies(Id::LayerDepth, core) == !Is3ds(core));
+        CHECK(RowApplies(Id::InvertDepth, core) == !Is3ds(core));
         CHECK(RowApplies(Id::CoreHeader, core) == !Is3ds(core));
     }
     CoreCaps gba = CoreCaps::ForGBA();
@@ -346,6 +368,23 @@ TEST_CASE("Core rows: Layer Depth", "[frame_xr][tabmenu]") {
     CHECK(range.min == 0.0f);
     CHECK(range.max == 3.0f);
     CHECK(range.step == 1.0f);
+}
+
+TEST_CASE("Core rows: Invert Depth goes with Layer Depth", "[frame_xr][tabmenu]") {
+    CHECK(LabelFor(Id::InvertDepth) == "Invert Depth");
+    CHECK(PerGameSetting(Id::InvertDepth));
+    CHECK(!ExplainLock(Lock::LayerDepthOff).empty());
+    for (CoreCaps core : {CoreCaps::ForGBA(), CoreCaps::ForGB(), CoreCaps::ForNDS()}) {
+        const auto pressable = [&core](int level) { // a locked row has no target
+            MenuModel m = Game(core);
+            m.layer_depth = level;
+            return Pressable(m, Id::InvertDepth);
+        };
+        CHECK(!pressable(2));
+        core.layer_depth = true;
+        CHECK(!pressable(0));
+        CHECK(pressable(1));
+    }
 }
 
 // The notice shown the first time Allow Game Editing is turned on.

@@ -190,8 +190,12 @@ std::vector<uint8_t> MakeBatteryGbRom() {
 /// A GBA ROM with two text backgrounds of `priority0` and `priority1`, drawn `right0` and
 /// `right1` pixels to the right of where they scroll. They scroll every frame and change in the
 /// middle of it; sound channel 1 plays.
-std::vector<uint8_t> MakeLayersGbaRom(uint32_t priority0, uint32_t priority1, uint32_t right0 = 0,
-                                      uint32_t right1 = 0) {
+std::vector<uint8_t> MakeLayersGbaRom(uint32_t priority0, uint32_t priority1, int right0 = 0,
+                                      int right1 = 0) {
+    const auto sub = [](uint32_t reg, int value) { // sub r1, reg, #value
+        return (value < 0 ? 0xE2801000u : 0xE2401000u) | reg << 16 |
+               static_cast<uint32_t>(std::abs(value));
+    };
     std::vector<uint8_t> rom = MakeHomebrewGbaRom();
     const uint32_t code[] = {
         0xE3A00301u,          // mov r0, #0x04000000
@@ -241,9 +245,9 @@ std::vector<uint8_t> MakeLayersGbaRom(uint32_t priority0, uint32_t priority1, ui
         0x1AFFFFFCu,          // bne -2
         0xE2888001u,          // add r8, r8, #1
         0xE1A070A8u,          // lsr r7, r8, #1
-        0xE2481000u | right0, // sub r1, r8, #right0
+        sub(8, right0),
         0xE1C011B0u,          // strh r1, [r0, #0x10]     BG0HOFS
-        0xE2471000u | right1, // sub r1, r7, #right1
+        sub(7, right1),
         0xE1C011B4u,          // strh r1, [r0, #0x14]     BG1HOFS
         0xE1C071B2u,          // strh r7, [r0, #0x12]     BG0VOFS
         0xE20810FFu,          // and r1, r8, #0xFF
@@ -274,7 +278,7 @@ std::vector<uint8_t> MakeLayersGbaRom(uint32_t priority0, uint32_t priority1, ui
 
 /// A Game Boy ROM whose background scrolls and changes its colours every frame, drawn `right`
 /// pixels to the right of where it scrolls; `window`: the window covers it. Sound channel 1 plays.
-std::vector<uint8_t> MakeLayersGbRom(bool window, uint8_t right = 0) {
+std::vector<uint8_t> MakeLayersGbRom(bool window, int right = 0) {
     std::vector<uint8_t> rom = MakeHomebrewGbRom();
     const uint8_t lcdc = window ? 0xF1 : 0x91;
     const uint8_t code[] = {
@@ -291,7 +295,7 @@ std::vector<uint8_t> MakeLayersGbRom(bool window, uint8_t right = 0) {
         // loop (0x18E):
         0xF0, 0x44, 0xFE, 0x90, 0x20, 0xFA,             // until line 144
         0x14, 0x7A, 0xE0, 0x47, 0xE0, 0x42, 0xE0, 0x13, // inc d: the palette, SCY, the note
-        0xD6, right, 0xE0, 0x43, 0x3E, 0x87, 0xE0, 0x14, // SCX
+        0xD6, static_cast<uint8_t>(right), 0xE0, 0x43, 0x3E, 0x87, 0xE0, 0x14, // SCX
         0xF0, 0x44, 0xFE, 0x90, 0x28, 0xFA,             // until the next line
         0xC3, 0x8E, 0x01,                               // jp loop
     };
@@ -351,6 +355,19 @@ struct DepthGame {
     }
     Pixels Right() const {
         return Copy(out.primary_right);
+    }
+};
+
+/// The setting, for a test.
+struct InvertDepth {
+    explicit InvertDepth(bool on) {
+        Set(on);
+    }
+    ~InvertDepth() {
+        Set(false);
+    }
+    void Set(bool on) {
+        Common::LayerDepth::Get().inverted = on;
     }
 };
 
@@ -1887,9 +1904,12 @@ TEST_CASE("Layer Depth: lines mGBA left undrawn at the start", "[frame_cores]") 
 TEST_CASE("Layer Depth: each layer moves by its priority", "[frame_cores]") {
     const uint32_t level = GENERATE(1u, 2u, 3u);
     const bool gba = GENERATE(true, false);
+    const bool inverted = GENERATE(false, true);
+    const InvertDepth invert{inverted};
     // The expected right eye: the same game with its layers drawn there
-    const auto moved = gba ? MakeLayersGbaRom(1, 3, level, level * 3)
-                           : MakeLayersGbRom(false, static_cast<uint8_t>(level * 2));
+    const int step = inverted ? -static_cast<int>(level) : static_cast<int>(level);
+    const auto moved =
+        gba ? MakeLayersGbaRom(1, 3, step, step * 3) : MakeLayersGbRom(false, step * 2);
     DepthGame game(gba, MakeDeepRom(gba), level);
     DepthGame expected(gba, moved, 0);
     int different = 0;
@@ -1901,6 +1921,8 @@ TEST_CASE("Layer Depth: each layer moves by its priority", "[frame_cores]") {
             continue; // until the game has scrolled
         }
         REQUIRE((game.Right() == expected.Left()));
+        REQUIRE(game.out.layer_shift ==
+                Catch::Approx(gba ? step * 3 / 240.0 : step * 2 / 160.0));
         different += game.Right() != game.Left();
     }
     CHECK(different >= 98); // the Game Boy's palette is all one colour now and then
@@ -1913,8 +1935,9 @@ TEST_CASE("Layer Depth: the limit moves the layers less", "[frame_cores]") {
     const uint32_t most = GENERATE(1u, 2u, 4u, 5u);
     const float limit = (static_cast<float>(most) + 0.5f) / static_cast<float>(width);
     const uint32_t nearer = Common::LayerDepth::LayerShift(3, 1, 3, 240, limit);
-    const auto moved = gba ? MakeLayersGbaRom(1, 3, nearer, most)
-                           : MakeLayersGbRom(false, static_cast<uint8_t>(most));
+    const auto moved =
+        gba ? MakeLayersGbaRom(1, 3, static_cast<int>(nearer), static_cast<int>(most))
+            : MakeLayersGbRom(false, static_cast<int>(most));
     DepthGame game(gba, MakeDeepRom(gba), 3);
     game.core->SetMaxLayerShift(limit);
     DepthGame expected(gba, moved, 0);
@@ -1927,6 +1950,46 @@ TEST_CASE("Layer Depth: the limit moves the layers less", "[frame_cores]") {
         if (i >= 20) {
             REQUIRE((game.Right() == expected.Left()));
         }
+    }
+}
+
+TEST_CASE("Layer Depth: inverted while the game runs", "[frame_cores]") {
+    const bool gba = GENERATE(true, false);
+    InvertDepth invert{false};
+    DepthGame game(gba, MakeDeepRom(gba), 2);
+    DepthGame plain(gba, MakeDeepRom(gba), 0);
+    DepthGame same(gba, MakeDeepRom(gba), 2);
+    DepthGame other(gba, MakeDeepRom(gba), 2);
+    for (int i = 0; i < 120; ++i) {
+        INFO("frame " << i);
+        const bool on = i / 20 % 2 != 0;
+        invert.Set(on);
+        game.Run();
+        plain.Run();
+        invert.Set(false);
+        same.Run();
+        invert.Set(true);
+        other.Run();
+        REQUIRE((game.Right() == (on ? other : same).Right()));
+        REQUIRE(game.out.layer_shift == (on ? other : same).out.layer_shift);
+        REQUIRE((game.Left() == plain.Left())); // the game's own picture is never touched
+        REQUIRE((plain.Right().empty()));       // level 0: none, either way
+        REQUIRE(plain.out.layer_shift == 0.0f);
+    }
+}
+
+TEST_CASE("Layer Depth: inverted, with nothing moved both eyes see the same", "[frame_cores]") {
+    const bool gba = GENERATE(true, false);
+    const bool on_screen = GENERATE(true, false);
+    const InvertDepth invert{true};
+    DepthGame game(gba, on_screen ? MakeDeepRom(gba) : MakeFlatRom(gba), 3);
+    if (on_screen) {
+        game.core->SetMaxLayerShift(Common::LayerDepth::kOnScreen);
+    }
+    for (int i = 0; i < 120; ++i) {
+        INFO("frame " << i);
+        game.Run();
+        REQUIRE((game.Left() == game.Right()));
     }
 }
 
