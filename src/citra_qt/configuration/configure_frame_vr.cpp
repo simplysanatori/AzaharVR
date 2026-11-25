@@ -537,7 +537,6 @@ void ConfigureFrameVr::SetupPerGameUI() {
     face_row->setVisible(Settings::IsConfiguringGlobal());
     window_scale_row->setVisible(Settings::IsConfiguringGlobal());
     background_row->setVisible(Settings::IsConfiguringGlobal());
-    curve_row->setVisible(Settings::IsConfiguringGlobal()); // AzaharFrame curve
     offset_row->setVisible(Settings::IsConfiguringGlobal()); // AzaharFrame vrsize
     show_controllers_check->setVisible(Settings::IsConfiguringGlobal()); // AzaharFrame vrvis
     controllers_in_front_row->setVisible(Settings::IsConfiguringGlobal()); // AzaharFrame ctrlfront
@@ -562,6 +561,7 @@ void ConfigureFrameVr::SetupPerGameUI() {
         hint(hide_bottom_check, Settings::values.vr_hide_bottom_screen.UsingGlobal());
         hint(shape_combo, Settings::values.vr_top_aspect.UsingGlobal());
         hint(screen_layout_combo, Settings::values.vr_screen_layout.UsingGlobal());
+        hint(curve_combo, Settings::values.vr_screen_curve.UsingGlobal());
         hint(fov_spin, Settings::values.vr_immersive_game_fov.UsingGlobal());
         hint(match_camera_combo, Settings::values.vr_immersive_match_camera_mode.UsingGlobal());
         // AzaharFrame fovaxis: Render Margin per axis (two keys each: render_margin.h)
@@ -598,6 +598,8 @@ void ConfigureFrameVr::SetupPerGameUI() {
             Settings::values.vr_immersive_match_camera_mode.GetValue(true), 2))); // fovonce
     ConfigurationShared::SetColoredComboBox(
         shape_combo, shape_row, static_cast<int>(Settings::values.vr_top_aspect.GetValue(true)));
+    ConfigurationShared::SetColoredComboBox(
+        curve_combo, curve_row, CurveIndex(Settings::values.vr_screen_curve.GetValue(true)));
     ConfigurationShared::SetColoredComboBox(
         screen_layout_combo, screen_layout_row,
         static_cast<int>(std::min<u32>(Settings::values.vr_screen_layout.GetValue(true), 1)));
@@ -755,6 +757,12 @@ void ConfigureFrameVr::SetConfiguration() {
 
     ConfigurationShared::SetPerGameSetting(shape_combo, &Settings::values.vr_top_aspect);
     ConfigurationShared::SetHighlight(shape_row, !Settings::values.vr_top_aspect.UsingGlobal());
+    // The game's own Screen Curve shows as its nearest item
+    curve_combo->setCurrentIndex(Settings::values.vr_screen_curve.UsingGlobal()
+                                     ? ConfigurationShared::USE_GLOBAL_INDEX
+                                     : CurveIndex(Settings::values.vr_screen_curve.GetValue()) +
+                                           ConfigurationShared::USE_GLOBAL_OFFSET);
+    ConfigurationShared::SetHighlight(curve_row, !Settings::values.vr_screen_curve.UsingGlobal());
     ConfigurationShared::SetPerGameSetting(screen_layout_combo, &Settings::values.vr_screen_layout);
     ConfigurationShared::SetHighlight(screen_layout_row,
                                       !Settings::values.vr_screen_layout.UsingGlobal());
@@ -1000,6 +1008,19 @@ void ConfigureFrameVr::ApplyConfiguration() {
     }
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.vr_top_aspect, shape_combo);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.vr_screen_layout, screen_layout_combo);
+    if (!Settings::IsConfiguringGlobal()) {
+        // Screen Curve: a value set in the headset between two items stays while the item shown
+        // is its nearest one.
+        auto& curve = Settings::values.vr_screen_curve;
+        const u32 own = curve.GetValue();
+        const bool had_own = !curve.UsingGlobal();
+        ConfigurationShared::ApplyPerGameSetting(&curve, curve_combo, [&](int item) {
+            return had_own && CurveIndex(own) == item
+                       ? static_cast<int>(own)
+                       : curve_combo->itemData(item + ConfigurationShared::USE_GLOBAL_OFFSET)
+                             .toInt();
+        });
+    }
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.vr_motion_controls,
                                              motion_combo); // AzaharFrame kiu
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.vr_immersive_game_fov, fov_scope,
