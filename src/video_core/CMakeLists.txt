@@ -21,6 +21,7 @@ add_library(video_core STATIC EXCLUDE_FROM_ALL
     vr_auto_shape.h # AzaharFrame fixes7
     vr_hud_spacing.h # AzaharFrame hudmove
     vr_view_matrix.h # AzaharFrame
+    kiu_clear.h # AzaharFrame kiuhs3
     kiu_hud.h # AzaharFrame kiu140
     kiu_powers.h # AzaharFrame kiupowers
     kiu_talk.h # AzaharFrame kiutalk

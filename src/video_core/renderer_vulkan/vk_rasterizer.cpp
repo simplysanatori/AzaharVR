@@ -674,6 +674,38 @@ void RasterizerVulkan::NoteKiuPowersDraw() {
     }
 }
 
+void RasterizerVulkan::ClearKiuPicture(bool world, const Common::Rectangle<u32>& rect) {
+    if (Pica::f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f != 240.0f ||
+        Pica::f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f != 400.0f) {
+        return;
+    }
+    const PAddr depth = regs.framebuffer.framebuffer.GetDepthBufferPhysicalAddress();
+    const bool clear = kiu_pictures.First(depth, world);
+    if (VideoCore::Immersive::g_draw_log.load(std::memory_order_relaxed)) { // test aid
+        LOG_INFO(Render, "kiu clear: depth {:08X} world {} cleared {}", depth, world, clear);
+    }
+    if (!clear) {
+        return;
+    }
+    scheduler.Record([rect](vk::CommandBuffer cmdbuf) {
+        const vk::ClearAttachment attachment = {
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .colorAttachment = 0,
+            .clearValue = {.color = {.float32 = std::array<float, 4>{}}},
+        };
+        const vk::ClearRect area = {
+            .rect =
+                {
+                    .offset = {static_cast<s32>(rect.left), static_cast<s32>(rect.bottom)},
+                    .extent = {rect.GetWidth(), rect.GetHeight()},
+                },
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        };
+        cmdbuf.clearAttachments(attachment, area);
+    });
+}
+
 bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     MICROPROFILE_SCOPE(Vulkan_Drawing);
     SyncDrawState();
@@ -796,6 +828,14 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
     // Begin rendering
     renderpass_cache.BeginRendering(framebuffer, draw_rect);
+    if (using_color_fb && VideoCore::KiuClear::g_on.load(std::memory_order_relaxed)) {
+        // AzaharFrame kiuhs3: the world's, or one of its draws shaded on the CPU (which comes first
+        // is not always the same); the 2D's are not depth tested.
+        ClearKiuPicture(vr_immersive_mode == 3 &&
+                            ((accelerate && vr_world_uniforms) ||
+                             regs.framebuffer.output_merger.depth_test_enable != 0),
+                        draw_rect);
+    }
 
     // Configure viewport and scissor
     const auto viewport = fb_helper.Viewport();
@@ -1029,6 +1069,9 @@ bool RasterizerVulkan::AccelerateTextureCopy(const Pica::DisplayTransferConfig& 
 }
 
 bool RasterizerVulkan::AccelerateFill(const Pica::MemoryFillConfig& config) {
+    if (VideoCore::KiuClear::g_on.load(std::memory_order_relaxed)) { // AzaharFrame kiuhs3
+        kiu_pictures.Fill(config.GetStartAddress(), config.GetEndAddress());
+    }
     return res_cache.AccelerateFill(config);
 }
 
