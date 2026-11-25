@@ -21,7 +21,7 @@ namespace {
 const std::string kFixes(40, 'a');
 const std::string kLibretro(40, 'b');
 
-std::string Index(const std::string& commit, const std::string& lines) {
+std::string IndexText(const std::string& commit, const std::string& lines) {
     return "# test\nazahar-cheat-index 1\nlibretro " + commit + "\n" + lines;
 }
 
@@ -47,7 +47,7 @@ const Pins kPins{kFixes, kLibretro};
 } // namespace
 
 TEST_CASE("ParseIndex reads entries and drops bad lines", "[frame_cores][cheat_db]") {
-    const auto p = ParseIndex(Index(kLibretro, kLines));
+    const auto p = ParseIndex(IndexText(kLibretro, kLines));
     REQUIRE(p.error.empty());
     CHECK(p.index.libretro_commit == kLibretro);
     REQUIRE(p.index.entries.size() == 5);
@@ -57,7 +57,7 @@ TEST_CASE("ParseIndex reads entries and drops bad lines", "[frame_cores][cheat_d
     CHECK(p.index.entries[3].code.empty());
     CHECK(p.index.entries[2].name == "007 - NightFire (USA, Europe) (Code Breaker)");
 
-    const auto bad = ParseIndex(Index(
+    const auto bad = ParseIndex(IndexText(
         kLibretro, "nds\tBJBF\t1FCCF595\t../../etc/passwd\n"
                    "nds\tBJBF\t1FCCF595\ta/b\n"
                    "nds\tBJBF\t1FCCF595\ta\\b\n"
@@ -85,14 +85,14 @@ TEST_CASE("ParseIndex refuses what is not an index", "[frame_cores][cheat_db]") 
     CHECK_FALSE(ParseIndex("azahar-cheat-index 1\nlibretro " + std::string(40, 'B') + "\n")
                     .error.empty());
     // A line over the limit, and a file over it
-    CHECK_FALSE(ParseIndex(Index(kLibretro, std::string(5000, 'x') + "\n")).error.empty());
+    CHECK_FALSE(ParseIndex(IndexText(kLibretro, std::string(5000, 'x') + "\n")).error.empty());
     CHECK_FALSE(ParseIndex(std::string(kMaxIndexBytes + 1, '\n')).error.empty());
     // Too many entries
     std::string many;
     for (std::size_t i = 0; i <= kMaxIndexEntries; ++i) {
         many += "gb\t-\t00000001\tx\n";
     }
-    CHECK_FALSE(ParseIndex(Index(kLibretro, many)).error.empty());
+    CHECK_FALSE(ParseIndex(IndexText(kLibretro, many)).error.empty());
     // Binary junk never throws
     std::mt19937 rng(7);
     for (int i = 0; i < 200; ++i) {
@@ -101,12 +101,12 @@ TEST_CASE("ParseIndex refuses what is not an index", "[frame_cores][cheat_db]") 
             c = static_cast<char>(rng());
         }
         (void)ParseIndex(junk);
-        (void)ParseIndex(Index(kLibretro, junk));
+        (void)ParseIndex(IndexText(kLibretro, junk));
     }
 }
 
 TEST_CASE("FindMatch: code and CRC, then the name", "[frame_cores][cheat_db]") {
-    const auto p = ParseIndex(Index(kLibretro, kLines));
+    const auto p = ParseIndex(IndexText(kLibretro, kLines));
     const auto& idx = p.index;
 
     auto m = FindMatch(idx, System::Nds, "BJBF", 0x1FCCF595u, "whatever");
@@ -293,7 +293,7 @@ TEST_CASE("MergeImported leaves out what is there and what is over the limit",
 
 TEST_CASE("Download: by CRC, by name, and the failures", "[frame_cores][cheat_db]") {
     std::vector<std::string> asked;
-    std::string index = Index(kLibretro, kLines);
+    std::string index = IndexText(kLibretro, kLines);
     std::string cht = kDsCht;
     int cht_status = 200;
     int index_status = 200;
@@ -339,9 +339,9 @@ TEST_CASE("Download: by CRC, by name, and the failures", "[frame_cores][cheat_db
     cht_status = 404;
     CHECK_FALSE(Download(get, System::Nds, "BJBF", 0x1FCCF595u, "x", kPins).error.empty());
     cht_status = 200;
-    index = Index(std::string(40, 'c'), kLines);
+    index = IndexText(std::string(40, 'c'), kLines);
     CHECK_FALSE(Download(get, System::Nds, "BJBF", 0x1FCCF595u, "x", kPins).error.empty());
-    index = Index(kLibretro, kLines);
+    index = IndexText(kLibretro, kLines);
     asked.clear();
     CHECK_FALSE(Download(get, System::Nds, "BJBF", 0x1FCCF595u, "x", Pins{"", kLibretro})
                     .error.empty());
@@ -355,7 +355,7 @@ TEST_CASE("Download: by CRC, by name, and the failures", "[frame_cores][cheat_db
     index = "<html>";
     CHECK_FALSE(Download(get, System::Nds, "BJBF", 0x1FCCF595u, "x", kPins).error.empty());
     // A cheat file over the limit
-    index = Index(kLibretro, kLines);
+    index = IndexText(kLibretro, kLines);
     cht = std::string(kMaxChtBytes + 1, 'x');
     CHECK_FALSE(Download(get, System::Nds, "BJBF", 0x1FCCF595u, "x", kPins).error.empty());
 }
