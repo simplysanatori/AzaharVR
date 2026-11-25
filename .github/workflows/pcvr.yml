@@ -94,6 +94,11 @@ jobs:
         run: |
           wget https://sdk.lunarg.com/sdk/download/1.4.304.1/windows/VulkanSDK-1.4.304.1-Installer.exe -O D:/a/_temp/vulkan.exe
           D:/a/_temp/vulkan.exe --accept-licenses --default-answer --confirm-command install
+      - name: clang-cl, for the DS and GBA cores
+        if: ${{ matrix.frame_xr == 'ON' }}
+        run: |
+          export PATH="$PATH:/c/Program Files/LLVM/bin"
+          clang-cl --version || choco install llvm
       - name: Disable line ending translation
         run: git config --global core.autocrlf input
       - name: Build
@@ -104,6 +109,7 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DENABLE_FRAME_XR=${{ matrix.frame_xr }} \
+            -DENABLE_ALT_CORES=${{ matrix.frame_xr }} \
             -DAZAHARVR_PC=ON \
             -DAZAHARFRAME_SENTRY=OFF \
             -DAZAHARFRAME_TEST_HOOKS=OFF \
@@ -118,6 +124,9 @@ jobs:
         run: |
           cd build
           ctest -VV -C Release || echo "::error ::Test error occurred on Windows build"
+      - name: Unit tests of the DS and GBA cores
+        if: ${{ matrix.frame_xr == 'ON' }}
+        run: build/bin/Release/tests.exe "[frame_cores]"
       - name: Pack, with the OpenXR loader
         if: ${{ matrix.frame_xr == 'ON' }}
         run: |
