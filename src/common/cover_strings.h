@@ -23,18 +23,16 @@ inline constexpr const char* kReset = "Reset Cover";
 inline constexpr const char* kAskTitle = "Download Thumbnails?";
 inline constexpr const char* kAskYes = "Download";
 inline constexpr const char* kAskNo = "Not Now";
-/// What the one source sees; `found`: after a directory was added, else of the games shown.
+/// `found`: after a directory was added, else of the games shown.
 inline std::string AskBody(std::size_t games, bool found) {
-    const std::string what = games == 1 ? (found ? "The cover for the game found" : "The cover for 1 game")
-                                        : "Covers for the " + std::to_string(games) + " games" +
-                                              (found ? " found" : "");
-    return what + " can be downloaded from libretro-thumbnails on GitHub. It sees your IP address "
-                  "and the name" +
-           (games == 1 ? " of the game." : "s of the games.");
+    const std::string what =
+        games == 1 ? (found ? "The cover for the game found" : "The cover for 1 game")
+                   : "Covers for the " + std::to_string(games) + " games" + (found ? " found" : "");
+    return what + " can be downloaded from libretro-thumbnails on GitHub.";
 }
 inline constexpr const char* kSettingTip =
     "Covers of the games in your list for the VR menu's Games tab, downloaded from "
-    "libretro-thumbnails on GitHub. It sees your IP address and the names of the games.";
+    "libretro-thumbnails on GitHub.";
 inline constexpr const char* kDownloadTip = "For the games the Games tab shows";
 inline constexpr const char* kBoxArt = "Box Art"; ///< Choose Another Cover's items
 inline constexpr const char* kTitleScreen = "Title Screen";
