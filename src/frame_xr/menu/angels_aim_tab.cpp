@@ -231,10 +231,11 @@ const std::vector<AimPlace>& AimPlaces() {
         {G::View, false, Id::KiuPitOpacity}, // under Camera, the row that shows it
         {G::View, false, Id::KiuSnapTurn},
         {G::View, false, Id::KiuCutscenes},
+        {G::View, false, Id::KiuStickClick},
         {G::Hud, false, Id::KiuHud},
         {G::Hud, false, Id::KiuHudSize},
         {G::Hud, false, Id::KiuSubtitleSize},
-        // (Power Menu)
+        {G::Hud, false, Id::KiuPowerMenu},
         {G::Hud, true, Id::KiuHudLinked},
         {G::Hud, true, Id::KiuHudAcross},
         {G::Hud, true, Id::KiuHudHeight},
@@ -243,7 +244,10 @@ const std::vector<AimPlace>& AimPlaces() {
         {G::Hud, true, Id::KiuScoreAcross},
         {G::Hud, true, Id::KiuScoreHeight},
         {G::Hud, true, Id::KiuSubtitleHeight},
-        // (HUD Position, HUD Opacity, Power Menu Opacity)
+        {G::Hud, true, Id::KiuPowerMenuAcross},
+        {G::Hud, true, Id::KiuPowerMenuHeight},
+        {G::Hud, true, Id::KiuPowerMenuOpacity},
+        // (HUD Position, HUD Opacity)
         {G::BottomScreen, false, Id::KiuBottomScreen},
         {G::BottomScreen, false, Id::KiuBottomSize},
         {G::BottomScreen, false, Id::KiuBottomOpacity},

@@ -319,7 +319,12 @@ enum class Id : int {
     KiuSubtitleSize, ///< AzaharFrame kiu140: a slider, 50 to 250 percent (vr_kiu_subtitle_size)
     KiuTalkPortraits, ///< AzaharFrame kiuaim: index: Hidden, Shown (vr_kiu_talk_portraits)
     KiuTalkPortraitsOpacity, ///< AzaharFrame kiuaim: a slider, 20 to 100 percent, while Shown
+    KiuStickClick, ///< AzaharFrame kiucam: index: Switch Camera, Swap Screens (vr_kiu_stick_click)
     KiuHideOffHand, ///< AzaharFrame kiuhands: index: Off, On (vr_kiu_hide_off_hand)
+    KiuPowerMenu, ///< AzaharFrame kiuaim: index: Off, Off Hand, Health Bar, Middle, Score (vr_kiu_power_menu)
+    KiuPowerMenuAcross, ///< a slider, -40 to 40 degrees, on the HUD (vr_kiu_power_menu_across)
+    KiuPowerMenuHeight, ///< a slider, -40 to 40 degrees, on the HUD (vr_kiu_power_menu_height)
+    KiuPowerMenuOpacity, ///< AzaharFrame kiuaim: a slider, 20 to 100 percent, while not Off
     /// AzaharFrame kiu132: a group's title in the Angel's Aim segment's settings (no action;
     /// index: AngelsAimGroupKind)
     AngelsAimGroup,
@@ -511,9 +516,14 @@ struct MenuModel {
     int kiu_score_height = 22; ///< AzaharFrame kiu140 (vr_kiu_score_height)
     int kiu_subtitle_height = -18; ///< AzaharFrame kiu140 (vr_kiu_subtitle_height)
     int kiu_subtitle_size = 130; ///< AzaharFrame kiu140 (vr_kiu_subtitle_size)
+    int kiu_stick_click = 0; ///< AzaharFrame kiucam (vr_kiu_stick_click)
     int kiu_hide_off_hand = 0; ///< AzaharFrame kiuhands (vr_kiu_hide_off_hand)
     int kiu_talk_portraits = 0; ///< AzaharFrame kiuaim (vr_kiu_talk_portraits)
     int kiu_talk_portraits_opacity = 100; ///< percent, 20 to 100 (vr_kiu_talk_portraits_opacity)
+    int kiu_power_menu = 0; ///< AzaharFrame kiuaim (vr_kiu_power_menu)
+    int kiu_power_menu_across = 0;    ///< degrees (vr_kiu_power_menu_across)
+    int kiu_power_menu_height = 0;    ///< degrees (vr_kiu_power_menu_height)
+    int kiu_power_menu_opacity = 100; ///< percent, 20 to 100 (vr_kiu_power_menu_opacity)
     int wrist_side = 0;             ///< 0 Back, 1 Inside (global)
     int kiu_reticle_size = 100;     ///< percent (30 to 150)
     int kiu_view = 0;               ///< AzaharFrame kiu133: Camera, Kiu::FirstPerson::ViewFor

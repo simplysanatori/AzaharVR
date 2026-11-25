@@ -232,6 +232,7 @@ std::vector<MenuModel> Sweep(Case c) {
                 m.weapon_in_hand = bits != 0;
                 m.muzzle_flash = bits & 4;
                 m.projectiles = bits & 1;
+                m.kiu_power_menu = bits % 5;
                 out.push_back(m);
             }
         }
@@ -334,7 +335,15 @@ TEST_CASE("Angel's Aim page: counts, and every row reachable", "[frame_xr][kiuai
     CHECK(AimPageRows(m, AimGroup::View).rows ==
           std::vector<Id>{Id::KiuOverShoulder, Id::KiuSnapTurn, Id::KiuCutscenes});
     CHECK(AimPageRows(m, AimGroup::Hud).rows ==
-          std::vector<Id>{Id::KiuHud, Id::KiuHudSize, Id::KiuSubtitleSize});
+          std::vector<Id>{Id::KiuHud, Id::KiuHudSize, Id::KiuSubtitleSize, Id::KiuPowerMenu});
+    for (const int place : {0, 1, 2, 3, 4}) { // Off, Off Hand, then the HUD's places
+        MenuModel p = m;
+        p.kiu_power_menu = place;
+        const std::vector<Id> more = AimPageRows(p, AimGroup::Hud).more;
+        CHECK(Has(more, Id::KiuPowerMenuOpacity) == (place != 0));
+        CHECK(Has(more, Id::KiuPowerMenuAcross) == (place >= 2));
+        CHECK(Has(more, Id::KiuPowerMenuHeight) == (place >= 2));
+    }
     CHECK(AimPageRows(m, AimGroup::BottomScreen).rows ==
           std::vector<Id>{Id::KiuBottomScreen, Id::KiuBottomSize, Id::KiuBottomOpacity,
                           Id::KiuWristAngle, Id::KiuWristAlong});
@@ -602,4 +611,26 @@ TEST_CASE("Angel's Aim page: off, the page as it was; other games as before",
         CHECK(d.menu.Hits().size() == before);
     }
     CHECK(d.Hit(Id::WristSide, 0)); // Wrist Side stays on the Stats tab
+}
+
+// AzaharFrame kiuaim: Power Menu and its opacity (the power lane's settings).
+TEST_CASE("Angel's Aim page: Power Menu", "[frame_xr][kiuaim]") {
+    for (const Id id : {Id::KiuPowerMenu, Id::KiuPowerMenuAcross, Id::KiuPowerMenuHeight,
+                        Id::KiuPowerMenuOpacity}) {
+        CHECK(PerGameSetting(id));
+        CHECK(SectionOf(id) == SettingsSection::Immersive);
+        CHECK_FALSE(ExplainFor(id).empty());
+    }
+    CHECK(LabelFor(Id::KiuPowerMenu) == "Power Menu");
+    CHECK(LabelFor(Id::KiuPowerMenuOpacity) == "Power Menu Opacity");
+    CHECK(ExplainFor(Id::KiuPowerMenu) == "Shows your powers when you pick one. Choose where.");
+    CHECK(OptionsFor(Id::KiuPowerMenu) ==
+          std::vector<std::string>{"Off", "Off Hand", "Health Bar", "Middle", "Score"}); // stored order
+    CHECK(LabelFor(Id::KiuPowerMenuAcross) == "Power Menu Left/Right");
+    CHECK(LabelFor(Id::KiuPowerMenuHeight) == "Power Menu Height");
+    CHECK(MenuModel{}.kiu_power_menu == 0);
+    CHECK(MenuModel{}.kiu_power_menu_opacity == 100);
+    CHECK_FALSE(Has(AngelsAimFirstPersonRows(ModelFor(Case::OtherGame)), Id::KiuPowerMenu));
+    CHECK_FALSE(Has(AngelsAimFirstPersonRows(ModelFor(Case::ModeOff)), Id::KiuPowerMenu));
+    CHECK(Has(AngelsAimFirstPersonRows(ModelFor(Case::ModeOn)), Id::KiuPowerMenu));
 }

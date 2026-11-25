@@ -386,6 +386,16 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::KiuSubtitleHeight;
     case Id::KiuSubtitleSize: // AzaharFrame kiu140
         return MenuSetting::KiuSubtitleSize;
+    case Id::KiuPowerMenu: // AzaharFrame kiuaim
+        return MenuSetting::KiuPowerMenu;
+    case Id::KiuPowerMenuAcross:
+        return MenuSetting::KiuPowerMenuAcross;
+    case Id::KiuPowerMenuHeight:
+        return MenuSetting::KiuPowerMenuHeight;
+    case Id::KiuPowerMenuOpacity:
+        return MenuSetting::KiuPowerMenuOpacity;
+    case Id::KiuStickClick: // AzaharFrame kiucam
+        return MenuSetting::KiuStickClick;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         return MenuSetting::KiuHideOffHand;
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim
@@ -1164,6 +1174,12 @@ void MenuPanel::BuildModel(const Host& host) {
     m.kiu_score_height = static_cast<int>(v.vr_kiu_score_height.GetValue()); // AzaharFrame kiu140
     m.kiu_subtitle_height = static_cast<int>(v.vr_kiu_subtitle_height.GetValue()); // AzaharFrame kiu140
     m.kiu_subtitle_size = static_cast<int>(v.vr_kiu_subtitle_size.GetValue()); // AzaharFrame kiu140
+    m.kiu_power_menu = static_cast<int>(std::min<u32>(v.vr_kiu_power_menu.GetValue(), 4)); // AzaharFrame kiuaim
+    m.kiu_power_menu_across = static_cast<int>(v.vr_kiu_power_menu_across.GetValue());
+    m.kiu_power_menu_height = static_cast<int>(v.vr_kiu_power_menu_height.GetValue());
+    m.kiu_power_menu_opacity =
+        static_cast<int>(std::clamp<u32>(v.vr_kiu_power_menu_opacity.GetValue(), 20, 100));
+    m.kiu_stick_click = static_cast<int>(std::min<u32>(v.vr_kiu_stick_click.GetValue(), 1)); // AzaharFrame kiucam
     m.kiu_hide_off_hand = static_cast<int>(v.vr_kiu_hide_off_hand.GetValue()); // AzaharFrame kiuhands
     m.kiu_talk_portraits = v.vr_kiu_talk_portraits.GetValue() ? 1 : 0; // AzaharFrame kiuaim
     m.kiu_talk_portraits_opacity = static_cast<int>(
@@ -1786,6 +1802,31 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = std::clamp(value, 50, 250);
         Apply(v.vr_kiu_subtitle_size, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::KiuSubtitleSize;
+        break;
+    case Id::KiuPowerMenu: // AzaharFrame kiuaim
+        r.value = std::clamp(value, 0, 4);
+        Apply(v.vr_kiu_power_menu, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuPowerMenu;
+        break;
+    case Id::KiuPowerMenuAcross:
+        r.value = std::clamp(value, -40, 40);
+        Apply(v.vr_kiu_power_menu_across, r.value, per_game);
+        r.setting = MenuSetting::KiuPowerMenuAcross;
+        break;
+    case Id::KiuPowerMenuHeight:
+        r.value = std::clamp(value, -40, 40);
+        Apply(v.vr_kiu_power_menu_height, r.value, per_game);
+        r.setting = MenuSetting::KiuPowerMenuHeight;
+        break;
+    case Id::KiuPowerMenuOpacity:
+        r.value = std::clamp(value, 20, 100);
+        Apply(v.vr_kiu_power_menu_opacity, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuPowerMenuOpacity;
+        break;
+    case Id::KiuStickClick: // AzaharFrame kiucam
+        r.value = std::clamp(value, 0, 1);
+        Apply(v.vr_kiu_stick_click, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuStickClick;
         break;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         r.value = std::clamp(value, 0, 1);
@@ -2797,7 +2838,9 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::KiuCutscenes: // AzaharFrame kiu140
     case Id::KiuHud: // AzaharFrame kiu140
     case Id::KiuArm: // AzaharFrame kiu140
+    case Id::KiuPowerMenu: // AzaharFrame kiuaim
     case Id::KiuHudLinked: // AzaharFrame kiu140
+    case Id::KiuStickClick: // AzaharFrame kiucam
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
     case Id::KiuTalkPortraits: // AzaharFrame kiuaim
     case Id::WristSide:       // Back, Inside

@@ -212,6 +212,32 @@ inline constexpr const char* kKiuTalkPortraitsTip =
 inline constexpr const char* kKiuTalkPortraitsOpacityRow = "Talk Portraits Opacity";
 inline constexpr const char* kKiuTalkPortraitsOpacityTip =
     "How solid the talk portraits look. Lower lets you see through them.";
+/// AzaharFrame kiuaim: Power Menu (vr_kiu_power_menu, _across, _height, _opacity: the power lane's
+/// settings). The row's tip is approved; the other tips PROPOSED.
+inline constexpr const char* kKiuPowerMenuRow = "Power Menu";
+inline constexpr const char* kKiuPowerMenuOff = "Off";
+inline constexpr const char* kKiuPowerMenuOffHand = "Off Hand";
+inline constexpr const char* kKiuPowerMenuHealthBar = "Health Bar";
+inline constexpr const char* kKiuPowerMenuMiddle = "Middle";
+inline constexpr const char* kKiuPowerMenuScore = "Score";
+inline constexpr const char* kKiuPowerMenuTip =
+    "Shows your powers when you pick one. Choose where.";
+inline constexpr const char* kKiuPowerMenuAcrossRow = "Power Menu Left/Right";
+inline constexpr const char* kKiuPowerMenuAcrossTip =
+    "How far left or right the power menu is. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuPowerMenuHeightRow = "Power Menu Height";
+inline constexpr const char* kKiuPowerMenuHeightTip =
+    "How high the power menu is. 0\u00B0 is straight ahead.";
+inline constexpr const char* kKiuPowerMenuOpacityRow = "Power Menu Opacity";
+inline constexpr const char* kKiuPowerMenuOpacityTip =
+    "How solid the power menu looks. Lower lets you see through it.";
+/// AzaharFrame kiucam: Right Stick Click (vr_kiu_stick_click). The row and its choices are the
+/// owner's; the tip PROPOSED.
+inline constexpr const char* kKiuStickClickRow = "Right Stick Click";
+inline constexpr const char* kKiuStickClickCamera = "Switch Camera";
+inline constexpr const char* kKiuStickClickSwap = "Swap Screens";
+inline constexpr const char* kKiuStickClickTip =
+    "In battles, a tap switches First Person and Over the Shoulder.";
 inline constexpr const char* kOverShoulderRow = "Over the Shoulder";
 inline constexpr const char* kOverShoulderTip =
     "Moves your view behind and above Pit, so you can see him.";

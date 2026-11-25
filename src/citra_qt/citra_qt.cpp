@@ -5830,6 +5830,21 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::KiuSubtitleSize: // AzaharFrame kiu140
         set(v.vr_kiu_subtitle_size, std::clamp<u32>(u, 50, 250));
         break;
+    case S::KiuPowerMenu: // AzaharFrame kiuaim
+        set(v.vr_kiu_power_menu, std::min<u32>(u, 4));
+        break;
+    case S::KiuPowerMenuAcross:
+        set(v.vr_kiu_power_menu_across, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuPowerMenuHeight:
+        set(v.vr_kiu_power_menu_height, std::clamp(r.value, -40, 40));
+        break;
+    case S::KiuPowerMenuOpacity:
+        set(v.vr_kiu_power_menu_opacity, std::clamp<u32>(u, 20, 100));
+        break;
+    case S::KiuStickClick: // AzaharFrame kiucam
+        set(v.vr_kiu_stick_click, std::min<u32>(u, 1));
+        break;
     case S::KiuHideOffHand: // AzaharFrame kiuhands
         set(v.vr_kiu_hide_off_hand, r.value != 0);
         break;

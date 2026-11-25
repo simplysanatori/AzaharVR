@@ -2979,6 +2979,7 @@ int main(int argc, char** argv) {
         ka.kiu_wrist_angle = 90;
         ka.kiu_wrist_along = 4;
         ka.kiu_hud = 1;
+        ka.kiu_power_menu = 2;
         ka.trigger_layout = 1;
         MenuView av;
         av.tab = Tab::Mods;
