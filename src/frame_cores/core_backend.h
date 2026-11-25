@@ -54,6 +54,7 @@ struct CoreBootOptions {
     uint32_t second_screen = 0;    ///< SecondScreen (GBA and Game Boy games)
     uint32_t layer_depth = 0;      ///< 0 off, 1 to 3: how far back the layers go
     uint32_t depth_on = 0;         ///< NdsDepth::DepthOn (DS games)
+    bool depth_by_slot = false;    ///< it names the Primary and Secondary slot
     DriverOverride driver;
     /// Tests: what draws a DS game over 1x (NdsHiresMaker)
     std::function<std::unique_ptr<NdsHiresRenderer>(melonDS::NDS&, std::string&)> ds_renderer;
@@ -156,8 +157,9 @@ public:
     virtual void SetGraphics(const Vulkan::AltGraphics* /*graphics*/) {}
     /// The pixels of pictures that are the GPU's (AltScreenImage::image) into `frame`.
     virtual void ReadPictures(FrameOutput& /*frame*/) {}
-    /// Which of the DS's screens it is for (NdsDepth::DepthOn), from the next frame.
-    virtual void SetDepthOn(uint32_t /*screens*/) {}
+    /// Which of the DS's screens it is for (NdsDepth::DepthOn), from the next frame. `by_slot`: of
+    /// the screens in the Primary and the Secondary slot (LayerDepth::Shared::swapped).
+    virtual void SetDepthOn(uint32_t /*screens*/, bool /*by_slot*/ = false) {}
     /// What shows the game can show a right eye's picture of the Secondary Screen
     /// (FrameOutput::secondary_right), from the next frame. Off as it starts.
     virtual void SetDepthOnSecondary(bool /*on*/) {}

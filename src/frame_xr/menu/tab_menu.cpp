@@ -36,6 +36,11 @@ constexpr int kSlots = 10;
 /// Which of the DS's screens Layer Depth is for, in the order of ds_depth_on.
 constexpr const char* kDepthOnLabel = "Depth On";
 const std::vector<std::string> kDepthOnChoices{"Both Screens", "Top Screen", "Bottom Screen"};
+const std::vector<std::string> kDepthOnSlotChoices{"Both Screens", "Primary Screen",
+                                                   "Secondary Screen"};
+/// Whether they are the DS's screens or the slots, in the order of ds_depth_by_slot.
+constexpr const char* kDepthFollowsLabel = "Depth Follows";
+const std::vector<std::string> kDepthFollowsChoices{"DS Screens", "Primary & Secondary"};
 
 struct TabInfo {
     const char* label;
@@ -552,6 +557,7 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
             rows.push_back(layers);
             if (m.layer_depth > 0) { // drops down under it, as Match Bottom Screen's
                 rows.push_back(row(Id::DepthOn, RowKind::Segmented, std::clamp(m.depth_on, 0, 2)));
+                rows.push_back(row(Id::DepthFollows, RowKind::Segmented, m.depth_by_slot ? 1 : 0));
                 rows.push_back(row(Id::InvertDepth, RowKind::Switch, 0, m.invert_depth));
             }
             // AzaharFrame fixa: Motion Clarity in the Off and Wide modes (vr_motion_clarity_normal),
@@ -746,6 +752,7 @@ SettingsSection SectionOf(Id id) {
     case Id::LayerDepth: // AzaharVR
     case Id::InvertDepth:
     case Id::DepthOn:
+    case Id::DepthFollows:
     case Id::AccurateImageCopies: // AzaharFrame accxfer
     case Id::AsyncShaders:
     case Id::MotionClarityNormal: // AzaharFrame fixa
@@ -932,6 +939,7 @@ bool PerGameSetting(Id id) {
     case Id::LayerDepth:
     case Id::InvertDepth:
     case Id::DepthOn:
+    case Id::DepthFollows:
         return true;
     default:
         return false;
@@ -1373,6 +1381,8 @@ const std::vector<std::string>& OptionsFor(Id id) {
     }
     case Id::DepthOn:
         return kDepthOnChoices;
+    case Id::DepthFollows:
+        return kDepthFollowsChoices;
     case Id::SecondScreen: {
         static const std::vector<std::string> kSecondScreen{"PokeDaisy", "GBA DS", "Off"};
         return kSecondScreen;
@@ -1419,6 +1429,10 @@ std::vector<std::string> ResolutionOptions(const CoreCaps& core) {
                       std::to_string(own.height * n) + ")");
     }
     return out;
+}
+
+const std::vector<std::string>& DepthOnOptions(bool by_slot) {
+    return by_slot ? kDepthOnSlotChoices : OptionsFor(Id::DepthOn);
 }
 
 std::vector<std::string> SecondScreenOptions(const CoreCaps& core) {
@@ -1879,6 +1893,8 @@ std::string LabelFor(Id id) {
         return "Invert Depth";
     case Id::DepthOn:
         return kDepthOnLabel;
+    case Id::DepthFollows:
+        return kDepthFollowsLabel;
     case Id::DsTouchEnabled:
         return "Touch Screen Input";
     case Id::DsMicBlow:
@@ -3945,7 +3961,9 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
             const std::vector<std::string> own_opts =
                 r.id == Id::SecondScreen ? SecondScreenOptions(model.core)
                                          : std::vector<std::string>();
-            const auto& opts = r.id == Id::SecondScreen ? own_opts : OptionsFor(r.id);
+            const auto& opts = r.id == Id::SecondScreen ? own_opts
+                               : r.id == Id::DepthOn    ? DepthOnOptions(model.depth_by_slot)
+                                                        : OptionsFor(r.id);
             const float w = kit.SegmentedWidth(opts, ctl.x1 - own_x0);
             const Rect seg{ctl.x1 - w, ctl.y0, ctl.x1, ctl.y1};
             const int hover = view.hover.id == r.id ? view.hover.index : -1;

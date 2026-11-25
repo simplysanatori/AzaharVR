@@ -1319,13 +1319,16 @@ void AltCoreHost::SetLayerDepth(uint32_t level) {
     impl->DropRight(level == 0, level == 0);
 }
 
-void AltCoreHost::SetDepthOn(uint32_t screens) {
+void AltCoreHost::SetDepthOn(uint32_t screens, bool by_slot) {
     std::lock_guard lock(impl->core_mutex);
     if (impl->core) {
-        impl->core->SetDepthOn(screens);
+        impl->core->SetDepthOn(screens, by_slot);
     }
     if (impl->caps.depth_per_screen) {
-        const NdsDepth::Screens on = NdsDepth::MakeScreens(screens, true);
+        const NdsDepth::Screens on = NdsDepth::MakeScreens(
+            NdsDepth::OnScreens(screens, by_slot,
+                                Common::LayerDepth::Get().swapped.load(std::memory_order_relaxed)),
+            true);
         impl->DropRight(!on.top, !on.bottom);
     }
 }

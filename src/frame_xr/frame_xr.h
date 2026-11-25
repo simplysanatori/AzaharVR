@@ -465,6 +465,7 @@ enum class MenuSetting {
     LayerDepth,  ///< `value`: 0 to 3 (layer_depth), per game too
     InvertDepth, ///< `value`: 0 Off, 1 On (invert_depth), per game too
     DepthOn,     ///< `value`: 0 both screens, 1 top, 2 bottom (ds_depth_on), per game too
+    DepthFollows, ///< `value`: 0 the DS's screens, 1 the slots (ds_depth_by_slot), per game too
 };
 struct MenuRequest {
     MenuCommand command = MenuCommand::Continue;

@@ -239,6 +239,12 @@ struct NdsCore::Impl {
         return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
     }
 
+    uint32_t ScreensOn() const {
+        return NdsDepth::OnScreens(
+            opts.depth_on, opts.depth_by_slot,
+            Common::LayerDepth::Get().swapped.load(std::memory_order_relaxed));
+    }
+
     NdsDepth::Depth Depth() const {
         // A turned screen's pixels would move up and down on it
         if (rotation_deg != 0) {
@@ -246,7 +252,7 @@ struct NdsCore::Impl {
         }
         const bool inverted = Common::LayerDepth::Get().inverted.load(std::memory_order_relaxed);
         return NdsDepth::MakeDepth(opts.layer_depth, max_layer_shift, inverted, depth_convergence,
-                                   NdsDepth::MakeScreens(opts.depth_on, depth_on_secondary));
+                                   NdsDepth::MakeScreens(ScreensOn(), depth_on_secondary));
     }
 
     /// Between frames.
@@ -759,8 +765,10 @@ void NdsCore::RunFrame(FrameOutput& out) {
     // picture.
     const auto right_picture = [&](int screen, const Vulkan::AltScreenImage& left,
                                    Vulkan::AltScreenImage& right, float& shift) {
+        // By slot the other screen may be next: as many pictures, the same for both eyes. A change
+        // of the layout would put swapped screens back.
         bool& shows = impl->shows_depth[static_cast<std::size_t>(screen)];
-        shows = depth.on && depth.screens[screen] &&
+        shows = depth.on && (depth.screens[screen] || impl->opts.depth_by_slot) &&
                 (shows || screen == 0 ||
                  (hires ? impl->resolution.ShowsDepth(screen)
                         : impl->stereo && impl->stereo->ShowsDepth(screen)));
@@ -768,6 +776,9 @@ void NdsCore::RunFrame(FrameOutput& out) {
             return;
         }
         right = left;
+        if (!depth.screens[screen]) {
+            return;
+        }
         int farthest = depth.layers[3];
         if (hires) {
             if (impl->resolution.GetRight(screen, right)) {
@@ -1043,8 +1054,9 @@ void NdsCore::SetDepthConvergence(float w) {
         w > 0.0f ? static_cast<int32_t>(std::min(w, 4095.0f) * NdsDepth::kOneW) : 0;
 }
 
-void NdsCore::SetDepthOn(uint32_t screens) {
+void NdsCore::SetDepthOn(uint32_t screens, bool by_slot) {
     impl->opts.depth_on = screens;
+    impl->opts.depth_by_slot = by_slot;
 }
 
 void NdsCore::SetDepthOnSecondary(bool on) {

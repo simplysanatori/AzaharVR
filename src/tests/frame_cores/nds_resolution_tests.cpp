@@ -67,6 +67,15 @@ struct InvertDepth {
     }
 };
 
+struct SwapScreens {
+    SwapScreens() {
+        Common::LayerDepth::Get().swapped = true;
+    }
+    ~SwapScreens() {
+        Common::LayerDepth::Get().swapped = false;
+    }
+};
+
 struct Log {
     int made = 0;
     int gone = 0;
@@ -741,6 +750,59 @@ TEST_CASE("DS resolution: Depth On over 1x", "[frame_cores]") {
     core.SetDepthOn(2);
     CHECK(run() == Screens{false, true});
     CHECK(log.screens == Screens{false, true});
+    // By slot, the one in the Secondary slot; swapped, the other, from the next frame. Both eyes
+    // have pictures of either then, the same ones where it is off.
+    core.SetDepthOn(2, true);
+    const auto on = [&](Screens screens) {
+        CHECK(run() == Screens{true, true});
+        CHECK(log.screens == screens);
+        for (const bool top : {true, false}) {
+            const auto& right = top ? out.primary_right : out.secondary_right;
+            const auto& left = top ? out.primary : out.secondary;
+            CHECK(right.width == left.width);
+            CHECK((screens[top ? 0 : 1] || right.pixels == left.pixels));
+        }
+    };
+    on({false, true});
+    {
+        const SwapScreens swap;
+        on({true, false});
+        core.SetDepthOn(1, true);
+        on({false, true});
+        core.SetDepthOn(0, true);
+        on({true, true});
+        core.SetDepthOn(2, true);
+        on({true, false});
+        core.SetDepthOn(2); // the DS's own
+        CHECK(run() == Screens{false, true});
+        CHECK(log.screens == Screens{false, true});
+        core.SetDepthOn(2, true);
+        // The renderer of 1x: on the top screen, the bottom one's right picture is the left one
+        core.SetResolution(1, 8);
+        core.RunFrame(out);
+        core.RunFrame(out); // the first whole frame
+        for (int i = 0; i < 3; i++) {
+            core.RunFrame(out);
+            CHECK(out.primary.scale == 1);
+            CHECK(out.primary_right.pixels != out.primary.pixels);
+            CHECK(out.secondary_right.pixels == out.secondary.pixels);
+        }
+        core.SetResolution(4, 8);
+        on({true, false});
+    }
+    core.SetResolution(1, 8);
+    for (int i = 0; i < 3; i++) {
+        core.RunFrame(out);
+        CHECK(out.primary_right.pixels == out.primary.pixels);
+    }
+    core.SetResolution(4, 8);
+    on({false, true});
+    core.SetDepthOnSecondary(false);
+    CHECK_FALSE(run().bottom);
+    core.SetDepthOnSecondary(true);
+    on({false, true});
+    core.SetDepthOn(2);
+    CHECK(run() == Screens{false, true});
     const InvertDepth inverted;
     CHECK(run() == Screens{false, true});
     CHECK(out.layer_shift == 0.0f);

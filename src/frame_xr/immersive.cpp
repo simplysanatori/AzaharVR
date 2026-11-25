@@ -20,6 +20,7 @@
 #include <utility>
 
 #include <fmt/format.h>
+#include "common/layer_depth.h"
 #include "common/test_hooks.h"
 #include "common/atomic_file.h"
 #include "common/file_util.h"
@@ -2606,6 +2607,7 @@ bool BottomFocused() {
 
 void SetBottomFocused(bool focused) {
     g_focus_bottom.store(focused, std::memory_order_relaxed);
+    Common::LayerDepth::Get().swapped.store(focused, std::memory_order_relaxed);
     if (focused != g.focus_bottom) {
         g.focus_bottom = focused;
         g.adjuster.Cancel();

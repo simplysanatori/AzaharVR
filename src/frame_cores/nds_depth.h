@@ -454,6 +454,16 @@ enum class DepthOn : uint32_t {
     Bottom,
 };
 
+/// DepthOn for the DS's screens, of one that names the slots (Settings::values.ds_depth_by_slot):
+/// `swapped`, the bottom screen is in the Primary slot.
+constexpr uint32_t OnScreens(uint32_t depth_on, bool by_slot, bool swapped) {
+    if (!by_slot || !swapped || depth_on == static_cast<uint32_t>(DepthOn::Both)) {
+        return depth_on;
+    }
+    return static_cast<uint32_t>(depth_on == static_cast<uint32_t>(DepthOn::Top) ? DepthOn::Bottom
+                                                                                 : DepthOn::Top);
+}
+
 /// The screens that have a right eye's picture; 0 is the top one. The one answer both renderers,
 /// the core and the host's picture take.
 struct Screens {

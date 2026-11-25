@@ -384,6 +384,7 @@ enum class Id : int {
     LayerDepth,       ///< a slider, 0 to 3 (layer_depth)
     InvertDepth,      ///< a switch (invert_depth), shown while Layer Depth is on
     DepthOn,          ///< DS games: index: both screens, top, bottom (ds_depth_on), as that one
+    DepthFollows,     ///< index: the DS's screens, the slots (ds_depth_by_slot), as that one
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -650,7 +651,8 @@ struct MenuModel {
     int gba_map_refresh = 1; ///< index of kMapRefreshFrames
     int layer_depth = 0;          ///< 0..3
     bool invert_depth = false;
-    int depth_on = 0;             ///< 0 both screens, 1 top, 2 bottom
+    int depth_on = 0;             ///< 0 both screens, 1 top (Primary), 2 bottom (Secondary)
+    bool depth_by_slot = false;   ///< Depth Follows: Primary & Secondary
     bool ds_touch_enabled = true; ///< DS touch input switch
     int ds_screen_rotation = 0;   ///< 0 = 0°, 1 = 90°, 2 = 270°
     bool ds_lid_closed = false;   ///< DS lid closed toggle
@@ -806,6 +808,8 @@ std::vector<std::string> ResolutionOptions(const CoreCaps& core);
 /// the row's index counts these. The setting's value of an index, and the index of a value (one
 /// the game has not falls to the next it has).
 std::vector<std::string> SecondScreenOptions(const CoreCaps& core);
+/// Depth On's, with Depth Follows.
+const std::vector<std::string>& DepthOnOptions(bool by_slot);
 int SecondScreenValue(const CoreCaps& core, int index);
 int SecondScreenIndex(const CoreCaps& core, int value);
 /// The label of an item, as on the menu.

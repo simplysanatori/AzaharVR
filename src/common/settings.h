@@ -1279,8 +1279,10 @@ struct Values {
                                                        "ds_texture_filter"};
     SwitchableSetting<u32, true> ds_layer_depth{0, 0, 3, "ds_layer_depth"};
     SwitchableSetting<bool> ds_invert_depth{false, "ds_invert_depth"};
-    // Which of the DS's screens Layer Depth is for: 0 both, 1 the top one, 2 the bottom one
+    // Which of the DS's screens Layer Depth is for: 0 both, 1 the top one, 2 the bottom one; with
+    // ds_depth_by_slot 1 the one in the Primary slot, 2 the one in the Secondary slot
     SwitchableSetting<u32, true> ds_depth_on{0, 0, 2, "ds_depth_on"};
+    SwitchableSetting<bool> ds_depth_by_slot{false, "ds_depth_by_slot"};
     SwitchableSetting<u32, true> gba_resolution_factor{kGbaResolutionDefault, 0, 18,
                                                        "gba_resolution_factor"};
     SwitchableSetting<TextureFilter> gba_texture_filter{TextureFilter::NoFilter,
@@ -1303,6 +1305,7 @@ struct Values {
     SwitchableSetting<bool> n3ds_invert_depth_unused{false, "n3ds_invert_depth_unused"};
     // Depth On is the DS's alone: what Graphics gives for the others.
     SwitchableSetting<u32, true> depth_on_unused{0, 0, 2, "depth_on_unused"};
+    SwitchableSetting<bool> depth_by_slot_unused{false, "depth_by_slot_unused"};
 };
 
 extern Values values;
@@ -1317,6 +1320,7 @@ struct ConsoleGraphics {
     SwitchableSetting<u32, true>& layer_depth;
     SwitchableSetting<bool>& invert_depth;
     SwitchableSetting<u32, true>& depth_on;
+    SwitchableSetting<bool>& depth_by_slot;
     SwitchableSetting<u32, true>& screen_layout;
     SwitchableSetting<u32, true>& screen_gap;
     SwitchableSetting<bool>& hide_bottom_screen;
@@ -1342,6 +1346,7 @@ void ForEachConsoleSetting(F&& f) {
     f(v.ds_layer_depth);
     f(v.ds_invert_depth);
     f(v.ds_depth_on);
+    f(v.ds_depth_by_slot);
     f(v.gba_resolution_factor);
     f(v.gba_texture_filter);
     f(v.layer_depth);

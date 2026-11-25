@@ -105,6 +105,9 @@ struct Shared {
     std::atomic<float> max_shift{kOnScreen};
     /// The frontend: Invert Depth. The cores read it every frame.
     std::atomic<bool> inverted{false};
+    /// XR thread: the bottom screen is in the main slot (Swap Screens). The cores read it every
+    /// frame.
+    std::atomic<bool> swapped{false};
 };
 
 inline Shared& Get() {

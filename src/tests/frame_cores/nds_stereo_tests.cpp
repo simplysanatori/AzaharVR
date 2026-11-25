@@ -1790,6 +1790,15 @@ TEST_CASE("NDS Layer Depth: which screens", "[frame_cores]") {
     CHECK(MakeScreens(0, true) == Screens{true, true});
     CHECK(MakeScreens(1, true) == Screens{true, false});
     CHECK(MakeScreens(2, true) == Screens{false, true});
+    // ds_depth_by_slot: the slots', which follow Swap Screens
+    for (const uint32_t on : {0u, 1u, 2u}) {
+        CHECK(OnScreens(on, false, false) == on);
+        CHECK(OnScreens(on, false, true) == on);
+        CHECK(OnScreens(on, true, false) == on);
+    }
+    CHECK(OnScreens(0, true, true) == 0);
+    CHECK(OnScreens(1, true, true) == 2);
+    CHECK(OnScreens(2, true, true) == 1);
     // Nothing shows a right eye's picture of the bottom screen
     CHECK(MakeScreens(0, false) == Screens{true, false});
     CHECK_FALSE(MakeScreens(2, false).Any());
