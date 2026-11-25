@@ -21,6 +21,7 @@
 #include <cstdint>
 
 #include "video_core/kiu_hud.h"
+#include "video_core/kiu_talk.h" // AzaharFrame kiutalk
 
 namespace VideoCore::KiuPowers {
 
@@ -43,6 +44,7 @@ struct PixelRect {
 };
 /// Zero size: the image has no strip.
 constexpr PixelRect StripIn(uint32_t width, uint32_t height) {
+    height = KiuTalk::Without(width, height); // AzaharFrame kiutalk
     const uint32_t scale = width / kScreenWide;
     if (scale == 0 || width % kScreenWide != 0 || height != ImageHeight(scale, true)) {
         return {};
@@ -51,6 +53,7 @@ constexpr PixelRect StripIn(uint32_t width, uint32_t height) {
 }
 /// An image without the strip (any other size too) is the picture whole.
 constexpr uint32_t PictureHeight(uint32_t width, uint32_t height) {
+    height = KiuTalk::Without(width, height); // AzaharFrame kiutalk
     return StripIn(width, height).width != 0 ? width * kScreenHigh / kScreenWide : height;
 }
 

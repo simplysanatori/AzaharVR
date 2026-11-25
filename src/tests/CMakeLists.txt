@@ -82,6 +82,7 @@ add_executable(tests
     frame_xr/kiu_cutscene.cpp # AzaharFrame kiu140
     frame_xr/kiu_hud.cpp # AzaharFrame kiu140
     frame_xr/kiu_powers.cpp # AzaharFrame kiupowers
+    frame_xr/kiu_talk.cpp # AzaharFrame kiutalk
     frame_xr/kiu_ui.cpp # AzaharFrame kiu1s
     frame_xr/kiu_camera_tap.cpp # AzaharFrame kiucam
     frame_xr/kiu_sheets.cpp # AzaharFrame kiu140

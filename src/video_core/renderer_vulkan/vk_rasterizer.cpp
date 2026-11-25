@@ -148,6 +148,7 @@ RasterizerVulkan::~RasterizerVulkan() = default;
 
 void RasterizerVulkan::TickFrame() {
     ++powers_tick; // AzaharFrame kiupowers
+    kiu_talk.Tick(); // AzaharFrame kiutalk
     scheduler.WaitWorker();
     res_cache.TickFrame();
 }
@@ -679,6 +680,10 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     if (accelerate && is_indexed &&
         VideoCore::KiuPowers::g_live.strip.load(std::memory_order_relaxed)) { // kiupowers
         NoteKiuPowersDraw();
+    }
+    if (accelerate && is_indexed &&
+        VideoCore::KiuTalk::g_live.strip.load(std::memory_order_relaxed)) { // kiutalk
+        kiu_talk.Note(regs, memory);
     }
     if (VideoCore::Immersive::g_draw_log.load(std::memory_order_relaxed)) { // AzaharFrame kiu133
         const auto& om = regs.framebuffer.output_merger;
