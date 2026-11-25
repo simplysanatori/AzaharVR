@@ -157,6 +157,8 @@ public:
     /// AzaharFrame kiu140: Pit's hand and forearm (pit_hand.h) in place of `hand`'s controller,
     /// while the weapon is drawn in the other. Cleared by TakeInput; GameFrame sets it.
     void SetPitArm(int hand);
+    /// AzaharFrame kiu140: no controller models this frame (a Kid Icarus cutscene).
+    void HideControllers(bool hide);
     /// AzaharFrame kiu140: where it was last drawn (controller_models.h PitForearm).
     bool PitForearm(int hand, Input::Vec3f* wrist, Input::Vec3f* elbow, float* radius) const;
     /// AzaharFrame kiuflash: the weapon's muzzle flash this frame (muzzle_flash.h), drawn with

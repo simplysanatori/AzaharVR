@@ -60,6 +60,8 @@ inline std::atomic<bool> g_soft_draw_turn{false};
 /// (no periphery factor, no head), so it looks the same in and out of battles. Set by the XR
 /// thread each frame (frame_xr/immersive.cpp).
 inline std::atomic<bool> g_bottom_as_drawn{false};
+/// AzaharFrame kiu140: text drawn into a texture keeps its own size (Kid Icarus first person).
+inline std::atomic<bool> g_text_as_drawn{false};
 
 /// AzaharFrame kiu140: the angle the game draws its world with, counted over the uploads of its
 /// camera into the top screen's viewport, in any view (patched or not): those within kNear of the

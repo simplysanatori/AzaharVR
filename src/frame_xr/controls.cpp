@@ -2436,6 +2436,8 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
     bool weapon_shown = false;
     pit_arm_hand = -1; // AzaharFrame kiu140
     Kiu::SetWanted(weapon_on, kiu && (recoil_on || flash_on || projectiles_on), kiu);
+    // AzaharFrame kiu140: no controllers over a cutscene; with the menu open they are to point.
+    visuals.HideControllers(Kiu::FirstPerson::Cutscene() && !menu_open);
     if (weapon_on) {
         FrameWeapons::Request(); // made the first time they are wanted (once a boot)
         // AZAHARFRAME_KIU_WEAPON=<id> (live): that weapon, for tuning its class's fit.
@@ -2447,7 +2449,7 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                 id = static_cast<int>(v);
             }
         }
-        // AzaharFrame kiu140: no weapon over a cutscene.
+        // AzaharFrame kiu140: no weapon over a cutscene (nor a controller, below).
         if (id >= 0 && !Kiu::FirstPerson::Cutscene()) {
             // AzaharFrame kiuopacity: Weapon Opacity, or AZAHARFRAME_KIU_OPACITY's (live).
             const Vis::OpacityTune see = Vis::ParseOpacityTune(

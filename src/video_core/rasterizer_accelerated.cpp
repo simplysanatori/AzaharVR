@@ -171,7 +171,13 @@ void RasterizerAccelerated::SyncHudSpacing() {
     // The viewport's size registers hold half the width and height (f24).
     const float width = f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f;
     const float height = f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f;
-    const HudSpacing::Scales s = HudSpacing::ForDraw(hud_spacing, width, height);
+    // AzaharFrame kiu140: text being drawn into a texture of its own (the subtitles' 512 x 128: wide,
+    // where the screens and what is made from them are tall) is as the game draws it: drawn
+    // smaller, the old words stayed round the new ones.
+    const bool text = VideoCore::Immersive::g_text_as_drawn.load(std::memory_order_relaxed) &&
+                      VideoCore::KiuHud::IsTextTarget(width, height);
+    const HudSpacing::Scales s =
+        text ? HudSpacing::Scales{} : HudSpacing::ForDraw(hud_spacing, width, height);
     const float far_plane = s.far_plane ? 1.0f : 0.0f;
     if (vs_data.vr_hud_across != s.across || vs_data.vr_hud_up_down != s.up_down ||
         vs_data.vr_hud_far_plane != far_plane) {
@@ -189,8 +195,9 @@ void RasterizerAccelerated::SyncHudSpacing() {
             pica.vs_setup.uniforms_dirty = true; // the camera in them is patched or not
         }
     }
-    const float factor = bottom ? 1.0f : vr_factor;
-    const float factor_y = bottom ? 1.0f : vr_factor_y;
+    const bool as_drawn = bottom || text;
+    const float factor = as_drawn ? 1.0f : vr_factor;
+    const float factor_y = as_drawn ? 1.0f : vr_factor_y;
     if (vs_data.vr_immersive_mode_factor != factor ||
         vs_data.vr_immersive_mode_factor_y != factor_y) {
         vs_data.vr_immersive_mode_factor = factor;
@@ -402,7 +409,7 @@ bool RasterizerAccelerated::HudDraw(bool* subtitle) const {
     }
     // The reticle is the hand's, not the HUD's.
     const u32 reticle = VideoCore::Immersive::g_reticle_texture.load(std::memory_order_relaxed);
-    return VideoCore::KiuHud::IsSubtitle(d) ||
+    return VideoCore::KiuHud::IsText(d) ||
            (VideoCore::KiuHud::MayBeHud(d) && !(reticle != 0 && d.texture == reticle));
 }
 
