@@ -1073,7 +1073,6 @@ TEST_CASE("Angel's Aim page: 60 FPS", "[frame_xr][kiuaim][kiu60]") {
     CHECK(Has(AimScopeRows(m), Id::Kiu60Fps)); // the page's count
     CHECK_FALSE(Has(AimScopeRows(ModelFor(Case::OtherGame)), Id::Kiu60Fps));
     // View's More opens on it.
-    const PageOn on;
     MenuView v = AimView();
     REQUIRE(AimPagePress(m, v, static_cast<int>(AimGroup::View)));
     REQUIRE(AimPagePress(m, v, kAimMoreIndex));
