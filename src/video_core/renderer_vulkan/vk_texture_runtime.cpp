@@ -1572,6 +1572,7 @@ Framebuffer::Framebuffer(TextureRuntime& runtime, const VideoCore::FramebufferPa
             VideoCore::Foveation::IsEyePicture(width, height, res_scale)) {
             render_pass = renderpass_cache.GetRenderpassFsr(formats[0], formats[1]);
             attachments[num_attachments++] = renderpass_cache.GetShadingRateView(width, height);
+            fsr_picture = true;
         }
     }
 

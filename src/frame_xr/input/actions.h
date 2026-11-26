@@ -65,6 +65,15 @@ public:
 
     void Destroy();
 
+    /// AzaharVR foveation: make the eye gaze pose action (XR_EXT_eye_gaze_interaction) in Create.
+    /// Set before Create, only with that extension enabled.
+    bool gaze_wanted = false;
+
+    /// AzaharVR foveation: where the eyes look in `view_space` at `time`, as the tangents of the
+    /// gaze direction (x / -z, y / -z). False when there is no valid gaze this frame.
+    bool LocateGaze(XrSession session, XrSpace view_space, XrTime time, float& tan_x,
+                    float& tan_y);
+
     /// AzaharFrame kiugyro: a haptic pulse on one controller (0 left, 1 right): Light Gun's recoil.
     /// The frequency is the runtime's. False when the runtime has no haptics bound.
     bool Pulse(XrSession session, int hand, int64_t duration_ns, float amplitude);

@@ -49,6 +49,8 @@ struct Actions::Impl {
     XrAction trackpad_force = XR_NULL_HANDLE;
 
     std::array<XrSpace, kNumHands> aim_space{};
+    XrAction gaze = XR_NULL_HANDLE; ///< AzaharVR foveation: the eye gaze pose
+    XrSpace gaze_space = XR_NULL_HANDLE;
     bool created_set = false;
 };
 
@@ -218,6 +220,13 @@ bool Actions::Create(XrInstance instance, bool has_frame_controller, bool has_fo
     s.stick_click =
         MakeAction(action_set_, "stick_click", "Stick Click", XR_ACTION_TYPE_BOOLEAN_INPUT, hands, 2);
     s.aim_pose = MakeAction(action_set_, "aim_pose", "Aim", XR_ACTION_TYPE_POSE_INPUT, hands, 2);
+    if (gaze_wanted) { // AzaharVR foveation
+        s.gaze = MakeAction(action_set_, "gaze", "Gaze", XR_ACTION_TYPE_POSE_INPUT, nullptr, 0);
+        if (s.gaze != XR_NULL_HANDLE) {
+            Suggest(instance, "/interaction_profiles/ext/eye_gaze_interaction",
+                    {{s.gaze, ToPath(instance, "/user/eyes_ext/input/gaze_ext/pose")}});
+        }
+    }
     s.a = MakeAction(action_set_, "button_a", "A", XR_ACTION_TYPE_BOOLEAN_INPUT, nullptr, 0);
     s.b = MakeAction(action_set_, "button_b", "B", XR_ACTION_TYPE_BOOLEAN_INPUT, nullptr, 0);
     s.x = MakeAction(action_set_, "button_x", "X", XR_ACTION_TYPE_BOOLEAN_INPUT, nullptr, 0);
@@ -513,6 +522,40 @@ bool Actions::CreateSpaces(XrSession session) {
             return false;
         }
     }
+    if (s.gaze != XR_NULL_HANDLE) { // AzaharVR foveation
+        XrActionSpaceCreateInfo info{XR_TYPE_ACTION_SPACE_CREATE_INFO};
+        info.action = s.gaze;
+        info.poseInActionSpace.orientation.w = 1.0f;
+        if (XR_FAILED(xrCreateActionSpace(session, &info, &s.gaze_space))) {
+            LOG_INFO(Input, "foveation: the eye gaze space could not be made");
+            s.gaze_space = XR_NULL_HANDLE;
+        }
+    }
+    return true;
+}
+
+bool Actions::LocateGaze(XrSession session, XrSpace view_space, XrTime time, float& tan_x,
+                         float& tan_y) {
+    if (impl_ == nullptr || impl_->gaze_space == XR_NULL_HANDLE || view_space == XR_NULL_HANDLE) {
+        return false;
+    }
+    if (!PoseActive(session, impl_->gaze, XR_NULL_PATH)) {
+        return false;
+    }
+    XrSpaceLocation loc{XR_TYPE_SPACE_LOCATION};
+    if (XR_FAILED(xrLocateSpace(impl_->gaze_space, view_space, time, &loc)) ||
+        !(loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT)) {
+        return false;
+    }
+    const XrQuaternionf& q = loc.pose.orientation; // the gaze looks along its -Z
+    const float x = -(2.0f * (q.x * q.z + q.w * q.y));
+    const float y = -(2.0f * (q.y * q.z - q.w * q.x));
+    const float z = -(1.0f - 2.0f * (q.x * q.x + q.y * q.y));
+    if (z > -0.2f) { // behind or far to the side: not a gaze at the picture
+        return false;
+    }
+    tan_x = x / -z;
+    tan_y = y / -z;
     return true;
 }
 
@@ -621,6 +664,10 @@ bool Actions::Sync(XrSession session, XrSpace base, XrTime time, InputFrame& out
 
 void Actions::Destroy() {
     if (impl_ != nullptr) {
+        if (impl_->gaze_space != XR_NULL_HANDLE) { // AzaharVR foveation
+            xrDestroySpace(impl_->gaze_space);
+            impl_->gaze_space = XR_NULL_HANDLE;
+        }
         for (XrSpace& space : impl_->aim_space) {
             if (space != XR_NULL_HANDLE) {
                 xrDestroySpace(space);

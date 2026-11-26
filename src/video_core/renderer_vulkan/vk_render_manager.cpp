@@ -2,10 +2,14 @@
 // Licensed under GPLv2 or any later version
 // Refer to the misc/licenses/gplv2.txt file included.
 
+#include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include "common/assert.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
-#include "video_core/renderer_vulkan/vk_foveation.h" // AzaharVR foveation
+#include "common/frame_test_switches.h" // AzaharVR foveation
+#include "video_core/renderer_vulkan/vk_foveation.h"
+#include "video_core/vr_gaze.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_render_manager.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
@@ -45,6 +49,9 @@ void RenderManager::BeginRendering(const Framebuffer* framebuffer,
             .height = draw_rect.GetHeight(),
         },
     };
+    if (framebuffer->fsr_picture) { // AzaharVR foveation: the gaze moves the full rate area
+        RefreshShadingRate(framebuffer->RateWidth(), framebuffer->RateHeight());
+    }
     const RenderPass new_pass = {
         .framebuffer = framebuffer->Handle(),
         .render_pass = framebuffer->RenderPass(),
@@ -175,6 +182,28 @@ vk::RenderPass RenderManager::GetRenderpass(VideoCore::PixelFormat color,
     return *renderpass;
 }
 
+namespace {
+// AzaharVR foveation: the full rate centre in the picture's rate image (0..1 along its columns and
+// rows), from the gaze or straight ahead, and it in texels (a change under one texel is none).
+void CentreFor(u32 width, u32 height, float& cx, float& cy) {
+    static int flip = -1;
+    static u32 flip_checked = 0;
+    if (flip < 0 || (++flip_checked % 120) == 0) { // the switch is read live, now and then
+        const auto v = Common::FrameTestSwitches::Value("AZAHARFRAME_XR_FOVEATION_FLIP");
+        flip = v ? std::atoi(v->c_str()) & 3 : 0;
+    }
+    float u, v;
+    VideoCore::Gaze::Centre(u, v);
+    VideoCore::Gaze::PictureToImage(u, v, width, height, flip, cx, cy);
+}
+
+u32 CentreKey(float cx, float cy, u32 w, u32 h) {
+    const u32 x = static_cast<u32>(std::clamp(cx, -0.5f, 1.5f) * static_cast<float>(w) + 64.0f);
+    const u32 y = static_cast<u32>(std::clamp(cy, -0.5f, 1.5f) * static_cast<float>(h) + 64.0f);
+    return (x << 16) | (y & 0xFFFF);
+}
+} // namespace
+
 // AzaharVR foveation: the render pass of GetRenderpass(color, depth, false) plus a shading rate
 // attachment (read only, kept in its layout). Pipelines made for the plain pass are used with it:
 // the attachment is not part of a render pass's compatibility.
@@ -275,12 +304,16 @@ vk::ImageView RenderManager::GetShadingRateView(u32 width, u32 height) {
     const u32 texel = instance.FragmentShadingRateTexelSize();
     const u32 w = (width + texel - 1) / texel;
     const u32 h = (height + texel - 1) / texel;
-    const std::vector<u8> data =
-        VideoCore::Foveation::MakeRateImage(instance.FoveationLevel(), width, height, texel);
+    float cx, cy;
+    CentreFor(width, height, cx, cy);
+    std::vector<u8> data = VideoCore::Foveation::MakeRateImage(instance.FoveationLevel(), width,
+                                                               height, texel, cy, cx);
+    data.resize((data.size() + 3) & ~std::size_t{3}); // a buffer update is in words
 
     RateImage r;
     r.width = width;
     r.height = height;
+    r.centre_key = CentreKey(cx, cy, w, h);
     const VkImageCreateInfo image_info = static_cast<VkImageCreateInfo>(vk::ImageCreateInfo{
         .imageType = vk::ImageType::e2D,
         .format = vk::Format::eR8Uint,
@@ -305,39 +338,57 @@ vk::ImageView RenderManager::GetShadingRateView(u32 width, u32 height) {
         .format = vk::Format::eR8Uint,
         .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
     });
+    // The rates reach the image through this buffer, written in the command stream
+    // (vkCmdUpdateBuffer), so a new set never overwrites one a pass before it still reads.
     const VkBufferCreateInfo buffer_info = static_cast<VkBufferCreateInfo>(vk::BufferCreateInfo{
         .size = data.size(),
-        .usage = vk::BufferUsageFlagBits::eTransferSrc,
+        .usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst,
     });
-    const VmaAllocationCreateInfo staging_alloc = {
-        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                 VMA_ALLOCATION_CREATE_MAPPED_BIT,
-        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
-    };
     VkBuffer raw_buffer{};
-    VmaAllocationInfo mapped{};
     const VkResult buffer_result =
-        vmaCreateBuffer(instance.GetAllocator(), &buffer_info, &staging_alloc, &raw_buffer,
-                        &r.staging_allocation, &mapped);
+        vmaCreateBuffer(instance.GetAllocator(), &buffer_info, &alloc_info, &raw_buffer,
+                        &r.staging_allocation, nullptr);
     ASSERT_MSG(buffer_result == VK_SUCCESS, "foveation: the rate image's buffer was not made");
     r.staging = vk::Buffer{raw_buffer};
-    std::memcpy(mapped.pMappedData, data.data(), data.size());
-    vmaFlushAllocation(instance.GetAllocator(), r.staging_allocation, 0, VK_WHOLE_SIZE);
 
     EndRendering(); // a copy is not recorded inside a render pass
-    scheduler.Record([image = r.image, staging = r.staging, w, h](vk::CommandBuffer cmdbuf) {
+    RecordRateUpload(r, std::move(data), true);
+    std::scoped_lock lock{cache_mutex};
+    rate_images.push_back(r);
+    return r.view;
+}
+
+void RenderManager::RecordRateUpload(const RateImage& r, std::vector<u8> data, bool first) {
+    const u32 texel = instance.FragmentShadingRateTexelSize();
+    const u32 w = (r.width + texel - 1) / texel;
+    const u32 h = (r.height + texel - 1) / texel;
+    scheduler.Record([image = r.image, staging = r.staging, w, h, first,
+                      data = std::move(data)](vk::CommandBuffer cmdbuf) {
         const vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        const vk::MemoryBarrier transfer_barrier{
+            .srcAccessMask = vk::AccessFlagBits::eTransferRead | vk::AccessFlagBits::eTransferWrite,
+            .dstAccessMask = vk::AccessFlagBits::eTransferRead | vk::AccessFlagBits::eTransferWrite,
+        };
         const vk::ImageMemoryBarrier to_copy{
+            .srcAccessMask = first ? vk::AccessFlags{}
+                                   : vk::AccessFlagBits::eFragmentShadingRateAttachmentReadKHR,
             .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
-            .oldLayout = vk::ImageLayout::eUndefined,
+            .oldLayout = first ? vk::ImageLayout::eUndefined
+                               : vk::ImageLayout::eFragmentShadingRateAttachmentOptimalKHR,
             .newLayout = vk::ImageLayout::eTransferDstOptimal,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = image,
             .subresourceRange = range,
         };
-        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
-                               vk::PipelineStageFlagBits::eTransfer, {}, {}, {}, to_copy);
+        cmdbuf.pipelineBarrier(
+            first ? vk::PipelineStageFlags{vk::PipelineStageFlagBits::eTopOfPipe}
+                  : (vk::PipelineStageFlagBits::eFragmentShadingRateAttachmentKHR |
+                     vk::PipelineStageFlagBits::eTransfer),
+            vk::PipelineStageFlagBits::eTransfer, {}, transfer_barrier, {}, to_copy);
+        cmdbuf.updateBuffer(staging, 0, data.size(), data.data());
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                               vk::PipelineStageFlagBits::eTransfer, {}, transfer_barrier, {}, {});
         const vk::BufferImageCopy region{
             .imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
             .imageExtent = {w, h, 1},
@@ -357,9 +408,39 @@ vk::ImageView RenderManager::GetShadingRateView(u32 width, u32 height) {
                                vk::PipelineStageFlagBits::eFragmentShadingRateAttachmentKHR, {},
                                {}, {}, to_rate);
     });
-    std::scoped_lock lock{cache_mutex};
-    rate_images.push_back(r);
-    return r.view;
+}
+
+void RenderManager::RefreshShadingRate(u32 width, u32 height) {
+    if (!VideoCore::Gaze::g_wanted.load(std::memory_order_relaxed)) {
+        return; // the fixed centre was uploaded with the image
+    }
+    const u32 texel = instance.FragmentShadingRateTexelSize();
+    const u32 w = (width + texel - 1) / texel;
+    const u32 h = (height + texel - 1) / texel;
+    float cx, cy;
+    CentreFor(width, height, cx, cy);
+    const u32 key = CentreKey(cx, cy, w, h);
+    RateImage found;
+    {
+        std::scoped_lock lock{cache_mutex};
+        RateImage* hit = nullptr;
+        for (RateImage& r : rate_images) {
+            if (r.width == width && r.height == height) {
+                hit = &r;
+                break;
+            }
+        }
+        if (!hit || hit->centre_key == key) {
+            return;
+        }
+        hit->centre_key = key;
+        found = *hit;
+    }
+    std::vector<u8> data = VideoCore::Foveation::MakeRateImage(instance.FoveationLevel(), width,
+                                                               height, texel, cy, cx);
+    data.resize((data.size() + 3) & ~std::size_t{3});
+    EndRendering();
+    RecordRateUpload(found, std::move(data), false);
 }
 
 vk::UniqueRenderPass RenderManager::CreateRenderPass(vk::Format color, vk::Format depth,

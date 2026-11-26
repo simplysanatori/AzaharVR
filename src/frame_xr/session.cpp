@@ -2,6 +2,8 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
+#include <cstdlib> // AzaharVR foveation
+#include "video_core/renderer_vulkan/vk_foveation.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -25,6 +27,14 @@
 #include "frame_xr/session.h"
 #include "frame_xr/xr_loader.h"
 #include "video_core/renderer_vulkan/vk_common.h" // projb: the queue idle before a swapchain goes
+
+namespace {
+// AzaharVR foveation: AZAHARFRAME_XR_FOVEATION_GAZE=0 keeps the fixed centre (default: gaze on).
+bool GazeWanted() {
+    const char* v = std::getenv("AZAHARFRAME_XR_FOVEATION_GAZE");
+    return !(v && v[0] == '0');
+}
+} // namespace
 
 namespace FrameXr {
 
@@ -232,6 +242,26 @@ bool Runtime::CreateXrInstance(bool renew) {
             if (offers(name) && !HasExtension(name.c_str())) {
                 enabled_extensions.push_back(name);
             }
+        }
+        // AzaharVR foveation: the eyes' gaze for the full rate centre, only with the switch on
+        // (and never a reason to fail: each is asked for only when the runtime offers it).
+        if (VideoCore::Foveation::LevelFromEnv() > 0 && GazeWanted()) {
+            if (offers("XR_EXT_eye_gaze_interaction") && !HasExtension("XR_EXT_eye_gaze_interaction")) {
+                enabled_extensions.push_back("XR_EXT_eye_gaze_interaction");
+            }
+            if (offers("XR_META_foveation_eye_tracked") && offers("XR_FB_foveation") &&
+                offers("XR_FB_foveation_configuration")) {
+                for (const char* n : {"XR_FB_foveation", "XR_FB_foveation_configuration",
+                                      "XR_META_foveation_eye_tracked"}) {
+                    if (!HasExtension(n)) {
+                        enabled_extensions.push_back(n);
+                    }
+                }
+            }
+            LOG_INFO(Frontend, "xr: foveation gaze: the runtime offers eye gaze interaction {}, "
+                               "eye tracked foveation {}",
+                     offers("XR_EXT_eye_gaze_interaction") ? "yes" : "no",
+                     offers("XR_META_foveation_eye_tracked") ? "yes" : "no");
         }
         // AzaharFrame kiu140: the finger joints' extensions, with their test switch alone.
         for (const char* name : Input::HandJoints::kExtensions) {

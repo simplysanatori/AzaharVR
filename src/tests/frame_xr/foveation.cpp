@@ -4,6 +4,7 @@
 
 // AzaharVR foveation: the layout of the shading rate image (vk_foveation.h).
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include "video_core/renderer_vulkan/vk_foveation.h"
 
@@ -41,4 +42,36 @@ TEST_CASE("foveation: only the eye picture is found", "[frame_xr]") {
     REQUIRE(F::IsEyePicture(1440, 2400, 6));
     REQUIRE_FALSE(F::IsEyePicture(1920, 1440, 6)); // the bottom screen (320 x 240)
     REQUIRE_FALSE(F::IsEyePicture(400, 240, 1));
+}
+
+#include "video_core/vr_gaze.h"
+
+TEST_CASE("foveation: the gaze lands in the picture", "[frame_xr]") {
+    namespace G = VideoCore::Gaze;
+    float u, v;
+    G::TanToPicture(0.0f, 0.0f, u, v); // straight ahead: the middle across, a little above the middle
+    REQUIRE(u == Catch::Approx(0.5f));
+    REQUIRE(v == Catch::Approx(G::kForwardV));
+    REQUIRE(v < 0.5f);
+    G::TanToPicture(G::kHalfTanX, 0.0f, u, v); // the right edge
+    REQUIRE(u == Catch::Approx(1.0f));
+    G::TanToPicture(0.0f, G::kHalfTanY + G::kMiddleTanY, u, v); // the top edge
+    REQUIRE(v == Catch::Approx(0.0f).margin(1e-4));
+    float cx, cy;
+    G::PictureToImage(0.8f, 0.3f, 240, 400, 0, cx, cy); // the PICA's rotated surface
+    REQUIRE(cx == Catch::Approx(0.7f));
+    REQUIRE(cy == Catch::Approx(0.8f));
+    G::PictureToImage(0.8f, 0.3f, 400, 240, 0, cx, cy);
+    REQUIRE(cx == Catch::Approx(0.8f));
+    REQUIRE(cy == Catch::Approx(0.3f));
+    G::PictureToImage(0.8f, 0.3f, 400, 240, 3, cx, cy);
+    REQUIRE(cx == Catch::Approx(0.2f));
+    REQUIRE(cy == Catch::Approx(0.7f));
+}
+
+TEST_CASE("foveation: the full rate centre follows the gaze", "[frame_xr]") {
+    const auto img = F::MakeRateImage(2, 2400, 1440, 16, 0.25f, 0.75f);
+    const std::uint32_t w = 150, h = 90;
+    REQUIRE(img[(h / 4) * w + (3 * w / 4)] == F::kRate1x1);
+    REQUIRE(img[(3 * h / 4) * w + (w / 4)] != F::kRate1x1);
 }

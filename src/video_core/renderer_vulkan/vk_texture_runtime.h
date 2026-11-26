@@ -315,7 +315,9 @@ public:
           formats(std::exchange(
               other.formats, {VideoCore::PixelFormat::Invalid, VideoCore::PixelFormat::Invalid})),
           width(std::exchange(other.width, 0)), height(std::exchange(other.height, 0)),
-          res_scale(std::exchange(other.res_scale, 1)) {}
+          res_scale(std::exchange(other.res_scale, 1)) {
+        fsr_picture = std::exchange(other.fsr_picture, false); // AzaharVR foveation
+    }
 
     Framebuffer& operator=(Framebuffer&& other) noexcept {
         VideoCore::FramebufferParams::operator=(std::move(other));
@@ -330,6 +332,7 @@ public:
         width = std::exchange(other.width, 0);
         height = std::exchange(other.height, 0);
         res_scale = std::exchange(other.res_scale, 1);
+        fsr_picture = std::exchange(other.fsr_picture, false); // AzaharVR foveation
 
         return *this;
     }
@@ -360,6 +363,15 @@ public:
 
     u32 Scale() const noexcept {
         return res_scale;
+    }
+
+    // AzaharVR foveation: the eye picture's framebuffer, with the rate image attached.
+    bool fsr_picture{};
+    u32 RateWidth() const noexcept {
+        return width;
+    }
+    u32 RateHeight() const noexcept {
+        return height;
     }
 
 private:

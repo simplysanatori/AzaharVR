@@ -2,6 +2,12 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
+#include <chrono> // AzaharVR foveation
+#include "frame_xr/xr_loader.h"
+#include <cmath>
+#include <cstdlib>
+#include "video_core/renderer_vulkan/vk_foveation.h"
+#include "video_core/vr_gaze.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -307,6 +313,8 @@ bool VrUi::Create(Runtime& rt) {
     chord_down = false;
     SwallowHeld(); // the buttons of the chord that made this session are still held
     mode_latch.Arm();
+    // AzaharVR foveation: the eye gaze action, when its extension is on and the gaze is wanted.
+    actions.gaze_wanted = rt.HasExtension("XR_EXT_eye_gaze_interaction");
     actions_ok = actions.Create(rt.instance, rt.HasExtension(Input::Actions::kFrameControllerExtension),
                                 rt.HasExtension("XR_HTC_vive_focus3_controller_interaction")); // AzaharVR
     cylinder_ok = rt.HasExtension(XR_KHR_COMPOSITION_LAYER_CYLINDER_EXTENSION_NAME); // AzaharFrame curve
@@ -1542,6 +1550,81 @@ VrUi::ScreenDraw VrUi::ScreenDrawFor(const Immersive::ScreenLayers& shown) const
     return draw;
 }
 
+// AzaharVR foveation: where the eyes look this frame, for the full rate centre of the eye picture
+// (video_core/vr_gaze.h). In order: XR_META_foveation_eye_tracked's state, XR_EXT_eye_gaze_interaction's
+// pose, then nothing (the renderer keeps the fixed centre). The source is logged once, and the
+// share of frames with a valid gaze every 10 seconds.
+static void SampleFoveationGaze(Runtime& rt, const FrameInfo& info, Input::Actions& actions,
+                                bool actions_ok) {
+    using namespace VideoCore::Gaze;
+    static bool wanted_known = false;
+    static bool wanted = false;
+    static int last_source = -1;
+    static std::chrono::steady_clock::time_point last_log{};
+    static uint32_t logged_samples = 0, logged_valid = 0;
+    if (!wanted_known) {
+        wanted_known = true;
+        const char* g = std::getenv("AZAHARFRAME_XR_FOVEATION_GAZE");
+        wanted = VideoCore::Foveation::LevelFromEnv() > 0 && !(g && g[0] == '0') &&
+                 (rt.HasExtension("XR_EXT_eye_gaze_interaction") ||
+                  rt.HasExtension("XR_META_foveation_eye_tracked"));
+        g_wanted.store(wanted, std::memory_order_relaxed);
+        LOG_INFO(Frontend, "xr: foveation gaze {}: eye gaze interaction {}, eye tracked foveation {}",
+                 wanted ? "on" : "off (the fixed centre)",
+                 rt.HasExtension("XR_EXT_eye_gaze_interaction") ? "enabled" : "not enabled",
+                 rt.HasExtension("XR_META_foveation_eye_tracked") ? "enabled" : "not enabled");
+    }
+    if (!wanted) {
+        return;
+    }
+    float tx = 0.0f, ty = 0.0f;
+    bool valid = false;
+    Source source = Source::None;
+    const ViewPose vp = LatestViewPose();
+    auto& fn = FrameXr::Xr();
+    if (fn.xrGetFoveationEyeTrackedStateMETA && rt.HasExtension("XR_META_foveation_eye_tracked")) {
+        XrFoveationEyeTrackedStateMETA state{XR_TYPE_FOVEATION_EYE_TRACKED_STATE_META};
+        if (XR_SUCCEEDED(fn.xrGetFoveationEyeTrackedStateMETA(info.session, &state)) &&
+            (state.flags & XR_FOVEATION_EYE_TRACKED_STATE_VALID_BIT_META)) {
+            float sx = 0.0f, sy = 0.0f;
+            for (int e = 0; e < 2; ++e) { // the centre is in NDC of each eye's own view
+                const XrFovf& f = vp.fov[e];
+                const float l = std::tan(f.angleLeft), r = std::tan(f.angleRight);
+                const float d = std::tan(f.angleDown), u = std::tan(f.angleUp);
+                sx += l + (state.foveationCenter[e].x * 0.5f + 0.5f) * (r - l);
+                sy += d + (state.foveationCenter[e].y * 0.5f + 0.5f) * (u - d);
+            }
+            tx = sx * 0.5f;
+            ty = sy * 0.5f;
+            valid = true;
+            source = Source::Meta;
+        }
+    }
+    if (!valid && actions_ok && actions.LocateGaze(info.session, info.view_space, info.display_time, tx, ty)) {
+        valid = true;
+        source = Source::Ext;
+    }
+    Publish(valid, tx, ty, source);
+    if (valid && static_cast<int>(source) != last_source) {
+        last_source = static_cast<int>(source);
+        LOG_INFO(Frontend, "xr: foveation gaze source: {}",
+                 source == Source::Meta ? "XR_META_foveation_eye_tracked"
+                                        : "XR_EXT_eye_gaze_interaction");
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (now - last_log > std::chrono::seconds(10)) {
+        const uint32_t s = g_samples.load(), v = g_valid_samples.load();
+        if (last_log.time_since_epoch().count() != 0 && s > logged_samples) {
+            LOG_INFO(Frontend, "xr: foveation gaze valid {}% of {} frames (centre {:.2f}, {:.2f})",
+                     100 * (v - logged_valid) / (s - logged_samples), s - logged_samples,
+                     g_u.load(), g_v.load());
+        }
+        last_log = now;
+        logged_samples = s;
+        logged_valid = v;
+    }
+}
+
 void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) {
     if (!info.game_on) {
         // No game: the next one starts with the top screen in focus and the bottom screen as its
@@ -1568,6 +1651,7 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
         hand_joints.LogRaw(pit_arm_hand, info.local_space, info.display_time,
                            in.hand[static_cast<std::size_t>(pit_arm_hand)]);
     }
+    SampleFoveationGaze(rt, info, actions, actions_ok && focused); // AzaharVR foveation
     // AzaharVR: the controller scheme of the profile in use, looked up when it changes (PC
     // builds; the Frame's build keeps the Frame's scheme whatever the profile).
     if (rt.profile_changes != profile_changes_seen) {

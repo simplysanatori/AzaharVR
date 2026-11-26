@@ -65,6 +65,10 @@ public:
     /// AzaharVR foveation: the rate image for a width x height picture (made once, kept).
     vk::ImageView GetShadingRateView(u32 width, u32 height);
 
+    /// AzaharVR foveation: moves the full rate area to the gaze (or straight ahead) when it moved
+    /// by a texel or more. Ends the pass in progress when it does; call before beginning one.
+    void RefreshShadingRate(u32 width, u32 height);
+
 private:
     /// Creates a renderpass configured appropriately and stores it in cached_renderpasses
     vk::UniqueRenderPass CreateRenderPass(vk::Format color, vk::Format depth,
@@ -84,7 +88,10 @@ private:
         VmaAllocation allocation{};
         vk::Buffer staging;
         VmaAllocation staging_allocation{};
+        u32 centre_key{~0u}; ///< the centre (in texels) of the rates it holds
     };
+    /// Records the upload of a rate image's rates (first: its layout is undefined).
+    void RecordRateUpload(const RateImage& r, std::vector<u8> data, bool first);
     std::vector<RateImage> rate_images;
     std::mutex cache_mutex;
     std::array<vk::Image, 2> images;

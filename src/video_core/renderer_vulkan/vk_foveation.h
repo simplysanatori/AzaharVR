@@ -38,15 +38,15 @@ inline constexpr std::uint8_t kRate2x2 = (1 << 2) | 1;
 inline constexpr std::uint8_t kRate4x4 = (2 << 2) | 2;
 
 /// The rate of the texel at (x, y) of a w x h image. The centre of the full rate is at
-/// (0.5, centre_y) of the picture; the rings are ellipses of the picture (radius 1 = half its
+/// (centre_x, centre_y) of the picture; the rings are ellipses of the picture (radius 1 = half its
 /// width/height). Level 1: 1x1 inside 0.6, 2x2 outside. Level 2: 1x1 inside 0.5, 2x2 to 0.85,
 /// 4x4 beyond.
 inline std::uint8_t RateAt(int level, std::uint32_t x, std::uint32_t y, std::uint32_t w,
-                           std::uint32_t h, float centre_y = 0.5f) {
+                           std::uint32_t h, float centre_y = 0.5f, float centre_x = 0.5f) {
     if (level <= 0) {
         return kRate1x1;
     }
-    const float dx = ((static_cast<float>(x) + 0.5f) / static_cast<float>(w) - 0.5f) * 2.0f;
+    const float dx = ((static_cast<float>(x) + 0.5f) / static_cast<float>(w) - centre_x) * 2.0f;
     const float dy =
         ((static_cast<float>(y) + 0.5f) / static_cast<float>(h) - centre_y) * 2.0f;
     const float d = std::sqrt(dx * dx + dy * dy);
@@ -59,13 +59,13 @@ inline std::uint8_t RateAt(int level, std::uint32_t x, std::uint32_t y, std::uin
 /// The rate image for a picture of width x height pixels with square texels of `texel` pixels.
 inline std::vector<std::uint8_t> MakeRateImage(int level, std::uint32_t width,
                                                std::uint32_t height, std::uint32_t texel,
-                                               float centre_y = 0.5f) {
+                                               float centre_y = 0.5f, float centre_x = 0.5f) {
     const std::uint32_t w = (width + texel - 1) / texel;
     const std::uint32_t h = (height + texel - 1) / texel;
     std::vector<std::uint8_t> out(static_cast<std::size_t>(w) * h);
     for (std::uint32_t y = 0; y < h; ++y) {
         for (std::uint32_t x = 0; x < w; ++x) {
-            out[static_cast<std::size_t>(y) * w + x] = RateAt(level, x, y, w, h, centre_y);
+            out[static_cast<std::size_t>(y) * w + x] = RateAt(level, x, y, w, h, centre_y, centre_x);
         }
     }
     return out;
