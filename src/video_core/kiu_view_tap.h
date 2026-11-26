@@ -105,11 +105,77 @@ inline bool ReticleScaled(u32 texture0) {
     return t != 0 && texture0 == t && g_reticle_scale.load(std::memory_order_relaxed) != 1.0f;
 }
 
+/// AzaharVR: in Angel's Aim's first person, the game's cone of streaks round the camera (a dark
+/// and a bright one) is not drawn: from behind, in VR, it is a grid of streaks to a point. Set
+/// by the hooks.
+inline std::atomic<bool> g_hide_camera_cone{false};
+/// The cone's draws: the texture (address, size, format), 36 vertices, no depth test.
+inline bool CameraConeDraw(u32 address, u32 width, u32 height, u32 format, u32 vertices,
+                           bool depth_test) {
+    if (!g_hide_camera_cone.load(std::memory_order_relaxed) || vertices != 36 || depth_test) {
+        return false;
+    }
+    return (address == 0x18402B00u && width == 128 && height == 128 && format == 12) ||
+           (address == 0x1843B080u && width == 64 && height == 64 && format == 1);
+}
+
+/// AzaharFrame kiumark: the markers over enemies and people (test switches
+/// AZAHARFRAME_KIU_MARKER_TEX=<hex>[,<hex>...] and AZAHARFRAME_KIU_MARKER_SIZE=<percent>, live):
+/// the draws with these textures are scaled like the reticle, by g_marker_scale.
+inline std::array<std::atomic<u32>, 4> g_marker_textures{};
+inline std::atomic<float> g_marker_scale{1.0f};
+/// The point a marker is scaled about (AZAHARFRAME_KIU_MARKER_ANCHOR): 0 its middle, 1 and 2 the
+/// low and high ends across clip x (up and down on the turned top screen), 3 and 4 across clip y.
+inline std::atomic<int> g_marker_anchor{1};
+/// AZAHARFRAME_KIU_MARKER_DROP=<percent>: the anchor moved that part of the marker's height on
+/// past the anchor's edge (toward the enemy), so a smaller marker sits lower.
+inline std::atomic<float> g_marker_drop{0.25f};
+/// AZAHARFRAME_KIU_MARKER_FAR=<w>: past this depth (clip w) a marker shrinks as 1/w, so a far
+/// enemy's marker is small (0: off), down to a quarter.
+inline std::atomic<float> g_marker_far{0.0f};
+/// Whether this texture is one of the markers (not the reticle).
+inline bool IsMarker(u32 texture0) {
+    for (const auto& t : g_marker_textures) {
+        if (texture0 != 0 && t.load(std::memory_order_relaxed) == texture0) {
+            return true;
+        }
+    }
+    return false;
+}
+/// The scale of the draw with this texture about its middle: the reticle's, a marker's, or 1.
+inline float DrawScale(u32 texture0) {
+    if (ReticleScaled(texture0)) {
+        return g_reticle_scale.load(std::memory_order_relaxed);
+    }
+    const float k = g_marker_scale.load(std::memory_order_relaxed);
+    if (texture0 != 0 && (k != 1.0f || g_marker_far.load(std::memory_order_relaxed) > 0.0f)) {
+        for (const auto& t : g_marker_textures) {
+            if (t.load(std::memory_order_relaxed) == texture0) {
+                return k;
+            }
+        }
+    }
+    return 1.0f;
+}
+
 /// AzaharFrame kiu133: a test aid (AZAHARFRAME_KIU_DRAW_LOG, frame_xr/kiu_hooks.cpp): while set,
 /// every draw is logged (texture 0, its size and format, the vertex count, the blend and depth
 /// state, the colour buffer); the hooks set it for one VBlank to the next each time the switch's
 /// value changes (for 40 ms).
 inline std::atomic<bool> g_draw_log{false};
+
+/// AzaharFrame kiugrid: a test aid (AZAHARFRAME_KIU_HIDE_TEX=<hex>[,<hex>...], live): draws whose
+/// texture 0 is at one of these addresses are not drawn (0 = none).
+inline std::array<std::atomic<u32>, 32> g_hide_textures{};
+inline bool HideTexture(u32 texture0) {
+    for (const auto& t : g_hide_textures) {
+        const u32 v = t.load(std::memory_order_relaxed);
+        if (v != 0 && v == texture0) {
+            return true;
+        }
+    }
+    return false;
+}
 
 /// AzaharFrame kiuhud: a test aid (AZAHARFRAME_KIU_HUD_CENSUS=<n>): every draw into the top
 /// screen's viewport without a depth test is shaded on the CPU and logged once a kind (its

@@ -180,6 +180,7 @@ const std::vector<AimPlace>& AimPlaces() {
         {G::Aiming, false, Id::GyroAim},
         {G::Aiming, false, Id::TriggerLayout},
         {G::Aiming, false, Id::KiuReticleSize},
+        {G::Aiming, false, Id::KiuMarkerSize}, // AzaharVR
         {G::Aiming, false, Id::LaserSight},
         {G::Aiming, false, Id::GyroSensitivity},
         {G::Aiming, true, Id::KeepOnScreen},

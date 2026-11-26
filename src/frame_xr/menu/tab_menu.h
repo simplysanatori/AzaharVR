@@ -305,6 +305,7 @@ enum class Id : int {
     KiuBottomReset,   ///< a button: Persistent back to its place (vr_kiu_bottom_x, _y)
     WristSide,        ///< index: 0 Back, 1 Inside (vr_wrist_side), global, the Stats tab
     KiuReticleSize,   ///< a slider, 30 to 150 (percent): the game's reticle in first person
+    KiuMarkerSize,    ///< AzaharVR: a slider, 20 to 100 (percent): the markers over enemies
     KiuPitOpacity,    ///< AzaharFrame kiu133: a slider, 20 to 100 (percent), with Camera not First Person
     KiuWristAngle, ///< AzaharFrame kiu140: a slider, 0 to 360 degrees, with Wrist (vr_kiu_wrist_angle)
     KiuWristAlong, ///< AzaharFrame kiu140: a slider, -12 to 25 cm, with Wrist (vr_kiu_wrist_along)
@@ -588,6 +589,7 @@ struct MenuModel {
     int kiu_power_menu_opacity = 100; ///< percent, 20 to 100 (vr_kiu_power_menu_opacity)
     int wrist_side = 0;             ///< 0 Back, 1 Inside (global)
     int kiu_reticle_size = 100;     ///< percent (30 to 150)
+    int kiu_marker_size = 30;       ///< AzaharVR: percent (20 to 100)
     int kiu_view = 0;               ///< AzaharFrame kiu133: Camera, Kiu::FirstPerson::ViewFor
     int kiu_pit_opacity = 100;      ///< percent (20 to 100)
     int kiu_snap_turn = 0;          ///< Turning's shown index (SnapTurnIndexOf), 0 Smooth

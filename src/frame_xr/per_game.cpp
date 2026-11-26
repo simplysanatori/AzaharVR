@@ -340,6 +340,9 @@ bool WithSetting(Menu::Id id, F&& f) {
         return true;
     case Id::KiuReticleSize:
         f(v.vr_kiu_reticle_size);
+        break;
+    case Id::KiuMarkerSize: // AzaharVR
+        f(v.vr_kiu_marker_size);
         return true;
     case Id::KiuOverShoulder:
         f(v.vr_kiu_over_shoulder);

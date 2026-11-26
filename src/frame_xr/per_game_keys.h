@@ -150,6 +150,7 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_kiu_subtitle_size); // AzaharFrame kiu140
     f(v.vr_kiu_hide_off_hand); // AzaharFrame kiuhands
     f(v.vr_kiu_reticle_size);
+    f(v.vr_kiu_marker_size); // AzaharVR
     f(v.vr_kiu_game_camera); // AzaharFrame kiu133
     f(v.vr_kiu_pit_opacity);
     f(v.vr_kiu_stick_click); // AzaharFrame kiucam

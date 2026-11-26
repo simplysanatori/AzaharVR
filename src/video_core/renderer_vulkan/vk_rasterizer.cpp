@@ -710,6 +710,21 @@ void RasterizerVulkan::ClearKiuPicture(bool world, const Common::Rectangle<u32>&
 
 bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     MICROPROFILE_SCOPE(Vulkan_Drawing);
+    // AzaharFrame kiugrid: the test aid AZAHARFRAME_KIU_HIDE_TEX leaves these textures' draws out.
+    if (regs.texturing.main_config.texture0_enable
+            ? VideoCore::Immersive::HideTexture(regs.texturing.texture0.GetPhysicalAddress())
+            : VideoCore::Immersive::HideTexture(0xFFFFFFFFu)) { // FFFFFFFF: the untextured draws
+        return true;
+    }
+    if (regs.texturing.main_config.texture0_enable && // AzaharVR: the camera's cone
+        VideoCore::Immersive::CameraConeDraw(
+            regs.texturing.texture0.GetPhysicalAddress(), regs.texturing.texture0.width.Value(),
+            regs.texturing.texture0.height.Value(),
+            static_cast<u32>(regs.texturing.texture0_format.Value()),
+            accelerate ? regs.pipeline.num_vertices : static_cast<u32>(vertex_batch.size()),
+            regs.framebuffer.output_merger.depth_test_enable.Value() != 0)) {
+        return true;
+    }
     // AzaharFrame kiuhs3a: HUD Opacity: another draw, or another target, after the pieces.
     const bool hud_fades = !accelerate && hud_piece.Fades();
     const u32 color_address = regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress();
@@ -733,7 +748,8 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         const auto& va = regs.pipeline.vertex_attributes;
         LOG_INFO(Render,
                  "kiu draw: tex0 {} {:08X} {}x{} fmt {} | verts {} {} attr0 {:08X} idx {:08X} | "
-                 "blend {} src {} dst {} | depth test {} write {} | colour {:08X} | view {}x{}",
+                 "blend {} src {} dst {} | depth test {} write {} | colour {:08X} | view {}x{} | "
+                 "scissor {} {},{}..{},{} | cull {}",
                  regs.texturing.main_config.texture0_enable.Value(),
                  regs.texturing.texture0.GetPhysicalAddress(),
                  regs.texturing.texture0.width.Value(), regs.texturing.texture0.height.Value(),
@@ -747,7 +763,11 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                  om.depth_test_enable.Value(), om.depth_write_enable.Value(),
                  regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress(),
                  Pica::f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f,
-                 Pica::f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f);
+                 Pica::f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f,
+                 static_cast<u32>(regs.rasterizer.scissor_test.mode.Value()), // AzaharFrame kiuheart
+                 regs.rasterizer.scissor_test.x1.Value(), regs.rasterizer.scissor_test.y1.Value(),
+                 regs.rasterizer.scissor_test.x2.Value(), regs.rasterizer.scissor_test.y2.Value(),
+                 static_cast<u32>(regs.rasterizer.cull_mode.Value()));
     }
 
     const bool shadow_rendering = regs.framebuffer.IsShadowRendering();

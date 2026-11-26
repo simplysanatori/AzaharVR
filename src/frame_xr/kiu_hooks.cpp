@@ -2,6 +2,9 @@
 // Licensed under GPLv3 or any later version
 // Refer to the license.txt file included.
 
+#include <algorithm> // AzaharFrame kiugrid, kiumark
+#include <cctype>
+#include <cstdlib>
 #include <atomic>
 #include <bit>
 #include <chrono>
@@ -46,6 +49,11 @@
 namespace FrameXr::Kiu::Hooks {
 
 namespace {
+
+/// AzaharFrame kiugrid: a test switch's list of texture addresses (hex, up to the slots' count,
+/// anything else between them) into the slots (0: none).
+template <std::size_t N>
+void ReadTextureList(const char* name, std::array<std::atomic<u32>, N>& slots);
 
 namespace KH = Input::KiuHooks;
 namespace KM = Input::KiuModel; // AzaharFrame kiu133
@@ -107,6 +115,27 @@ std::optional<std::string> Switch(const char* name) {
 bool SwitchIs(const char* name, const char* value) {
     const auto v = Switch(name);
     return v && *v == value;
+}
+
+template <std::size_t N>
+void ReadTextureList(const char* name, std::array<std::atomic<u32>, N>& slots) {
+    const auto text = Switch(name);
+    const std::string list = text ? *text : std::string{};
+    std::size_t pos = 0;
+    for (auto& slot : slots) {
+        u32 v = 0;
+        while (pos < list.size() && !std::isxdigit(static_cast<unsigned char>(list[pos]))) {
+            ++pos;
+        }
+        const std::size_t start = pos;
+        while (pos < list.size() && std::isxdigit(static_cast<unsigned char>(list[pos]))) {
+            ++pos;
+        }
+        if (pos > start && pos - start <= 8) {
+            v = static_cast<u32>(std::stoul(list.substr(start, pos - start), nullptr, 16));
+        }
+        slot.store(v, std::memory_order_relaxed);
+    }
 }
 
 /// The game's memory through the emulator: only mapped addresses are read or written; a code
@@ -891,6 +920,43 @@ void Hook(int64_t ticks) {
         s.draw_log_seen = now;
         VideoCore::Immersive::g_draw_log.store(host_now < s.draw_log_until,
                                                std::memory_order_relaxed);
+    }
+    // AzaharFrame kiugrid: AZAHARFRAME_KIU_HIDE_TEX: up to 32 texture addresses (hex) not drawn.
+    ReadTextureList("AZAHARFRAME_KIU_HIDE_TEX", VideoCore::Immersive::g_hide_textures);
+    // AzaharVR: the camera's cone of streaks, not in first person (kiu_view_tap.h)
+    VideoCore::Immersive::g_hide_camera_cone.store(first_person, std::memory_order_relaxed);
+    // AzaharVR Markers: the markers over enemies (the European game's atlas at 21915300) in
+    // first person, at the setting's size about their tip; the test switches
+    // AZAHARFRAME_KIU_MARKER_TEX (up to 4 addresses), _SIZE (percent) and _ANCHOR override.
+    {
+        const auto tex_text = Switch("AZAHARFRAME_KIU_MARKER_TEX");
+        if (tex_text && !tex_text->empty()) {
+            ReadTextureList("AZAHARFRAME_KIU_MARKER_TEX", VideoCore::Immersive::g_marker_textures);
+        } else {
+            for (auto& t : VideoCore::Immersive::g_marker_textures) {
+                t.store(0, std::memory_order_relaxed);
+            }
+            VideoCore::Immersive::g_marker_textures[0].store(first_person ? 0x21915300u : 0u,
+                                                             std::memory_order_relaxed);
+        }
+        const auto text = Switch("AZAHARFRAME_KIU_MARKER_SIZE");
+        float pct = static_cast<float>(Settings::values.vr_kiu_marker_size.GetValue());
+        if (text && !text->empty()) {
+            pct = std::clamp(std::strtof(text->c_str(), nullptr), 10.0f, 300.0f);
+        }
+        VideoCore::Immersive::g_marker_scale.store(pct / 100.0f, std::memory_order_relaxed);
+        const auto anchor = Switch("AZAHARFRAME_KIU_MARKER_ANCHOR");
+        VideoCore::Immersive::g_marker_anchor.store(
+            anchor && !anchor->empty() ? std::clamp(std::atoi(anchor->c_str()), 0, 4) : 1,
+            std::memory_order_relaxed);
+        const auto drop = Switch("AZAHARFRAME_KIU_MARKER_DROP");
+        VideoCore::Immersive::g_marker_drop.store(
+            drop && !drop->empty() ? std::strtof(drop->c_str(), nullptr) / 100.0f : 0.25f,
+            std::memory_order_relaxed);
+        const auto far = Switch("AZAHARFRAME_KIU_MARKER_FAR");
+        VideoCore::Immersive::g_marker_far.store(
+            far && !far->empty() ? std::max(0.0f, std::strtof(far->c_str(), nullptr)) : 0.0f,
+            std::memory_order_relaxed);
     }
     // AzaharFrame kiumode: why Angel's Aim plays as Full (6DoF): Other Games here.
     const char* const as_other =

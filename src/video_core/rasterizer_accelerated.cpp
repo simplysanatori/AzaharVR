@@ -381,8 +381,16 @@ void RasterizerAccelerated::SetVRFactorY(float factor_y) {
 }
 
 bool RasterizerAccelerated::ReticleDraw() const {
+    const auto& t0 = regs.texturing.texture0;
+    if (regs.texturing.main_config.texture0_enable != 0 &&
+        VideoCore::Immersive::IsMarker(t0.GetPhysicalAddress()) &&
+        (t0.width != 256 || t0.height != 256 ||
+         regs.texturing.texture0_format != Pica::TexturingRegs::TextureFormat::ETC1A4)) {
+        return false; // AzaharVR Markers: not the markers' atlas
+    }
     return regs.texturing.main_config.texture0_enable != 0 &&
-           VideoCore::Immersive::ReticleScaled(regs.texturing.texture0.GetPhysicalAddress());
+           VideoCore::Immersive::DrawScale(regs.texturing.texture0.GetPhysicalAddress()) !=
+               1.0f; // AzaharFrame kiumark: and the markers
 }
 
 namespace {
@@ -813,22 +821,52 @@ void RasterizerAccelerated::TurnSoftwareVertices() {
         HudCensus("not hud");
     }
     // AzaharFrame kiu131: Reticle Size: the reticle's draw about its middle on the screen.
+    // AzaharFrame kiumark: a markers' draw holds several (6 vertices each): each about its own.
     if (!vertex_batch.empty() && ReticleDraw()) {
-        const float k = VideoCore::Immersive::g_reticle_scale.load(std::memory_order_relaxed);
-        float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f;
-        for (const auto& v : vertex_batch) {
-            if (v.position.w > 0.0f) {
-                x0 = std::min(x0, v.position.x / v.position.w);
-                x1 = std::max(x1, v.position.x / v.position.w);
-                y0 = std::min(y0, v.position.y / v.position.w);
-                y1 = std::max(y1, v.position.y / v.position.w);
+        const u32 tex = regs.texturing.texture0.GetPhysicalAddress();
+        const bool marker = VideoCore::Immersive::IsMarker(tex);
+        const float k = VideoCore::Immersive::DrawScale(tex);
+        const std::size_t group =
+            marker && vertex_batch.size() % 6 == 0 ? 6 : vertex_batch.size();
+        for (std::size_t first = 0; first < vertex_batch.size(); first += group) {
+            const auto begin = vertex_batch.begin() + first;
+            const auto end_it = begin + group;
+            float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f, w_sum = 0.0f;
+            int n = 0;
+            for (auto it = begin; it != end_it; ++it) {
+                if (it->position.w > 0.0f) {
+                    x0 = std::min(x0, it->position.x / it->position.w);
+                    x1 = std::max(x1, it->position.x / it->position.w);
+                    y0 = std::min(y0, it->position.y / it->position.w);
+                    y1 = std::max(y1, it->position.y / it->position.w);
+                    w_sum += it->position.w;
+                    ++n;
+                }
             }
-        }
-        if (x0 <= x1) {
-            const float cx = 0.5f * (x0 + x1), cy = 0.5f * (y0 + y1);
-            for (auto& v : vertex_batch) {
-                v.position.x = (cx + (v.position.x / v.position.w - cx) * k) * v.position.w;
-                v.position.y = (cy + (v.position.y / v.position.w - cy) * k) * v.position.w;
+            if (n == 0) {
+                continue;
+            }
+            float cx = 0.5f * (x0 + x1), cy = 0.5f * (y0 + y1);
+            float k_draw = k;
+            if (marker) {
+                const float drop =
+                    VideoCore::Immersive::g_marker_drop.load(std::memory_order_relaxed);
+                switch (VideoCore::Immersive::g_marker_anchor.load(std::memory_order_relaxed)) {
+                case 1: cx = x0 - drop * (x1 - x0); break;
+                case 2: cx = x1 + drop * (x1 - x0); break;
+                case 3: cy = y0 - drop * (y1 - y0); break;
+                case 4: cy = y1 + drop * (y1 - y0); break;
+                default: break;
+                }
+                const float far = VideoCore::Immersive::g_marker_far.load(std::memory_order_relaxed);
+                if (far > 0.0f) {
+                    k_draw *= std::clamp(far / (w_sum / static_cast<float>(n)), 0.25f, 1.0f);
+                }
+            }
+            for (auto it = begin; it != end_it; ++it) {
+                auto& v = *it;
+                v.position.x = (cx + (v.position.x / v.position.w - cx) * k_draw) * v.position.w;
+                v.position.y = (cy + (v.position.y / v.position.w - cy) * k_draw) * v.position.w;
             }
         }
     }

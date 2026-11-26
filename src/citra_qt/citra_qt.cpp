@@ -6475,6 +6475,9 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::KiuReticleSize:
         set(v.vr_kiu_reticle_size, std::clamp<u32>(u, 30, 150));
         break;
+    case S::KiuMarkerSize: // AzaharVR
+        set(v.vr_kiu_marker_size, std::clamp<u32>(u, 20, 100));
+        break;
     case S::WristSide: // global
         set(v.vr_wrist_side, std::min<u32>(u, 1));
         break;
@@ -9548,6 +9551,20 @@ int LaunchQtFrontend(int argc, char* argv[]) {
 
     auto rounding_policy = GetHighDpiRoundingPolicy();
     QApplication::setHighDpiScaleFactorRoundingPolicy(rounding_policy);
+
+#ifdef _WIN32 // AzaharVR: the menus at 150% when Windows itself scales nothing (100%, 96 DPI),
+              // unless QT_SCALE_FACTOR is set
+    if (qEnvironmentVariableIsEmpty("QT_SCALE_FACTOR")) {
+        DWORD dpi = 0;
+        DWORD size = sizeof(dpi);
+        const bool read = RegGetValueW(HKEY_CURRENT_USER, L"Control Panel\\Desktop\\WindowMetrics",
+                                       L"AppliedDPI", RRF_RT_REG_DWORD, nullptr, &dpi,
+                                       &size) == ERROR_SUCCESS;
+        if (!read || dpi <= 96) {
+            qputenv("QT_SCALE_FACTOR", "1.5");
+        }
+    }
+#endif
 
 #ifdef __APPLE__
     auto bundle_dir = FileUtil::GetBundleDirectory();

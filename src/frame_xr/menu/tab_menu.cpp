@@ -127,6 +127,7 @@ std::string SliderText(Id id, float value) {
         id == Id::WeaponOpacity || id == Id::ProjectileOpacity ||
         id == Id::MuzzleFlashSize || id == Id::HudSpacingX || id == Id::HudSpacingY ||
         id == Id::KiuBottomSize || id == Id::KiuBottomOpacity || id == Id::KiuReticleSize ||
+        id == Id::KiuMarkerSize || // AzaharVR
         id == Id::KiuTalkPortraitsOpacity || // AzaharFrame kiuaim
         id == Id::KiuPowerMenuOpacity || // AzaharFrame kiuaim
         id == Id::KiuHudOpacity || // AzaharFrame kiuhs3a
@@ -386,6 +387,9 @@ Row RowFor(Id id, const MenuModel& m) {
         break;
     case Id::KiuReticleSize:
         slider(m.kiu_reticle_size);
+        break;
+    case Id::KiuMarkerSize: // AzaharVR
+        slider(m.kiu_marker_size);
         break;
     default:
         break;
@@ -812,6 +816,7 @@ SettingsSection SectionOf(Id id) {
     case Id::KiuPortraitsAcross:
     case Id::KiuPortraitsHeight:
     case Id::KiuReticleSize:
+    case Id::KiuMarkerSize: // AzaharVR
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
     case Id::KiuSnapTurn:
@@ -930,6 +935,7 @@ bool PerGameSetting(Id id) {
     case Id::KiuPortraitsAcross:
     case Id::KiuPortraitsHeight:
     case Id::KiuReticleSize:
+    case Id::KiuMarkerSize: // AzaharVR
     case Id::KiuOverShoulder:
     case Id::KiuPitOpacity: // AzaharFrame kiu133
     case Id::KiuSnapTurn:
@@ -1148,6 +1154,7 @@ std::vector<Id> AngelsAimFirstPersonRows(const MenuModel& m) {
         }
     }
     rows.push_back(Id::KiuReticleSize);
+    rows.push_back(Id::KiuMarkerSize); // AzaharVR
     return rows;
 }
 
@@ -1668,6 +1675,8 @@ std::string LabelFor(Id id) {
         return kKiuPortraitsHeightRow;
     case Id::KiuReticleSize:
         return kReticleSizeRow;
+    case Id::KiuMarkerSize: // AzaharVR
+        return kMarkerSizeRow;
     case Id::KiuOverShoulder: // AzaharFrame kiu133
         return kCameraRow;
     case Id::KiuPitOpacity:
@@ -2195,6 +2204,8 @@ std::string ExplainFor(Id id) {
         return kKiuPortraitsHeightTip;
     case Id::KiuReticleSize:
         return kReticleSizeTip;
+    case Id::KiuMarkerSize: // AzaharVR
+        return kMarkerSizeTip;
     case Id::KiuOverShoulder: // AzaharFrame kiu133
         return kGameCameraOffered ? kCameraTipGame : kCameraTip;
     case Id::KiuPitOpacity:
@@ -2421,6 +2432,9 @@ SliderRange SliderFor(Id id) {
     }
     if (id == Id::KiuReticleSize) { // 30 to 150 %
         return {30.0f, 150.0f, 10.0f};
+    }
+    if (id == Id::KiuMarkerSize) { // AzaharVR: 20 to 100 %
+        return {20.0f, 100.0f, 5.0f};
     }
     if (id == Id::GbaSolarLevel) {
         return {0.0f, 10.0f, 1.0f};

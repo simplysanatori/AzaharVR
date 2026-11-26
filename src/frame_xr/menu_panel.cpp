@@ -428,6 +428,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::WristSide;
     case Id::KiuReticleSize:
         return MenuSetting::KiuReticleSize;
+    case Id::KiuMarkerSize: // AzaharVR
+        return MenuSetting::KiuMarkerSize;
     case Id::KiuOverShoulder:
         return MenuSetting::KiuOverShoulder;
     case Id::KiuPitOpacity: // AzaharFrame kiu133
@@ -1259,6 +1261,8 @@ void MenuPanel::BuildModel(const Host& host) {
     m.wrist_side = static_cast<int>(std::min<u32>(v.vr_wrist_side.GetValue(), 1));
     m.kiu_reticle_size =
         static_cast<int>(std::clamp<u32>(v.vr_kiu_reticle_size.GetValue(), 30, 150));
+    m.kiu_marker_size = // AzaharVR
+        static_cast<int>(std::clamp<u32>(v.vr_kiu_marker_size.GetValue(), 20, 100));
     m.kiu_view = Kiu::FirstPerson::ViewFor(v.vr_kiu_over_shoulder.GetValue(),
                                            v.vr_kiu_game_camera.GetValue()); // AzaharFrame kiu133
     m.kiu_pit_opacity =
@@ -2003,6 +2007,11 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = std::clamp(value, 30, 150);
         Apply(v.vr_kiu_reticle_size, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::KiuReticleSize;
+        break;
+    case Id::KiuMarkerSize: // AzaharVR
+        r.value = std::clamp(value, 20, 100);
+        Apply(v.vr_kiu_marker_size, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::KiuMarkerSize;
         break;
     case Id::WristSide: // global, every wrist display
         Apply(v.vr_wrist_side, std::min<u32>(u, 1), false);
