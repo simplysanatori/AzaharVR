@@ -866,6 +866,13 @@ Frontend::WindowSystemType FrameXrWindowSystemType() {
     if (platform == QStringLiteral("wayland") || platform == QStringLiteral("wayland-egl")) {
         return Frontend::WindowSystemType::Wayland;
     }
+#ifdef _WIN32 // AzaharVR: the shared Vulkan instance needs the window's surface extensions: SteamVR
+              // adds them itself, other runtimes (Virtual Desktop's) don't, and the game's window
+              // crashed at boot (issue #4)
+    if (platform == QStringLiteral("windows")) {
+        return Frontend::WindowSystemType::Windows;
+    }
+#endif
     return Frontend::WindowSystemType::Headless;
 }
 } // namespace
