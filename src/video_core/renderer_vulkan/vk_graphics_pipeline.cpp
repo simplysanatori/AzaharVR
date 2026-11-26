@@ -288,6 +288,14 @@ bool GraphicsPipeline::Build(bool fail_on_compile_required) {
         };
     }
 
+    // AzaharVR foveation: with the switch on, every pipeline takes the rate of a shading rate
+    // attachment when its pass has one (REPLACE; 1x1 when it has none). Off: nothing is chained.
+    vk::PipelineFragmentShadingRateStateCreateInfoKHR shading_rate_state{
+        .fragmentSize = {1, 1},
+    };
+    shading_rate_state.combinerOps[0] = vk::FragmentShadingRateCombinerOpKHR::eKeep;
+    shading_rate_state.combinerOps[1] = vk::FragmentShadingRateCombinerOpKHR::eReplace;
+
     vk::GraphicsPipelineCreateInfo pipeline_info = {
         .stageCount = shader_count,
         .pStages = shader_stages.data(),
@@ -303,6 +311,10 @@ bool GraphicsPipeline::Build(bool fail_on_compile_required) {
         .renderPass = renderpass_cache.GetRenderpass(info.state.attachments.color,
                                                      info.state.attachments.depth, false),
     };
+
+    if (instance.FoveationLevel() > 0) { // AzaharVR foveation
+        pipeline_info.pNext = &shading_rate_state;
+    }
 
     if (fail_on_compile_required) {
         pipeline_info.flags |= vk::PipelineCreateFlagBits::eFailOnPipelineCompileRequiredEXT;

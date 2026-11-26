@@ -5,9 +5,12 @@
 #pragma once
 
 #include <mutex>
+#include <vector>
 
 #include "common/math_util.h"
 #include "video_core/renderer_vulkan/vk_common.h"
+
+VK_DEFINE_HANDLE(VmaAllocation) // AzaharVR foveation
 
 namespace VideoCore {
 enum class PixelFormat : u32;
@@ -55,6 +58,13 @@ public:
     vk::RenderPass GetRenderpass(VideoCore::PixelFormat color, VideoCore::PixelFormat depth,
                                  bool is_clear);
 
+    /// AzaharVR foveation: the same render pass with a shading rate attachment as its last
+    /// attachment (the one view of GetShadingRateView).
+    vk::RenderPass GetRenderpassFsr(VideoCore::PixelFormat color, VideoCore::PixelFormat depth);
+
+    /// AzaharVR foveation: the rate image for a width x height picture (made once, kept).
+    vk::ImageView GetShadingRateView(u32 width, u32 height);
+
 private:
     /// Creates a renderpass configured appropriately and stores it in cached_renderpasses
     vk::UniqueRenderPass CreateRenderPass(vk::Format color, vk::Format depth,
@@ -64,6 +74,18 @@ private:
     const Instance& instance;
     Scheduler& scheduler;
     vk::UniqueRenderPass cached_renderpasses[NumColorFormats + 1][NumDepthFormats + 1][2];
+    // AzaharVR foveation
+    vk::UniqueRenderPass cached_fsr_renderpasses[NumColorFormats + 1][NumDepthFormats + 1];
+    struct RateImage {
+        u32 width{};
+        u32 height{};
+        vk::Image image;
+        vk::ImageView view;
+        VmaAllocation allocation{};
+        vk::Buffer staging;
+        VmaAllocation staging_allocation{};
+    };
+    std::vector<RateImage> rate_images;
     std::mutex cache_mutex;
     std::array<vk::Image, 2> images;
     std::array<vk::ImageAspectFlags, 2> aspects;

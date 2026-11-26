@@ -24,7 +24,10 @@
 #include "video_core/custom_textures/material.h"
 #include "video_core/rasterizer_cache/texture_codec.h"
 #include "video_core/rasterizer_cache/utils.h"
+#include "common/settings.h" // AzaharVR foveation
 #include "video_core/renderer_vulkan/pica_to_vk.h"
+#include "video_core/renderer_vulkan/vk_foveation.h"
+#include "video_core/vr_immersive.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_render_manager.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
@@ -1531,7 +1534,7 @@ Framebuffer::Framebuffer(TextureRuntime& runtime, const VideoCore::FramebufferPa
     width = height = std::numeric_limits<u32>::max();
 
     u32 num_attachments{};
-    std::array<vk::ImageView, 2> attachments;
+    std::array<vk::ImageView, 3> attachments; // AzaharVR foveation: and the rate image
 
     const auto prepare = [&](u32 index, Surface* surface) {
         const auto extent = surface->RealExtent();
@@ -1562,6 +1565,14 @@ Framebuffer::Framebuffer(TextureRuntime& runtime, const VideoCore::FramebufferPa
             attachments[num_attachments++] = image_views[1];
         }
         render_pass = renderpass_cache.GetRenderpass(formats[0], formats[1], false);
+        // AzaharVR foveation: the eye picture of the immersive view gets the rate image.
+        if (color && instance.FoveationLevel() > 0 &&
+            VideoCore::Immersive::g_xr_active.load(std::memory_order_relaxed) &&
+            Settings::values.vr_immersive_mode.GetValue() != 0 && color_level == 0 &&
+            VideoCore::Foveation::IsEyePicture(width, height, res_scale)) {
+            render_pass = renderpass_cache.GetRenderpassFsr(formats[0], formats[1]);
+            attachments[num_attachments++] = renderpass_cache.GetShadingRateView(width, height);
+        }
     }
 
     const vk::FramebufferCreateInfo framebuffer_info = {

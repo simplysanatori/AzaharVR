@@ -13,6 +13,7 @@
 #include "common/stall_telemetry.h" // AzaharFrame
 #include "core/frontend/emu_window.h"
 #include "video_core/custom_textures/custom_format.h"
+#include "video_core/renderer_vulkan/vk_foveation.h" // AzaharVR foveation
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_platform.h"
 #include "video_core/vulkan_hooks.h" // AzaharFrame
@@ -492,12 +493,14 @@ bool Instance::CreateDevice() {
         vk::PhysicalDeviceRobustness2FeaturesEXT,
         vk::PhysicalDeviceFragmentShaderInterlockFeaturesEXT,
         vk::PhysicalDevicePipelineCreationCacheControlFeaturesEXT,
-        vk::PhysicalDeviceFragmentShaderBarycentricFeaturesKHR>();
+        vk::PhysicalDeviceFragmentShaderBarycentricFeaturesKHR,
+        vk::PhysicalDeviceFragmentShadingRateFeaturesKHR>(); // AzaharVR foveation
     const vk::StructureChain properties_chain =
         physical_device
             .getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceDriverProperties,
                             vk::PhysicalDevicePortabilitySubsetPropertiesKHR,
-                            vk::PhysicalDeviceExternalMemoryHostPropertiesEXT>();
+                            vk::PhysicalDeviceExternalMemoryHostPropertiesEXT,
+                            vk::PhysicalDeviceFragmentShadingRatePropertiesKHR>(); // AzaharVR
     const vk::PhysicalDeviceDriverProperties driver =
         properties_chain.get<vk::PhysicalDeviceDriverProperties>();
 
@@ -510,7 +513,7 @@ bool Instance::CreateDevice() {
         return false;
     }
 
-    boost::container::static_vector<const char*, 13> enabled_extensions;
+    boost::container::static_vector<const char*, 16> enabled_extensions;
     const auto add_extension = [&](std::string_view extension, bool blacklist = false,
                                    std::string_view reason = "") -> bool {
         const auto result =
@@ -566,6 +569,15 @@ bool Instance::CreateDevice() {
     const bool has_fragment_shader_barycentric =
         add_extension(VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME, is_moltenvk,
                       "the PerVertexKHR attribute is not supported by MoltenVK");
+
+    // AzaharVR foveation: a shading rate attachment (AZAHARFRAME_XR_FOVEATION=1|2). Asked for
+    // only when the switch is on, so with it off the device is made exactly as before.
+    const int foveation_asked = VideoCore::Foveation::LevelFromEnv();
+    bool has_fsr = false;
+    if (foveation_asked > 0) {
+        const bool has_rp2 = add_extension(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+        has_fsr = has_rp2 && add_extension(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+    }
 
     const auto family_properties = physical_device.getQueueFamilyProperties();
     if (family_properties.empty()) {
@@ -630,6 +642,7 @@ bool Instance::CreateDevice() {
         vk::PhysicalDeviceFragmentShaderInterlockFeaturesEXT{},
         vk::PhysicalDevicePipelineCreationCacheControlFeaturesEXT{},
         vk::PhysicalDeviceFragmentShaderBarycentricFeaturesKHR{},
+        vk::PhysicalDeviceFragmentShadingRateFeaturesKHR{}, // AzaharVR foveation
     };
 
 #define PROP_GET(structName, prop, property) property = properties_chain.get<structName>().prop;
@@ -713,6 +726,36 @@ bool Instance::CreateDevice() {
                  fragment_shader_barycentric)
     } else {
         device_chain.unlink<vk::PhysicalDeviceFragmentShaderBarycentricFeaturesKHR>();
+    }
+
+    // AzaharVR foveation: needs both the pipeline and the attachment rates (and a texel size).
+    if (has_fsr) {
+        const auto& f = feature_chain.get<vk::PhysicalDeviceFragmentShadingRateFeaturesKHR>();
+        const auto& p = properties_chain.get<vk::PhysicalDeviceFragmentShadingRatePropertiesKHR>();
+        if (f.pipelineFragmentShadingRate && f.attachmentFragmentShadingRate) {
+            device_chain.get<vk::PhysicalDeviceFragmentShadingRateFeaturesKHR>()
+                .pipelineFragmentShadingRate = true;
+            device_chain.get<vk::PhysicalDeviceFragmentShadingRateFeaturesKHR>()
+                .attachmentFragmentShadingRate = true;
+            fsr_texel_min = p.minFragmentShadingRateAttachmentTexelSize.width;
+            fsr_texel_max = p.maxFragmentShadingRateAttachmentTexelSize.width;
+            fragment_shading_rate = fsr_texel_min > 0 && fsr_texel_min <= fsr_texel_max;
+        }
+    }
+    if (!fragment_shading_rate) {
+        device_chain.unlink<vk::PhysicalDeviceFragmentShadingRateFeaturesKHR>();
+    }
+    if (fragment_shading_rate) {
+        foveation_level = foveation_asked;
+        LOG_INFO(Render_Vulkan, "foveation: on, level {}, shading rate attachment texel {}x{}",
+                 foveation_level, FragmentShadingRateTexelSize(), FragmentShadingRateTexelSize());
+    } else if (foveation_asked > 0) {
+        LOG_INFO(Render_Vulkan,
+                 "foveation: level {} asked, but the device has no fragment shading rate "
+                 "attachment; foveation off",
+                 foveation_asked);
+    } else {
+        LOG_INFO(Render_Vulkan, "foveation: off (AZAHARFRAME_XR_FOVEATION not set)");
     }
 
 #undef PROP_GET

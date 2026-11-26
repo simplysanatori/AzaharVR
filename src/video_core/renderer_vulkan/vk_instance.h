@@ -156,6 +156,22 @@ public:
         return null_descriptor;
     }
 
+    /// AzaharVR foveation: true when AZAHARFRAME_XR_FOVEATION asked for it and the device has
+    /// the fragment shading rate attachment (with a texel size).
+    bool IsFragmentShadingRateSupported() const {
+        return fragment_shading_rate;
+    }
+
+    /// AzaharVR foveation: 0 (off), 1 or 2.
+    int FoveationLevel() const {
+        return foveation_level;
+    }
+
+    /// AzaharVR foveation: the attachment's texel size (square): 16 when the device allows it.
+    u32 FragmentShadingRateTexelSize() const {
+        return std::min(std::max(16u, fsr_texel_min), fsr_texel_max);
+    }
+
     /// Returns true when VK_EXT_fragment_shader_interlock is supported
     bool IsFragmentShaderInterlockSupported() const {
         return fragment_shader_interlock;
@@ -338,6 +354,10 @@ protected:
     bool image_format_list{};
     bool pipeline_creation_cache_control{};
     bool fragment_shader_barycentric{};
+    bool fragment_shading_rate{}; // AzaharVR foveation
+    int foveation_level{};
+    u32 fsr_texel_min{};
+    u32 fsr_texel_max{};
     bool shader_stencil_export{};
     bool external_memory_host{};
     u64 min_imported_host_pointer_alignment{};
