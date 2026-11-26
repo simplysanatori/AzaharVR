@@ -305,7 +305,7 @@ enum class Id : int {
     KiuBottomReset,   ///< a button: Persistent back to its place (vr_kiu_bottom_x, _y)
     WristSide,        ///< index: 0 Back, 1 Inside (vr_wrist_side), global, the Stats tab
     KiuReticleSize,   ///< a slider, 30 to 150 (percent): the game's reticle in first person
-    KiuMarkerSize,    ///< AzaharVR: a slider, 20 to 100 (percent): the markers over enemies
+    KiuMarkerSize,    ///< AzaharVR: a slider, 20 to 100 (percent), 15 Off: the markers over enemies
     KiuPitOpacity,    ///< AzaharFrame kiu133: a slider, 20 to 100 (percent), with Camera not First Person
     KiuWristAngle, ///< AzaharFrame kiu140: a slider, 0 to 360 degrees, with Wrist (vr_kiu_wrist_angle)
     KiuWristAlong, ///< AzaharFrame kiu140: a slider, -12 to 25 cm, with Wrist (vr_kiu_wrist_along)

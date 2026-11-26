@@ -1262,7 +1262,7 @@ void MenuPanel::BuildModel(const Host& host) {
     m.kiu_reticle_size =
         static_cast<int>(std::clamp<u32>(v.vr_kiu_reticle_size.GetValue(), 30, 150));
     m.kiu_marker_size = // AzaharVR
-        static_cast<int>(std::clamp<u32>(v.vr_kiu_marker_size.GetValue(), 20, 100));
+        static_cast<int>(std::clamp<u32>(v.vr_kiu_marker_size.GetValue(), 15, 100));
     m.kiu_view = Kiu::FirstPerson::ViewFor(v.vr_kiu_over_shoulder.GetValue(),
                                            v.vr_kiu_game_camera.GetValue()); // AzaharFrame kiu133
     m.kiu_pit_opacity =
@@ -2009,7 +2009,7 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.setting = MenuSetting::KiuReticleSize;
         break;
     case Id::KiuMarkerSize: // AzaharVR
-        r.value = std::clamp(value, 20, 100);
+        r.value = std::clamp(value, 15, 100);
         Apply(v.vr_kiu_marker_size, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::KiuMarkerSize;
         break;

@@ -941,6 +941,9 @@ void Hook(int64_t ticks) {
         }
         const auto text = Switch("AZAHARFRAME_KIU_MARKER_SIZE");
         float pct = static_cast<float>(Settings::values.vr_kiu_marker_size.GetValue());
+        if (pct < 17.5f) {
+            pct = 0.0f; // Off: drawn at no size
+        }
         if (text && !text->empty()) {
             pct = std::clamp(std::strtof(text->c_str(), nullptr), 10.0f, 300.0f);
         }

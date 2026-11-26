@@ -428,7 +428,7 @@ enum class MenuSetting {
     KiuBottomY,      ///< `value` tenths of a degree (vr_kiu_bottom_y)
     WristSide,       ///< `value` 0 Back, 1 Inside (vr_wrist_side, global)
     KiuReticleSize,  ///< `value` percent, 30 to 150 (vr_kiu_reticle_size)
-    KiuMarkerSize,   ///< AzaharVR: `value` percent, 20 to 100 (vr_kiu_marker_size)
+    KiuMarkerSize,   ///< AzaharVR: `value` percent, 20 to 100, 15 Off (vr_kiu_marker_size)
     KiuOverShoulder, ///< `value` Camera: 0 First Person, 1 Third Person, 2 Game's Camera
                      ///< (vr_kiu_over_shoulder, vr_kiu_game_camera; AzaharFrame kiu133)
     KiuPitOpacity,   ///< `value` percent, 20 to 100 (vr_kiu_pit_opacity; AzaharFrame kiu133)

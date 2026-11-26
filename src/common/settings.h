@@ -1230,8 +1230,8 @@ struct Values {
     // AzaharFrame kiu131: Reticle Size: the game's own reticle in Angel's Aim's first person, in
     // percent about its middle.
     SwitchableSetting<u32, true> vr_kiu_reticle_size{100, 30, 150, "vr_kiu_reticle_size"};
-    /// AzaharVR: Markers: the markers over enemies in first person, percent
-    SwitchableSetting<u32, true> vr_kiu_marker_size{30, 20, 100, "vr_kiu_marker_size"};
+    /// AzaharVR: Markers: the markers over enemies in first person, percent (15: Off)
+    SwitchableSetting<u32, true> vr_kiu_marker_size{30, 15, 100, "vr_kiu_marker_size"};
     /// AzaharFrame kiu133: the View row's third choice, the Game's Camera (Angel's Aim; wins
     /// over vr_kiu_over_shoulder; Kiu::FirstPerson::ViewFor), and Pit Opacity (percent, 20 to
     /// 100) in the views from outside Pit.

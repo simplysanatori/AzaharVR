@@ -174,6 +174,9 @@ std::string SliderText(Id id, float value) {
     if (id == Id::LayerDepth && value < 0.5f) {
         return "Off";
     }
+    if (id == Id::KiuMarkerSize && value < 17.5f) { // AzaharVR: Markers' Off
+        return "Off";
+    }
     if (id == Id::AutosaveEvery) { // AzaharFrame autosave: the stop's minutes
         const int i = std::clamp(static_cast<int>(std::lround(value)), 0,
                                  static_cast<int>(kAutosaveEvery.size()) - 1);
@@ -2433,8 +2436,8 @@ SliderRange SliderFor(Id id) {
     if (id == Id::KiuReticleSize) { // 30 to 150 %
         return {30.0f, 150.0f, 10.0f};
     }
-    if (id == Id::KiuMarkerSize) { // AzaharVR: 20 to 100 %
-        return {20.0f, 100.0f, 5.0f};
+    if (id == Id::KiuMarkerSize) { // AzaharVR: Off (15), then 20 to 100 %
+        return {15.0f, 100.0f, 5.0f};
     }
     if (id == Id::GbaSolarLevel) {
         return {0.0f, 10.0f, 1.0f};

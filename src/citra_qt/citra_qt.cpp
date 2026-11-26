@@ -6476,7 +6476,7 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
         set(v.vr_kiu_reticle_size, std::clamp<u32>(u, 30, 150));
         break;
     case S::KiuMarkerSize: // AzaharVR
-        set(v.vr_kiu_marker_size, std::clamp<u32>(u, 20, 100));
+        set(v.vr_kiu_marker_size, std::clamp<u32>(u, 15, 100));
         break;
     case S::WristSide: // global
         set(v.vr_wrist_side, std::min<u32>(u, 1));
