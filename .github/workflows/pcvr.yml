@@ -59,7 +59,9 @@ jobs:
           path: artifacts/azahar-vr-linux-x86_64.tar.gz
 
   windows-msvc:
-    runs-on: windows-latest
+    # Visual Studio 2022: windows-latest moved to Visual Studio 2026, whose STL wants clang-cl 22
+    # or newer, and its LLVM is 20 (the DS and GBA cores).
+    runs-on: windows-2025
     timeout-minutes: 180
     strategy:
       fail-fast: false
