@@ -249,15 +249,8 @@ bool Runtime::CreateXrInstance(bool renew) {
             if (offers("XR_EXT_eye_gaze_interaction") && !HasExtension("XR_EXT_eye_gaze_interaction")) {
                 enabled_extensions.push_back("XR_EXT_eye_gaze_interaction");
             }
-            if (offers("XR_META_foveation_eye_tracked") && offers("XR_FB_foveation") &&
-                offers("XR_FB_foveation_configuration")) {
-                for (const char* n : {"XR_FB_foveation", "XR_FB_foveation_configuration",
-                                      "XR_META_foveation_eye_tracked"}) {
-                    if (!HasExtension(n)) {
-                        enabled_extensions.push_back(n);
-                    }
-                }
-            }
+            // Not XR_META_foveation_eye_tracked: its XR_FB_foveation needs more extensions (and
+            // swapchains made for it); SteamVR on the Frame refused the instance with it.
             LOG_INFO(Frontend, "xr: foveation gaze: the runtime offers eye gaze interaction {}, "
                                "eye tracked foveation {}",
                      offers("XR_EXT_eye_gaze_interaction") ? "yes" : "no",
@@ -294,6 +287,22 @@ bool Runtime::CreateXrInstance(bool renew) {
     ci.enabledExtensionCount = static_cast<uint32_t>(names.size());
     ci.enabledExtensionNames = names.data();
     r = xr.xrCreateInstance(&ci, &instance);
+    if (XR_FAILED(r) && !renew) { // AzaharVR foveation: never a reason to run flat
+        const auto gaze = std::find(enabled_extensions.begin(), enabled_extensions.end(),
+                                    std::string{"XR_EXT_eye_gaze_interaction"});
+        if (gaze != enabled_extensions.end()) {
+            LOG_WARNING(Frontend, "xr: xrCreateInstance with eye gaze: {}; again without it",
+                        ResultName(r));
+            enabled_extensions.erase(gaze);
+            names.clear();
+            for (const auto& n : enabled_extensions) {
+                names.push_back(n.c_str());
+            }
+            ci.enabledExtensionCount = static_cast<uint32_t>(names.size());
+            ci.enabledExtensionNames = names.data();
+            r = xr.xrCreateInstance(&ci, &instance);
+        }
+    }
     if (XR_FAILED(r)) {
         LOG_ERROR(Frontend, "xr: xrCreateInstance: {}", ResultName(r));
         instance = XR_NULL_HANDLE;
