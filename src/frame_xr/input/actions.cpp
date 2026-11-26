@@ -544,7 +544,8 @@ bool Actions::LocateGaze(XrSession session, XrSpace view_space, XrTime time, flo
     }
     XrSpaceLocation loc{XR_TYPE_SPACE_LOCATION};
     if (XR_FAILED(xrLocateSpace(impl_->gaze_space, view_space, time, &loc)) ||
-        !(loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT)) {
+        !(loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) ||
+        !(loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_TRACKED_BIT)) { // AzaharVR: a real gaze
         return false;
     }
     const XrQuaternionf& q = loc.pose.orientation; // the gaze looks along its -Z

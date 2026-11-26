@@ -1582,7 +1582,13 @@ static void SampleFoveationGaze(Runtime& rt, const FrameInfo& info, Input::Actio
     Source source = Source::None;
     const ViewPose vp = LatestViewPose();
     auto& fn = FrameXr::Xr();
-    if (fn.xrGetFoveationEyeTrackedStateMETA && rt.HasExtension("XR_META_foveation_eye_tracked")) {
+    // AzaharVR: SteamVR's eye gaze (Valve's eye tracking path) first; the eye tracked
+    // foveation state only when it gives none
+    if (actions_ok && actions.LocateGaze(info.session, info.view_space, info.display_time, tx, ty)) {
+        valid = true;
+        source = Source::Ext;
+    }
+    if (!valid && fn.xrGetFoveationEyeTrackedStateMETA && rt.HasExtension("XR_META_foveation_eye_tracked")) {
         XrFoveationEyeTrackedStateMETA state{XR_TYPE_FOVEATION_EYE_TRACKED_STATE_META};
         if (XR_SUCCEEDED(fn.xrGetFoveationEyeTrackedStateMETA(info.session, &state)) &&
             (state.flags & XR_FOVEATION_EYE_TRACKED_STATE_VALID_BIT_META)) {
@@ -1599,10 +1605,6 @@ static void SampleFoveationGaze(Runtime& rt, const FrameInfo& info, Input::Actio
             valid = true;
             source = Source::Meta;
         }
-    }
-    if (!valid && actions_ok && actions.LocateGaze(info.session, info.view_space, info.display_time, tx, ty)) {
-        valid = true;
-        source = Source::Ext;
     }
     Publish(valid, tx, ty, source);
     if (valid && static_cast<int>(source) != last_source) {
