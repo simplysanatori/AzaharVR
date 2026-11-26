@@ -666,8 +666,8 @@ void FrameMods::RefreshAngelsAim() {
          downloads = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation).toStdString()] {
             Menu::AngelsAimModel m;
             m.shown = true;
-            m.recommended = FrameXr::Kiu::IsAngelsAimTitle(tid); // kiufix2: Europe only
-            m.mapped = m.recommended; // AzaharFrame kiu132: first person's rows (Europe only)
+            m.recommended = FrameXr::Kiu::IsAngelsAimTitle(tid); // kiufix2: Europe, AzaharVR: and USA Rev 1
+            m.mapped = m.recommended; // AzaharFrame kiu132: first person's rows (Europe, USA Rev 1)
             m.mod_installed = FrameXr::CStickModInstalled(tid);
             m.textures_pack = AngelsAimPackOn(tid);
             m.hand_installed = FrameXr::Vis::HandFileExists(

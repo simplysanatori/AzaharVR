@@ -121,7 +121,7 @@ constexpr ImmersivePreset kAsphalt3D{
 // the reticle stays on the screen: they come apart whenever the head turns. Full (6DoF): Angel's
 // Aim (Immersive::Names::kModeAngelsAim, stored 4) is the mode that keeps them together: it
 // brings first person, the aim from the hand and its own registers in memory. So (the owner's
-// decision, 2026-11-18) the European game starts in it (the only region it is mapped for; the
+// decision, 2026-11-18) the European game and USA Rev 1 start in it (the regions it is mapped for; the
 // others keep the normal view), for a player with no Immersive Mode of their own
 // for the game (ApplyPresetSettings); a mode the player chose, Off included, stays. Registers:
 // none (-1); Angel's Aim supplies its own.
@@ -183,8 +183,8 @@ constexpr ImmersivePresetTitle kTitles[] = {
     // (not in the compatibility list). AzaharFrame kiu: and 0004000000030000, Japan as the
     // C-Stick & Gyro mod lists it.
     {0x0004000000030000, &kKidIcarusUprisingOtherRegion},
-    {0x0004000000030100, &kKidIcarusUprisingOtherRegion},
-    {0x0004000000030200, &kKidIcarusUprising}, // Europe: the only region Angel's Aim is mapped for
+    {0x0004000000030100, &kKidIcarusUprising}, // AzaharVR: USA Rev 1, mapped too (kiuusa)
+    {0x0004000000030200, &kKidIcarusUprising}, // Europe
     {0x0004000000030300, &kKidIcarusUprisingOtherRegion},
 };
 

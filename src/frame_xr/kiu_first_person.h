@@ -198,7 +198,8 @@ constexpr bool OnFor(bool dev_switch, uint32_t stored_mode, uint64_t title, bool
 constexpr bool LeaveOutCStickModFor(bool installed, uint32_t stored_mode, uint64_t title,
                                     bool in_vr) {
     return installed && in_vr && stored_mode == kModeAngelsAim &&
-           title == Input::KiuTurn::kTitleEur;
+           (title == Input::KiuTurn::kTitleEur ||
+            title == Input::KiuTurn::kTitleUsa); // AzaharVR: USA Rev 1 too
 }
 /// AzaharFrame kiu132: a C-Stick mod loaded in this run keeps Angel's Aim out (a stored 4 then
 /// plays as Other Games, as with any other code): Angel's Aim asked for now (the stored mode 4,

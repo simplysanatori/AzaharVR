@@ -866,7 +866,7 @@ TEST_CASE("FrameXr C-Stick mods: the files a run in Angel's Aim leaves out",
     CHECK(FP::LeaveOutCStickModFor(true, 4, kEur, true));
     CHECK_FALSE(FP::LeaveOutCStickModFor(false, 4, kEur, true)); // no mod
     CHECK_FALSE(FP::LeaveOutCStickModFor(true, 4, kEur, false)); // Flat: the mod aims
-    CHECK_FALSE(FP::LeaveOutCStickModFor(true, 4, kUsa, true));  // a stored 4 is Other Games
+    CHECK(FP::LeaveOutCStickModFor(true, 4, kUsa, true)); // AzaharVR: USA Rev 1 is mapped too
     for (const uint32_t mode : {0u, 1u, 2u, 3u}) {
         INFO("mode " << mode);
         CHECK_FALSE(FP::LeaveOutCStickModFor(true, mode, kEur, true));
