@@ -3747,6 +3747,9 @@ void ControllerModels::Record(const ViewPose& views, const std::array<Hand, 2>& 
                 }
                 continue;
             }
+            if (!g_frame_controller_models.load(std::memory_order_relaxed)) {
+                continue; // AzaharVR: not a Steam Frame controller: no model of it
+            }
             const ModelFile& m = f.hand[static_cast<std::size_t>(h)];
             const Gpu::HandGpu& hg = g.hands[static_cast<std::size_t>(h)];
             const XrPosef aim = ToXr(hand.aim);

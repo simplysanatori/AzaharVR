@@ -63,6 +63,10 @@ std::string ControllerModelDir();
 /// Reads both hands' files from it (any thread). False with the file and the reason in `error`.
 bool ReadControllerModels(std::array<ModelFile, 2>& files, std::string& error);
 
+/// AzaharVR: the Steam Frame's controller models are drawn only for its controllers (the
+/// controls' scheme, XR thread); other controllers draw none. A weapon and Pit's hand still are.
+inline std::atomic<bool> g_frame_controller_models{true};
+
 class ControllerModels {
 public:
     ControllerModels();

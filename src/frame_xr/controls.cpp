@@ -24,6 +24,7 @@
 #include "common/logging/log.h"
 #include "common/settings.h" // AzaharFrame curve
 #include "frame_xr/controls.h"
+#include "frame_xr/vis/controller_models.h" // AzaharVR
 #include "frame_xr/kiu_first_person.h" // AzaharFrame kiuvr
 #include "frame_xr/kiu_powers_live.h" // AzaharFrame kiupowers
 #include "frame_xr/kiu_probe.h"     // AzaharFrame kiugyro: Light Gun
@@ -1666,6 +1667,9 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
                  profile.empty() ? std::string{"none"} : profile,
                  Input::SchemeTable(scheme).name);
         controller_scheme = scheme;
+        // AzaharVR: no Steam Frame controller models in other controllers' place
+        Vis::g_frame_controller_models.store(scheme == Input::ControllerScheme::Frame,
+                                             std::memory_order_relaxed);
     }
     bridge.pc().SetScheme(controller_scheme);
     if (have_input) {
