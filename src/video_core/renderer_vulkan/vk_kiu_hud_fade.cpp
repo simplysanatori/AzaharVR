@@ -208,7 +208,7 @@ vk::Pipeline KiuHudFade::PipelineFor(const Framebuffer* target) {
         .pColorBlendState = &blending,
         .pDynamicState = &dynamic,
         .layout = layout,
-        .renderPass = renderpass_cache.GetRenderpass(color, depth, false),
+        .renderPass = renderpass_cache.GetDrawRenderpass(color, depth), // AzaharVR foveation
     };
     const auto [result, pipeline] = device.createGraphicsPipeline({}, info);
     ASSERT_MSG(result == vk::Result::eSuccess, "Unable to build the HUD's pipeline");

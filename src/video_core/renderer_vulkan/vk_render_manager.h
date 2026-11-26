@@ -62,8 +62,18 @@ public:
     /// attachment (the one view of GetShadingRateView).
     vk::RenderPass GetRenderpassFsr(VideoCore::PixelFormat color, VideoCore::PixelFormat depth);
 
+    /// AzaharVR foveation: the render pass the game's framebuffers and pipelines use: with the
+    /// switch on, GetRenderpassFsr (a pass with a shading rate attachment is only compatible
+    /// with pipelines made for one), else GetRenderpass(color, depth, false). Shadow passes (no
+    /// attachment) keep the plain pass.
+    vk::RenderPass GetDrawRenderpass(VideoCore::PixelFormat color, VideoCore::PixelFormat depth);
+
     /// AzaharVR foveation: the rate image for a width x height picture (made once, kept).
     vk::ImageView GetShadingRateView(u32 width, u32 height);
+
+    /// AzaharVR foveation: a rate image of 1x1 everywhere, as large as the largest framebuffer:
+    /// for the passes of the switch's render pass that are not the eye picture.
+    vk::ImageView GetFullRateView();
 
     /// AzaharVR foveation: moves the full rate area to the gaze (or straight ahead) when it moved
     /// by a texel or more. Ends the pass in progress when it does; call before beginning one.
@@ -93,6 +103,7 @@ private:
     /// Records the upload of a rate image's rates (first: its layout is undefined).
     void RecordRateUpload(const RateImage& r, std::vector<u8> data, bool first);
     std::vector<RateImage> rate_images;
+    RateImage full_rate; ///< AzaharVR foveation: GetFullRateView's (no staging buffer)
     std::mutex cache_mutex;
     std::array<vk::Image, 2> images;
     std::array<vk::ImageAspectFlags, 2> aspects;

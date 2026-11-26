@@ -35,6 +35,11 @@ RenderManager::~RenderManager() {
         vmaDestroyBuffer(instance.GetAllocator(), static_cast<VkBuffer>(r.staging),
                          r.staging_allocation);
     }
+    if (full_rate.image) {
+        instance.GetDevice().destroyImageView(full_rate.view);
+        vmaDestroyImage(instance.GetAllocator(), static_cast<VkImage>(full_rate.image),
+                        full_rate.allocation);
+    }
 }
 
 void RenderManager::BeginRendering(const Framebuffer* framebuffer,
@@ -204,9 +209,19 @@ u32 CentreKey(float cx, float cy, u32 w, u32 h) {
 }
 } // namespace
 
+vk::RenderPass RenderManager::GetDrawRenderpass(VideoCore::PixelFormat color,
+                                                VideoCore::PixelFormat depth) {
+    if (instance.FoveationLevel() > 0 &&
+        (color != VideoCore::PixelFormat::Invalid || depth != VideoCore::PixelFormat::Invalid)) {
+        return GetRenderpassFsr(color, depth);
+    }
+    return GetRenderpass(color, depth, false);
+}
+
 // AzaharVR foveation: the render pass of GetRenderpass(color, depth, false) plus a shading rate
-// attachment (read only, kept in its layout). Pipelines made for the plain pass are used with it:
-// the attachment is not part of a render pass's compatibility.
+// attachment (read only, kept in its layout). A pass with the attachment is not compatible with
+// one without it, so with the switch on every game framebuffer and pipeline uses this pass
+// (GetDrawRenderpass); the passes that are not the eye picture get GetFullRateView's image.
 vk::RenderPass RenderManager::GetRenderpassFsr(VideoCore::PixelFormat color,
                                                VideoCore::PixelFormat depth) {
     std::scoped_lock lock{cache_mutex};
@@ -356,6 +371,73 @@ vk::ImageView RenderManager::GetShadingRateView(u32 width, u32 height) {
     std::scoped_lock lock{cache_mutex};
     rate_images.push_back(r);
     return r.view;
+}
+
+vk::ImageView RenderManager::GetFullRateView() {
+    std::scoped_lock lock{cache_mutex};
+    if (full_rate.image) {
+        return full_rate.view;
+    }
+    const u32 texel = instance.FragmentShadingRateTexelSize();
+    const auto& limits = instance.GetPhysicalDevice().getProperties().limits;
+    const u32 w = (std::min(limits.maxFramebufferWidth, 16384u) + texel - 1) / texel;
+    const u32 h = (std::min(limits.maxFramebufferHeight, 16384u) + texel - 1) / texel;
+    const VkImageCreateInfo image_info = static_cast<VkImageCreateInfo>(vk::ImageCreateInfo{
+        .imageType = vk::ImageType::e2D,
+        .format = vk::Format::eR8Uint,
+        .extent = {w, h, 1},
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = vk::SampleCountFlagBits::e1,
+        .tiling = vk::ImageTiling::eOptimal,
+        .usage = vk::ImageUsageFlagBits::eFragmentShadingRateAttachmentKHR |
+                 vk::ImageUsageFlagBits::eTransferDst,
+        .initialLayout = vk::ImageLayout::eUndefined,
+    });
+    const VmaAllocationCreateInfo alloc_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+    VkImage raw_image{};
+    const VkResult result = vmaCreateImage(instance.GetAllocator(), &image_info, &alloc_info,
+                                           &raw_image, &full_rate.allocation, nullptr);
+    ASSERT_MSG(result == VK_SUCCESS, "foveation: the full rate image could not be made");
+    full_rate.image = vk::Image{raw_image};
+    full_rate.view = instance.GetDevice().createImageView({
+        .image = full_rate.image,
+        .viewType = vk::ImageViewType::e2D,
+        .format = vk::Format::eR8Uint,
+        .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
+    });
+    // 0 is the 1x1 rate. A clear: the image is far larger than an update can write.
+    EndRendering();
+    scheduler.Record([image = full_rate.image](vk::CommandBuffer cmdbuf) {
+        const vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        const vk::ImageMemoryBarrier to_clear{
+            .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .oldLayout = vk::ImageLayout::eUndefined,
+            .newLayout = vk::ImageLayout::eTransferDstOptimal,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = image,
+            .subresourceRange = range,
+        };
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
+                               vk::PipelineStageFlagBits::eTransfer, {}, {}, {}, to_clear);
+        const vk::ClearColorValue zero{}; // all bits 0: the rate 1x1
+        cmdbuf.clearColorImage(image, vk::ImageLayout::eTransferDstOptimal, zero, range);
+        const vk::ImageMemoryBarrier to_rate{
+            .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .dstAccessMask = vk::AccessFlagBits::eFragmentShadingRateAttachmentReadKHR,
+            .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+            .newLayout = vk::ImageLayout::eFragmentShadingRateAttachmentOptimalKHR,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = image,
+            .subresourceRange = range,
+        };
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                               vk::PipelineStageFlagBits::eFragmentShadingRateAttachmentKHR, {},
+                               {}, {}, to_rate);
+    });
+    return full_rate.view;
 }
 
 void RenderManager::RecordRateUpload(const RateImage& r, std::vector<u8> data, bool first) {

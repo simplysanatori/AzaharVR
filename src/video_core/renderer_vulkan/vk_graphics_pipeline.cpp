@@ -308,8 +308,8 @@ bool GraphicsPipeline::Build(bool fail_on_compile_required) {
         .pColorBlendState = &color_blending,
         .pDynamicState = &dynamic_info,
         .layout = pipeline_layout,
-        .renderPass = renderpass_cache.GetRenderpass(info.state.attachments.color,
-                                                     info.state.attachments.depth, false),
+        .renderPass = renderpass_cache.GetDrawRenderpass(info.state.attachments.color, // AzaharVR
+                                                         info.state.attachments.depth),
     };
 
     if (instance.FoveationLevel() > 0) { // AzaharVR foveation
