@@ -470,18 +470,18 @@ void CheckAimTuningGiven() {
     auto& v = Settings::values;
     CHECK(!v.vr_light_gun_lock.GetValue());
     CHECK(!v.vr_light_gun_lock.UsingGlobal());
-    CHECK(v.vr_light_gun_turn_speed.GetValue() == 1.8f);
+    CHECK(v.vr_light_gun_turn_speed.GetValue() == 2.0f);
     CHECK(!v.vr_light_gun_turn_speed.UsingGlobal());
     CHECK(v.vr_light_gun_turn_speed.GetValue(true) == 1.0f); // the global value stays
     CHECK(v.vr_light_gun_turn_speed_vertical.GetValue() == 1.0f);
     CHECK(!v.vr_light_gun_turn_speed_vertical.UsingGlobal());
     CHECK(v.vr_light_gun_turn_zone.GetValue() == 30u);
-    CHECK(v.vr_light_gun_weapon_scale.GetValue() == 70u);
+    CHECK(v.vr_light_gun_weapon_scale.GetValue() == 100u);
     CHECK(!v.vr_light_gun_weapon_scale.UsingGlobal());
     CHECK(v.vr_light_gun_muzzle_flash_size.GetValue() == 230u);
     CHECK(v.vr_light_gun_projectile_size.GetValue() == 170u);
     CHECK(v.vr_light_gun_projectile_speed.GetValue() == 180u);
-    CHECK(v.vr_light_gun_projectile_opacity.GetValue() == 40u);
+    CHECK(v.vr_light_gun_projectile_opacity.GetValue() == 100u);
     CHECK(!v.vr_light_gun_projectile_opacity.UsingGlobal());
     // The defaults already: not given.
     CHECK(v.vr_light_gun_laser.UsingGlobal());
@@ -601,7 +601,7 @@ TEST_CASE("FrameXr Controls preset: starting values only", "[frame_xr][kiu][kiug
         CHECK(v.vr_gyro_aim.GetValue() == 1);
         CHECK(v.vr_light_gun_turn_zone.UsingGlobal());
         CHECK(v.vr_light_gun_turn_zone.GetValue() == 20u);
-        CHECK(v.vr_light_gun_turn_speed.GetValue() == 1.8f);
+        CHECK(v.vr_light_gun_turn_speed.GetValue() == 2.0f);
         // The tuning is one group: decided now, its global Turn Zone stays even at the default.
         CHECK(v.vr_controls_preset_done.GetValue() == kPresetAimTuning);
         v.vr_light_gun_turn_zone.SetValue(10);
@@ -952,4 +952,31 @@ TEST_CASE("Presets: a stored 4 fits a mode 3 preset as a 3 does", "[frame_xr][ki
     CHECK(!v.vr_si_mode_register_offset.UsingGlobal());
     CHECK(v.vr_si_mode_register_offset.GetValue() == asphalt->register_offset);
     ResetPresetSettings();
+}
+
+// AzaharVR 1.4.0 (the owner): Angel's Aim's settings go back to 1.4.0's defaults once a game, the
+// game's own value and a changed global one alike.
+TEST_CASE("FrameXr Controls preset: Angel's Aim back to the defaults once",
+          "[frame_xr][kiu]") {
+    auto& v = Settings::values;
+    ResetControlsSettings();
+    const u32 old_power_menu = v.vr_kiu_power_menu.GetValue(true);
+    const u32 old_reticle_size = v.vr_kiu_reticle_size.GetValue(true);
+    v.vr_kiu_reticle_size.SetGlobal(false);
+    v.vr_kiu_reticle_size.SetValue(80); // the game's own value
+    v.vr_kiu_power_menu.SetGlobal(true);
+    v.vr_kiu_power_menu.SetValue(1); // a changed global value
+    CHECK(ResetAngelsAimToDefaults(kKidIcarusUprisingControls) > 0);
+    CHECK(v.vr_kiu_reticle_size.UsingGlobal());
+    CHECK(v.vr_kiu_reticle_size.GetValue() == v.vr_kiu_reticle_size.GetDefault());
+    CHECK(v.vr_kiu_power_menu.UsingGlobal());
+    CHECK(v.vr_kiu_power_menu.GetValue(true) == v.vr_kiu_power_menu.GetDefault());
+    CHECK((v.vr_controls_preset_done.GetValue() & kPresetAngelsAimDefaults) != 0u);
+    // Once a game: a second call changes nothing.
+    CHECK(ResetAngelsAimToDefaults(kKidIcarusUprisingControls) == 0);
+    v.vr_kiu_reticle_size.SetGlobal(true);
+    v.vr_kiu_reticle_size.SetValue(old_reticle_size);
+    v.vr_kiu_power_menu.SetGlobal(true);
+    v.vr_kiu_power_menu.SetValue(old_power_menu);
+    ResetControlsSettings();
 }

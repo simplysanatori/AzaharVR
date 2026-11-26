@@ -1854,8 +1854,8 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         break;
     case Id::KiuBottomReset: { // both offsets back to 0 where the grip saves them: the game's
         const bool game = GameTitleId() != 0;
-        Apply(v.vr_kiu_bottom_x, 0.0f, game);
-        Apply(v.vr_kiu_bottom_y, 0.0f, game);
+        Apply(v.vr_kiu_bottom_x, v.vr_kiu_bottom_x.GetDefault(), game); // AzaharVR: the default place
+        Apply(v.vr_kiu_bottom_y, v.vr_kiu_bottom_y.GetDefault(), game);
         send(MenuSetting::KiuBottomX, 0, game);
         r.per_game = game;
         r.value = 0;

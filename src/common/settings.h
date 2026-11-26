@@ -13,6 +13,7 @@
 #include "audio_core/input_details.h"
 #include "audio_core/sink_details.h"
 #include "common/common_types.h"
+#include "common/frame_product.h" // AzaharVR: 60 FPS's default
 #include "common/console_group.h"
 #include "common/setting_keys.h"
 #include "common/string_util.h"
@@ -1150,7 +1151,7 @@ struct Values {
     // (both triggers fire and keep their own buttons, ZL/ZR), 1 Fire and Power (the aiming hand's
     // trigger only fires, the other uses the selected power, the bumpers pick it;
     // input/kiu_trigger_layout.h). A plain new key: older builds ignore it.
-    SwitchableSetting<u32, true> vr_kiu_trigger_layout{0, 0, 1, "vr_kiu_trigger_layout"};
+    SwitchableSetting<u32, true> vr_kiu_trigger_layout{1, 0, 1, "vr_kiu_trigger_layout"};
     // AzaharFrame kiutoggles: Angel's Aim's first-person options (Kid Icarus: Uprising, Immersive
     // Mode's Angel's Aim; per game too), each once a test switch only. The switch, when set,
     // still wins over the setting (kiu_first_person.h, kiu_turn.h, vis/wrist_screen.h). Off by
@@ -1168,29 +1169,31 @@ struct Values {
     // AzaharFrame kiu131: Angel's Aim's Bottom Screen: 0 Off, 1 Persistent (with the view, below
     // it), 2 Wrist. It replaces vr_kiu_wrist_screen and vr_kiu_talk_panel, which are still read
     // while this is 0 and cleared whenever it is chosen (kiu_first_person.h BottomScreenModeFor).
-    SwitchableSetting<u32, true> vr_kiu_bottom_screen{2, 0, 2, "vr_kiu_bottom_screen"};
+    // AzaharVR: the defaults of the Angel's Aim settings are the owner's Steam Frame ones
+    // (2026-11-26); 60 FPS is on by default on PC only.
+    SwitchableSetting<u32, true> vr_kiu_bottom_screen{0, 0, 2, "vr_kiu_bottom_screen"};
     // Its size and opacity in percent (Persistent and Wrist alike).
-    SwitchableSetting<u32, true> vr_kiu_bottom_size{100, 50, 200, "vr_kiu_bottom_size"};
-    SwitchableSetting<u32, true> vr_kiu_bottom_opacity{100, 20, 100, "vr_kiu_bottom_opacity"};
+    SwitchableSetting<u32, true> vr_kiu_bottom_size{160, 50, 200, "vr_kiu_bottom_size"};
+    SwitchableSetting<u32, true> vr_kiu_bottom_opacity{50, 20, 100, "vr_kiu_bottom_opacity"};
     // AzaharFrame kiu1s: the talk's portraits as a card in Angel's Aim's view, and its opacity in
     // percent.
-    SwitchableSetting<bool> vr_kiu_talk_portraits{false, "vr_kiu_talk_portraits"};
-    SwitchableSetting<u32, true> vr_kiu_talk_portraits_opacity{100, 20, 100,
+    SwitchableSetting<bool> vr_kiu_talk_portraits{true, "vr_kiu_talk_portraits"};
+    SwitchableSetting<u32, true> vr_kiu_talk_portraits_opacity{50, 20, 100,
                                                                "vr_kiu_talk_portraits_opacity"};
     // AzaharFrame kiuaim: the portraits move with the subtitles (Subtitle Height; linked), or
     // degrees to the right and up from their own place.
-    SwitchableSetting<bool> vr_kiu_portraits_linked{true, "vr_kiu_portraits_linked"};
-    SwitchableSetting<s32, true> vr_kiu_portraits_across{0, -40, 40, "vr_kiu_portraits_across"};
-    SwitchableSetting<s32, true> vr_kiu_portraits_height{0, -40, 40, "vr_kiu_portraits_height"};
+    SwitchableSetting<bool> vr_kiu_portraits_linked{false, "vr_kiu_portraits_linked"};
+    SwitchableSetting<s32, true> vr_kiu_portraits_across{12, -40, 40, "vr_kiu_portraits_across"};
+    SwitchableSetting<s32, true> vr_kiu_portraits_height{-25, -40, 40, "vr_kiu_portraits_height"};
     // AzaharFrame kiupowers: the powers (on land) and the special attack's dots (in the air) in
     // Angel's Aim: 0 off, 1 over the off hand, 2 under the health bar, 3 between the bar and the
     // score, 4 under the score; their opacity in percent; with the HUD (2 to 4), degrees to the
     // right and up from that place.
-    SwitchableSetting<u32, true> vr_kiu_power_menu{0, 0, 4, "vr_kiu_power_menu"};
-    SwitchableSetting<u32, true> vr_kiu_power_menu_opacity{100, 20, 100,
+    SwitchableSetting<u32, true> vr_kiu_power_menu{3, 0, 4, "vr_kiu_power_menu"};
+    SwitchableSetting<u32, true> vr_kiu_power_menu_opacity{50, 20, 100,
                                                            "vr_kiu_power_menu_opacity"};
     SwitchableSetting<s32, true> vr_kiu_power_menu_across{0, -40, 40, "vr_kiu_power_menu_across"};
-    SwitchableSetting<s32, true> vr_kiu_power_menu_height{0, -40, 40, "vr_kiu_power_menu_height"};
+    SwitchableSetting<s32, true> vr_kiu_power_menu_height{-5, -40, 40, "vr_kiu_power_menu_height"};
     // AzaharFrame kiu140: HUD in Angel's Aim: 0 where the game puts it, 1 in the view, its size in
     // percent; the health bar and the score side by side as one (linked), where that is (degrees
     // to the right and up from straight ahead), or each with a place of its own.
@@ -1200,9 +1203,9 @@ struct Values {
     SwitchableSetting<u32, true> vr_kiu_hud_opacity{100, 20, 100, "vr_kiu_hud_opacity"};
     SwitchableSetting<u32, true> vr_kiu_hud_linked{1, 0, 1, "vr_kiu_hud_linked"};
     SwitchableSetting<s32, true> vr_kiu_hud_across{0, -40, 40, "vr_kiu_hud_across"};
-    SwitchableSetting<s32, true> vr_kiu_hud_height{22, -40, 40, "vr_kiu_hud_height"};
-    SwitchableSetting<u32, true> vr_kiu_subtitle_size{130, 50, 250, "vr_kiu_subtitle_size"};
-    SwitchableSetting<s32, true> vr_kiu_subtitle_height{-18, -40, 40, "vr_kiu_subtitle_height"};
+    SwitchableSetting<s32, true> vr_kiu_hud_height{20, -40, 40, "vr_kiu_hud_height"};
+    SwitchableSetting<u32, true> vr_kiu_subtitle_size{100, 50, 250, "vr_kiu_subtitle_size"};
+    SwitchableSetting<s32, true> vr_kiu_subtitle_height{-40, -40, 40, "vr_kiu_subtitle_height"};
     SwitchableSetting<s32, true> vr_kiu_bar_across{-20, -40, 40, "vr_kiu_bar_across"};
     SwitchableSetting<s32, true> vr_kiu_bar_height{22, -40, 40, "vr_kiu_bar_height"};
     SwitchableSetting<s32, true> vr_kiu_score_across{20, -40, 40, "vr_kiu_score_across"};
@@ -1211,7 +1214,7 @@ struct Values {
     SwitchableSetting<u32, true> vr_kiu_arm{1, 0, 1, "vr_kiu_arm"};
     // AzaharFrame kiuhands: the hand without the weapon is not drawn in Angel's Aim (Pit's arm, the
     // game's arm or the controller there).
-    SwitchableSetting<bool> vr_kiu_hide_off_hand{false, "vr_kiu_hide_off_hand"};
+    SwitchableSetting<bool> vr_kiu_hide_off_hand{true, "vr_kiu_hide_off_hand"};
     // AzaharFrame kiu140: Cutscenes in Angel's Aim: 0 in the view, 1 on the Primary Screen.
     SwitchableSetting<u32, true> vr_kiu_cutscenes{0, 0, 1, "vr_kiu_cutscenes"};
     // AzaharFrame kiu140: the Wrist's place: degrees round the wrist, and centimetres up the arm
@@ -1221,28 +1224,28 @@ struct Values {
     // global file 1 (Wrist Side was Back: nothing added) or 2 (Inside: 180 added), which is what
     // a game's file with its own angle gets when it is carried later (its own mark is the file's
     // key, never kept here). citra_qt/configuration/frame_per_game_ini.h.
-    SwitchableSetting<u32, true> vr_kiu_wrist_angle{0, 0, 360, "vr_kiu_wrist_angle"};
+    SwitchableSetting<u32, true> vr_kiu_wrist_angle{100, 0, 360, "vr_kiu_wrist_angle"};
     Setting<u32> vr_kiu_wrist_angle_from{0, "vr_kiu_wrist_angle_from"};
     SwitchableSetting<s32, true> vr_kiu_wrist_along{0, -12, 25, "vr_kiu_wrist_along"};
     // Persistent's place moved by the grip: degrees right of and below its default place.
-    SwitchableSetting<float, true> vr_kiu_bottom_x{0.f, -60.f, 60.f, "vr_kiu_bottom_x"};
-    SwitchableSetting<float, true> vr_kiu_bottom_y{0.f, -60.f, 60.f, "vr_kiu_bottom_y"};
+    SwitchableSetting<float, true> vr_kiu_bottom_x{4.5f, -60.f, 60.f, "vr_kiu_bottom_x"};
+    SwitchableSetting<float, true> vr_kiu_bottom_y{-0.1f, -60.f, 60.f, "vr_kiu_bottom_y"};
     // AzaharFrame kiu131: Reticle Size: the game's own reticle in Angel's Aim's first person, in
     // percent about its middle.
-    SwitchableSetting<u32, true> vr_kiu_reticle_size{100, 30, 150, "vr_kiu_reticle_size"};
+    SwitchableSetting<u32, true> vr_kiu_reticle_size{30, 30, 150, "vr_kiu_reticle_size"};
     /// AzaharVR: Markers: the markers over enemies in first person, percent (15: Off)
     SwitchableSetting<u32, true> vr_kiu_marker_size{30, 15, 100, "vr_kiu_marker_size"};
     /// AzaharFrame kiu133: the View row's third choice, the Game's Camera (Angel's Aim; wins
     /// over vr_kiu_over_shoulder; Kiu::FirstPerson::ViewFor), and Pit Opacity (percent, 20 to
     /// 100) in the views from outside Pit.
     SwitchableSetting<bool> vr_kiu_game_camera{false, "vr_kiu_game_camera"};
-    SwitchableSetting<u32, true> vr_kiu_pit_opacity{100, 20, 100, "vr_kiu_pit_opacity"};
+    SwitchableSetting<u32, true> vr_kiu_pit_opacity{20, 20, 100, "vr_kiu_pit_opacity"};
     // AzaharFrame kiucam: a tap of the right stick's click in a battle in Angel's Aim: 0 switches
     // the camera, 1 Swap Screens (frame_xr/kiu_camera_tap.h).
     SwitchableSetting<u32, true> vr_kiu_stick_click{0, 0, 1, "vr_kiu_stick_click"};
     // AzaharFrame kiu60: Kid Icarus: Uprising at 60 pictures a second, read when the game starts
     // (core/file_sys/kiu_60fps.h).
-    SwitchableSetting<bool> vr_kiu_60fps{false, "vr_kiu_60fps"};
+    SwitchableSetting<bool> vr_kiu_60fps{Common::FrameProduct::kPc, "vr_kiu_60fps"};
     // AzaharFrame kiu: in a game's own file only: the Controls preset's values already decided
     // for this game (FrameXr::ControlsPresetField bits). A value the preset gave, or the game
     // already had, is never given again, so a later choice (Use Global Value too) stays.

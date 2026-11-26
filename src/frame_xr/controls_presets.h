@@ -73,6 +73,9 @@ enum ControlsPresetField : uint32_t {
     /// and the global one was the default; a global value the player chose is then never given.
     /// Older builds never read it.
     kPresetAimTuning = 1u << 4,
+    /// AzaharVR 1.4.0 (the owner): Angel's Aim's settings were put back to 1.4.0's defaults once
+    /// (ResetAngelsAimToDefaults). Older builds never read it.
+    kPresetAngelsAimDefaults = 1u << 5,
 };
 
 /// AzaharFrame kiugyro: bits 8 and 9 of vr_controls_preset_done mirror the game's own Gyro Aim
@@ -134,7 +137,7 @@ bool RestoreAimExtras();
 /// 1.2.0 RC2 (the owner): with the mod, the owner's own settings of 2026-11-15 (their game's
 /// file): Bottom Screen Reticle Off, Keep Reticle on Screen off, Horizontal Turn Speed 1.8x,
 /// Vertical Turn Speed 1.0x, Turn Zone 30 %, Weapon Scale 70 %, Muzzle Flash Size 230 %,
-/// Projectile Size 170 %, Speed 180 % and Opacity 40 %. Laser Sight off, Projectiles on, Weapon
+/// Projectile Size 170 %, Speed 180 % and Opacity 100 % (AzaharVR: the owner's Frame values, with Turn Speed 2 and Weapon Scale 100). Laser Sight off, Projectiles on, Weapon
 /// Size Game Size and Turn Zone From Aim Box are the defaults already.
 inline constexpr ControlsPreset kKidIcarusUprisingControls{.name = "Kid Icarus: Uprising",
                                                            .bottom_screen_reticle = 3,
@@ -145,14 +148,14 @@ inline constexpr ControlsPreset kKidIcarusUprisingControls{.name = "Kid Icarus: 
                                                            .gyro_aim_with_mod = 2,
                                                            .bottom_screen_reticle_with_mod = 0,
                                                            .light_gun_lock = 0,
-                                                           .turn_speed = 1.8f,
+                                                           .turn_speed = 2.0f,
                                                            .turn_speed_vertical = 1.0f,
                                                            .turn_zone = 30,
-                                                           .weapon_scale = 70,
+                                                           .weapon_scale = 100,
                                                            .muzzle_flash_size = 230,
                                                            .projectile_size = 170,
                                                            .projectile_speed = 180,
-                                                           .projectile_opacity = 40};
+                                                           .projectile_opacity = 100};
 
 struct ControlsPresetTitle {
     uint64_t title_id;
@@ -217,5 +220,12 @@ std::vector<std::string> CStickModFiles(const std::vector<Mods::ModInfo>& mods);
 /// when the mod is installed at the time it is given. 1.2.0 RC2: the same for Angel's Aim's
 /// tuning (kPresetAimTuning); Bottom Screen Reticle takes `bottom_screen_reticle_with_mod`.
 uint32_t ApplyControlsPreset(const ControlsPreset& preset, bool cstick_mod_installed);
+
+/// AzaharVR 1.4.0 (the owner): once per game (kPresetAngelsAimDefaults), every Angel's Aim
+/// setting (vr_kiu_*, but the Wrist Angle's carry mark) goes back to its default, the game's own
+/// value and a changed global one alike, and the preset's aim tuning becomes the game's own:
+/// 1.4.0's defaults are the owner's Steam Frame setup. Call with the game's file read, before
+/// ApplyControlsPreset. Returns how many values changed.
+int ResetAngelsAimToDefaults(const ControlsPreset& preset);
 
 } // namespace FrameXr

@@ -233,6 +233,107 @@ bool RestoreAimExtras() { // AzaharFrame kiufix
     return any;
 }
 
+int ResetAngelsAimToDefaults(const ControlsPreset& preset) {
+    auto& v = Settings::values;
+    auto& done_setting = v.vr_controls_preset_done;
+    if ((done_setting.GetValue() & kPresetAngelsAimDefaults) != 0) {
+        return 0;
+    }
+    int changed = 0;
+    const auto reset = [&](auto& setting) {
+        if (!setting.UsingGlobal()) {
+            setting.SetGlobal(true); // the game's own value goes
+            ++changed;
+        }
+        if (setting.GetValue(true) != setting.GetDefault()) {
+            setting.SetValue(setting.GetDefault()); // the global one, while UsingGlobal
+            ++changed;
+        }
+    };
+    reset(v.vr_kiu_trigger_layout);
+    reset(v.vr_kiu_wrist_screen);
+    reset(v.vr_kiu_talk_panel);
+    reset(v.vr_kiu_over_shoulder);
+    reset(v.vr_kiu_snap_turn);
+    reset(v.vr_kiu_bottom_screen);
+    reset(v.vr_kiu_bottom_size);
+    reset(v.vr_kiu_bottom_opacity);
+    reset(v.vr_kiu_talk_portraits);
+    reset(v.vr_kiu_talk_portraits_opacity);
+    reset(v.vr_kiu_portraits_linked);
+    reset(v.vr_kiu_portraits_across);
+    reset(v.vr_kiu_portraits_height);
+    reset(v.vr_kiu_power_menu);
+    reset(v.vr_kiu_power_menu_opacity);
+    reset(v.vr_kiu_power_menu_across);
+    reset(v.vr_kiu_power_menu_height);
+    reset(v.vr_kiu_hud);
+    reset(v.vr_kiu_hud_size);
+    reset(v.vr_kiu_hud_opacity);
+    reset(v.vr_kiu_hud_linked);
+    reset(v.vr_kiu_hud_across);
+    reset(v.vr_kiu_hud_height);
+    reset(v.vr_kiu_subtitle_size);
+    reset(v.vr_kiu_subtitle_height);
+    reset(v.vr_kiu_bar_across);
+    reset(v.vr_kiu_bar_height);
+    reset(v.vr_kiu_score_across);
+    reset(v.vr_kiu_score_height);
+    reset(v.vr_kiu_arm);
+    reset(v.vr_kiu_hide_off_hand);
+    reset(v.vr_kiu_cutscenes);
+    reset(v.vr_kiu_wrist_angle);
+    reset(v.vr_kiu_wrist_along);
+    reset(v.vr_kiu_bottom_x);
+    reset(v.vr_kiu_bottom_y);
+    reset(v.vr_kiu_reticle_size);
+    reset(v.vr_kiu_marker_size);
+    reset(v.vr_kiu_game_camera);
+    reset(v.vr_kiu_pit_opacity);
+    reset(v.vr_kiu_stick_click);
+    reset(v.vr_kiu_60fps);
+    // The aim tuning: the preset's values as the game's own.
+    const auto give = [&](auto& setting, auto value) {
+        if (setting.UsingGlobal() || setting.GetValue() != value) {
+            setting.SetGlobal(false);
+            setting.SetValue(value);
+            ++changed;
+        }
+    };
+    if (preset.light_gun_lock >= 0) {
+        give(v.vr_light_gun_lock, preset.light_gun_lock != 0);
+    }
+    if (preset.turn_speed > 0.0f) {
+        give(v.vr_light_gun_turn_speed, preset.turn_speed);
+    }
+    if (preset.turn_speed_vertical > 0.0f) {
+        give(v.vr_light_gun_turn_speed_vertical, preset.turn_speed_vertical);
+    }
+    if (preset.turn_zone >= 0) {
+        give(v.vr_light_gun_turn_zone, static_cast<u32>(preset.turn_zone));
+    }
+    if (preset.weapon_scale != 0) {
+        give(v.vr_light_gun_weapon_scale, preset.weapon_scale);
+    }
+    if (preset.muzzle_flash_size != 0) {
+        give(v.vr_light_gun_muzzle_flash_size, preset.muzzle_flash_size);
+    }
+    if (preset.projectile_size != 0) {
+        give(v.vr_light_gun_projectile_size, preset.projectile_size);
+    }
+    if (preset.projectile_speed != 0) {
+        give(v.vr_light_gun_projectile_speed, preset.projectile_speed);
+    }
+    if (preset.projectile_opacity != 0) {
+        give(v.vr_light_gun_projectile_opacity, preset.projectile_opacity);
+    }
+    done_setting.SetGlobal(false);
+    done_setting.SetValue(done_setting.GetValue() | kPresetAngelsAimDefaults | kPresetAimTuning);
+    LOG_INFO(Frontend, "xr: {}: Angel's Aim's settings put back to 1.4.0's defaults ({} values)",
+             preset.name, changed);
+    return changed;
+}
+
 uint32_t ApplyControlsPreset(const ControlsPreset& preset, bool cstick_mod_installed) {
     auto& v = Settings::values;
     auto& done_setting = v.vr_controls_preset_done;

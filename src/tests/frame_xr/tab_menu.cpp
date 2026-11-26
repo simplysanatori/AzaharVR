@@ -3605,7 +3605,7 @@ TEST_CASE("Tab menu: Trigger Layout, Kid Icarus only", "[frame_xr][tabmenu][kiuf
     CHECK(TriggerLayoutIndexOf(1) == 0);
     CHECK(TriggerLayoutValueAt(0) == 1);
     CHECK(TriggerLayoutValueAt(1) == 0);
-    CHECK(MenuModel{}.trigger_layout == 0); // Original
+    CHECK(MenuModel{}.trigger_layout == 1); // AzaharVR: Fire and Power, the owner's default
     Drawn d;
     MenuModel m = Sample();
     MenuView v;
@@ -3679,11 +3679,11 @@ TEST_CASE("Tab menu: Angel's Aim's first-person rows, Kid Icarus and Angel's Aim
     CHECK(OptionsFor(Id::KiuSnapTurn) ==
           std::vector<std::string>{"Smooth", "30\xC2\xB0", "45\xC2\xB0", "60\xC2\xB0", "90\xC2\xB0"});
     const MenuModel defaults;
-    CHECK(defaults.kiu_bottom_screen == 2); // Wrist
-    CHECK(defaults.kiu_bottom_size == 100);
-    CHECK(defaults.kiu_bottom_opacity == 100);
+    CHECK(defaults.kiu_bottom_screen == 0); // AzaharVR: Off, the owner's Frame defaults
+    CHECK(defaults.kiu_bottom_size == 160);
+    CHECK(defaults.kiu_bottom_opacity == 50);
     CHECK(defaults.wrist_side == 0);
-    CHECK(defaults.kiu_reticle_size == 100);
+    CHECK(defaults.kiu_reticle_size == 30);
     CHECK(AngelsAimRowsShown(true, 4));
     CHECK_FALSE(AngelsAimRowsShown(false, 4));
     CHECK_FALSE(AngelsAimRowsShown(true, 3));
@@ -5355,7 +5355,7 @@ TEST_CASE("Tab menu: Angel's Aim's Camera and Pit Opacity", "[frame_xr][tabmenu]
     CHECK(SliderFor(Id::KiuPitOpacity).max == 100.0f);
     const MenuModel defaults;
     CHECK(defaults.kiu_view == 0);
-    CHECK(defaults.kiu_pit_opacity == 100);
+    CHECK(defaults.kiu_pit_opacity == 20);
     for (const int view : {0, 1, 2}) {
         INFO("view " << view);
         MenuModel m = KiuModel(true, 4);
@@ -5384,7 +5384,7 @@ TEST_CASE("Tab menu: Hide Off Hand", "[frame_xr][tabmenu][kiuhands]") {
     CHECK(LabelFor(Id::KiuHideOffHand) == "Free Hand");
     CHECK(OptionsFor(Id::KiuHideOffHand) == std::vector<std::string>{"Shown", "Hidden"}); // 0: not hidden
     CHECK_FALSE(ExplainFor(Id::KiuHideOffHand).empty());
-    CHECK(MenuModel{}.kiu_hide_off_hand == 0);
+    CHECK(MenuModel{}.kiu_hide_off_hand == 1); // AzaharVR: the owner's default
     MenuModel m = KiuModel(true, 4);
     CHECK(Has(AngelsAimFirstPersonRows(m), Id::KiuHideOffHand));
     CHECK(AimPageRows(m, AimGroup::Weapon).rows.back() == Id::KiuHideOffHand); // Weapon's last

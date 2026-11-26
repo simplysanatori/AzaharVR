@@ -43,6 +43,7 @@ Game Boy Advance, Game Boy, and Game Boy Color emulation is powered by libmgba f
 ## PokeDaisy
 
 Based on PokeDaisy by Lidor Itzhari - https://github.com/lidor30/pokedaisy
+(PokeDaisy is now at https://gitlab.com/pokedaisy/pokedaisy.)
 
 The companion second screen and game editing for Pokémon games on Game Boy, Game Boy Color and Game Boy Advance are PokeDaisy, Copyright (C) 2026 Lidor Itzhari, under the GNU General Public License, version 3, with an additional term under section 7(b): the line above must be kept in the NOTICE file, the README and the credits. The files of its shared C code that the program builds are in `externals/pokedaisy`, unmodified, with its LICENSE and NOTICE; the build and our stubs are in `externals/pokedaisy_cmake`.
 

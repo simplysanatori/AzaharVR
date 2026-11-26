@@ -22,7 +22,9 @@ AboutDialog::AboutDialog(QWidget* parent)
         ui->labelLinks->text() +
         QStringLiteral("<p>Based on PokeDaisy by Lidor Itzhari - "
                        "<a href=\"https://github.com/lidor30/pokedaisy\">"
-                       "https://github.com/lidor30/pokedaisy</a></p>"));
+                       "https://github.com/lidor30/pokedaisy</a> (now at "
+                       "<a href=\"https://gitlab.com/pokedaisy/pokedaisy\">"
+                       "https://gitlab.com/pokedaisy/pokedaisy</a>)</p>"));
 #endif
 #ifdef ENABLE_FRAME_XR // AzaharFrame: the Azahar for Frame icon instead of Azahar's
     const QString icon_path = FrameBranding::ArtFile(QStringLiteral("icon.png"));

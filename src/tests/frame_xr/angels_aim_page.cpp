@@ -258,7 +258,8 @@ TEST_CASE("Angel's Aim page: counts, and every row reachable", "[frame_xr][kiuai
     // Where the approved rows are.
     const MenuModel m = ModelFor(Case::ModeOn);
     CHECK(AimPageRows(m, AimGroup::Aiming).rows ==
-          std::vector<Id>{Id::GyroAim, Id::TriggerLayout, Id::KiuReticleSize, Id::LaserSight});
+          std::vector<Id>{Id::GyroAim, Id::TriggerLayout, Id::KiuReticleSize, Id::KiuMarkerSize,
+                          Id::LaserSight});
     CHECK(AimPageRows(m, AimGroup::Aiming).more ==
           std::vector<Id>{Id::KeepOnScreen, Id::GripFreesAim, Id::TurnZoneFrom, Id::TurnZone,
                           Id::TurnSpeed, Id::TurnSpeedVertical, Id::CalibrateAim});
@@ -285,7 +286,10 @@ TEST_CASE("Angel's Aim page: counts, and every row reachable", "[frame_xr][kiuai
     CHECK(AimPageRows(m, AimGroup::BottomScreen).rows ==
           std::vector<Id>{Id::KiuBottomScreen, Id::KiuBottomSize, Id::KiuBottomOpacity,
                           Id::KiuWristAngle, Id::KiuWristAlong});
-    CHECK(AimPageRows(m, AimGroup::BottomScreen).more == std::vector<Id>{Id::KiuTalkPortraits});
+    // AzaharVR: Character Portraits shown and Separate by default (the owner's defaults)
+    CHECK(AimPageRows(m, AimGroup::BottomScreen).more ==
+          std::vector<Id>{Id::KiuTalkPortraits, Id::KiuTalkPortraitsOpacity, Id::KiuPortraitsLinked,
+                          Id::KiuPortraitsAcross, Id::KiuPortraitsHeight});
     for (const int shown : {0, 1}) {
         MenuModel p = m;
         p.kiu_talk_portraits = shown;
@@ -1061,8 +1065,8 @@ TEST_CASE("Angel's Aim page: Power Menu", "[frame_xr][kiuaim]") {
           std::vector<std::string>{"Off", "Off Hand", "Health Bar", "Middle", "Score"}); // stored order
     CHECK(LabelFor(Id::KiuPowerMenuAcross) == "Power Menu Left/Right");
     CHECK(LabelFor(Id::KiuPowerMenuHeight) == "Power Menu Height");
-    CHECK(MenuModel{}.kiu_power_menu == 0);
-    CHECK(MenuModel{}.kiu_power_menu_opacity == 100);
+    CHECK(MenuModel{}.kiu_power_menu == 3); // AzaharVR: the owner's defaults
+    CHECK(MenuModel{}.kiu_power_menu_opacity == 50); // AzaharVR: the owner's defaults
     CHECK_FALSE(Has(AngelsAimFirstPersonRows(ModelFor(Case::OtherGame)), Id::KiuPowerMenu));
     CHECK_FALSE(Has(AngelsAimFirstPersonRows(ModelFor(Case::ModeOff)), Id::KiuPowerMenu));
     CHECK(Has(AngelsAimFirstPersonRows(ModelFor(Case::ModeOn)), Id::KiuPowerMenu));

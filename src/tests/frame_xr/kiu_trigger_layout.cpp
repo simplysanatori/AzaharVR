@@ -92,7 +92,7 @@ TEST_CASE("Trigger Layout: Original, Aiming Off or another game change nothing",
                                  0x0004000000033500ull, 0ull}) {
         CHECK_FALSE(FrameXr::Kiu::IsKidIcarus(other));
     }
-    CHECK(Settings::values.vr_kiu_trigger_layout.GetDefault() == kOriginal);
+    CHECK(Settings::values.vr_kiu_trigger_layout.GetDefault() == kFireAndPower); // AzaharVR: the owner's Frame default
 }
 
 TEST_CASE("Trigger Layout: the aiming trigger fires (L) and nothing else", "[kiufire]") {
