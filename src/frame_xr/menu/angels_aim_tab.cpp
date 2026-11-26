@@ -477,6 +477,9 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
     }
     const Rect c{area.x0 + kPad, area.y0, area.x1 - kPad, area.y1 - kPad};
     const Rect shown{area.x0, area.y0, area.x1, area.y1 - 8.0f};
+    // AzaharVR: what About and Mods & Pack draw and press in: the page's list, under its Back
+    // bar (set with the page). The whole pane let their rows scroll over Back and its title.
+    Rect page_clip = shown;
     const std::vector<int> rows = AngelsAimModRows(model.mods.mods);
     OfferListOptions opt;
     opt.manage = true;
@@ -555,7 +558,7 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
         const float sw = kit.TextWidth(Type::Label, send) + 48.0f;
         const Rect sb{c.x0, y, c.x0 + sw, y + kButtonH};
         kit.Button(sb, ButtonStyle::Tonal, 0, send, StateOf(view, {Id::AngelsAimSend}));
-        AddHit({sb.x0, sb.Cy() - 24.0f, sb.x1, sb.Cy() + 24.0f}, {Id::AngelsAimSend}, shown);
+        AddHit({sb.x0, sb.Cy() - 24.0f, sb.x1, sb.Cy() + 24.0f}, {Id::AngelsAimSend}, page_clip);
         const std::string label = LabelFor(Id::AngelsAimReport);
         const float w = kit.TextWidth(Type::Label, label) + 28.0f + 24.0f;
         const Rect b{sb.x1 + 8.0f, y, sb.x1 + 8.0f + w, y + kButtonH};
@@ -563,7 +566,7 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
         kit.Button(b, ButtonStyle::Text, Sym::kOpenInNew, label,
                    StateOf(view, {Id::AngelsAimReport}, can));
         if (can) {
-            AddHit({b.x0, b.Cy() - 24.0f, b.x1, b.Cy() + 24.0f}, {Id::AngelsAimReport}, shown);
+            AddHit({b.x0, b.Cy() - 24.0f, b.x1, b.Cy() + 24.0f}, {Id::AngelsAimReport}, page_clip);
         }
         y += kButtonH;
         kit.TextSized(c.x0, y + 10.0f + kit.CapHeightSized(kSmall, false) * 0.5f, kSmall, false,
@@ -582,7 +585,8 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
         status_item(kAngelsAimModName, m.mod_installed);
         if (!rows.empty()) {
             opt.page_top = y;
-            DrawOfferList(kit, model, view, area, c, shown, rows, opt);
+            DrawOfferList(kit, model, view, area, c, page_clip, rows, opt);
+            kit.Clip(page_clip); // AzaharVR: DrawOfferList clears its clip at the end
             y += OfferListHeight(kit, model.mods.mods, c, rows, opt);
         }
         divider();
@@ -598,7 +602,7 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
             const Rect b{c.x1 - w, y + (kItemH - kButtonH) * 0.5f, c.x1,
                          y + (kItemH + kButtonH) * 0.5f};
             kit.Button(b, ButtonStyle::Tonal, Sym::kFolderOpen, zip, StateOf(view, zt));
-            AddHit({b.x0, y, b.x1, y + kItemH}, zt, shown);
+            AddHit({b.x0, y, b.x1, y + kItemH}, zt, page_clip);
             status_item(kAngelsAimHandModel, m.hand_installed, w + 16.0f,
                         found ? kAngelsAimHandFound : kAngelsAimNotInstalled);
         }
@@ -698,6 +702,7 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
                              : at.more ? std::floor(room / kRowH) * kRowH
                                        : room;
         const Rect list{area.x0, y, area.x1, y + list_h};
+        page_clip = list; // AzaharVR
         const AimPage rows_now = AimPageRows(model, g);
         const std::vector<Id>& ids = at.more ? rows_now.more : rows_now.rows;
         const bool more_row = !at.more && !rows_now.more.empty();
@@ -713,6 +718,9 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
             std::clamp(view.scroll[static_cast<std::size_t>(view.tab)], 0.0f, max_scroll);
         layout.max_scroll = max_scroll;
         layout.scroll_step = is_rows ? kRowH : 48.0f;
+        if (scroll > 0.0f) { // AzaharVR: a line under Back once the page has scrolled under it
+            kit.Line(c.x0, list.y0, c.x1, list.y0, 1.0f, Tok::kOutlineVariant);
+        }
         kit.Clip(list);
         y -= scroll;
         if (g == AimGroup::ModsAndPack) {
