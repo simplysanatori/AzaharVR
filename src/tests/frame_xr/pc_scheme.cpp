@@ -454,3 +454,53 @@ TEST_CASE("AzaharVR Index: trackpads are the D-pad and the Menu role; grips from
     CHECK(r.Hold(IdleFrame(), 5, Control::View));
     CHECK_FALSE(r.pc.dpad_mode());
 }
+
+// AzaharVR: Edit Controls with a PC controller listens to what the game gets (an XR Elite's
+// presses did not register: it has no bumpers or D-pad, only grips and sticks).
+TEST_CASE("AzaharVR Focus 3: Edit Controls hears the grips as L and R and the stick as the D-pad",
+          "[frame_xr][pcvr][pclisten]") {
+    using S = ControllerScheme;
+    InputFrame prev{};
+    InputFrame in{};
+    in.menu = true;
+    in.view = true;
+    in.hand[0].grip = 0.7f;
+    InputFrame f = PcScheme::ListenFrame(S::Focus3, in, prev);
+    CHECK(f.hand[0].bumper);
+    CHECK_FALSE(f.hand[1].bumper);
+    CHECK_FALSE(f.menu); // Start and Select are the scheme's own
+    CHECK_FALSE(f.view);
+    // hysteresis: held at 0.5 once down, let go below 0.40; not down from 0.5
+    in.hand[0].grip = 0.5f;
+    CHECK(PcScheme::ListenFrame(S::Focus3, in, f).hand[0].bumper);
+    CHECK_FALSE(PcScheme::ListenFrame(S::Focus3, in, prev).hand[0].bumper);
+    in.hand[0].grip = 0.3f;
+    CHECK_FALSE(PcScheme::ListenFrame(S::Focus3, in, f).hand[0].bumper);
+
+    InputFrame st{};
+    st.hand[0].stick = {0.0f, 0.8f};
+    f = PcScheme::ListenFrame(S::Focus3, st, prev);
+    CHECK(f.dpad_up);
+    CHECK_FALSE(f.dpad_down);
+    st.hand[0].stick = {-0.8f, 0.1f};
+    CHECK(PcScheme::ListenFrame(S::Touch, st, prev).dpad_left);
+    st.hand[0].stick = {0.2f, 0.1f};
+    CHECK_FALSE(PcScheme::ListenFrame(S::Focus3, st, prev).dpad_up);
+    // Index's D-pad is its left trackpad (Normalize), not the stick
+    st.hand[0].stick = {0.0f, 0.9f};
+    CHECK_FALSE(PcScheme::ListenFrame(S::Index, st, prev).dpad_up);
+}
+
+TEST_CASE("AzaharVR schemes: Edit Controls on the Frame listens as before",
+          "[frame_xr][pcvr][pclisten]") {
+    InputFrame in{};
+    in.menu = true;
+    in.view = true;
+    in.hand[0].grip = 1.0f;
+    in.hand[0].stick = {0.0f, 1.0f};
+    const InputFrame f = PcScheme::ListenFrame(ControllerScheme::Frame, in, {});
+    CHECK(f.menu);
+    CHECK(f.view);
+    CHECK_FALSE(f.hand[0].bumper); // the Frame's grips grab the screens
+    CHECK_FALSE(f.dpad_up);
+}

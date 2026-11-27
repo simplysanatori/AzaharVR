@@ -281,4 +281,27 @@ void PcScheme::Merge(const PcSchemeOut& pc, MapperOutput& out) {
     cmd.toggle_fast_forward = cmd.toggle_fast_forward || pc.toggle_fast_forward;
 }
 
+// AzaharVR: Edit Controls' listening with a PC scheme (pc_scheme.h).
+InputFrame PcScheme::ListenFrame(ControllerScheme scheme, const InputFrame& in,
+                                 const InputFrame& prev, const PcSchemeConfig& config) {
+    if (scheme == ControllerScheme::Frame) {
+        return in;
+    }
+    InputFrame f = in;
+    f.menu = false;
+    f.view = false;
+    for (std::size_t h = 0; h < f.hand.size(); h++) {
+        f.hand[h].bumper = in.hand[h].grip > (prev.hand[h].bumper ? config.grip_release
+                                                                   : config.grip_press);
+    }
+    if (SchemeTable(scheme).dpad == DpadSource::LeftStickToggle) {
+        const bool held = prev.dpad_up || prev.dpad_down || prev.dpad_left || prev.dpad_right;
+        const float m = Magnitude(in.hand[0].stick);
+        if (held ? m > config.stick_dpad_release : m >= config.stick_dpad_press) {
+            PressDpad(f, FourWay(in.hand[0].stick));
+        }
+    }
+    return f;
+}
+
 } // namespace FrameXr::Input

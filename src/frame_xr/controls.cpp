@@ -1684,6 +1684,7 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
                                              std::memory_order_relaxed);
     }
     bridge.pc().SetScheme(controller_scheme);
+    tab_menu.scheme = controller_scheme; // AzaharVR: Edit Controls listens as the game reads
     if (have_input) {
         bridge.pc().Normalize(in); // AzaharVR: nothing with the Frame's scheme
         mode_latch.Filter(in); // the chord that made this session stays away until let go

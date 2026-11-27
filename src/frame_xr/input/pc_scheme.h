@@ -92,6 +92,14 @@ public:
     /// Forgets the held state (the D-pad mode stays). Call when the game ends or input is lost.
     void Reset();
 
+    /// AzaharVR: what Edit Controls listens to with a PC scheme: the presses as the game gets
+    /// them. The grips are the bumpers (L and R), the left stick pushed one way is that D-pad
+    /// direction (Touch, Focus 3), and Menu and View are off (Start and Select are the scheme's
+    /// own; no 3DS button moves to them). `prev` is the frame this returned last time (the
+    /// thresholds' hysteresis). With the Frame's scheme it returns `in`.
+    static InputFrame ListenFrame(ControllerScheme scheme, const InputFrame& in,
+                                  const InputFrame& prev, const PcSchemeConfig& config = {});
+
 private:
     PcSchemeConfig config_;
     ControllerScheme scheme_ = ControllerScheme::Frame;

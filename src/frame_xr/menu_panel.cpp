@@ -27,6 +27,7 @@
 #include "frame_xr/immersive_layout.h"   // AzaharFrame kiu: Horizontal and Vertical Scale
 #include "frame_xr/immersive_names.h"    // AzaharFrame projdef: Motion Clarity's toast
 #include "frame_xr/input/default_bindings.h"
+#include "frame_xr/input/pc_scheme.h"
 #include "frame_xr/input/devices.h" // AzaharFrame pads
 #include "frame_xr/input/geometry.h"
 #include "frame_xr/input/gyro_aim.h" // AzaharFrame kiugyro
@@ -828,9 +829,16 @@ void MenuPanel::EditChanged(Menu::Remap::Event e, Host& host) {
 
 // A Frame button pressed while a chip listens (the XR thread's raw input): B cancels, the others
 // move the chip's 3DS buttons to it. Presses are edges; the game is paused, so it sees none.
-void MenuPanel::EditInput(const Input::InputFrame& in, bool have_input, float dt, Host& host) {
+void MenuPanel::EditInput(const Input::InputFrame& frame, bool have_input, float dt,
+                          Host& host) {
     using Input::Control;
-    const bool pos = model.face_buttons == 0;
+    // AzaharVR: a PC controller (Touch, Index, Focus 3 / XR Elite): its presses as the game gets
+    // them (pc_scheme.h ListenFrame: grips as L and R, ...), and its buttons by label.
+    const bool pc = scheme != Input::ControllerScheme::Frame;
+    const Input::InputFrame in = Input::PcScheme::ListenFrame(scheme, frame, edit_prev_in);
+    edit_prev_in = in;
+    const bool pos =
+        model.face_buttons == 0 && !(pc && Input::SchemeTable(scheme).face_buttons_by_label);
     const std::array<bool, 11> now = {
         have_input && in.a,
         have_input && in.x,

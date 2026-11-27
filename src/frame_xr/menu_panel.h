@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "frame_xr/frame_xr.h"
+#include "frame_xr/input/default_bindings.h"
 #include "frame_xr/input/input_frame.h"
 #include "frame_xr/menu/remap.h"
 #include "frame_xr/menu/tab_menu.h"
@@ -115,6 +116,9 @@ public:
     bool AimBottomPageOpen() const {
         return open && Menu::AimBottomPageOpen(model, view);
     }
+    /// AzaharVR: the controller scheme in use (controls.cpp sets it each frame): Edit Controls
+    /// listens to what the game gets from a PC controller (its grips as L and R, ...).
+    Input::ControllerScheme scheme = Input::ControllerScheme::Frame;
 
 private:
     struct Shared;
@@ -192,6 +196,7 @@ private:
     std::array<std::string, 2> edit_analogs;
     Menu::RemapSticks edit_sticks = Menu::kDefaultSticks;
     std::array<bool, 11> edit_prev{};
+    Input::InputFrame edit_prev_in{}; ///< AzaharVR: PcScheme::ListenFrame's last frame
     bool edit_b_prev = true;
     /// AzaharFrame pads: the device Edit Controls edits ("frame", a gamepad's id, "mouse"), and
     /// whether its next button is being listened for (frame_xr/input/devices.h).
