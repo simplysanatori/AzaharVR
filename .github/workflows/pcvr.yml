@@ -59,8 +59,6 @@ jobs:
           path: artifacts/azahar-vr-linux-x86_64.tar.gz
 
   windows-msvc:
-    # Visual Studio 2022: windows-latest moved to Visual Studio 2026, whose STL wants clang-cl 22
-    # or newer, and its LLVM is 20 (the DS and GBA cores).
     runs-on: windows-2025
     timeout-minutes: 180
     strategy:
@@ -96,11 +94,22 @@ jobs:
         run: |
           wget https://sdk.lunarg.com/sdk/download/1.4.304.1/windows/VulkanSDK-1.4.304.1-Installer.exe -O D:/a/_temp/vulkan.exe
           D:/a/_temp/vulkan.exe --accept-licenses --default-answer --confirm-command install
+      # The image's Visual Studio 2026 STL wants clang-cl 22 or newer, and its LLVM is 20: LLVM
+      # 23.1.6 (the version the Windows builds are made with), unpacked, not installed.
       - name: clang-cl, for the DS and GBA cores
         if: ${{ matrix.frame_xr == 'ON' }}
+        shell: pwsh
         run: |
-          export PATH="$PATH:/c/Program Files/LLVM/bin"
-          clang-cl --version || choco install llvm
+          $ProgressPreference = 'SilentlyContinue'
+          $msi = "$env:RUNNER_TEMP\llvm.msi"
+          Invoke-WebRequest https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.6/LLVM-23.1.6-win64.msi -OutFile $msi
+          if ((Get-FileHash $msi -Algorithm SHA256).Hash -ne '81F7EB520CA698EB2D5CD8BC4B8F24F7ADD9ED66ED40A6F722A6E6F060737C00') { throw 'LLVM: the download does not match its checksum' }
+          $p = Start-Process msiexec -ArgumentList '/a', "`"$msi`"", '/qn', "TARGETDIR=`"$env:RUNNER_TEMP\llvm`"" -Wait -NoNewWindow -PassThru
+          if ($p.ExitCode -ne 0) { throw "LLVM: msiexec exit $($p.ExitCode)" }
+          $cl = Get-ChildItem "$env:RUNNER_TEMP\llvm" -Recurse -Filter clang-cl.exe | Select-Object -First 1
+          if (-not $cl) { throw 'LLVM: no clang-cl.exe' }
+          & $cl.FullName --version
+          "CLANG_CL_EXECUTABLE=$($cl.FullName.Replace('\', '/'))" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
       - name: Disable line ending translation
         run: git config --global core.autocrlf input
       - name: Build
@@ -113,6 +122,7 @@ jobs:
             -DENABLE_FRAME_XR=${{ matrix.frame_xr }} \
             -DENABLE_ALT_CORES=${{ matrix.frame_xr }} \
             -DAZAHARVR_PC=ON \
+            ${CLANG_CL_EXECUTABLE:+-DCLANG_CL_EXECUTABLE="$CLANG_CL_EXECUTABLE"} \
             -DAZAHARFRAME_SENTRY=OFF \
             -DAZAHARFRAME_TEST_HOOKS=OFF \
             -DCITRA_WARNINGS_AS_ERRORS=OFF \
