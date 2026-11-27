@@ -6,6 +6,7 @@
 // global value, also while the running game has its own (that one stays, and a plain hint says
 // so); in a game's Properties it edits that game's value, or Use global.
 
+#include "frame_xr/kiu_scan.h"
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
@@ -815,7 +816,7 @@ TEST_CASE("VR group: Angel's Aim is Recommended only in Kid Icarus: Uprising's P
         REQUIRE(mode->count() == 5 + off);
         // AzaharFrame kiufix2: the badge only for the European game (the one Angel's Aim is
         // mapped for); the item is in every region's list
-        const bool eur = kiu == 0x0004000000030200ull;
+        const bool eur = FrameXr::Kiu::IsAngelsAimTitle(kiu); // EUR and USA Rev 1 (1.4.0)
         CHECK(mode->itemText(3 + off) ==
               QString::fromUtf8(FrameXr::Immersive::Names::kModeAngelsAim) +
                   (eur ? QStringLiteral(" (Recommended)") : QString()));

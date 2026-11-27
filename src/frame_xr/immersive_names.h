@@ -66,7 +66,7 @@ inline constexpr const char* kScaleFieldOfViewTip =
 /// the four ring controls shown under it while on.
 inline constexpr const char* kFoveatedRendering = "Foveated Rendering";
 inline constexpr const char* kFoveatedRenderingTip =
-    "Experimental. Lowers resolution outside where you look in Immersive Mode to save GPU time.";
+    "Lowers resolution outside where you look in Immersive Mode to save GPU time.";
 inline constexpr const char* kFoveationOff = "Off";
 inline constexpr const char* kFoveationLow = "Low";
 inline constexpr const char* kFoveationMedium = "Medium";

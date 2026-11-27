@@ -977,7 +977,9 @@ struct Values {
     // AzaharVR foveation: eye-tracked foveated rendering in Immersive Mode (per game and global):
     // 0 = Off, 1 = Low, 2 = Medium, 3 = High (picking a preset sets the four ring controls below).
     // Active only on headsets with eye tracking (Steam Frame) and updates live mid-game.
-    SwitchableSetting<u32, true> vr_foveated_rendering{0, 0, 3, "vr_foveated_rendering"};
+    // AzaharVR 1.4.1: Low on the Frame (eye tracked), Off on PC.
+    SwitchableSetting<u32, true> vr_foveated_rendering{Common::FrameProduct::kPc ? 0u : 1u, 0, 3,
+                                                       "vr_foveated_rendering"};
     SwitchableSetting<u32, true> vr_foveation_inner_radius{40, 10, 80, "vr_foveation_inner_radius"};
     SwitchableSetting<u32, true> vr_foveation_middle_radius{70, 20, 100,
                                                             "vr_foveation_middle_radius"};

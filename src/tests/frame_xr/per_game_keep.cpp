@@ -8,6 +8,7 @@
 // Here the file is read and written as QtConfig::ReadGlobalSetting and WriteGlobalSetting do for a
 // game's file (the key's "use_global", and its value when the game has its own), with QSettings.
 
+#include "common/frame_product.h"
 #include <algorithm>
 #include <string>
 #include <type_traits>
@@ -430,7 +431,7 @@ TEST_CASE("Per-Game: Trigger Layout's key, Original by default", "[frame_xr][kiu
     CHECK(std::find(labels.begin(), labels.end(), "vr_kiu_trigger_layout") != labels.end());
     CHECK(FrameXr::PerGame::KeysOf(Id::TriggerLayout) ==
           std::vector<std::string>{"vr_kiu_trigger_layout"});
-    CHECK(Settings::values.vr_kiu_trigger_layout.GetDefault() == 0u);
+    CHECK(Settings::values.vr_kiu_trigger_layout.GetDefault() == 1u);
 }
 
 // AzaharVR: Screen Layout per game too: the same key, and a game's file without it (every file an
@@ -695,7 +696,8 @@ TEST_CASE("Per-Game: the Angel's Aim page's own rows write the settings they alw
         {Id::KiuPortraitsLinked, {"vr_kiu_portraits_linked"}},
         {Id::KiuPortraitsAcross, {"vr_kiu_portraits_across"}},
         {Id::KiuPortraitsHeight, {"vr_kiu_portraits_height"}},
-        {Id::KiuReticleSize, {"vr_kiu_reticle_size"}}};
+        {Id::KiuReticleSize, {"vr_kiu_reticle_size"}},
+        {Id::KiuMarkerSize, {"vr_kiu_marker_size"}}};
     const auto has = [](const std::vector<Id>& ids, Id id) {
         return std::find(ids.begin(), ids.end(), id) != ids.end();
     };
@@ -793,19 +795,19 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
           std::vector<std::string>{"vr_kiu_over_shoulder", "vr_kiu_game_camera"});
     CHECK(std::find(labels.begin(), labels.end(), "vr_kiu_game_camera") != labels.end());
     CHECK_FALSE(Settings::values.vr_kiu_game_camera.GetDefault());
-    CHECK_FALSE(Settings::values.vr_kiu_hide_off_hand.GetDefault());
-    CHECK_FALSE(Settings::values.vr_kiu_60fps.GetDefault()); // AzaharFrame kiu60
-    CHECK(Settings::values.vr_kiu_pit_opacity.GetDefault() == 100u);
+    CHECK(Settings::values.vr_kiu_hide_off_hand.GetDefault());
+    CHECK(Settings::values.vr_kiu_60fps.GetDefault() == Common::FrameProduct::kPc); // AzaharFrame kiu60
+    CHECK(Settings::values.vr_kiu_pit_opacity.GetDefault() == 20u);
     CHECK_FALSE(Settings::values.vr_kiu_wrist_screen.GetDefault());
     CHECK_FALSE(Settings::values.vr_kiu_talk_panel.GetDefault());
     CHECK_FALSE(Settings::values.vr_kiu_over_shoulder.GetDefault());
     CHECK(Settings::values.vr_kiu_snap_turn.GetDefault() == 0u);
-    CHECK(Settings::values.vr_kiu_bottom_screen.GetDefault() == 2u); // Wrist
-    CHECK(Settings::values.vr_kiu_bottom_size.GetDefault() == 100u);
-    CHECK(Settings::values.vr_kiu_bottom_opacity.GetDefault() == 100u);
+    CHECK(Settings::values.vr_kiu_bottom_screen.GetDefault() == 0u);
+    CHECK(Settings::values.vr_kiu_bottom_size.GetDefault() == 160u);
+    CHECK(Settings::values.vr_kiu_bottom_opacity.GetDefault() == 50u);
     // AzaharFrame kiu1s: the talk's portraits, off, and their opacity.
-    CHECK_FALSE(Settings::values.vr_kiu_talk_portraits.GetDefault());
-    CHECK(Settings::values.vr_kiu_talk_portraits_opacity.GetDefault() == 100u);
+    CHECK(Settings::values.vr_kiu_talk_portraits.GetDefault());
+    CHECK(Settings::values.vr_kiu_talk_portraits_opacity.GetDefault() == 50u);
     CHECK(Settings::values.vr_kiu_portraits_linked.GetDefault());
     CHECK(Settings::values.vr_kiu_portraits_across.GetDefault() == 0);
     CHECK(Settings::values.vr_kiu_portraits_height.GetDefault() == 0);
