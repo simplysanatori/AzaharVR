@@ -114,7 +114,9 @@ RasterizerVulkan::RasterizerVulkan(Memory::MemorySystem& memory, Pica::PicaCore&
         .range = VK_WHOLE_SIZE,
     });
 
-    scheduler.RegisterOnSubmit([&renderpass_cache] { renderpass_cache.EndRendering(); });
+    scheduler.RegisterOnSubmit([&renderpass_cache] { // AzaharFrame gpupasses: the reason
+        renderpass_cache.EndRendering(VideoCore::GpuPasses::Why::Submit);
+    });
 
     // Prepare the static buffer descriptor set.
     const auto buffer_set = pipeline_cache.Acquire(DescriptorHeapType::Buffer);
@@ -872,6 +874,13 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
     // Begin rendering
     renderpass_cache.BeginRendering(framebuffer, draw_rect);
+    if (renderpass_cache.Timing()) { // AzaharFrame gpupasses: the world's or 2D (as kiuhs3 tells)
+        renderpass_cache.NoteDraw(
+            (accelerate && vr_world_uniforms) ||
+                regs.framebuffer.output_merger.depth_test_enable != 0,
+            static_cast<u32>(Pica::f24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2.0f),
+            static_cast<u32>(Pica::f24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2.0f));
+    }
     if (using_color_fb && VideoCore::KiuClear::g_on.load(std::memory_order_relaxed)) {
         // AzaharFrame kiuhs3: the world's, or one of its draws shaded on the CPU (which comes first
         // is not always the same); the 2D's are not depth tested.

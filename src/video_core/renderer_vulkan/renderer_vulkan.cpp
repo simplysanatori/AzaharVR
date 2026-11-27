@@ -210,7 +210,7 @@ void RendererVulkan::PrepareDraw(Frame* frame, const Layout::FramebufferLayout& 
                                      sampler);
     }
 
-    renderpass_cache.EndRendering();
+    renderpass_cache.EndRendering(VideoCore::GpuPasses::Why::Present); // AzaharFrame gpupasses
     scheduler.Record([this, layout, frame, present_set,
                       renderpass = main_present_window.Renderpass(),
                       index = current_pipeline](vk::CommandBuffer cmdbuf) {
@@ -701,7 +701,7 @@ void RendererVulkan::FillScreen(Common::Vec3<u8> color, const TextureInfo& textu
             },
     };
 
-    renderpass_cache.EndRendering();
+    renderpass_cache.EndRendering(VideoCore::GpuPasses::Why::Present); // AzaharFrame gpupasses
     scheduler.Record([image = texture.image, clear_color](vk::CommandBuffer cmdbuf) {
         const vk::ImageSubresourceRange range = {
             .aspectMask = vk::ImageAspectFlagBits::eColor,
@@ -1238,6 +1238,7 @@ void RendererVulkan::SwapBuffers() {
     LimitFramesAheadOfGpu();
 
     system.perf_stats->EndSwap();
+    renderpass_cache.NoteFrame(); // AzaharFrame gpupasses: a game frame ends
     rasterizer.TickFrame();
     EndFrame();
 }

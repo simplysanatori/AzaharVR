@@ -1016,6 +1016,11 @@ and the screen's ceiling, and CPU as a share of one core per thread group from
 `XrRelease`, audio: the sink library's threads, named as they are on the system) with the three
 busiest others by name. The /proc read and the line run on a short thread of their own.
 
+Where the emulator's GPU work goes (AzaharFrame gpupasses): `AZAHARFRAME_GPU_PASSES=1` adds lines
+`gpu passes: ...` every 10 s from the renderer's worker thread, the same span cut by kind of work
+(the game's top screen 3D and 2D passes, bottom screen, offscreen, copies, uploads, readback,
+present, other), with passes, draws, loads and stores and why passes ended (docs/TECHNICAL_NOTES.md).
+
 Two more switches with it, for every mode (docs/TECHNICAL_NOTES.md): both eyes' top images in one
 swapchain (`AZAHARFRAME_XR_PACKED`) and one game frame's screens released together
 (`AZAHARFRAME_XR_SET_RELEASE`), so the two eyes never come from different game frames.

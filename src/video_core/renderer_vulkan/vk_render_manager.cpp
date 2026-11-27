@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <utility>
 #include "common/assert.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
 #include "common/frame_test_switches.h" // AzaharVR foveation
@@ -25,7 +26,8 @@ using VideoCore::PixelFormat;
 using VideoCore::SurfaceType;
 
 RenderManager::RenderManager(const Instance& instance, Scheduler& scheduler)
-    : instance{instance}, scheduler{scheduler} {}
+    : instance{instance}, scheduler{scheduler},
+      timing{scheduler.PassTimer().Enable()} {} // AzaharFrame gpupasses
 
 RenderManager::~RenderManager() {
     // AzaharVR foveation
@@ -67,16 +69,23 @@ void RenderManager::BeginRendering(const Framebuffer* framebuffer,
     images = framebuffer->Images();
     aspects = framebuffer->Aspects();
     shadow_rendering = framebuffer->shadow_rendering;
+    next_framebuffer = framebuffer; // AzaharFrame gpupasses: a game pass (bookkeeping only)
     BeginRendering(new_pass);
 }
 
 void RenderManager::BeginRendering(const RenderPass& new_pass) {
+    const Framebuffer* const framebuffer = std::exchange(next_framebuffer, nullptr);
     if (pass == new_pass) [[likely]] {
         num_draws++;
         return;
     }
 
-    EndRendering();
+    // AzaharFrame gpupasses: why the pass in progress ends (bookkeeping only).
+    EndRendering(pass.framebuffer != new_pass.framebuffer ? VideoCore::GpuPasses::Why::Target
+                                                          : VideoCore::GpuPasses::Why::Area);
+    if (timing) {
+        StartPass(new_pass, framebuffer); // before the pass: outside it
+    }
     scheduler.Record([info = new_pass](vk::CommandBuffer cmdbuf) {
         const vk::RenderPassBeginInfo renderpass_begin_info = {
             .renderPass = info.render_pass,
@@ -91,8 +100,11 @@ void RenderManager::BeginRendering(const RenderPass& new_pass) {
     pass = new_pass;
 }
 
-void RenderManager::EndRendering() {
+void RenderManager::EndRendering(VideoCore::GpuPasses::Why why) {
     if (!pass.render_pass) {
+        if (timing) {
+            ExpectWork(why); // AzaharFrame gpupasses
+        }
         return;
     }
 
@@ -153,11 +165,185 @@ void RenderManager::EndRendering() {
     aspects = {};
     shadow_rendering = false;
 
+    // AzaharFrame gpupasses: the pass's timestamp, after it (and in its command buffer).
+    const bool timed_pass = timing;
+    const VideoCore::GpuPasses::Why next = timed_pass ? EndPass(why) : why;
+
     // The Mali guide recommends flushing at the end of each major renderpass
     // Testing has shown this has a significant effect on rendering performance
     if (num_draws > MinDrawsToFlush && instance.ShouldFlush()) {
         scheduler.Flush();
         num_draws = 0;
+    }
+    if (timed_pass) {
+        ExpectWork(next); // the work outside passes after it (in the new buffer after a flush)
+    }
+}
+
+// AzaharFrame gpupasses: the bookkeeping of AZAHARFRAME_GPU_PASSES=1 (vk_gpu_passes.h). Only
+// marks are recorded (a timestamp each, outside render passes); nothing else changes.
+namespace {
+namespace GP = VideoCore::GpuPasses;
+
+template <typename Handle>
+u64 HandleId(Handle handle) {
+    u64 id = 0;
+    std::memcpy(&id, &handle, std::min(sizeof(id), sizeof(handle)));
+    return id;
+}
+
+u8 FormatId(VideoCore::PixelFormat format) {
+    return format == PixelFormat::Invalid ? GP::kNoFormat : static_cast<u8>(format);
+}
+
+constexpr std::size_t kMostTargets = 512; ///< targets a frame tracked for re-opened passes
+} // namespace
+
+void RenderManager::Mark(const GP::Segment& segment) {
+    scheduler.Record([segment, timer = &scheduler.PassTimer()](vk::CommandBuffer cmdbuf) {
+        timer->Mark(cmdbuf, segment);
+    });
+}
+
+void RenderManager::CloseWork() {
+    if (!timed.work_open) {
+        return;
+    }
+    GP::Segment segment;
+    segment.frame = timed.frame;
+    segment.bucket = timed.work == GP::Bucket::Count ? GP::Bucket::Other : timed.work;
+    segment.ops = timed.work_ops;
+    Mark(segment);
+    timed.work_open = false;
+    timed.work_ops = 0;
+}
+
+void RenderManager::SwitchWork(GP::Bucket bucket) {
+    if (timed.work_open && timed.work != bucket) {
+        CloseWork();
+    }
+    timed.work = bucket;
+    timed.work_open = true;
+    ++timed.work_ops;
+}
+
+void RenderManager::ExpectWork(GP::Why why) {
+    if (pass.render_pass) {
+        if (why != GP::Why::None) {
+            timed.pending = why; // the pass in progress ends for it
+        }
+        return;
+    }
+    const GP::Bucket bucket = GP::BucketOf(why);
+    if (bucket != GP::Bucket::Count) {
+        SwitchWork(bucket);
+    } else if (why == GP::Why::Submit) {
+        CloseWork(); // the command buffer's end: its own timestamp follows
+        timed.work = GP::Bucket::Count;
+    }
+}
+
+void RenderManager::StartPass(const RenderPass& new_pass, const Framebuffer* framebuffer) {
+    CloseWork(); // the work outside passes before it
+    if (framebuffer) {
+        timed.work = GP::Bucket::Count; // a game pass: the operation before it is over
+    }
+    GP::Segment& p = timed.pass;
+    p = {};
+    p.frame = timed.frame;
+    p.pass = true;
+    p.area = new_pass.render_area.extent.width * new_pass.render_area.extent.height;
+    p.clear = new_pass.do_clear != 0;
+    p.load = !p.clear;
+    p.store = true;
+    timed.game = framebuffer != nullptr;
+    timed.shadow = false;
+    timed.screen = GP::Screen::None;
+    timed.target_screen = GP::Screen::None;
+    timed.world_draws = 0;
+    timed.pending = GP::Why::None;
+    if (framebuffer) {
+        const u32 scale = std::max(framebuffer->Scale(), 1u);
+        p.width = framebuffer->RateWidth();
+        p.height = framebuffer->RateHeight();
+        p.scaled = scale > 1;
+        p.foveated = framebuffer->fsr_picture;
+        timed.shadow = framebuffer->shadow_rendering;
+        const auto images = framebuffer->Images();
+        p.target = HandleId(static_cast<VkImage>(images[0] ? images[0] : images[1]));
+        if (timed.shadow) {
+            p.attachments = 0; // a storage image, no attachment to load or store
+            p.load = p.store = false;
+        } else {
+            p.color = FormatId(framebuffer->Format(SurfaceType::Color));
+            p.depth = FormatId(framebuffer->Format(SurfaceType::Depth));
+            p.attachments = static_cast<u8>((p.color != GP::kNoFormat ? 1 : 0) +
+                                            (p.depth != GP::kNoFormat ? 1 : 0));
+        }
+        timed.target_screen = GP::ScreenOf(p.width / scale, p.height / scale);
+    } else {
+        // A helper's pass (a conversion, a filter): its framebuffer only.
+        p.width = new_pass.render_area.extent.width;
+        p.height = new_pass.render_area.extent.height;
+        p.attachments = 1;
+        p.target = HandleId(static_cast<VkFramebuffer>(new_pass.framebuffer));
+    }
+    for (auto& t : timed.targets) {
+        if (t.id == p.target) {
+            p.index = t.passes;
+            if (p.load && p.attachments > 0) {
+                p.reopen = t.last_end == GP::Why::None ? GP::Why::Other : t.last_end;
+            }
+            t.passes = static_cast<u8>(std::min<u32>(t.passes + 1u, 255u));
+            return;
+        }
+    }
+    if (timed.targets.size() < kMostTargets) {
+        timed.targets.push_back({p.target, 1, GP::Why::None});
+    }
+}
+
+GP::Why RenderManager::EndPass(GP::Why why) {
+    using W = GP::Why;
+    // A reason announced while the pass was open wins over the generic ones.
+    const bool generic = why == W::None || why == W::Target || why == W::Area ||
+                         why == W::Submit || why == W::Other;
+    const W effective = timed.pending != W::None && generic ? timed.pending : why;
+    timed.pending = W::None;
+    GP::Segment& p = timed.pass;
+    p.end = effective == W::None ? W::Other : effective;
+    if (timed.game) {
+        const GP::Screen screen =
+            timed.screen != GP::Screen::None ? timed.screen : timed.target_screen;
+        p.bucket = GP::GameBucket(timed.shadow, screen, timed.world_draws);
+    } else {
+        p.bucket = timed.work != GP::Bucket::Count ? timed.work : GP::Bucket::Copy;
+    }
+    Mark(p);
+    for (auto& t : timed.targets) {
+        if (t.id == p.target) {
+            t.last_end = p.end;
+            break;
+        }
+    }
+    if (!timed.game && timed.work != GP::Bucket::Count) {
+        timed.work_open = true; // the operation the helper's pass belongs to goes on
+    }
+    return effective;
+}
+
+void RenderManager::NoteDraw(bool world, u32 viewport_width, u32 viewport_height) {
+    if (!pass.render_pass) {
+        return;
+    }
+    ++timed.pass.draws;
+    if (world) {
+        ++timed.world_draws;
+    } else {
+        ++timed.pass.flat;
+    }
+    if (timed.screen == GP::Screen::None) {
+        timed.screen = GP::ScreenOf(viewport_width, viewport_height);
     }
 }
 
@@ -366,7 +552,7 @@ vk::ImageView RenderManager::GetShadingRateView(u32 width, u32 height) {
     ASSERT_MSG(buffer_result == VK_SUCCESS, "foveation: the rate image's buffer was not made");
     r.staging = vk::Buffer{raw_buffer};
 
-    EndRendering(); // a copy is not recorded inside a render pass
+    EndRendering(VideoCore::GpuPasses::Why::Foveation); // a copy is not recorded inside a pass
     RecordRateUpload(r, std::move(data), true);
     std::scoped_lock lock{cache_mutex};
     rate_images.push_back(r);
@@ -407,7 +593,7 @@ vk::ImageView RenderManager::GetFullRateView() {
         .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
     });
     // 0 is the 1x1 rate. A clear: the image is far larger than an update can write.
-    EndRendering();
+    EndRendering(VideoCore::GpuPasses::Why::Foveation);
     scheduler.Record([image = full_rate.image](vk::CommandBuffer cmdbuf) {
         const vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
         const vk::ImageMemoryBarrier to_clear{
@@ -521,7 +707,7 @@ void RenderManager::RefreshShadingRate(u32 width, u32 height) {
     std::vector<u8> data = VideoCore::Foveation::MakeRateImage(instance.FoveationLevel(), width,
                                                                height, texel, cy, cx);
     data.resize((data.size() + 3) & ~std::size_t{3});
-    EndRendering();
+    EndRendering(VideoCore::GpuPasses::Why::Foveation);
     RecordRateUpload(found, std::move(data), false);
 }
 

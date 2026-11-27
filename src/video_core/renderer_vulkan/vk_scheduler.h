@@ -11,6 +11,7 @@
 #include "common/common_funcs.h"
 #include "common/polyfill_thread.h"
 #include "video_core/renderer_vulkan/vk_gpu_busy.h" // AzaharFrame projdef
+#include "video_core/renderer_vulkan/vk_gpu_passes.h" // AzaharFrame gpupasses
 #include "video_core/renderer_vulkan/vk_master_semaphore.h"
 #include "video_core/renderer_vulkan/vk_resource_pool.h"
 
@@ -96,6 +97,11 @@ public:
     /// Returns the master timeline semaphore.
     [[nodiscard]] MasterSemaphore* GetMasterSemaphore() noexcept {
         return master_semaphore.get();
+    }
+
+    /// AzaharFrame gpupasses: the timestamps between render passes (AZAHARFRAME_GPU_PASSES=1).
+    [[nodiscard]] GpuPassTimer& PassTimer() noexcept {
+        return pass_timer;
     }
 
     std::mutex submit_mutex;
@@ -197,6 +203,7 @@ private:
     std::unique_ptr<MasterSemaphore> master_semaphore;
     CommandPool command_pool;
     GpuBusyTimer gpu_busy; ///< AzaharFrame projdef: each command buffer's GPU time
+    GpuPassTimer pass_timer; ///< AzaharFrame gpupasses: its time by kind of work
     std::unique_ptr<CommandChunk> chunk;
     std::queue<std::unique_ptr<CommandChunk>> work_queue;
     std::vector<std::unique_ptr<CommandChunk>> chunk_reserve;

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "common/math_util.h"
+#include "video_core/gpu_pass_stats.h" // AzaharFrame gpupasses
 #include "video_core/renderer_vulkan/vk_common.h"
 
 VK_DEFINE_HANDLE(VmaAllocation) // AzaharVR foveation
@@ -51,8 +52,36 @@ public:
     /// Begins a new renderpass with the provided render state.
     void BeginRendering(const RenderPass& new_pass);
 
-    /// Exits from any currently active renderpass instance
-    void EndRendering();
+    /// Exits from any currently active renderpass instance. AzaharFrame gpupasses: `why` is
+    /// what comes next (the reason the pass ends, and the kind of the work outside passes after
+    /// it); it is only bookkeeping for AZAHARFRAME_GPU_PASSES=1 and changes nothing else.
+    void EndRendering(VideoCore::GpuPasses::Why why = VideoCore::GpuPasses::Why::None);
+
+    /// AzaharFrame gpupasses: whether the passes are timed (AZAHARFRAME_GPU_PASSES=1).
+    [[nodiscard]] bool Timing() const noexcept {
+        return timing;
+    }
+
+    /// AzaharFrame gpupasses: work of kind `why` comes next, maybe through a helper that ends the
+    /// pass itself (a conversion by shader). Bookkeeping only.
+    void Expect(VideoCore::GpuPasses::Why why) {
+        if (timing) {
+            ExpectWork(why);
+        }
+    }
+
+    /// AzaharFrame gpupasses: one of the game's draws in the pass begun last. `world`: through
+    /// the world camera or depth tested (else 2D); the viewport in the 3DS's pixels. Call only
+    /// when Timing().
+    void NoteDraw(bool world, u32 viewport_width, u32 viewport_height);
+
+    /// AzaharFrame gpupasses: a game frame ends (the renderer's swap).
+    void NoteFrame() {
+        if (timing) {
+            ++timed.frame;
+            timed.targets.clear();
+        }
+    }
 
     /// Returns the renderpass associated with the color-depth format pair
     vk::RenderPass GetRenderpass(VideoCore::PixelFormat color, VideoCore::PixelFormat depth,
@@ -80,6 +109,14 @@ public:
     void RefreshShadingRate(u32 width, u32 height);
 
 private:
+    // AzaharFrame gpupasses
+    void StartPass(const RenderPass& new_pass, const Framebuffer* framebuffer);
+    VideoCore::GpuPasses::Why EndPass(VideoCore::GpuPasses::Why why);
+    void ExpectWork(VideoCore::GpuPasses::Why why);
+    void SwitchWork(VideoCore::GpuPasses::Bucket bucket);
+    void CloseWork();
+    void Mark(const VideoCore::GpuPasses::Segment& segment);
+
     /// Creates a renderpass configured appropriately and stores it in cached_renderpasses
     vk::UniqueRenderPass CreateRenderPass(vk::Format color, vk::Format depth,
                                           vk::AttachmentLoadOp load_op) const;
@@ -110,6 +147,29 @@ private:
     bool shadow_rendering{};
     RenderPass pass{};
     u32 num_draws{};
+
+    // AzaharFrame gpupasses: the segment being recorded (on the thread that records).
+    bool timing{};
+    const Framebuffer* next_framebuffer{}; ///< the game's framebuffer of the pass about to begin
+    struct Timed {
+        u64 frame{};
+        VideoCore::GpuPasses::Segment pass;     ///< the render pass in progress
+        bool game{};                            ///< a game pass (drawn by the rasterizer)
+        bool shadow{};
+        VideoCore::GpuPasses::Screen screen{};  ///< from its draws' viewport
+        VideoCore::GpuPasses::Screen target_screen{}; ///< from its target's unscaled size
+        u32 world_draws{};
+        VideoCore::GpuPasses::Why pending{};    ///< announced (Expect) while the pass was open
+        VideoCore::GpuPasses::Bucket work{VideoCore::GpuPasses::Bucket::Count}; ///< outside passes
+        bool work_open{};                       ///< work of `work` recorded since the last mark
+        u32 work_ops{};
+        struct Target {
+            u64 id;
+            u8 passes;
+            VideoCore::GpuPasses::Why last_end;
+        };
+        std::vector<Target> targets; ///< this frame's
+    } timed;
 };
 
 } // namespace Vulkan

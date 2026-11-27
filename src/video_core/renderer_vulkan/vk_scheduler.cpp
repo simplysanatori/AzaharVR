@@ -53,6 +53,7 @@ void Scheduler::CommandChunk::ExecuteAll(vk::CommandBuffer cmdbuf) {
 Scheduler::Scheduler(const Instance& instance)
     : master_semaphore{MakeMasterSemaphore(instance)},
       command_pool{instance, master_semaphore.get()}, gpu_busy{instance}, // AzaharFrame projdef
+      pass_timer{instance},                                                // AzaharFrame gpupasses
       use_worker_thread{true} {
     AllocateWorkerCommandBuffers();
     if (use_worker_thread) {
@@ -179,6 +180,8 @@ void Scheduler::AllocateWorkerCommandBuffers() {
     current_cmdbuf = command_pool.Commit();
     current_cmdbuf.begin(begin_info);
     gpu_busy.Begin(current_cmdbuf); // AzaharFrame projdef
+    pass_timer.BeginBuffer(current_cmdbuf); // AzaharFrame gpupasses: off, it returns at once
+    pass_timer.Collect(*master_semaphore);  // the ones done by now (no wait), not under submit_mutex
 }
 
 void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wait_semaphore) {
@@ -196,6 +199,7 @@ void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wa
         std::scoped_lock lock{submit_mutex};
         const auto locked = SteadyClock::now();
         Common::DebugStall::Maybe(Common::DebugStall::Where::Submit);
+        pass_timer.EndBuffer(cmdbuf, signal_value); // AzaharFrame gpupasses
         gpu_busy.End(cmdbuf, signal_value); // AzaharFrame projdef: before SubmitWork ends it
         master_semaphore->SubmitWork(cmdbuf, wait_semaphore, signal_semaphore, signal_value);
         gpu_busy.Collect(*master_semaphore); // the ones done by now (no wait)

@@ -22,6 +22,8 @@ add_library(video_core STATIC EXCLUDE_FROM_ALL
     vr_hud_spacing.h # AzaharFrame hudmove
     vr_view_matrix.h # AzaharFrame
     kiu_clear.h # AzaharFrame kiuhs3
+    gpu_pass_stats.cpp # AzaharFrame gpupasses
+    gpu_pass_stats.h
     kiu_hud.h # AzaharFrame kiu140
     kiu_powers.h # AzaharFrame kiupowers
     kiu_hud_fade.h # AzaharFrame kiuhs3a
@@ -192,6 +194,8 @@ if (ENABLE_VULKAN)
         renderer_vulkan/vk_scheduler.h
         renderer_vulkan/vk_gpu_busy.cpp # AzaharFrame projdef
         renderer_vulkan/vk_gpu_busy.h
+        renderer_vulkan/vk_gpu_passes.cpp # AzaharFrame gpupasses
+        renderer_vulkan/vk_gpu_passes.h
         renderer_vulkan/vk_resource_pool.cpp
         renderer_vulkan/vk_resource_pool.h
         renderer_vulkan/vk_instance.cpp

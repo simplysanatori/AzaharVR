@@ -338,6 +338,7 @@ bool TextureRuntime::Reinterpret(Surface& source, Surface& dest,
     }
 
     if (src_format == PixelFormat::D24S8 && dst_format == PixelFormat::RGBA8) {
+        renderpass_cache.Expect(VideoCore::GpuPasses::Why::Convert); // AzaharFrame gpupasses
         blit_helper.ConvertDS24S8ToRGBA8(source, dest, copy);
     } else {
         LOG_WARNING(Render_Vulkan, "Unimplemented reinterpretation {}({}) -> {}({})",
@@ -349,7 +350,7 @@ bool TextureRuntime::Reinterpret(Surface& source, Surface& dest,
 }
 
 bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClear& clear) {
-    renderpass_cache.EndRendering();
+    renderpass_cache.EndRendering(VideoCore::GpuPasses::Why::Clear); // AzaharFrame gpupasses
 
     const RecordParams params = {
         .aspect = surface.Aspect(),
@@ -499,7 +500,7 @@ void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
 
 bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
                                   std::span<const VideoCore::TextureCopy> copies) {
-    renderpass_cache.EndRendering();
+    renderpass_cache.EndRendering(VideoCore::GpuPasses::Why::Copy); // AzaharFrame gpupasses
 
     const RecordParams params = {
         .aspect = source.Aspect(),
@@ -604,10 +605,11 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
     const bool is_depth_stencil = source.type == VideoCore::SurfaceType::DepthStencil;
     const auto& depth_traits = instance.GetTraits(source.pixel_format);
     if (is_depth_stencil && !depth_traits.blit_support) {
+        renderpass_cache.Expect(VideoCore::GpuPasses::Why::Convert); // AzaharFrame gpupasses
         return blit_helper.BlitDepthStencil(source, dest, blit);
     }
 
-    renderpass_cache.EndRendering();
+    renderpass_cache.EndRendering(VideoCore::GpuPasses::Why::Blit); // AzaharFrame gpupasses
 
     const RecordParams params = {
         .aspect = source.Aspect(),
@@ -715,7 +717,7 @@ void TextureRuntime::GenerateMipmaps(Surface& surface) {
         return;
     }
 
-    renderpass_cache.EndRendering();
+    renderpass_cache.EndRendering(VideoCore::GpuPasses::Why::Mipmap); // AzaharFrame gpupasses
 
     auto [width, height] = surface.RealExtent();
     // AzaharFrame: a custom image can have fewer levels than the guest surface
@@ -808,7 +810,7 @@ Surface::Surface(TextureRuntime& runtime_, const VideoCore::SurfaceParams& param
 
     current = res_scale != 1 ? Type::Scaled : Type::Base;
 
-    runtime.renderpass_cache.EndRendering();
+    runtime.renderpass_cache.EndRendering(VideoCore::GpuPasses::Why::Other); // gpupasses: a new image
     scheduler.Record([raw_images, num_images, aspect = traits.aspect](vk::CommandBuffer cmdbuf) {
         std::array<vk::ImageMemoryBarrier, 3> barriers;
         MakeInitBarriers(aspect, num_images, raw_images, barriers);
@@ -860,7 +862,7 @@ Surface::Surface(TextureRuntime& runtime_, const VideoCore::SurfaceBase& surface
 
     current = Type::Base;
 
-    runtime.renderpass_cache.EndRendering();
+    runtime.renderpass_cache.EndRendering(VideoCore::GpuPasses::Why::Other); // gpupasses: a new image
     scheduler.Record([raw_images, num_images, aspect = traits.aspect](vk::CommandBuffer cmdbuf) {
         std::array<vk::ImageMemoryBarrier, 3> barriers;
         MakeInitBarriers(aspect, num_images, raw_images, barriers);
@@ -875,7 +877,7 @@ Surface::Surface(TextureRuntime& runtime_, const VideoCore::SurfaceBase& surface
 
 void Surface::Upload(const VideoCore::BufferTextureCopy& upload,
                      const VideoCore::StagingData& staging) {
-    runtime.renderpass_cache.EndRendering();
+    runtime.renderpass_cache.EndRendering(VideoCore::GpuPasses::Why::Upload); // AzaharFrame gpupasses
 
     const RecordParams params = {
         .aspect = Aspect(),
@@ -963,6 +965,7 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload,
 }
 
 void Surface::UploadCustom(const VideoCore::Material* material, u32 level) {
+    runtime.renderpass_cache.Expect(VideoCore::GpuPasses::Why::Upload); // AzaharFrame gpupasses
     // AzaharFrame: the base material uploads every level of its stored mip chain the image
     // has (one copy region each, one staging allocation). A material for a later level (a
     // pack with one file per level) writes that level only, if the image has it.
@@ -1065,7 +1068,7 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download,
         runtime.download_buffer.Commit(staging.size);
     });
 
-    runtime.renderpass_cache.EndRendering();
+    runtime.renderpass_cache.EndRendering(VideoCore::GpuPasses::Why::Readback); // gpupasses
 
     if (pixel_format == PixelFormat::D24S8) {
         runtime.blit_helper.DepthToBuffer(*this, runtime.download_buffer.Handle(), download);
@@ -1171,7 +1174,7 @@ void Surface::ScaleUp(u32 new_scale) {
 
     handles[Type::Copy].Destroy();
 
-    runtime.renderpass_cache.EndRendering();
+    runtime.renderpass_cache.EndRendering(VideoCore::GpuPasses::Why::Scale); // AzaharFrame gpupasses
     scheduler.Record(
         [raw_images = std::array{Image()}, aspect = traits.aspect](vk::CommandBuffer cmdbuf) {
             std::array<vk::ImageMemoryBarrier, 1> barriers;
@@ -1242,7 +1245,7 @@ vk::ImageView Surface::CopyImageView(std::span<const vk::Rect2D> parts) noexcept
         copy_layout = vk::ImageLayout::eUndefined;
     }
 
-    runtime.renderpass_cache.EndRendering();
+    runtime.renderpass_cache.EndRendering(VideoCore::GpuPasses::Why::Copy); // AzaharFrame gpupasses
 
     const RecordParams params = {
         .aspect = Aspect(),

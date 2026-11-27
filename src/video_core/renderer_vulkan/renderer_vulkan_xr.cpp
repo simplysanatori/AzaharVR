@@ -237,7 +237,7 @@ bool RendererVulkan::RenderToXr() {
         });
     }
     PrepareKiuTalk(); // AzaharFrame kiutalk
-    renderpass_cache.EndRendering();
+    renderpass_cache.EndRendering(VideoCore::GpuPasses::Why::Present); // AzaharFrame gpupasses
 
     std::array<XrPresentTarget::Target, XrPresentTarget::kScreens> targets{};
     // AzaharFrame doubling: the head pose the picture on the screens was drawn with (immersive
