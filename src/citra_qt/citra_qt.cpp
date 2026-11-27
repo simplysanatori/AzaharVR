@@ -6209,8 +6209,8 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::ScaleMode: // AzaharFrame fovscale: Stretch, Field of View
         set(v.vr_immersive_scale_mode, r.value == 0 ? 0u : 1u);
         break;
-    case S::FoveatedRendering: // AzaharVR foveation: 0 Off, 1 Medium, 2 High
-        set(v.vr_foveated_rendering, static_cast<u32>(std::clamp(r.value, 0, 2)));
+    case S::FoveatedRendering: // AzaharVR foveation: 0 Off, 1 Low, 2 Medium, 3 High
+        set(v.vr_foveated_rendering, static_cast<u32>(std::clamp(r.value, 0, 3)));
         break;
     case S::FoveationInnerRadius:
         set(v.vr_foveation_inner_radius, static_cast<u32>(std::clamp(r.value, 10, 80)));

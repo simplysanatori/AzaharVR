@@ -975,10 +975,9 @@ struct Values {
     // there) and draws at most 1.6x; Stretch keeps the axes within 1.5 of each other.
     SwitchableSetting<u32, true> vr_immersive_scale_mode{1, 0, 1, "vr_immersive_scale_mode"};
     // AzaharVR foveation: eye-tracked foveated rendering in Immersive Mode (per game and global):
-    // 0 = Off, 1 = Medium, 2 = High (picking a preset sets the four ring controls below; any value
-    // > 2 from an earlier build reads as High). Active only on headsets with eye tracking (Steam
-    // Frame) and updates live mid-game.
-    SwitchableSetting<u32, true> vr_foveated_rendering{0, 0, 2, "vr_foveated_rendering"};
+    // 0 = Off, 1 = Low, 2 = Medium, 3 = High (picking a preset sets the four ring controls below).
+    // Active only on headsets with eye tracking (Steam Frame) and updates live mid-game.
+    SwitchableSetting<u32, true> vr_foveated_rendering{0, 0, 3, "vr_foveated_rendering"};
     SwitchableSetting<u32, true> vr_foveation_inner_radius{40, 10, 80, "vr_foveation_inner_radius"};
     SwitchableSetting<u32, true> vr_foveation_middle_radius{70, 20, 100,
                                                             "vr_foveation_middle_radius"};

@@ -371,6 +371,21 @@ Row RowFor(Id id, const MenuModel& m) {
     case Id::Kiu60Fps: // AzaharFrame kiu60
         segmented(std::clamp(m.kiu_60fps, 0, 1));
         break;
+    case Id::FoveatedRendering: // AzaharVR foveation
+        segmented(std::clamp(m.foveated_rendering, 0, 3));
+        break;
+    case Id::FoveationInnerRadius:
+        slider(m.foveation_inner_radius);
+        break;
+    case Id::FoveationMiddleRadius:
+        slider(m.foveation_middle_radius);
+        break;
+    case Id::FoveationMiddleRate:
+        segmented(std::clamp(m.foveation_middle_rate, 0, 4));
+        break;
+    case Id::FoveationOuterRate:
+        segmented(std::clamp(m.foveation_outer_rate, 0, 4));
+        break;
     case Id::KiuHideOffHand: // AzaharFrame kiuhands
         segmented(std::clamp(m.kiu_hide_off_hand, 0, 1));
         break;
@@ -693,10 +708,10 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
         if (m.motion_clarity_immersive) {
             rows.push_back(row(Id::MatchBottom, RowKind::Switch, 0, m.match_bottom));
         }
-        // AzaharVR foveation: eye-tracked foveated rendering (Off, Medium, High) and its ring
+        // AzaharVR foveation: eye-tracked foveated rendering (Off, Low, Medium, High) and its ring
         // controls while on.
         rows.push_back(
-            row(Id::FoveatedRendering, RowKind::Segmented, std::clamp(m.foveated_rendering, 0, 2)));
+            row(Id::FoveatedRendering, RowKind::Segmented, std::clamp(m.foveated_rendering, 0, 3)));
         if (m.foveated_rendering > 0) {
             for (const auto& [id, value] :
                  {std::pair{Id::FoveationInnerRadius, m.foveation_inner_radius},
@@ -1421,13 +1436,13 @@ const std::vector<std::string>& OptionsFor(Id id) {
         return kWider;
     case Id::FoveatedRendering: { // AzaharVR foveation
         static const std::vector<std::string> kFoveated{
-            Immersive::Names::kFoveationOff, Immersive::Names::kFoveationMedium,
-            Immersive::Names::kFoveationHigh};
+            Immersive::Names::kFoveationOff, Immersive::Names::kFoveationLow,
+            Immersive::Names::kFoveationMedium, Immersive::Names::kFoveationHigh};
         return kFoveated;
     }
     case Id::FoveationMiddleRate:
     case Id::FoveationOuterRate: {
-        static const std::vector<std::string> kRates{"1x1", "1x2", "2x2", "2x4", "4x4"};
+        static const std::vector<std::string> kRates{"Full", "1/2", "1/4", "1/8", "1/16"};
         return kRates;
     }
     case Id::DsConsoleMode: {
@@ -3467,17 +3482,20 @@ constexpr float kScopeEditGap = 40.0f;
 // An "Experimental" chip right after a row's label, where no Experimental subheader is over it
 // (Angel's Aim's page), in the style of its Alpha chip.
 constexpr float kRowChipH = 32.0f, kRowChipPad = 12.0f, kRowChipGap = 12.0f;
-const char* RowChip(Id id) {
-    return id == Id::Kiu60Fps ? Immersive::Names::kExperimental : nullptr;
+const char* RowChip(Id id, Tab tab = Tab::Settings) {
+    if (id == Id::Kiu60Fps || (id == Id::FoveatedRendering && tab == Tab::Mods)) {
+        return Immersive::Names::kExperimental;
+    }
+    return nullptr;
 }
-float RowChipWidth(const Kit& kit, Id id) {
-    const char* chip = RowChip(id);
+float RowChipWidth(const Kit& kit, Id id, Tab tab = Tab::Settings) {
+    const char* chip = RowChip(id, tab);
     return chip ? kRowChipGap + kit.TextWidth(Type::Label, chip) + kRowChipPad * 2.0f : 0.0f;
 }
 
-float LabelRoom(const Kit& kit, const MenuModel& model, Id id) {
+float LabelRoom(const Kit& kit, const MenuModel& model, Id id, Tab tab = Tab::Settings) {
     (void)model;
-    return kit.TextWidth(Type::Body, LabelFor(id)) + RowChipWidth(kit, id);
+    return kit.TextWidth(Type::Body, LabelFor(id)) + RowChipWidth(kit, id, tab);
 }
 } // namespace
 
@@ -4011,7 +4029,7 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
             y += kRowH;
             continue;
         }
-        const float own_x0 = c.x0 + LabelRoom(kit, model, r.id) + kLabelGap; // useglobal
+        const float own_x0 = c.x0 + LabelRoom(kit, model, r.id, view.tab) + kLabelGap; // useglobal
         const bool row_hit = r.kind == RowKind::Switch || r.kind == RowKind::Link;
         if (row.y1 > list.y0 && row.y0 < list.y1) {
             // AzaharFrame kiufire: Trigger Layout's label says what the chosen layout does.
@@ -4031,7 +4049,7 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
         const float label_y = r.note.empty() ? cy : cy - 11.0f;
         kit.TextMid(c.x0, label_y, Type::Body, Tok::kOnSurface, LabelFor(r.id), 0,
                     enabled ? 1.0f : kDisabledContent);
-        if (const char* chip = RowChip(r.id)) {
+        if (const char* chip = RowChip(r.id, view.tab)) {
             const float x = c.x0 + kit.TextWidth(Type::Body, LabelFor(r.id)) + kRowChipGap;
             const float cw = kit.TextWidth(Type::Label, chip) + kRowChipPad * 2.0f;
             const Rect chip_r{x, label_y - kRowChipH * 0.5f, x + cw, label_y + kRowChipH * 0.5f};
@@ -4212,7 +4230,7 @@ float TabMenu::DrawAimRows(Kit& kit, const MenuModel& model, const MenuView& vie
     for (const Id id : ids) {
         rows.push_back(RowFor(id, model));
         if (rows.back().kind == RowKind::Slider || rows.back().kind == RowKind::MenuButton) {
-            label_w = std::max(label_w, LabelRoom(kit, model, id));
+            label_w = std::max(label_w, LabelRoom(kit, model, id, view.tab));
         }
     }
     return DrawRowItems(kit, model, view, rows, c, list, y, c.x0 + label_w + kLabelGap,

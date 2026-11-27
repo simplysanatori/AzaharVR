@@ -172,8 +172,9 @@ enum class Id : int {
     /// AzaharFrame projdef: Primary Screen as Panel, a switch, first under Experimental
     /// (the opposite of vr_screens_in_projection), per game, never locked
     ScreenAsPanel,
-    /// AzaharVR foveation: Foveated Rendering (vr_foveated_rendering), 0 Off, 1 Medium, 2 High,
-    /// per game, under Experimental (eye-tracked headsets only), with its four ring rows under it
+    /// AzaharVR foveation: Foveated Rendering (vr_foveated_rendering), 0 Off, 1 Low, 2 Medium,
+    /// 3 High, per game, under Experimental (eye-tracked headsets only), with its four ring rows
+    /// under it
     FoveatedRendering,
     FoveationInnerRadius,
     FoveationMiddleRadius,
@@ -639,11 +640,11 @@ struct MenuModel {
     /// (a note, never a lock).
     int bfi_uneven_hz = 0;
     bool screen_as_panel = false; ///< AzaharFrame projdef: !vr_screens_in_projection
-    int foveated_rendering = 0;      ///< AzaharVR foveation: 0 Off, 1 Medium, 2 High
+    int foveated_rendering = 0;      ///< AzaharVR foveation: 0 Off, 1 Low, 2 Medium, 3 High
     int foveation_inner_radius = 40; ///< percent, 10 to 80
     int foveation_middle_radius = 70; ///< percent, 20 to 100
-    int foveation_middle_rate = 2;   ///< 0=1x1, 1=1x2, 2=2x2, 3=2x4, 4=4x4
-    int foveation_outer_rate = 4;    ///< 0=1x1, 1=1x2, 2=2x2, 3=2x4, 4=4x4
+    int foveation_middle_rate = 2;   ///< 0 Full, 1 1/2, 2 1/4, 3 1/8, 4 1/16
+    int foveation_outer_rate = 4;    ///< 0 Full, 1 1/2, 2 1/4, 3 1/8, 4 1/16
     // AzaharFrame autosave: the running game's values (Per-Game, else Global)
     bool autosave = false;
     int autosave_every = 2; ///< index into kAutosaveEvery

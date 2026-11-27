@@ -246,6 +246,16 @@ TEST_CASE("Angel's Aim page: counts, and every row reachable", "[frame_xr][kiuai
                         }
                     }
                 }
+                if (AngelsAimRowsShown(m.mods.angels_aim.shown && m.mods.angels_aim.mapped,
+                                       m.immersive_mode)) {
+                    before.push_back(Id::FoveatedRendering);
+                    if (m.foveated_rendering > 0) {
+                        before.push_back(Id::FoveationInnerRadius);
+                        before.push_back(Id::FoveationMiddleRadius);
+                        before.push_back(Id::FoveationMiddleRate);
+                        before.push_back(Id::FoveationOuterRate);
+                    }
+                }
             }
             std::vector<Id> now = PageIds(m);
             CHECK(now.size() == before.size());
@@ -265,8 +275,15 @@ TEST_CASE("Angel's Aim page: counts, and every row reachable", "[frame_xr][kiuai
                           Id::TurnSpeed, Id::TurnSpeedVertical, Id::CalibrateAim});
     CHECK(AimPageRows(m, AimGroup::View).rows ==
           std::vector<Id>{Id::KiuOverShoulder, Id::KiuSnapTurn, Id::KiuCutscenes,
-                          Id::KiuStickClick}); // Right Stick Click
-    CHECK(AimPageRows(m, AimGroup::View).more == std::vector<Id>{Id::Kiu60Fps}); // AzaharFrame kiu60
+                          Id::KiuStickClick, Id::Kiu60Fps, Id::FoveatedRendering});
+    CHECK(AimPageRows(m, AimGroup::View).more.empty());
+    {
+        MenuModel mf = m;
+        mf.foveated_rendering = 2;
+        CHECK(AimPageRows(mf, AimGroup::View).more ==
+              std::vector<Id>{Id::FoveationInnerRadius, Id::FoveationMiddleRadius,
+                              Id::FoveationMiddleRate, Id::FoveationOuterRate});
+    }
     CHECK(AimPageRows(m, AimGroup::Hud).rows ==
           std::vector<Id>{Id::KiuHud, Id::KiuHudSize, Id::KiuHudOpacity, Id::KiuSubtitleSize,
                           Id::KiuPowerMenu});
@@ -437,6 +454,10 @@ TEST_CASE("Angel's Aim page: each group's page by the beam, its rows targets, B 
                         if (page.more.empty()) {
                             break;
                         }
+                        if (d.menu.MaxScroll() > 0.0f) {
+                            v.scroll[mods] = d.menu.MaxScroll();
+                            d.Draw(m, v);
+                        }
                         const auto* mr = d.Hit(Id::AngelsAimGroup, kAimMoreIndex);
                         REQUIRE(mr);
                         CHECK(mr->r.H() >= 48.0f);
@@ -448,9 +469,17 @@ TEST_CASE("Angel's Aim page: each group's page by the beam, its rows targets, B 
                     CHECK(d.Drew(more ? AimMoreTitle(g) : std::string(AimGroupName(g))));
                     CHECK_FALSE(d.Hit(Id::Scope, 0)); // the scope is the front view's
                     if (!more && is_rows) {
-                        CHECK(d.menu.MaxScroll() == 0.0f); // a group's page never scrolls
+                        if (g != AimGroup::View) {
+                            CHECK(d.menu.MaxScroll() == 0.0f); // other groups' pages never scroll
+                        }
+                        if (d.menu.MaxScroll() > 0.0f) {
+                            v.scroll[mods] = d.menu.MaxScroll();
+                            d.Draw(m, v);
+                        }
                         CHECK((d.Hit(Id::AngelsAimGroup, kAimMoreIndex) != nullptr) ==
                               !page.more.empty());
+                        v.scroll[mods] = 0.0f;
+                        d.Draw(m, v);
                     }
                     if (is_rows) { // no row is cut off, at the top of the page or scrolled
                         for (const float s : {0.0f, d.menu.MaxScroll()}) {
@@ -674,6 +703,10 @@ std::set<Id> PressedIds(Drawn& d, const MenuModel& m, AimGroup g, bool more) {
     }
     d.Draw(m, v);
     if (more) {
+        if (d.menu.MaxScroll() > 0.0f) {
+            v.scroll[static_cast<std::size_t>(Tab::Mods)] = d.menu.MaxScroll();
+            d.Draw(m, v);
+        }
         const auto* mr = d.Hit(Id::AngelsAimGroup, kAimMoreIndex);
         if (!mr || !AimPagePress(m, v, d.menu.HitTest(mr->r.Cx(), mr->r.Cy()).index)) {
             return ids;
@@ -1106,15 +1139,36 @@ TEST_CASE("Angel's Aim page: 60 FPS", "[frame_xr][kiuaim][kiu60]") {
     CHECK(Has(AngelsAimFirstPersonRows(m), Id::Kiu60Fps));
     CHECK(Has(AimScopeRows(m), Id::Kiu60Fps)); // the page's count
     CHECK_FALSE(Has(AimScopeRows(ModelFor(Case::OtherGame)), Id::Kiu60Fps));
-    // View's More opens on it.
+    // Both 60 FPS and Foveated Rendering sit directly on View (not hidden under More).
     MenuView v = AimView();
     REQUIRE(AimPagePress(m, v, static_cast<int>(AimGroup::View)));
-    REQUIRE(AimPagePress(m, v, kAimMoreIndex));
     Drawn d;
     d.Draw(m, v);
-    CHECK(d.Drew("View \xC2\xB7 More"));
+    CHECK(d.Drew("View"));
     CHECK(d.Drew("60 FPS"));
-    CHECK(d.Drew(FrameXr::Immersive::Names::kExperimental)); // its chip, as HUD Spacing's rows have
+    CHECK(d.Drew(FrameXr::Immersive::Names::kExperimental));
     CHECK(d.Hit(Id::Kiu60Fps, 0));
     CHECK(d.Hit(Id::Kiu60Fps, 1));
+    if (d.menu.MaxScroll() > 0.0f) {
+        v.scroll[static_cast<std::size_t>(Tab::Mods)] = d.menu.MaxScroll();
+        d.Draw(m, v);
+    }
+    CHECK(d.Drew("Foveated Rendering"));
+    CHECK(d.Drew(FrameXr::Immersive::Names::kExperimental));
+    CHECK(d.Hit(Id::FoveatedRendering, 0));
+    CHECK(d.Hit(Id::FoveatedRendering, 1));
+    CHECK(d.Hit(Id::FoveatedRendering, 2));
+    CHECK(d.Hit(Id::FoveatedRendering, 3));
+    // With Foveated Rendering on, its four ring controls live in View · More.
+    MenuModel mf = m;
+    mf.foveated_rendering = 2;
+    v = AimView();
+    REQUIRE(AimPagePress(mf, v, static_cast<int>(AimGroup::View)));
+    REQUIRE(AimPagePress(mf, v, kAimMoreIndex));
+    d.Draw(mf, v);
+    CHECK(d.Drew("View \xC2\xB7 More"));
+    CHECK(d.Drew("Inner Ring Size"));
+    CHECK(d.Drew("Middle Ring Size"));
+    CHECK(d.Drew("Middle Ring Resolution"));
+    CHECK(d.Drew("Outer Ring Resolution"));
 }

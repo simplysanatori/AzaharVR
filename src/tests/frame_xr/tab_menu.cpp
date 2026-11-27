@@ -4853,7 +4853,8 @@ TEST_CASE("Tab menu: Primary Screen as Panel", "[frame_xr][tabmenu][projdef]") {
     CHECK(PerGameSetting(Id::FoveatedRendering));
     CHECK(SectionOf(Id::FoveatedRendering) == SettingsSection::Immersive);
     CHECK(LabelFor(Id::FoveatedRendering) == "Foveated Rendering");
-    CHECK(OptionsFor(Id::FoveatedRendering) == std::vector<std::string>{"Off", "Medium", "High"});
+    CHECK(OptionsFor(Id::FoveatedRendering) ==
+          std::vector<std::string>{"Off", "Low", "Medium", "High"});
     CHECK(MenuModel{}.foveated_rendering == 0);
     for (const Id id : {Id::FoveationInnerRadius, Id::FoveationMiddleRadius,
                         Id::FoveationMiddleRate, Id::FoveationOuterRate}) {
@@ -4863,9 +4864,9 @@ TEST_CASE("Tab menu: Primary Screen as Panel", "[frame_xr][tabmenu][projdef]") {
         CHECK(kit.TextWidth(Type::Tooltip, ExplainFor(id)) + 28.0f <= 2.0f * kPanelW * 0.7f);
     }
     CHECK(OptionsFor(Id::FoveationMiddleRate) ==
-          std::vector<std::string>{"1x1", "1x2", "2x2", "2x4", "4x4"});
+          std::vector<std::string>{"Full", "1/2", "1/4", "1/8", "1/16"});
     CHECK(OptionsFor(Id::FoveationOuterRate) ==
-          std::vector<std::string>{"1x1", "1x2", "2x2", "2x4", "4x4"});
+          std::vector<std::string>{"Full", "1/2", "1/4", "1/8", "1/16"});
     {
         MenuModel m = Sample();
         m.foveated_rendering = 0;

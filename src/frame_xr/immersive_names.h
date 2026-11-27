@@ -62,26 +62,27 @@ inline constexpr const char* kScaleStretchTip =
 inline constexpr const char* kScaleFieldOfView = "Field of View";
 inline constexpr const char* kScaleFieldOfViewTip =
     "Shows more or less of the game, cropping when smaller. No warping up to +60%.";
-/// AzaharVR foveation: Settings::values.vr_foveated_rendering (0 Off, 1 Medium, 2 High) and the
-/// four ring controls shown under it while on.
+/// AzaharVR foveation: Settings::values.vr_foveated_rendering (0 Off, 1 Low, 2 Medium, 3 High) and
+/// the four ring controls shown under it while on.
 inline constexpr const char* kFoveatedRendering = "Foveated Rendering";
 inline constexpr const char* kFoveatedRenderingTip =
-    "Experimental. Lowers shading rate outside your gaze in Immersive Mode to save GPU time.";
+    "Experimental. Lowers resolution outside where you look in Immersive Mode to save GPU time.";
 inline constexpr const char* kFoveationOff = "Off";
+inline constexpr const char* kFoveationLow = "Low";
 inline constexpr const char* kFoveationMedium = "Medium";
 inline constexpr const char* kFoveationHigh = "High";
 inline constexpr const char* kFoveationInnerRadius = "Inner Ring Size";
 inline constexpr const char* kFoveationInnerRadiusTip =
-    "Full 1x1 resolution radius around your gaze.";
+    "Full resolution area around where you look.";
 inline constexpr const char* kFoveationMiddleRadius = "Middle Ring Size";
 inline constexpr const char* kFoveationMiddleRadiusTip =
-    "Outer edge of the middle ring. Everything beyond uses the outer rate.";
-inline constexpr const char* kFoveationMiddleRate = "Middle Ring Rate";
+    "Outer edge of the middle ring. Everything beyond uses the outer resolution.";
+inline constexpr const char* kFoveationMiddleRate = "Middle Ring Resolution";
 inline constexpr const char* kFoveationMiddleRateTip =
-    "Shading rate for the middle ring. Higher ratios save more GPU time.";
-inline constexpr const char* kFoveationOuterRate = "Outer Ring Rate";
+    "Detail level in the middle ring. Lower fractions save more GPU time.";
+inline constexpr const char* kFoveationOuterRate = "Outer Ring Resolution";
 inline constexpr const char* kFoveationOuterRateTip =
-    "Shading rate for the outermost ring. 4x4 is the coarsest rate supported.";
+    "Detail level at the far edges. 1/16 is the lowest detail and fastest.";
 /// AzaharFrame fovaxis: Fill View (VR menu, under Scale Mode): sets the screen's size and
 /// Horizontal Scale once so the screen fills most of the view across (Layout::FillView, 1.2.0:
 /// across only; Vertical Scale stays); the toast is Layout::FillToast.

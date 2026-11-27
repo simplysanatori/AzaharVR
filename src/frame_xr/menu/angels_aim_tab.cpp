@@ -195,7 +195,12 @@ const std::vector<AimPlace>& AimPlaces() {
         {G::View, false, Id::KiuSnapTurn},
         {G::View, false, Id::KiuCutscenes},
         {G::View, false, Id::KiuStickClick},
-        {G::View, true, Id::Kiu60Fps}, // AzaharFrame kiu60
+        {G::View, false, Id::Kiu60Fps}, // AzaharFrame kiu60
+        {G::View, false, Id::FoveatedRendering}, // AzaharVR foveation
+        {G::View, true, Id::FoveationInnerRadius},
+        {G::View, true, Id::FoveationMiddleRadius},
+        {G::View, true, Id::FoveationMiddleRate},
+        {G::View, true, Id::FoveationOuterRate},
         {G::Hud, false, Id::KiuHud},
         {G::Hud, false, Id::KiuHudSize},
         {G::Hud, false, Id::KiuHudOpacity}, // AzaharFrame kiuhs3a
@@ -263,6 +268,17 @@ std::pair<std::vector<Id>, std::vector<Id>> AimRowsNow(const MenuModel& model) {
     for (const Id id : AngelsAimFirstPersonRows(model)) {
         if (AimPageRowShown(model, id)) {
             now.second.push_back(id);
+        }
+    }
+    if (AngelsAimRowsShown(model.mods.angels_aim.shown && model.mods.angels_aim.mapped,
+                           model.immersive_mode)) {
+        // AzaharVR foveation: linked under View right below 60 FPS; its ring controls sit in More.
+        now.second.push_back(Id::FoveatedRendering);
+        if (model.foveated_rendering > 0) {
+            now.second.push_back(Id::FoveationInnerRadius);
+            now.second.push_back(Id::FoveationMiddleRadius);
+            now.second.push_back(Id::FoveationMiddleRate);
+            now.second.push_back(Id::FoveationOuterRate);
         }
     }
     return now;
@@ -698,12 +714,6 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
         const bool is_rows = g != AimGroup::ModsAndPack && g != AimGroup::About;
         y += is_rows ? kBackBarH : kPageBarH;
         const float room = area.y1 - kPageEnd - y;
-        // A More page shows whole rows only.
-        const float list_h = !is_rows ? shown.y1 - y
-                             : at.more ? std::floor(room / kRowH) * kRowH
-                                       : room;
-        const Rect list{area.x0, y, area.x1, y + list_h};
-        page_clip = list; // AzaharVR
         const AimPage rows_now = AimPageRows(model, g);
         const std::vector<Id>& ids = at.more ? rows_now.more : rows_now.rows;
         const bool more_row = !at.more && !rows_now.more.empty();
@@ -711,6 +721,12 @@ void TabMenu::DrawAngelsAim(Kit& kit, const MenuModel& model, const MenuView& vi
                               : g == AimGroup::About     ? about_h
                                                          : kRowH * static_cast<float>(ids.size()) +
                                                                (more_row ? kMoreRowH : 0.0f);
+        // Any scrolling rows list shows whole rows only, so no row is clipped mid-line.
+        const float list_h = !is_rows                      ? shown.y1 - y
+                             : (at.more || content > room) ? std::floor(room / kRowH) * kRowH
+                                                           : room;
+        const Rect list{area.x0, y, area.x1, y + list_h};
+        page_clip = list; // AzaharVR
         // Rows scroll in whole rows (as the Settings tab's), the rest as the page did.
         const float over = content - list.H();
         const float max_scroll =

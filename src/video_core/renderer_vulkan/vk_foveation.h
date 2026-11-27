@@ -85,39 +85,32 @@ inline constexpr std::uint8_t RateByte(std::uint32_t index) {
 
 /// Complete foveation parameters for the three concentric rings around the gaze point.
 struct Params {
-    int level = 0; ///< 0 = Off, 1 = Medium, 2 = High (or env override 1..3)
+    int level = 0; ///< 0 = Off, 1 = Low, 2 = Medium, 3 = High
     std::uint32_t inner_pct = 40;
     std::uint32_t middle_pct = 70;
-    std::uint32_t middle_rate = 2; ///< 0=1x1, 1=1x2, 2=2x2, 3=2x4, 4=4x4
+    std::uint32_t middle_rate = 2; ///< 0=Full (1x1), 1=1/2 (1x2), 2=1/4 (2x2), 3=1/8 (2x4), 4=1/16 (4x4)
     std::uint32_t outer_rate = 4;
     bool operator==(const Params&) const = default;
 };
 
-/// Preset parameters for VR menu notches: 1 = Medium (40%/70%, 2x2/4x4), 2 = High (20%/45%,
-/// 2x2/4x4). Any level <= 0 is Off.
+/// Preset parameters for VR menu notches:
+/// 1 = Low (55%/85%, 1/2 & 1/4), 2 = Medium (40%/70%, 1/4 & 1/16), 3 = High (20%/45%, 1/4 & 1/16).
 inline constexpr Params PresetParams(int level) {
     if (level <= 0) {
         return Params{0, 40, 70, 2, 4};
     }
     if (level == 1) {
-        return Params{1, 40, 70, 2, 4};
+        return Params{1, 55, 85, 1, 2};
     }
-    return Params{2, 20, 45, 2, 4};
-}
-
-/// Parameters for a test-switch override (AZAHARFRAME_XR_FOVEATION=0..3):
-/// 1 = legacy 60% 1x1 / 2x2 outside, 2 = Medium (40%/70% 2x2/4x4), 3 = High (20%/45% 2x2/4x4).
-inline constexpr Params EnvParams(int env_level) {
-    if (env_level <= 0) {
-        return Params{0, 40, 70, 2, 4};
-    }
-    if (env_level == 1) {
-        return Params{1, 60, 100, 2, 2};
-    }
-    if (env_level == 2) {
+    if (level == 2) {
         return Params{2, 40, 70, 2, 4};
     }
     return Params{3, 20, 45, 2, 4};
+}
+
+/// Parameters for a test-switch override (AZAHARFRAME_XR_FOVEATION=0..3).
+inline constexpr Params EnvParams(int env_level) {
+    return PresetParams(env_level);
 }
 
 /// Effective foveation parameters: AZAHARFRAME_XR_FOVEATION overrides if set; otherwise uses the
@@ -132,7 +125,7 @@ inline Params EffectiveParams(std::uint32_t setting_level, bool eye_tracking_ava
         return Params{0, 40, 70, 2, 4};
     }
     return Params{
-        static_cast<int>(std::min<std::uint32_t>(setting_level, 2u)),
+        static_cast<int>(std::min<std::uint32_t>(setting_level, 3u)),
         std::clamp(inner_pct, kMinInnerPct, kMaxInnerPct),
         std::clamp(middle_pct, kMinMiddlePct, kMaxMiddlePct),
         std::min(middle_rate, kMaxRateIndex),

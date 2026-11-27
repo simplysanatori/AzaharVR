@@ -327,7 +327,7 @@ inline constexpr const char* kAimTipRecoilRapid = "How strong it is for each rap
 /// group with at most kAimPageMost rows; the rest of a group is under More.
 struct MenuView;
 enum class AimGroup : int { Aiming, View, Hud, BottomScreen, Weapon, ModsAndPack, About, Count };
-inline constexpr int kAimFrontMost = 8, kAimPageMost = 5;
+inline constexpr int kAimFrontMost = 8, kAimPageMost = 7;
 inline constexpr const char* kAimPageTitle = "Angel's Aim";
 inline constexpr const char* kAngelsAimGroupHud = "HUD";
 inline constexpr const char* kAimMore = "More";

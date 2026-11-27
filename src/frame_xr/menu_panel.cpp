@@ -1455,7 +1455,7 @@ void MenuPanel::BuildModel(const Host& host) {
         Common::StallTelemetry::Get().display_period_ns.load(std::memory_order_relaxed));
     m.screen_as_panel = !v.vr_screens_in_projection.GetValue();            // AzaharFrame projdef
     m.foveated_rendering =
-        static_cast<int>(std::min<u32>(v.vr_foveated_rendering.GetValue(), 2)); // AzaharVR foveation
+        static_cast<int>(std::min<u32>(v.vr_foveated_rendering.GetValue(), 3)); // AzaharVR foveation
     m.foveation_inner_radius =
         static_cast<int>(std::clamp<u32>(v.vr_foveation_inner_radius.GetValue(), 10, 80));
     m.foveation_middle_radius =
@@ -2204,8 +2204,8 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = in_projection ? 1 : 0;
         break;
     }
-    case Id::FoveatedRendering: { // AzaharVR foveation: 0 Off, 1 Medium, 2 High (live)
-        r.value = static_cast<int>(std::min<u32>(u, 2));
+    case Id::FoveatedRendering: { // AzaharVR foveation: 0 Off, 1 Low, 2 Medium, 3 High (live)
+        r.value = static_cast<int>(std::min<u32>(u, 3));
         Apply(v.vr_foveated_rendering, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::FoveatedRendering;
         if (r.value > 0) {
