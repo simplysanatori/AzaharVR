@@ -644,6 +644,10 @@ void QtConfig::ReadVrValues() {
     // default of whichever build reads it).
     ReadGlobalSetting(Settings::values.vr_immersive_scale_mode);
     ReadGlobalSetting(Settings::values.vr_foveated_rendering); // AzaharVR foveation
+    ReadGlobalSetting(Settings::values.vr_foveation_inner_radius);
+    ReadGlobalSetting(Settings::values.vr_foveation_middle_radius);
+    ReadGlobalSetting(Settings::values.vr_foveation_middle_rate);
+    ReadGlobalSetting(Settings::values.vr_foveation_outer_rate);
     ReadGlobalSetting(Settings::values.vr_immersive_hud_spacing_x); // AzaharFrame hudmove
     ReadGlobalSetting(Settings::values.vr_immersive_hud_spacing_y);
     // AzaharFrame autosave: a global value and, for a game, its own (Per-Game)
@@ -1454,6 +1458,10 @@ void QtConfig::SaveVrValues() {
     WriteGlobalSetting(Settings::values.vr_immersive_scale_y);
     WriteGlobalSetting(Settings::values.vr_immersive_scale_mode); // AzaharFrame fovscale
     WriteGlobalSetting(Settings::values.vr_foveated_rendering);   // AzaharVR foveation
+    WriteGlobalSetting(Settings::values.vr_foveation_inner_radius);
+    WriteGlobalSetting(Settings::values.vr_foveation_middle_radius);
+    WriteGlobalSetting(Settings::values.vr_foveation_middle_rate);
+    WriteGlobalSetting(Settings::values.vr_foveation_outer_rate);
     WriteGlobalSetting(Settings::values.vr_immersive_hud_spacing_x); // AzaharFrame hudmove
     WriteGlobalSetting(Settings::values.vr_immersive_hud_spacing_y);
     // Narrow Screen and Narrow Height, read once into the scales above

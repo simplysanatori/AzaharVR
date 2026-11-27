@@ -4849,13 +4849,37 @@ TEST_CASE("Tab menu: Primary Screen as Panel", "[frame_xr][tabmenu][projdef]") {
           "Experimental. Draws the Primary screen as a separate panel in the Full modes. It may "
           "double on fast head turns.");
     CHECK_FALSE(MenuModel{}.screen_as_panel);
-    // AzaharVR foveation: Foveated Rendering row under Experimental
+    // AzaharVR foveation: Foveated Rendering row under Experimental, with ring controls while on
     CHECK(PerGameSetting(Id::FoveatedRendering));
     CHECK(SectionOf(Id::FoveatedRendering) == SettingsSection::Immersive);
     CHECK(LabelFor(Id::FoveatedRendering) == "Foveated Rendering");
-    CHECK(OptionsFor(Id::FoveatedRendering) ==
-          std::vector<std::string>{"Off", "Low", "Medium", "High"});
+    CHECK(OptionsFor(Id::FoveatedRendering) == std::vector<std::string>{"Off", "Medium", "High"});
     CHECK(MenuModel{}.foveated_rendering == 0);
+    for (const Id id : {Id::FoveationInnerRadius, Id::FoveationMiddleRadius,
+                        Id::FoveationMiddleRate, Id::FoveationOuterRate}) {
+        CHECK(PerGameSetting(id));
+        CHECK(SectionOf(id) == SettingsSection::Immersive);
+        Kit kit{1.0f};
+        CHECK(kit.TextWidth(Type::Tooltip, ExplainFor(id)) + 28.0f <= 2.0f * kPanelW * 0.7f);
+    }
+    CHECK(OptionsFor(Id::FoveationMiddleRate) ==
+          std::vector<std::string>{"1x1", "1x2", "2x2", "2x4", "4x4"});
+    CHECK(OptionsFor(Id::FoveationOuterRate) ==
+          std::vector<std::string>{"1x1", "1x2", "2x2", "2x4", "4x4"});
+    {
+        MenuModel m = Sample();
+        m.foveated_rendering = 0;
+        const auto off_rows = RowIds(Tab::Settings, m, SettingsSection::Immersive);
+        CHECK(std::find(off_rows.begin(), off_rows.end(), Id::FoveationInnerRadius) ==
+              off_rows.end());
+        m.foveated_rendering = 2;
+        const auto on_rows = RowIds(Tab::Settings, m, SettingsSection::Immersive);
+        CHECK(std::find(on_rows.begin(), on_rows.end(), Id::FoveationInnerRadius) != on_rows.end());
+        CHECK(std::find(on_rows.begin(), on_rows.end(), Id::FoveationMiddleRadius) !=
+              on_rows.end());
+        CHECK(std::find(on_rows.begin(), on_rows.end(), Id::FoveationMiddleRate) != on_rows.end());
+        CHECK(std::find(on_rows.begin(), on_rows.end(), Id::FoveationOuterRate) != on_rows.end());
+    }
     {
         Kit kit{1.0f};
         CHECK(kit.TextWidth(Type::Tooltip, ExplainFor(Id::FoveatedRendering)) + 28.0f <=

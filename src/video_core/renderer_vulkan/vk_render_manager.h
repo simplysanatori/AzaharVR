@@ -10,6 +10,7 @@
 #include "common/math_util.h"
 #include "video_core/gpu_pass_stats.h" // AzaharFrame gpupasses
 #include "video_core/renderer_vulkan/vk_common.h"
+#include "video_core/renderer_vulkan/vk_foveation.h" // AzaharVR foveation
 
 VK_DEFINE_HANDLE(VmaAllocation) // AzaharVR foveation
 
@@ -142,7 +143,7 @@ private:
         vk::Buffer staging;
         VmaAllocation staging_allocation{};
         u32 centre_key{~0u}; ///< the centre (in texels) of the rates it holds
-        int level{-1};       ///< foveation level (0..3) of the rates it holds
+        VideoCore::Foveation::Params params{-1}; ///< foveation params of the rates it holds
         u32 rect_x{};        ///< active eye picture sub-rectangle within width x height
         u32 rect_y{};
         u32 rect_w{};

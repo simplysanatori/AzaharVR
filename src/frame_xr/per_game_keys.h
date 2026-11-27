@@ -50,7 +50,11 @@ void ForEachMenuKey(F&& f) {
     f(v.vr_immersive_scale_x); // AzaharFrame kiu
     f(v.vr_immersive_scale_y);
     f(v.vr_immersive_scale_mode); // AzaharFrame fovscale
-    f(v.vr_foveated_rendering);   // AzaharVR foveation
+    f(v.vr_foveated_rendering);      // AzaharVR foveation
+    f(v.vr_foveation_inner_radius);
+    f(v.vr_foveation_middle_radius);
+    f(v.vr_foveation_middle_rate);
+    f(v.vr_foveation_outer_rate);
     f(v.vr_immersive_hud_spacing_x); // AzaharFrame hudmove
     f(v.vr_immersive_hud_spacing_y);
     f(v.vr_motion_clarity_immersive); // AzaharFrame projdef, fixa: Immersive's Motion Clarity

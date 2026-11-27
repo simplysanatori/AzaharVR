@@ -975,9 +975,16 @@ struct Values {
     // there) and draws at most 1.6x; Stretch keeps the axes within 1.5 of each other.
     SwitchableSetting<u32, true> vr_immersive_scale_mode{1, 0, 1, "vr_immersive_scale_mode"};
     // AzaharVR foveation: eye-tracked foveated rendering in Immersive Mode (per game and global):
-    // 0 = Off, 1 = Low, 2 = Medium, 3 = High. Active only on headsets with eye tracking (Steam
-    // Frame); takes effect when a game starts (levels update live once active).
-    SwitchableSetting<u32, true> vr_foveated_rendering{0, 0, 3, "vr_foveated_rendering"};
+    // 0 = Off, 1 = Medium, 2 = High (picking a preset sets the four ring controls below; any value
+    // > 2 from an earlier build reads as High). Active only on headsets with eye tracking (Steam
+    // Frame) and updates live mid-game.
+    SwitchableSetting<u32, true> vr_foveated_rendering{0, 0, 2, "vr_foveated_rendering"};
+    SwitchableSetting<u32, true> vr_foveation_inner_radius{40, 10, 80, "vr_foveation_inner_radius"};
+    SwitchableSetting<u32, true> vr_foveation_middle_radius{70, 20, 100,
+                                                            "vr_foveation_middle_radius"};
+    // 0 = 1x1, 1 = 1x2, 2 = 2x2, 3 = 2x4, 4 = 4x4
+    SwitchableSetting<u32, true> vr_foveation_middle_rate{2, 0, 4, "vr_foveation_middle_rate"};
+    SwitchableSetting<u32, true> vr_foveation_outer_rate{4, 0, 4, "vr_foveation_outer_rate"};
     // AzaharFrame hudmove: HUD Spacing (experimental; Full modes only, per game and global, read
     // every frame): the game's flat 2D drawing on the Primary screen (its HUD) at this percent of
     // its own distance from the middle, across (x) and up and down (y), 0 to 150; 100 (the

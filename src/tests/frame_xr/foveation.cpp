@@ -31,6 +31,23 @@ TEST_CASE("foveation: effective level requires eye tracking unless overridden", 
     REQUIRE(F::EffectiveLevel(1, false) == 0);
     REQUIRE(F::EffectiveLevel(2, false) == 0);
     REQUIRE(F::EffectiveLevel(3, false) == 0);
+
+    // Custom ring params: legacy level 3 clamps to 2 (High), custom radii and rates apply.
+    const auto p = F::EffectiveParams(3, true, 25, 55, 1, 3);
+    REQUIRE(p.level == 2);
+    REQUIRE(p.inner_pct == 25);
+    REQUIRE(p.middle_pct == 55);
+    REQUIRE(p.middle_rate == 1);
+    REQUIRE(p.outer_rate == 3);
+    REQUIRE(F::RateForDistance(p, 0.20f) == F::kRate1x1);
+    REQUIRE(F::RateForDistance(p, 0.40f) == F::kRate1x2);
+    REQUIRE(F::RateForDistance(p, 0.80f) == F::kRate2x4);
+    REQUIRE(F::EffectiveParams(2, false, 25, 55, 1, 3).level == 0);
+    // High preset is tighter than Medium preset.
+    const auto med = F::PresetParams(1);
+    const auto hi = F::PresetParams(2);
+    REQUIRE(hi.inner_pct < med.inner_pct);
+    REQUIRE(hi.middle_pct < med.middle_pct);
 }
 
 TEST_CASE("foveation: the rate image has a full rate centre", "[frame_xr]") {

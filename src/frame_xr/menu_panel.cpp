@@ -19,6 +19,7 @@
 #include "common/stall_telemetry.h"     // AzaharFrame bfidr: the display's rate
 #include "frame_xr/bfi_helpers.h"        // AzaharFrame bfidr
 #include "frame_xr/dynamic_resolution.h" // AzaharFrame menuux
+#include "video_core/renderer_vulkan/vk_foveation.h" // AzaharVR foveation
 #include "video_core/vr_cache_save.h"        // AzaharFrame flash3
 #include "video_core/vr_gaze.h"              // AzaharVR foveation
 #include "video_core/vr_hud_spacing.h"          // AzaharFrame hudmove
@@ -295,6 +296,14 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::ScreensInProjection;
     case Id::FoveatedRendering: // AzaharVR foveation
         return MenuSetting::FoveatedRendering;
+    case Id::FoveationInnerRadius:
+        return MenuSetting::FoveationInnerRadius;
+    case Id::FoveationMiddleRadius:
+        return MenuSetting::FoveationMiddleRadius;
+    case Id::FoveationMiddleRate:
+        return MenuSetting::FoveationMiddleRate;
+    case Id::FoveationOuterRate:
+        return MenuSetting::FoveationOuterRate;
     case Id::Depth3d:
         return MenuSetting::Depth3d;
     case Id::InternalResolution:
@@ -1446,7 +1455,15 @@ void MenuPanel::BuildModel(const Host& host) {
         Common::StallTelemetry::Get().display_period_ns.load(std::memory_order_relaxed));
     m.screen_as_panel = !v.vr_screens_in_projection.GetValue();            // AzaharFrame projdef
     m.foveated_rendering =
-        static_cast<int>(std::min<u32>(v.vr_foveated_rendering.GetValue(), 3)); // AzaharVR foveation
+        static_cast<int>(std::min<u32>(v.vr_foveated_rendering.GetValue(), 2)); // AzaharVR foveation
+    m.foveation_inner_radius =
+        static_cast<int>(std::clamp<u32>(v.vr_foveation_inner_radius.GetValue(), 10, 80));
+    m.foveation_middle_radius =
+        static_cast<int>(std::clamp<u32>(v.vr_foveation_middle_radius.GetValue(), 20, 100));
+    m.foveation_middle_rate =
+        static_cast<int>(std::min<u32>(v.vr_foveation_middle_rate.GetValue(), 4));
+    m.foveation_outer_rate =
+        static_cast<int>(std::min<u32>(v.vr_foveation_outer_rate.GetValue(), 4));
     // AzaharFrame autosave: the running game's values (its own, else the global ones)
     m.autosave = v.autosave_enabled.GetValue();
     m.autosave_every = 0;
@@ -1475,6 +1492,10 @@ void MenuPanel::BuildModel(const Host& host) {
     }
     if (!VideoCore::Gaze::g_available.load(std::memory_order_relaxed)) {
         lock(Id::FoveatedRendering, Lock::Unavailable);
+        lock(Id::FoveationInnerRadius, Lock::Unavailable);
+        lock(Id::FoveationMiddleRadius, Lock::Unavailable);
+        lock(Id::FoveationMiddleRate, Lock::Unavailable);
+        lock(Id::FoveationOuterRate, Lock::Unavailable);
     }
     if (!per_game_ok) {
         lock(Id::Scope, Lock::NoGame); // AzaharFrame reticle: the toggle shows Global alone
@@ -2183,10 +2204,49 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = in_projection ? 1 : 0;
         break;
     }
-    case Id::FoveatedRendering: // AzaharVR foveation: 0 Off, 1 Low, 2 Medium, 3 High (live)
-        r.value = static_cast<int>(std::min<u32>(u, 3));
+    case Id::FoveatedRendering: { // AzaharVR foveation: 0 Off, 1 Medium, 2 High (live)
+        r.value = static_cast<int>(std::min<u32>(u, 2));
         Apply(v.vr_foveated_rendering, static_cast<u32>(r.value), per_game);
         r.setting = MenuSetting::FoveatedRendering;
+        if (r.value > 0) {
+            const auto p = VideoCore::Foveation::PresetParams(r.value);
+            if (host.request) {
+                host.request(r);
+            }
+            Apply(v.vr_foveation_inner_radius, p.inner_pct, per_game);
+            send(MenuSetting::FoveationInnerRadius, static_cast<int>(p.inner_pct), per_game);
+            Apply(v.vr_foveation_middle_radius, p.middle_pct, per_game);
+            send(MenuSetting::FoveationMiddleRadius, static_cast<int>(p.middle_pct), per_game);
+            Apply(v.vr_foveation_middle_rate, p.middle_rate, per_game);
+            send(MenuSetting::FoveationMiddleRate, static_cast<int>(p.middle_rate), per_game);
+            Apply(v.vr_foveation_outer_rate, p.outer_rate, per_game);
+            send(MenuSetting::FoveationOuterRate, static_cast<int>(p.outer_rate), per_game);
+            LOG_INFO(Frontend, "xr: in-game menu: Foveated Rendering = {}{} (preset {}%/{}% {}/{})",
+                     r.value, per_game ? " (this game)" : "", p.inner_pct, p.middle_pct,
+                     p.middle_rate, p.outer_rate);
+            return;
+        }
+        break;
+    }
+    case Id::FoveationInnerRadius:
+        r.value = std::clamp(value, 10, 80);
+        Apply(v.vr_foveation_inner_radius, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::FoveationInnerRadius;
+        break;
+    case Id::FoveationMiddleRadius:
+        r.value = std::clamp(value, 20, 100);
+        Apply(v.vr_foveation_middle_radius, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::FoveationMiddleRadius;
+        break;
+    case Id::FoveationMiddleRate:
+        r.value = static_cast<int>(std::min<u32>(u, 4));
+        Apply(v.vr_foveation_middle_rate, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::FoveationMiddleRate;
+        break;
+    case Id::FoveationOuterRate:
+        r.value = static_cast<int>(std::min<u32>(u, 4));
+        Apply(v.vr_foveation_outer_rate, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::FoveationOuterRate;
         break;
     case Id::Depth3d: // AzaharFrame depth3d: the HID's 3D slider reads it on every pad update
         // AzaharFrame natural: in the Full modes their own 3D Depth (percent of the natural 3D).
@@ -3119,7 +3179,9 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::WindowScale:
     case Id::MatchCamera: // AzaharFrame fovonce: Off | Set Once | Always
     case Id::ScaleMode:   // AzaharFrame fovscale: Stretch | Field of View
-    case Id::FoveatedRendering: // AzaharVR foveation: Off | Low | Medium | High
+    case Id::FoveatedRendering:   // AzaharVR foveation: Off | Medium | High
+    case Id::FoveationMiddleRate: // 1x1 | 1x2 | 2x2 | 2x4 | 4x4
+    case Id::FoveationOuterRate:
     case Id::ControllersInFront: // AzaharFrame ctrlfront: Off | Primary | Secondary | Both
     case Id::TextureFilter:    // AzaharFrame menuux
     case Id::AccurateImageCopies: // AzaharFrame xfergpu: Off | Automatic | On

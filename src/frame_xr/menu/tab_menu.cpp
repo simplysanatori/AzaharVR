@@ -126,6 +126,7 @@ std::string SliderText(Id id, float value) {
         id == Id::WeaponScale || id == Id::ProjectileSize || id == Id::ProjectileSpeed ||
         id == Id::WeaponOpacity || id == Id::ProjectileOpacity ||
         id == Id::MuzzleFlashSize || id == Id::HudSpacingX || id == Id::HudSpacingY ||
+        id == Id::FoveationInnerRadius || id == Id::FoveationMiddleRadius ||
         id == Id::KiuBottomSize || id == Id::KiuBottomOpacity || id == Id::KiuReticleSize ||
         id == Id::KiuMarkerSize || // AzaharVR
         id == Id::KiuTalkPortraitsOpacity || // AzaharFrame kiuaim
@@ -692,9 +693,26 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
         if (m.motion_clarity_immersive) {
             rows.push_back(row(Id::MatchBottom, RowKind::Switch, 0, m.match_bottom));
         }
-        // AzaharVR foveation: eye-tracked foveated rendering (Off, Low, Medium, High).
+        // AzaharVR foveation: eye-tracked foveated rendering (Off, Medium, High) and its ring
+        // controls while on.
         rows.push_back(
-            row(Id::FoveatedRendering, RowKind::Segmented, std::clamp(m.foveated_rendering, 0, 3)));
+            row(Id::FoveatedRendering, RowKind::Segmented, std::clamp(m.foveated_rendering, 0, 2)));
+        if (m.foveated_rendering > 0) {
+            for (const auto& [id, value] :
+                 {std::pair{Id::FoveationInnerRadius, m.foveation_inner_radius},
+                  std::pair{Id::FoveationMiddleRadius, m.foveation_middle_radius}}) {
+                Row r = row(id, RowKind::Slider);
+                const SliderRange sr = SliderFor(id);
+                const float v = std::clamp(static_cast<float>(value), sr.min, sr.max);
+                r.t = (v - sr.min) / (sr.max - sr.min);
+                r.value = SliderText(id, v);
+                rows.push_back(r);
+            }
+            rows.push_back(row(Id::FoveationMiddleRate, RowKind::Segmented,
+                               std::clamp(m.foveation_middle_rate, 0, 4)));
+            rows.push_back(row(Id::FoveationOuterRate, RowKind::Segmented,
+                               std::clamp(m.foveation_outer_rate, 0, 4)));
+        }
     }
     return rows;
 }
@@ -790,6 +808,10 @@ SettingsSection SectionOf(Id id) {
     case Id::MatchBottom:   // AzaharFrame fixa
     case Id::ScreenAsPanel:
     case Id::FoveatedRendering: // AzaharVR foveation
+    case Id::FoveationInnerRadius:
+    case Id::FoveationMiddleRadius:
+    case Id::FoveationMiddleRate:
+    case Id::FoveationOuterRate:
     case Id::KiuBottomScreen: // AzaharFrame kiutoggles, kiu131
     case Id::KiuBottomSize:
     case Id::KiuBottomOpacity:
@@ -869,6 +891,10 @@ bool PerGameSetting(Id id) {
     case Id::MatchBottomNormal:
     case Id::ScreenAsPanel:
     case Id::FoveatedRendering: // AzaharVR foveation
+    case Id::FoveationInnerRadius:
+    case Id::FoveationMiddleRadius:
+    case Id::FoveationMiddleRate:
+    case Id::FoveationOuterRate:
     case Id::ShowControllers:    // 1.2.0 RC2 (the owner): per game, e.g. on for Kid Icarus
     case Id::ControllersInFront: // and its weapon, off in another game
     case Id::Depth3d: // AzaharFrame depth3d
@@ -1395,9 +1421,14 @@ const std::vector<std::string>& OptionsFor(Id id) {
         return kWider;
     case Id::FoveatedRendering: { // AzaharVR foveation
         static const std::vector<std::string> kFoveated{
-            Immersive::Names::kFoveationOff, Immersive::Names::kFoveationLow,
-            Immersive::Names::kFoveationMedium, Immersive::Names::kFoveationHigh};
+            Immersive::Names::kFoveationOff, Immersive::Names::kFoveationMedium,
+            Immersive::Names::kFoveationHigh};
         return kFoveated;
+    }
+    case Id::FoveationMiddleRate:
+    case Id::FoveationOuterRate: {
+        static const std::vector<std::string> kRates{"1x1", "1x2", "2x2", "2x4", "4x4"};
+        return kRates;
     }
     case Id::DsConsoleMode: {
         static const std::vector<std::string> kDsConsole{"Automatic", "DS", "DSi"};
@@ -1761,6 +1792,14 @@ std::string LabelFor(Id id) {
         return Immersive::Names::kScreenAsPanel;
     case Id::FoveatedRendering: // AzaharVR foveation
         return Immersive::Names::kFoveatedRendering;
+    case Id::FoveationInnerRadius:
+        return Immersive::Names::kFoveationInnerRadius;
+    case Id::FoveationMiddleRadius:
+        return Immersive::Names::kFoveationMiddleRadius;
+    case Id::FoveationMiddleRate:
+        return Immersive::Names::kFoveationMiddleRate;
+    case Id::FoveationOuterRate:
+        return Immersive::Names::kFoveationOuterRate;
     case Id::MoreSettings:
         return "More Settings";
     case Id::SavesHeader: // AzaharFrame autosave
@@ -2154,6 +2193,14 @@ std::string ExplainFor(Id id) {
         return Immersive::Names::kScreenAsPanelTip;
     case Id::FoveatedRendering: // AzaharVR foveation
         return Immersive::Names::kFoveatedRenderingTip;
+    case Id::FoveationInnerRadius:
+        return Immersive::Names::kFoveationInnerRadiusTip;
+    case Id::FoveationMiddleRadius:
+        return Immersive::Names::kFoveationMiddleRadiusTip;
+    case Id::FoveationMiddleRate:
+        return Immersive::Names::kFoveationMiddleRateTip;
+    case Id::FoveationOuterRate:
+        return Immersive::Names::kFoveationOuterRateTip;
     case Id::KiuBottomScreen: // AzaharFrame kiu131 (angels_aim_tab.h)
         return kBottomScreenTip;
     case Id::KiuBottomSize:
@@ -2360,6 +2407,12 @@ SliderRange SliderFor(Id id) {
     if (id == Id::HudSpacingX || id == Id::HudSpacingY) { // AzaharFrame hudmove: 0 to 150 %
         return {static_cast<float>(VideoCore::HudSpacing::kMinSpacing),
                 static_cast<float>(VideoCore::HudSpacing::kMaxSpacing), 1.0f};
+    }
+    if (id == Id::FoveationInnerRadius) { // AzaharVR foveation: 10 to 80 %
+        return {10.0f, 80.0f, 5.0f};
+    }
+    if (id == Id::FoveationMiddleRadius) { // AzaharVR foveation: 20 to 100 %
+        return {20.0f, 100.0f, 5.0f};
     }
     if (id == Id::WorldScale) { // AzaharFrame natural: Layout::kWorldScaleStops' indexes
         return {0.0f, static_cast<float>(Immersive::Layout::kWorldScaleStops.size() - 1), 1.0f};

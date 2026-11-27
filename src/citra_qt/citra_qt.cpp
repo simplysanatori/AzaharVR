@@ -6209,8 +6209,20 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::ScaleMode: // AzaharFrame fovscale: Stretch, Field of View
         set(v.vr_immersive_scale_mode, r.value == 0 ? 0u : 1u);
         break;
-    case S::FoveatedRendering: // AzaharVR foveation: 0 Off, 1 Low, 2 Medium, 3 High
-        set(v.vr_foveated_rendering, static_cast<u32>(std::clamp(r.value, 0, 3)));
+    case S::FoveatedRendering: // AzaharVR foveation: 0 Off, 1 Medium, 2 High
+        set(v.vr_foveated_rendering, static_cast<u32>(std::clamp(r.value, 0, 2)));
+        break;
+    case S::FoveationInnerRadius:
+        set(v.vr_foveation_inner_radius, static_cast<u32>(std::clamp(r.value, 10, 80)));
+        break;
+    case S::FoveationMiddleRadius:
+        set(v.vr_foveation_middle_radius, static_cast<u32>(std::clamp(r.value, 20, 100)));
+        break;
+    case S::FoveationMiddleRate:
+        set(v.vr_foveation_middle_rate, static_cast<u32>(std::clamp(r.value, 0, 4)));
+        break;
+    case S::FoveationOuterRate:
+        set(v.vr_foveation_outer_rate, static_cast<u32>(std::clamp(r.value, 0, 4)));
         break;
     case S::WorldScale: // AzaharFrame natural: World Scale, hundredths of a percent
         set(v.vr_immersive_world_scale, std::clamp(static_cast<float>(r.value) / 100.0f, 10.0f,

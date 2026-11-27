@@ -512,18 +512,22 @@ vk::ImageView RenderManager::GetShadingRateView(u32 width, u32 height) {
     const u32 h = (height + texel - 1) / texel;
     float cx, cy;
     CentreFor(width, height, cx, cy);
-    const int level = VideoCore::Foveation::EffectiveLevel(
+    const VideoCore::Foveation::Params params = VideoCore::Foveation::EffectiveParams(
         Settings::values.vr_foveated_rendering.GetValue(),
-        VideoCore::Gaze::g_available.load(std::memory_order_relaxed));
+        VideoCore::Gaze::g_available.load(std::memory_order_relaxed),
+        Settings::values.vr_foveation_inner_radius.GetValue(),
+        Settings::values.vr_foveation_middle_radius.GetValue(),
+        Settings::values.vr_foveation_middle_rate.GetValue(),
+        Settings::values.vr_foveation_outer_rate.GetValue());
     std::vector<u8> data =
-        VideoCore::Foveation::MakeRateImage(level, width, height, texel, cy, cx);
+        VideoCore::Foveation::MakeRateImage(params, width, height, texel, cy, cx);
     data.resize((data.size() + 3) & ~std::size_t{3}); // a buffer update is in words
 
     RateImage r;
     r.width = width;
     r.height = height;
     r.centre_key = CentreKey(cx, cy, w, h);
-    r.level = level;
+    r.params = params;
     r.rect_x = 0;
     r.rect_y = 0;
     r.rect_w = width;
@@ -697,9 +701,13 @@ void RenderManager::RefreshShadingRate(u32 width, u32 height, Common::Rectangle<
     const bool use_draw_rect = rw * 2 >= width && rh * 2 >= height &&
                                draw_rect.left + rw <= width && draw_rect.bottom + rh <= height;
     const bool gaze_live = VideoCore::Gaze::g_wanted.load(std::memory_order_relaxed);
-    const int level = VideoCore::Foveation::EffectiveLevel(
+    const VideoCore::Foveation::Params params = VideoCore::Foveation::EffectiveParams(
         Settings::values.vr_foveated_rendering.GetValue(),
-        VideoCore::Gaze::g_available.load(std::memory_order_relaxed));
+        VideoCore::Gaze::g_available.load(std::memory_order_relaxed),
+        Settings::values.vr_foveation_inner_radius.GetValue(),
+        Settings::values.vr_foveation_middle_radius.GetValue(),
+        Settings::values.vr_foveation_middle_rate.GetValue(),
+        Settings::values.vr_foveation_outer_rate.GetValue());
     const u32 texel = instance.FragmentShadingRateTexelSize();
     const u32 w = (width + texel - 1) / texel;
     const u32 h = (height + texel - 1) / texel;
@@ -731,17 +739,17 @@ void RenderManager::RefreshShadingRate(u32 width, u32 height, Common::Rectangle<
         }
         const bool rect_changed =
             rx != hit->rect_x || ry != hit->rect_y || act_w != hit->rect_w || act_h != hit->rect_h;
-        const bool level_changed = level != hit->level;
-        if (!gaze_live && !rect_changed && !level_changed) {
-            return; // fixed centre, level, and active picture rectangle already uploaded
+        const bool params_changed = params != hit->params;
+        if (!gaze_live && !rect_changed && !params_changed) {
+            return; // fixed centre, params, and active picture rectangle already uploaded
         }
         CentreFor(act_w, act_h, cx, cy);
         const u32 key = CentreKey(cx, cy, w, h);
-        if (!rect_changed && !level_changed && hit->centre_key == key) {
+        if (!rect_changed && !params_changed && hit->centre_key == key) {
             return;
         }
         hit->centre_key = key;
-        hit->level = level;
+        hit->params = params;
         hit->rect_x = rx;
         hit->rect_y = ry;
         hit->rect_w = act_w;
@@ -749,7 +757,7 @@ void RenderManager::RefreshShadingRate(u32 width, u32 height, Common::Rectangle<
         found = *hit;
     }
     std::vector<u8> data = VideoCore::Foveation::MakeRateImage(
-        level, width, height, texel, cy, cx, rx, ry, act_w, act_h);
+        params, width, height, texel, cy, cx, rx, ry, act_w, act_h);
     data.resize((data.size() + 3) & ~std::size_t{3});
     EndRendering(VideoCore::GpuPasses::Why::Foveation);
     RecordRateUpload(found, std::move(data), false);

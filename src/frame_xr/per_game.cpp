@@ -82,6 +82,18 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::FoveatedRendering: // AzaharVR foveation
         f(v.vr_foveated_rendering);
         return true;
+    case Id::FoveationInnerRadius:
+        f(v.vr_foveation_inner_radius);
+        return true;
+    case Id::FoveationMiddleRadius:
+        f(v.vr_foveation_middle_radius);
+        return true;
+    case Id::FoveationMiddleRate:
+        f(v.vr_foveation_middle_rate);
+        return true;
+    case Id::FoveationOuterRate:
+        f(v.vr_foveation_outer_rate);
+        return true;
     case Id::ShowControllers: // 1.2.0 RC2 (the owner): per game
         f(v.vr_show_controllers);
         return true;

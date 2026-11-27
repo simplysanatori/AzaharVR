@@ -56,45 +56,134 @@ inline int EffectiveLevel(std::uint32_t setting_level, bool eye_tracking_availab
 
 /// A texel of the shading rate image: log2(width) << 2 | log2(height) of the fragment size.
 inline constexpr std::uint8_t kRate1x1 = 0;
+inline constexpr std::uint8_t kRate1x2 = (0 << 2) | 1;
 inline constexpr std::uint8_t kRate2x2 = (1 << 2) | 1;
+inline constexpr std::uint8_t kRate2x4 = (1 << 2) | 2;
 inline constexpr std::uint8_t kRate4x4 = (2 << 2) | 2;
 
-/// Shading rate for a normalised ellipse distance `d` from the fovea centre.
-/// Level 1 (Low): 1x1 inside 0.60, 2x2 outside.
-/// Level 2 (Medium): 1x1 inside 0.50, 2x2 to 0.85, 4x4 beyond.
-/// Level 3 (High): 1x1 inside 0.40, 2x2 to 0.72, 4x4 beyond.
-inline std::uint8_t RateForDistance(int level, float d) {
-    if (level <= 0) {
+inline constexpr std::uint32_t kMinInnerPct = 10;
+inline constexpr std::uint32_t kMaxInnerPct = 80;
+inline constexpr std::uint32_t kMinMiddlePct = 20;
+inline constexpr std::uint32_t kMaxMiddlePct = 100;
+inline constexpr std::uint32_t kMaxRateIndex = 4;
+
+/// Shading rate byte for a menu rate index: 0=1x1, 1=1x2, 2=2x2, 3=2x4, 4=4x4.
+inline constexpr std::uint8_t RateByte(std::uint32_t index) {
+    switch (index) {
+    case 0:
         return kRate1x1;
+    case 1:
+        return kRate1x2;
+    case 2:
+        return kRate2x2;
+    case 3:
+        return kRate2x4;
+    default:
+        return kRate4x4;
+    }
+}
+
+/// Complete foveation parameters for the three concentric rings around the gaze point.
+struct Params {
+    int level = 0; ///< 0 = Off, 1 = Medium, 2 = High (or env override 1..3)
+    std::uint32_t inner_pct = 40;
+    std::uint32_t middle_pct = 70;
+    std::uint32_t middle_rate = 2; ///< 0=1x1, 1=1x2, 2=2x2, 3=2x4, 4=4x4
+    std::uint32_t outer_rate = 4;
+    bool operator==(const Params&) const = default;
+};
+
+/// Preset parameters for VR menu notches: 1 = Medium (40%/70%, 2x2/4x4), 2 = High (20%/45%,
+/// 2x2/4x4). Any level <= 0 is Off.
+inline constexpr Params PresetParams(int level) {
+    if (level <= 0) {
+        return Params{0, 40, 70, 2, 4};
     }
     if (level == 1) {
-        return d <= 0.60f ? kRate1x1 : kRate2x2;
+        return Params{1, 40, 70, 2, 4};
     }
-    if (level == 2) {
-        return d <= 0.50f ? kRate1x1 : (d <= 0.85f ? kRate2x2 : kRate4x4);
+    return Params{2, 20, 45, 2, 4};
+}
+
+/// Parameters for a test-switch override (AZAHARFRAME_XR_FOVEATION=0..3):
+/// 1 = legacy 60% 1x1 / 2x2 outside, 2 = Medium (40%/70% 2x2/4x4), 3 = High (20%/45% 2x2/4x4).
+inline constexpr Params EnvParams(int env_level) {
+    if (env_level <= 0) {
+        return Params{0, 40, 70, 2, 4};
     }
-    return d <= 0.40f ? kRate1x1 : (d <= 0.72f ? kRate2x2 : kRate4x4);
+    if (env_level == 1) {
+        return Params{1, 60, 100, 2, 2};
+    }
+    if (env_level == 2) {
+        return Params{2, 40, 70, 2, 4};
+    }
+    return Params{3, 20, 45, 2, 4};
+}
+
+/// Effective foveation parameters: AZAHARFRAME_XR_FOVEATION overrides if set; otherwise uses the
+/// VR menu settings only when eye tracking is available on the headset (Steam Frame).
+inline Params EffectiveParams(std::uint32_t setting_level, bool eye_tracking_available,
+                              std::uint32_t inner_pct, std::uint32_t middle_pct,
+                              std::uint32_t middle_rate, std::uint32_t outer_rate) {
+    if (const auto env = EnvOverride(); env.has_value()) {
+        return EnvParams(*env);
+    }
+    if (!eye_tracking_available || setting_level == 0) {
+        return Params{0, 40, 70, 2, 4};
+    }
+    return Params{
+        static_cast<int>(std::min<std::uint32_t>(setting_level, 2u)),
+        std::clamp(inner_pct, kMinInnerPct, kMaxInnerPct),
+        std::clamp(middle_pct, kMinMiddlePct, kMaxMiddlePct),
+        std::min(middle_rate, kMaxRateIndex),
+        std::min(outer_rate, kMaxRateIndex),
+    };
+}
+
+/// Shading rate for a normalised ellipse distance `d` from the fovea centre.
+inline std::uint8_t RateForDistance(const Params& p, float d) {
+    if (p.level <= 0) {
+        return kRate1x1;
+    }
+    const float inner = static_cast<float>(p.inner_pct) * 0.01f;
+    const float middle = std::max(inner, static_cast<float>(p.middle_pct) * 0.01f);
+    if (d <= inner) {
+        return kRate1x1;
+    }
+    if (d <= middle) {
+        return RateByte(p.middle_rate);
+    }
+    return RateByte(p.outer_rate);
+}
+
+inline std::uint8_t RateForDistance(int level, float d) {
+    return RateForDistance(EnvParams(level), d);
 }
 
 /// The rate of the texel at (x, y) of a w x h image. The centre of the full rate is at
 /// (centre_x, centre_y) of the picture; the rings are ellipses of the picture (radius 1 = half its
 /// width/height).
-inline std::uint8_t RateAt(int level, std::uint32_t x, std::uint32_t y, std::uint32_t w,
+inline std::uint8_t RateAt(const Params& p, std::uint32_t x, std::uint32_t y, std::uint32_t w,
                            std::uint32_t h, float centre_y = 0.5f, float centre_x = 0.5f) {
-    if (level <= 0) {
+    if (p.level <= 0) {
         return kRate1x1;
     }
     const float dx = ((static_cast<float>(x) + 0.5f) / static_cast<float>(w) - centre_x) * 2.0f;
     const float dy =
         ((static_cast<float>(y) + 0.5f) / static_cast<float>(h) - centre_y) * 2.0f;
-    return RateForDistance(level, std::sqrt(dx * dx + dy * dy));
+    return RateForDistance(p, std::sqrt(dx * dx + dy * dy));
+}
+
+inline std::uint8_t RateAt(int level, std::uint32_t x, std::uint32_t y, std::uint32_t w,
+                           std::uint32_t h, float centre_y = 0.5f, float centre_x = 0.5f) {
+    return RateAt(EnvParams(level), x, y, w, h, centre_y, centre_x);
 }
 
 /// The rate image for a picture of width x height pixels with square texels of `texel` pixels.
 /// When the active eye picture occupies a sub-rectangle `(rect_x, rect_y, rect_w, rect_h)` inside
 /// a padded surface (e.g. 240 x 400 inside 256 x 512), the foveal ellipses are centred and scaled
 /// to that sub-rectangle instead of the full padded surface.
-inline std::vector<std::uint8_t> MakeRateImage(int level, std::uint32_t width,
+inline std::vector<std::uint8_t> MakeRateImage(const Params& p, std::uint32_t width,
                                                std::uint32_t height, std::uint32_t texel,
                                                float centre_y = 0.5f, float centre_x = 0.5f,
                                                std::uint32_t rect_x = 0, std::uint32_t rect_y = 0,
@@ -109,7 +198,7 @@ inline std::vector<std::uint8_t> MakeRateImage(int level, std::uint32_t width,
         for (std::uint32_t y = 0; y < h; ++y) {
             for (std::uint32_t x = 0; x < w; ++x) {
                 out[static_cast<std::size_t>(y) * w + x] =
-                    RateAt(level, x, y, w, h, centre_y, centre_x);
+                    RateAt(p, x, y, w, h, centre_y, centre_x);
             }
         }
         return out;
@@ -123,17 +212,27 @@ inline std::vector<std::uint8_t> MakeRateImage(int level, std::uint32_t width,
         const float py = (static_cast<float>(y) + 0.5f) * t;
         const float dy = ((py - ry) / rh - centre_y) * 2.0f;
         for (std::uint32_t x = 0; x < w; ++x) {
-            if (level <= 0) {
+            if (p.level <= 0) {
                 out[static_cast<std::size_t>(y) * w + x] = kRate1x1;
                 continue;
             }
             const float px = (static_cast<float>(x) + 0.5f) * t;
             const float dx = ((px - rx) / rw - centre_x) * 2.0f;
             const float d = std::sqrt(dx * dx + dy * dy);
-            out[static_cast<std::size_t>(y) * w + x] = RateForDistance(level, d);
+            out[static_cast<std::size_t>(y) * w + x] = RateForDistance(p, d);
         }
     }
     return out;
+}
+
+inline std::vector<std::uint8_t> MakeRateImage(int level, std::uint32_t width,
+                                               std::uint32_t height, std::uint32_t texel,
+                                               float centre_y = 0.5f, float centre_x = 0.5f,
+                                               std::uint32_t rect_x = 0, std::uint32_t rect_y = 0,
+                                               std::uint32_t rect_w = 0,
+                                               std::uint32_t rect_h = 0) {
+    return MakeRateImage(EnvParams(level), width, height, texel, centre_y, centre_x, rect_x, rect_y,
+                         rect_w, rect_h);
 }
 
 /// Is a framebuffer of this size the eye picture (the top screen: 400 x 240, or as stored 240 x

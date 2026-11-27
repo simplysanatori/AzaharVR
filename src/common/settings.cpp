@@ -317,7 +317,11 @@ void RestoreGlobalState(bool is_powered_on) {
     values.vr_immersive_scale_x.SetGlobal(true);    // AzaharFrame kiu
     values.vr_immersive_scale_y.SetGlobal(true);
     values.vr_immersive_scale_mode.SetGlobal(true); // AzaharFrame fovscale
-    values.vr_foveated_rendering.SetGlobal(true);   // AzaharVR foveation
+    values.vr_foveated_rendering.SetGlobal(true);      // AzaharVR foveation
+    values.vr_foveation_inner_radius.SetGlobal(true);
+    values.vr_foveation_middle_radius.SetGlobal(true);
+    values.vr_foveation_middle_rate.SetGlobal(true);
+    values.vr_foveation_outer_rate.SetGlobal(true);
     values.vr_immersive_hud_spacing_x.SetGlobal(true); // AzaharFrame hudmove
     values.vr_immersive_hud_spacing_y.SetGlobal(true);
     values.vr_face_buttons.SetGlobal(true); // AzaharFrame
