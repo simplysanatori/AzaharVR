@@ -805,17 +805,17 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
     CHECK(Settings::values.vr_kiu_bottom_screen.GetDefault() == 0u);
     CHECK(Settings::values.vr_kiu_bottom_size.GetDefault() == 160u);
     CHECK(Settings::values.vr_kiu_bottom_opacity.GetDefault() == 50u);
-    // AzaharFrame kiu1s: the talk's portraits, off, and their opacity.
+    // AzaharFrame kiu1s: the talk's portraits and their opacity (1.4.0 defaults, cf5c53dc8).
     CHECK(Settings::values.vr_kiu_talk_portraits.GetDefault());
     CHECK(Settings::values.vr_kiu_talk_portraits_opacity.GetDefault() == 50u);
-    CHECK(Settings::values.vr_kiu_portraits_linked.GetDefault());
-    CHECK(Settings::values.vr_kiu_portraits_across.GetDefault() == 0);
-    CHECK(Settings::values.vr_kiu_portraits_height.GetDefault() == 0);
-    // AzaharFrame kiupowers: the power menu, off, and its opacity.
-    CHECK(Settings::values.vr_kiu_power_menu.GetDefault() == 0u);
-    CHECK(Settings::values.vr_kiu_power_menu_opacity.GetDefault() == 100u);
+    CHECK_FALSE(Settings::values.vr_kiu_portraits_linked.GetDefault());
+    CHECK(Settings::values.vr_kiu_portraits_across.GetDefault() == 12);
+    CHECK(Settings::values.vr_kiu_portraits_height.GetDefault() == -25);
+    // AzaharFrame kiupowers: the power menu and its opacity (1.4.0 defaults).
+    CHECK(Settings::values.vr_kiu_power_menu.GetDefault() == 3u);
+    CHECK(Settings::values.vr_kiu_power_menu_opacity.GetDefault() == 50u);
     CHECK(Settings::values.vr_kiu_power_menu_across.GetDefault() == 0);
-    CHECK(Settings::values.vr_kiu_power_menu_height.GetDefault() == 0);
+    CHECK(Settings::values.vr_kiu_power_menu_height.GetDefault() == -5);
     for (const char* key : {"vr_kiu_talk_portraits", "vr_kiu_talk_portraits_opacity",
                             "vr_kiu_portraits_linked", "vr_kiu_portraits_across",
                             "vr_kiu_portraits_height",
@@ -827,7 +827,7 @@ TEST_CASE("Per-Game: Angel's Aim's first-person keys, off by default", "[frame_x
     CHECK(Settings::values.vr_kiu_stick_click.GetDefault() == 0u); // AzaharFrame kiucam
     CHECK(std::find(labels.begin(), labels.end(), "vr_kiu_stick_click") != labels.end());
     CHECK(Settings::values.vr_wrist_side.GetDefault() == 0u); // Back
-    CHECK(Settings::values.vr_kiu_reticle_size.GetDefault() == 100u);
+    CHECK(Settings::values.vr_kiu_reticle_size.GetDefault() == 30u);
     for (const char* key : {"vr_kiu_bottom_x", "vr_kiu_bottom_y", "vr_kiu_wrist_screen",
                             "vr_kiu_talk_panel"}) {
         INFO(key);
