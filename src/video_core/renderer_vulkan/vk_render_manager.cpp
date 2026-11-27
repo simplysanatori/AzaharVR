@@ -270,6 +270,7 @@ void RenderManager::StartPass(const RenderPass& new_pass, const Framebuffer* fra
         p.scaled = scale > 1;
         p.foveated =
             framebuffer->fsr_picture &&
+            Settings::values.vr_immersive_mode.GetValue() >= 2 &&
             VideoCore::Foveation::EffectiveLevel(
                 Settings::values.vr_foveated_rendering.GetValue(),
                 VideoCore::Gaze::g_available.load(std::memory_order_relaxed)) > 0;
@@ -398,6 +399,21 @@ u32 CentreKey(float cx, float cy, u32 w, u32 h) {
     const u32 y = static_cast<u32>(std::clamp(cy, -0.5f, 1.5f) * static_cast<float>(h) + 64.0f);
     return (x << 16) | (y & 0xFFFF);
 }
+
+// Eye-tracked foveation applies only in head-locked Full modes (vr_immersive_mode >= 2);
+// Off (0) and Wide (1) use floating panels where view-space gaze does not match screen UVs.
+VideoCore::Foveation::Params CurrentFoveationParams() {
+    if (Settings::values.vr_immersive_mode.GetValue() < 2) {
+        return VideoCore::Foveation::Params{};
+    }
+    return VideoCore::Foveation::EffectiveParams(
+        Settings::values.vr_foveated_rendering.GetValue(),
+        VideoCore::Gaze::g_available.load(std::memory_order_relaxed),
+        Settings::values.vr_foveation_inner_radius.GetValue(),
+        Settings::values.vr_foveation_middle_radius.GetValue(),
+        Settings::values.vr_foveation_middle_rate.GetValue(),
+        Settings::values.vr_foveation_outer_rate.GetValue());
+}
 } // namespace
 
 vk::RenderPass RenderManager::GetDrawRenderpass(VideoCore::PixelFormat color,
@@ -512,13 +528,7 @@ vk::ImageView RenderManager::GetShadingRateView(u32 width, u32 height) {
     const u32 h = (height + texel - 1) / texel;
     float cx, cy;
     CentreFor(width, height, cx, cy);
-    const VideoCore::Foveation::Params params = VideoCore::Foveation::EffectiveParams(
-        Settings::values.vr_foveated_rendering.GetValue(),
-        VideoCore::Gaze::g_available.load(std::memory_order_relaxed),
-        Settings::values.vr_foveation_inner_radius.GetValue(),
-        Settings::values.vr_foveation_middle_radius.GetValue(),
-        Settings::values.vr_foveation_middle_rate.GetValue(),
-        Settings::values.vr_foveation_outer_rate.GetValue());
+    const VideoCore::Foveation::Params params = CurrentFoveationParams();
     std::vector<u8> data =
         VideoCore::Foveation::MakeRateImage(params, width, height, texel, cy, cx);
     data.resize((data.size() + 3) & ~std::size_t{3}); // a buffer update is in words
@@ -707,13 +717,7 @@ void RenderManager::RefreshShadingRate(u32 width, u32 height, Common::Rectangle<
     const bool use_draw_rect = rw * 2 >= width && rh * 2 >= height &&
                                draw_rect.left + rw <= width && draw_rect.bottom + rh <= height;
     const bool gaze_live = VideoCore::Gaze::g_wanted.load(std::memory_order_relaxed);
-    const VideoCore::Foveation::Params params = VideoCore::Foveation::EffectiveParams(
-        Settings::values.vr_foveated_rendering.GetValue(),
-        VideoCore::Gaze::g_available.load(std::memory_order_relaxed),
-        Settings::values.vr_foveation_inner_radius.GetValue(),
-        Settings::values.vr_foveation_middle_radius.GetValue(),
-        Settings::values.vr_foveation_middle_rate.GetValue(),
-        Settings::values.vr_foveation_outer_rate.GetValue());
+    const VideoCore::Foveation::Params params = CurrentFoveationParams();
     const u32 texel = instance.FragmentShadingRateTexelSize();
     const u32 w = (width + texel - 1) / texel;
     const u32 h = (height + texel - 1) / texel;

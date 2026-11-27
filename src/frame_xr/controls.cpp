@@ -1566,27 +1566,22 @@ VrUi::ScreenDraw VrUi::ScreenDrawFor(const Immersive::ScreenLayers& shown) const
 static void SampleFoveationGaze(Runtime& rt, const FrameInfo& info, Input::Actions& actions,
                                 bool actions_ok) {
     using namespace VideoCore::Gaze;
-    static bool init_done = false;
-    static bool gaze_allowed = false;
-    static bool available = false;
-    static bool last_wanted = false;
+    static int last_wanted = -1;
     static int last_source = -1;
     static std::chrono::steady_clock::time_point last_log{};
     static uint32_t logged_samples = 0, logged_valid = 0;
-    if (!init_done) {
-        init_done = true;
-        const char* g = std::getenv("AZAHARFRAME_XR_FOVEATION_GAZE");
-        gaze_allowed = !(g && g[0] == '0');
-        available = gaze_allowed && (rt.HasExtension("XR_EXT_eye_gaze_interaction") ||
-                                     rt.HasExtension("XR_META_foveation_eye_tracked"));
-        g_available.store(available, std::memory_order_relaxed);
-    }
-    const int level = VideoCore::Foveation::EffectiveLevel(
-        Settings::values.vr_foveated_rendering.GetValue(), available);
+    const bool available = g_available.load(std::memory_order_relaxed);
+    const bool full_mode = Settings::values.vr_immersive_mode.GetValue() >= 2;
+    const int level = full_mode ? VideoCore::Foveation::EffectiveLevel(
+                                      Settings::values.vr_foveated_rendering.GetValue(), available)
+                                : 0;
     const bool wanted = level > 0 && available;
-    if (wanted != last_wanted || (last_log == std::chrono::steady_clock::time_point{} && wanted)) {
-        last_wanted = wanted;
+    if (last_wanted < 0 ? wanted : (wanted != (last_wanted != 0))) {
+        last_wanted = wanted ? 1 : 0;
         g_wanted.store(wanted, std::memory_order_relaxed);
+        if (!wanted) {
+            g_valid.store(false, std::memory_order_relaxed);
+        }
         LOG_INFO(Frontend, "xr: foveation gaze {}: eye gaze interaction {}, eye tracked foveation {}",
                  wanted ? "on" : "off",
                  rt.HasExtension("XR_EXT_eye_gaze_interaction") ? "enabled" : "not enabled",

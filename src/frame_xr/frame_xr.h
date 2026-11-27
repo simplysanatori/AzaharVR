@@ -363,8 +363,8 @@ enum class MenuSetting {
     MatchBottom,
     /// AzaharFrame projdef: `value` 1 the projection layer, 0 a panel (vr_screens_in_projection)
     ScreensInProjection,
-    /// AzaharVR foveation: `value` 0 Off, 1 Medium, 2 High (vr_foveated_rendering) and the four
-    /// ring controls (inner/middle radius percent, middle/outer shading rate index 0..4)
+    /// AzaharVR foveation: `value` 0 Off, 1 Low, 2 Medium, 3 High (vr_foveated_rendering) and the
+    /// four ring controls (inner/middle radius percent, middle/outer resolution index 0..4)
     FoveatedRendering,
     FoveationInnerRadius,
     FoveationMiddleRadius,

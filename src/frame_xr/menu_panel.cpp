@@ -3179,8 +3179,8 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::WindowScale:
     case Id::MatchCamera: // AzaharFrame fovonce: Off | Set Once | Always
     case Id::ScaleMode:   // AzaharFrame fovscale: Stretch | Field of View
-    case Id::FoveatedRendering:   // AzaharVR foveation: Off | Medium | High
-    case Id::FoveationMiddleRate: // 1x1 | 1x2 | 2x2 | 2x4 | 4x4
+    case Id::FoveatedRendering:   // AzaharVR foveation: Off | Low | Medium | High
+    case Id::FoveationMiddleRate: // Full | 1/2 | 1/4 | 1/8 | 1/16
     case Id::FoveationOuterRate:
     case Id::ControllersInFront: // AzaharFrame ctrlfront: Off | Primary | Secondary | Both
     case Id::TextureFilter:    // AzaharFrame menuux

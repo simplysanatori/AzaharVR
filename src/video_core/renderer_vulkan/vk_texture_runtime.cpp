@@ -1568,12 +1568,13 @@ Framebuffer::Framebuffer(TextureRuntime& runtime, const VideoCore::FramebufferPa
             attachments[num_attachments++] = image_views[1];
         }
         render_pass = renderpass_cache.GetDrawRenderpass(formats[0], formats[1]);
-        // AzaharVR foveation: with the switch on every pass has a rate image (the pipelines are
-        // made for that pass): the eye picture of the immersive view its own, the rest 1x1.
+        // AzaharVR foveation: with the extension supported every pass has a rate image (the
+        // pipelines are made for that pass). Eye pictures in XR always attach the dynamic rate
+        // image so toggling Immersive Mode or Foveated Rendering live updates without recreating
+        // cached framebuffers; everything else uses the static 1x1 image.
         if (instance.IsFragmentShadingRateSupported() && (color || depth)) {
             if (color && VideoCore::Immersive::g_xr_active.load(std::memory_order_relaxed) &&
-                Settings::values.vr_immersive_mode.GetValue() != 0 && color_level == 0 &&
-                VideoCore::Foveation::IsEyePicture(width, height, res_scale)) {
+                color_level == 0 && VideoCore::Foveation::IsEyePicture(width, height, res_scale)) {
                 attachments[num_attachments++] =
                     renderpass_cache.GetShadingRateView(width, height);
                 fsr_picture = true;
