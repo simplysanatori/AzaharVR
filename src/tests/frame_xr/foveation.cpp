@@ -16,21 +16,39 @@ TEST_CASE("foveation: the level of the switch", "[frame_xr]") {
     REQUIRE(F::LevelFromText("0") == 0);
     REQUIRE(F::LevelFromText("1") == 1);
     REQUIRE(F::LevelFromText("2") == 2);
-    REQUIRE(F::LevelFromText("7") == 2);
+    REQUIRE(F::LevelFromText("3") == 3);
+    REQUIRE(F::LevelFromText("7") == 3);
     REQUIRE(F::LevelFromText("abc") == 0);
 }
 
+TEST_CASE("foveation: effective level requires eye tracking unless overridden", "[frame_xr]") {
+    REQUIRE(F::EffectiveLevel(0, true) == 0);
+    REQUIRE(F::EffectiveLevel(1, true) == 1);
+    REQUIRE(F::EffectiveLevel(2, true) == 2);
+    REQUIRE(F::EffectiveLevel(3, true) == 3);
+    REQUIRE(F::EffectiveLevel(9, true) == 3);
+    // Without eye tracking (non-Frame headsets), the menu setting stays off.
+    REQUIRE(F::EffectiveLevel(1, false) == 0);
+    REQUIRE(F::EffectiveLevel(2, false) == 0);
+    REQUIRE(F::EffectiveLevel(3, false) == 0);
+}
+
 TEST_CASE("foveation: the rate image has a full rate centre", "[frame_xr]") {
-    for (int level : {1, 2}) {
+    for (int level : {1, 2, 3}) {
         const auto img = F::MakeRateImage(level, 2400, 1440, 16);
         const std::uint32_t w = 150, h = 90;
         REQUIRE(img.size() == w * h);
         REQUIRE(img[(h / 2) * w + w / 2] == F::kRate1x1);
         REQUIRE(img[0] == (level == 1 ? F::kRate2x2 : F::kRate4x4));
     }
-    // Level 2 has a middle ring of 2x2; level 1 has no 4x4; off is all 1x1.
+    // Level 2 and 3 have a middle ring of 2x2; level 3 has more 4x4 than level 2; level 1 has no
+    // 4x4; off is all 1x1.
     const auto l2 = F::MakeRateImage(2, 2400, 1440, 16);
+    const auto l3 = F::MakeRateImage(3, 2400, 1440, 16);
     REQUIRE(std::count(l2.begin(), l2.end(), F::kRate2x2) > 0);
+    REQUIRE(std::count(l3.begin(), l3.end(), F::kRate2x2) > 0);
+    REQUIRE(std::count(l3.begin(), l3.end(), F::kRate4x4) >
+            std::count(l2.begin(), l2.end(), F::kRate4x4));
     const auto l1 = F::MakeRateImage(1, 2400, 1440, 16);
     REQUIRE(std::count(l1.begin(), l1.end(), F::kRate4x4) == 0);
     const auto l0 = F::MakeRateImage(0, 2400, 1440, 16);

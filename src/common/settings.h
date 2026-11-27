@@ -974,6 +974,10 @@ struct Values {
     // fovaxis: Field of View crops below the game's own frame (fov100 and before: a squash
     // there) and draws at most 1.6x; Stretch keeps the axes within 1.5 of each other.
     SwitchableSetting<u32, true> vr_immersive_scale_mode{1, 0, 1, "vr_immersive_scale_mode"};
+    // AzaharVR foveation: eye-tracked foveated rendering in Immersive Mode (per game and global):
+    // 0 = Off, 1 = Low, 2 = Medium, 3 = High. Active only on headsets with eye tracking (Steam
+    // Frame); takes effect when a game starts (levels update live once active).
+    SwitchableSetting<u32, true> vr_foveated_rendering{0, 0, 3, "vr_foveated_rendering"};
     // AzaharFrame hudmove: HUD Spacing (experimental; Full modes only, per game and global, read
     // every frame): the game's flat 2D drawing on the Primary screen (its HUD) at this percent of
     // its own distance from the middle, across (x) and up and down (y), 0 to 150; 100 (the

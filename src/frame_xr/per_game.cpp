@@ -79,6 +79,9 @@ bool WithSetting(Menu::Id id, F&& f) {
     case Id::ScreenAsPanel: // AzaharFrame projdef
         f(v.vr_screens_in_projection);
         return true;
+    case Id::FoveatedRendering: // AzaharVR foveation
+        f(v.vr_foveated_rendering);
+        return true;
     case Id::ShowControllers: // 1.2.0 RC2 (the owner): per game
         f(v.vr_show_controllers);
         return true;

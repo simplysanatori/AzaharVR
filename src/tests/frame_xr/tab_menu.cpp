@@ -3235,7 +3235,7 @@ TEST_CASE("Tab menu: the Per-Game count and Use Global Values for All, per tab",
                   Id::MatchCamera, Id::ScaleX, Id::ScaleY, Id::WorldScale, Id::FollowScreen,
                   Id::MotionClarity, // AzaharFrame flash
                   Id::MotionClarityNormal, // AzaharFrame fixa
-                  Id::MatchBottom, Id::MatchBottomNormal,
+                  Id::MatchBottom, Id::MatchBottomNormal, Id::FoveatedRendering,
                   Id::Autosave,
                   Id::AutosaveEvery, Id::AutosaveKeep, Id::HideBottomScreen, Id::ScreenShape,
                   Id::ScreenLayout, Id::ScreenCurve, Id::TouchpadTouch, Id::BottomScreenReticle, Id::ReticleSpeed,
@@ -4849,6 +4849,18 @@ TEST_CASE("Tab menu: Primary Screen as Panel", "[frame_xr][tabmenu][projdef]") {
           "Experimental. Draws the Primary screen as a separate panel in the Full modes. It may "
           "double on fast head turns.");
     CHECK_FALSE(MenuModel{}.screen_as_panel);
+    // AzaharVR foveation: Foveated Rendering row under Experimental
+    CHECK(PerGameSetting(Id::FoveatedRendering));
+    CHECK(SectionOf(Id::FoveatedRendering) == SettingsSection::Immersive);
+    CHECK(LabelFor(Id::FoveatedRendering) == "Foveated Rendering");
+    CHECK(OptionsFor(Id::FoveatedRendering) ==
+          std::vector<std::string>{"Off", "Low", "Medium", "High"});
+    CHECK(MenuModel{}.foveated_rendering == 0);
+    {
+        Kit kit{1.0f};
+        CHECK(kit.TextWidth(Type::Tooltip, ExplainFor(Id::FoveatedRendering)) + 28.0f <=
+              2.0f * kPanelW * 0.7f);
+    }
     {
         Kit kit{1.0f};
         CHECK(kit.TextWidth(Type::Tooltip, ExplainFor(Id::ScreenAsPanel)) + 28.0f <=

@@ -491,6 +491,7 @@ TEST_CASE("Per-Game: a moved row keeps its key", "[frame_xr][tabmenu]") {
         {Id::MotionClarity, {"vr_motion_clarity_immersive"}},
         {Id::MatchBottom, {"vr_motion_clarity_match_bottom"}},
         {Id::ScreenAsPanel, {"vr_screens_in_projection"}},
+        {Id::FoveatedRendering, {"vr_foveated_rendering"}},
         {Id::HudSpacingX, {"vr_immersive_hud_spacing_x"}},
         {Id::HudSpacingY, {"vr_immersive_hud_spacing_y"}},
         {Id::GameFov, {"vr_immersive_game_fov"}},

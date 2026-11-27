@@ -363,6 +363,8 @@ enum class MenuSetting {
     MatchBottom,
     /// AzaharFrame projdef: `value` 1 the projection layer, 0 a panel (vr_screens_in_projection)
     ScreensInProjection,
+    /// AzaharVR foveation: `value` 0 Off, 1 Low, 2 Medium, 3 High (vr_foveated_rendering)
+    FoveatedRendering,
     /// AzaharFrame natural: set while the game plays (Immersive::TakeWorldScaleSave), for its own
     /// file: `value` World Scale in hundredths of a percent (below 0: unchanged; `text` "migrated"
     /// sets vr_immersive_world_set too), `text` also "k=<eye per far>" for vr_immersive_eye_per_far.

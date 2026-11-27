@@ -437,7 +437,7 @@ TEST_CASE("Sections: a 3DS game's rows, in order", "[frame_xr][tabmenu]") {
         Id::ScaleMode,      Id::ScaleX,        Id::ScaleY,             Id::MarginX,
         Id::MarginY,        Id::GameFov,       Id::MatchCamera,        Id::ExperimentalHeader,
         Id::ScreenAsPanel,  Id::HudSpacingX,   Id::HudSpacingY,        Id::MotionClarity,
-        Id::MatchBottom};
+        Id::MatchBottom,    Id::FoveatedRendering};
     CHECK(RowIds(Tab::Settings, m, SettingsSection::Immersive) == immersive);
     CHECK(ControlsRows(m, ControlsSection::Buttons) == kButtons);
     CHECK(ControlsRows(m, ControlsSection::Pointing) == kPointing);

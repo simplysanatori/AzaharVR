@@ -20,6 +20,7 @@
 #include "frame_xr/bfi_helpers.h"        // AzaharFrame bfidr
 #include "frame_xr/dynamic_resolution.h" // AzaharFrame menuux
 #include "video_core/vr_cache_save.h"        // AzaharFrame flash3
+#include "video_core/vr_gaze.h"              // AzaharVR foveation
 #include "video_core/vr_hud_spacing.h"          // AzaharFrame hudmove
 #include "frame_xr/immersive.h"          // AzaharFrame fovonce: MeasureCameraAgain
 #include "frame_xr/immersive_layout.h"   // AzaharFrame kiu: Horizontal and Vertical Scale
@@ -292,6 +293,8 @@ MenuSetting SettingOf(Id id) {
         return MenuSetting::MatchBottom;
     case Id::ScreenAsPanel: // AzaharFrame projdef
         return MenuSetting::ScreensInProjection;
+    case Id::FoveatedRendering: // AzaharVR foveation
+        return MenuSetting::FoveatedRendering;
     case Id::Depth3d:
         return MenuSetting::Depth3d;
     case Id::InternalResolution:
@@ -1442,6 +1445,8 @@ void MenuPanel::BuildModel(const Host& host) {
     m.bfi_uneven_hz = MotionClarity::UnevenHz( // AzaharFrame bfidr
         Common::StallTelemetry::Get().display_period_ns.load(std::memory_order_relaxed));
     m.screen_as_panel = !v.vr_screens_in_projection.GetValue();            // AzaharFrame projdef
+    m.foveated_rendering =
+        static_cast<int>(std::min<u32>(v.vr_foveated_rendering.GetValue(), 3)); // AzaharVR foveation
     // AzaharFrame autosave: the running game's values (its own, else the global ones)
     m.autosave = v.autosave_enabled.GetValue();
     m.autosave_every = 0;
@@ -1467,6 +1472,9 @@ void MenuPanel::BuildModel(const Host& host) {
     }
     if (!host.passthrough_ok && m.background == 0) {
         lock(Id::Background, Lock::Unavailable);
+    }
+    if (!VideoCore::Gaze::g_available.load(std::memory_order_relaxed)) {
+        lock(Id::FoveatedRendering, Lock::Unavailable);
     }
     if (!per_game_ok) {
         lock(Id::Scope, Lock::NoGame); // AzaharFrame reticle: the toggle shows Global alone
@@ -2175,6 +2183,11 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
         r.value = in_projection ? 1 : 0;
         break;
     }
+    case Id::FoveatedRendering: // AzaharVR foveation: 0 Off, 1 Low, 2 Medium, 3 High (live)
+        r.value = static_cast<int>(std::min<u32>(u, 3));
+        Apply(v.vr_foveated_rendering, static_cast<u32>(r.value), per_game);
+        r.setting = MenuSetting::FoveatedRendering;
+        break;
     case Id::Depth3d: // AzaharFrame depth3d: the HID's 3D slider reads it on every pad update
         // AzaharFrame natural: in the Full modes their own 3D Depth (percent of the natural 3D).
         if (v.vr_immersive_mode.GetValue() >= 2) {
@@ -3106,6 +3119,7 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::WindowScale:
     case Id::MatchCamera: // AzaharFrame fovonce: Off | Set Once | Always
     case Id::ScaleMode:   // AzaharFrame fovscale: Stretch | Field of View
+    case Id::FoveatedRendering: // AzaharVR foveation: Off | Low | Medium | High
     case Id::ControllersInFront: // AzaharFrame ctrlfront: Off | Primary | Secondary | Both
     case Id::TextureFilter:    // AzaharFrame menuux
     case Id::AccurateImageCopies: // AzaharFrame xfergpu: Off | Automatic | On

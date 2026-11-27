@@ -37,6 +37,7 @@ inline std::atomic<float> g_v{kForwardV};
 inline std::atomic<int> g_source{0};
 inline std::atomic<std::uint32_t> g_samples{0};       ///< frames asked
 inline std::atomic<std::uint32_t> g_valid_samples{0}; ///< of them with a valid gaze
+inline std::atomic<bool> g_available{false};          ///< headset runtime offers eye tracking
 inline std::atomic<bool> g_wanted{false};             ///< foveation with gaze is on
 
 /// One frame's gaze (a view direction as tangents, valid or not). Smoothed a little: a saccade

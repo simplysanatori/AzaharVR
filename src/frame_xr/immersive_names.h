@@ -62,6 +62,14 @@ inline constexpr const char* kScaleStretchTip =
 inline constexpr const char* kScaleFieldOfView = "Field of View";
 inline constexpr const char* kScaleFieldOfViewTip =
     "Shows more or less of the game, cropping when smaller. No warping up to +60%.";
+/// AzaharVR foveation: Settings::values.vr_foveated_rendering (0 Off, 1 Low, 2 Medium, 3 High).
+inline constexpr const char* kFoveatedRendering = "Foveated Rendering";
+inline constexpr const char* kFoveatedRenderingTip =
+    "Experimental. Lowers shading rate outside your gaze in Immersive Mode to save GPU time.";
+inline constexpr const char* kFoveationOff = "Off";
+inline constexpr const char* kFoveationLow = "Low";
+inline constexpr const char* kFoveationMedium = "Medium";
+inline constexpr const char* kFoveationHigh = "High";
 /// AzaharFrame fovaxis: Fill View (VR menu, under Scale Mode): sets the screen's size and
 /// Horizontal Scale once so the screen fills most of the view across (Layout::FillView, 1.2.0:
 /// across only; Vertical Scale stays); the toast is Layout::FillToast.

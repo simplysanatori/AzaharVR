@@ -692,6 +692,9 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
         if (m.motion_clarity_immersive) {
             rows.push_back(row(Id::MatchBottom, RowKind::Switch, 0, m.match_bottom));
         }
+        // AzaharVR foveation: eye-tracked foveated rendering (Off, Low, Medium, High).
+        rows.push_back(
+            row(Id::FoveatedRendering, RowKind::Segmented, std::clamp(m.foveated_rendering, 0, 3)));
     }
     return rows;
 }
@@ -786,6 +789,7 @@ SettingsSection SectionOf(Id id) {
     case Id::MotionClarity: // AzaharFrame flash
     case Id::MatchBottom:   // AzaharFrame fixa
     case Id::ScreenAsPanel:
+    case Id::FoveatedRendering: // AzaharVR foveation
     case Id::KiuBottomScreen: // AzaharFrame kiutoggles, kiu131
     case Id::KiuBottomSize:
     case Id::KiuBottomOpacity:
@@ -864,6 +868,7 @@ bool PerGameSetting(Id id) {
     case Id::MatchBottom:
     case Id::MatchBottomNormal:
     case Id::ScreenAsPanel:
+    case Id::FoveatedRendering: // AzaharVR foveation
     case Id::ShowControllers:    // 1.2.0 RC2 (the owner): per game, e.g. on for Kid Icarus
     case Id::ControllersInFront: // and its weapon, off in another game
     case Id::Depth3d: // AzaharFrame depth3d
@@ -1388,6 +1393,12 @@ const std::vector<std::string>& OptionsFor(Id id) {
     case Id::MarginX: // AzaharFrame fovaxis
     case Id::MarginY:
         return kWider;
+    case Id::FoveatedRendering: { // AzaharVR foveation
+        static const std::vector<std::string> kFoveated{
+            Immersive::Names::kFoveationOff, Immersive::Names::kFoveationLow,
+            Immersive::Names::kFoveationMedium, Immersive::Names::kFoveationHigh};
+        return kFoveated;
+    }
     case Id::DsConsoleMode: {
         static const std::vector<std::string> kDsConsole{"Automatic", "DS", "DSi"};
         return kDsConsole;
@@ -1748,6 +1759,8 @@ std::string LabelFor(Id id) {
         return Immersive::Names::kMatchBottom;
     case Id::ScreenAsPanel: // AzaharFrame projdef
         return Immersive::Names::kScreenAsPanel;
+    case Id::FoveatedRendering: // AzaharVR foveation
+        return Immersive::Names::kFoveatedRendering;
     case Id::MoreSettings:
         return "More Settings";
     case Id::SavesHeader: // AzaharFrame autosave
@@ -2139,6 +2152,8 @@ std::string ExplainFor(Id id) {
         return Immersive::Names::kMatchBottomTip;
     case Id::ScreenAsPanel: // AzaharFrame projdef
         return Immersive::Names::kScreenAsPanelTip;
+    case Id::FoveatedRendering: // AzaharVR foveation
+        return Immersive::Names::kFoveatedRenderingTip;
     case Id::KiuBottomScreen: // AzaharFrame kiu131 (angels_aim_tab.h)
         return kBottomScreenTip;
     case Id::KiuBottomSize:

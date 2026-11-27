@@ -243,17 +243,17 @@ bool Runtime::CreateXrInstance(bool renew) {
                 enabled_extensions.push_back(name);
             }
         }
-        // AzaharVR foveation: the eyes' gaze for the full rate centre, only with the switch on
-        // (and never a reason to fail: each is asked for only when the runtime offers it).
-        if (VideoCore::Foveation::LevelFromEnv() > 0 && GazeWanted()) {
-            if (offers("XR_EXT_eye_gaze_interaction") && !HasExtension("XR_EXT_eye_gaze_interaction")) {
+        // AzaharVR foveation: request eye gaze interaction whenever the runtime offers it (Steam
+        // Frame), so toggling Foveated Rendering in the VR menu works without restarting Azahar.
+        // Never a reason to fail: asked for only when the runtime offers it.
+        if (GazeWanted() && offers("XR_EXT_eye_gaze_interaction")) {
+            if (!HasExtension("XR_EXT_eye_gaze_interaction")) {
                 enabled_extensions.push_back("XR_EXT_eye_gaze_interaction");
             }
             // Not XR_META_foveation_eye_tracked: its XR_FB_foveation needs more extensions (and
             // swapchains made for it); SteamVR on the Frame refused the instance with it.
-            LOG_INFO(Frontend, "xr: foveation gaze: the runtime offers eye gaze interaction {}, "
+            LOG_INFO(Frontend, "xr: foveation gaze: the runtime offers eye gaze interaction yes, "
                                "eye tracked foveation {}",
-                     offers("XR_EXT_eye_gaze_interaction") ? "yes" : "no",
                      offers("XR_META_foveation_eye_tracked") ? "yes" : "no");
         }
         // AzaharFrame kiu140: the finger joints' extensions, with their test switch alone.

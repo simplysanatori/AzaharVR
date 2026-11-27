@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <optional>
 #include <vector>
 
 namespace VideoCore::Foveation {
@@ -19,17 +20,38 @@ namespace VideoCore::Foveation {
 /// The test switch (read at the start; it is put in the environment from test-switches.txt).
 inline constexpr const char* kSwitch = "AZAHARFRAME_XR_FOVEATION";
 
-/// 0 (off, also for anything else), 1 or 2.
+/// 0 (off, also for anything else), 1 (Low), 2 (Medium), or 3 (High).
 inline int LevelFromText(const char* text) {
     if (!text || !*text) {
         return 0;
     }
     const long v = std::strtol(text, nullptr, 10);
-    return v >= 2 ? 2 : (v == 1 ? 1 : 0);
+    return v >= 3 ? 3 : (v == 2 ? 2 : (v == 1 ? 1 : 0));
+}
+
+/// Returns the test-switch override when AZAHARFRAME_XR_FOVEATION is set and non-empty.
+inline std::optional<int> EnvOverride() {
+    const char* env = std::getenv(kSwitch);
+    if (!env || !*env) {
+        return std::nullopt;
+    }
+    return LevelFromText(env);
 }
 
 inline int LevelFromEnv() {
     return LevelFromText(std::getenv(kSwitch));
+}
+
+/// Effective foveation level (0..3): AZAHARFRAME_XR_FOVEATION overrides if set; otherwise uses
+/// the menu setting only when eye tracking is available on the headset (Steam Frame).
+inline int EffectiveLevel(std::uint32_t setting_level, bool eye_tracking_available) {
+    if (const auto env = EnvOverride(); env.has_value()) {
+        return *env;
+    }
+    if (!eye_tracking_available) {
+        return 0;
+    }
+    return static_cast<int>(std::min<std::uint32_t>(setting_level, 3u));
 }
 
 /// A texel of the shading rate image: log2(width) << 2 | log2(height) of the fragment size.
@@ -37,10 +59,26 @@ inline constexpr std::uint8_t kRate1x1 = 0;
 inline constexpr std::uint8_t kRate2x2 = (1 << 2) | 1;
 inline constexpr std::uint8_t kRate4x4 = (2 << 2) | 2;
 
+/// Shading rate for a normalised ellipse distance `d` from the fovea centre.
+/// Level 1 (Low): 1x1 inside 0.60, 2x2 outside.
+/// Level 2 (Medium): 1x1 inside 0.50, 2x2 to 0.85, 4x4 beyond.
+/// Level 3 (High): 1x1 inside 0.40, 2x2 to 0.72, 4x4 beyond.
+inline std::uint8_t RateForDistance(int level, float d) {
+    if (level <= 0) {
+        return kRate1x1;
+    }
+    if (level == 1) {
+        return d <= 0.60f ? kRate1x1 : kRate2x2;
+    }
+    if (level == 2) {
+        return d <= 0.50f ? kRate1x1 : (d <= 0.85f ? kRate2x2 : kRate4x4);
+    }
+    return d <= 0.40f ? kRate1x1 : (d <= 0.72f ? kRate2x2 : kRate4x4);
+}
+
 /// The rate of the texel at (x, y) of a w x h image. The centre of the full rate is at
 /// (centre_x, centre_y) of the picture; the rings are ellipses of the picture (radius 1 = half its
-/// width/height). Level 1: 1x1 inside 0.6, 2x2 outside. Level 2: 1x1 inside 0.5, 2x2 to 0.85,
-/// 4x4 beyond.
+/// width/height).
 inline std::uint8_t RateAt(int level, std::uint32_t x, std::uint32_t y, std::uint32_t w,
                            std::uint32_t h, float centre_y = 0.5f, float centre_x = 0.5f) {
     if (level <= 0) {
@@ -49,11 +87,7 @@ inline std::uint8_t RateAt(int level, std::uint32_t x, std::uint32_t y, std::uin
     const float dx = ((static_cast<float>(x) + 0.5f) / static_cast<float>(w) - centre_x) * 2.0f;
     const float dy =
         ((static_cast<float>(y) + 0.5f) / static_cast<float>(h) - centre_y) * 2.0f;
-    const float d = std::sqrt(dx * dx + dy * dy);
-    if (level == 1) {
-        return d <= 0.6f ? kRate1x1 : kRate2x2;
-    }
-    return d <= 0.5f ? kRate1x1 : (d <= 0.85f ? kRate2x2 : kRate4x4);
+    return RateForDistance(level, std::sqrt(dx * dx + dy * dy));
 }
 
 /// The rate image for a picture of width x height pixels with square texels of `texel` pixels.
@@ -96,9 +130,7 @@ inline std::vector<std::uint8_t> MakeRateImage(int level, std::uint32_t width,
             const float px = (static_cast<float>(x) + 0.5f) * t;
             const float dx = ((px - rx) / rw - centre_x) * 2.0f;
             const float d = std::sqrt(dx * dx + dy * dy);
-            out[static_cast<std::size_t>(y) * w + x] =
-                level == 1 ? (d <= 0.6f ? kRate1x1 : kRate2x2)
-                           : (d <= 0.5f ? kRate1x1 : (d <= 0.85f ? kRate2x2 : kRate4x4));
+            out[static_cast<std::size_t>(y) * w + x] = RateForDistance(level, d);
         }
     }
     return out;

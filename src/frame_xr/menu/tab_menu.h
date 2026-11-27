@@ -172,6 +172,9 @@ enum class Id : int {
     /// AzaharFrame projdef: Primary Screen as Panel, a switch, first under Experimental
     /// (the opposite of vr_screens_in_projection), per game, never locked
     ScreenAsPanel,
+    /// AzaharVR foveation: Foveated Rendering (vr_foveated_rendering), 0 Off, 1 Low, 2 Medium,
+    /// 3 High, per game, under Experimental (eye-tracked headsets only)
+    FoveatedRendering,
     MoreSettings,
     HelpHeader,    ///< AzaharFrame crashreport: General's "Help" subheader (no action)
     ReportProblem, ///< AzaharFrame crashreport: Report a Problem (a dialog in Azahar's window)
@@ -632,6 +635,7 @@ struct MenuModel {
     /// (a note, never a lock).
     int bfi_uneven_hz = 0;
     bool screen_as_panel = false; ///< AzaharFrame projdef: !vr_screens_in_projection
+    int foveated_rendering = 0;   ///< AzaharVR foveation: 0 Off, 1 Low, 2 Medium, 3 High
     // AzaharFrame autosave: the running game's values (Per-Game, else Global)
     bool autosave = false;
     int autosave_every = 2; ///< index into kAutosaveEvery

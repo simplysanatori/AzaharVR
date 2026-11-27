@@ -316,6 +316,14 @@ bool VrUi::Create(Runtime& rt) {
     mode_latch.Arm();
     // AzaharVR foveation: the eye gaze action, when its extension is on and the gaze is wanted.
     actions.gaze_wanted = rt.HasExtension("XR_EXT_eye_gaze_interaction");
+    {
+        const char* g = std::getenv("AZAHARFRAME_XR_FOVEATION_GAZE");
+        const bool gaze_allowed = !(g && g[0] == '0');
+        VideoCore::Gaze::g_available.store(
+            gaze_allowed && (rt.HasExtension("XR_EXT_eye_gaze_interaction") ||
+                             rt.HasExtension("XR_META_foveation_eye_tracked")),
+            std::memory_order_relaxed);
+    }
     actions_ok = actions.Create(rt.instance, rt.HasExtension(Input::Actions::kFrameControllerExtension),
                                 rt.HasExtension("XR_HTC_vive_focus3_controller_interaction")); // AzaharVR
     cylinder_ok = rt.HasExtension(XR_KHR_COMPOSITION_LAYER_CYLINDER_EXTENSION_NAME); // AzaharFrame curve
@@ -1558,20 +1566,29 @@ VrUi::ScreenDraw VrUi::ScreenDrawFor(const Immersive::ScreenLayers& shown) const
 static void SampleFoveationGaze(Runtime& rt, const FrameInfo& info, Input::Actions& actions,
                                 bool actions_ok) {
     using namespace VideoCore::Gaze;
-    static bool wanted_known = false;
-    static bool wanted = false;
+    static bool init_done = false;
+    static bool gaze_allowed = false;
+    static bool available = false;
+    static bool last_wanted = false;
     static int last_source = -1;
     static std::chrono::steady_clock::time_point last_log{};
     static uint32_t logged_samples = 0, logged_valid = 0;
-    if (!wanted_known) {
-        wanted_known = true;
+    if (!init_done) {
+        init_done = true;
         const char* g = std::getenv("AZAHARFRAME_XR_FOVEATION_GAZE");
-        wanted = VideoCore::Foveation::LevelFromEnv() > 0 && !(g && g[0] == '0') &&
-                 (rt.HasExtension("XR_EXT_eye_gaze_interaction") ||
-                  rt.HasExtension("XR_META_foveation_eye_tracked"));
+        gaze_allowed = !(g && g[0] == '0');
+        available = gaze_allowed && (rt.HasExtension("XR_EXT_eye_gaze_interaction") ||
+                                     rt.HasExtension("XR_META_foveation_eye_tracked"));
+        g_available.store(available, std::memory_order_relaxed);
+    }
+    const int level = VideoCore::Foveation::EffectiveLevel(
+        Settings::values.vr_foveated_rendering.GetValue(), available);
+    const bool wanted = level > 0 && available;
+    if (wanted != last_wanted || (last_log == std::chrono::steady_clock::time_point{} && wanted)) {
+        last_wanted = wanted;
         g_wanted.store(wanted, std::memory_order_relaxed);
         LOG_INFO(Frontend, "xr: foveation gaze {}: eye gaze interaction {}, eye tracked foveation {}",
-                 wanted ? "on" : "off (the fixed centre)",
+                 wanted ? "on" : "off",
                  rt.HasExtension("XR_EXT_eye_gaze_interaction") ? "enabled" : "not enabled",
                  rt.HasExtension("XR_META_foveation_eye_tracked") ? "enabled" : "not enabled");
     }

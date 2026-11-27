@@ -142,6 +142,7 @@ private:
         vk::Buffer staging;
         VmaAllocation staging_allocation{};
         u32 centre_key{~0u}; ///< the centre (in texels) of the rates it holds
+        int level{-1};       ///< foveation level (0..3) of the rates it holds
         u32 rect_x{};        ///< active eye picture sub-rectangle within width x height
         u32 rect_y{};
         u32 rect_w{};

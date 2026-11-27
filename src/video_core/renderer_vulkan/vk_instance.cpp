@@ -14,6 +14,7 @@
 #include "core/frontend/emu_window.h"
 #include "video_core/custom_textures/custom_format.h"
 #include "video_core/renderer_vulkan/vk_foveation.h" // AzaharVR foveation
+#include "video_core/vr_gaze.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_platform.h"
 #include "video_core/vulkan_hooks.h" // AzaharFrame
@@ -570,11 +571,18 @@ bool Instance::CreateDevice() {
         add_extension(VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME, is_moltenvk,
                       "the PerVertexKHR attribute is not supported by MoltenVK");
 
-    // AzaharVR foveation: a shading rate attachment (AZAHARFRAME_XR_FOVEATION=1|2). Asked for
-    // only when the switch is on, so with it off the device is made exactly as before.
-    const int foveation_asked = VideoCore::Foveation::LevelFromEnv();
+    // AzaharVR foveation: a shading rate attachment (VR menu setting or AZAHARFRAME_XR_FOVEATION).
+    // Prepared whenever eye tracking is available (unless overridden off by the switch) so the
+    // user can toggle Off / Low / Medium / High live in the VR menu without restarting the game.
+    const bool eye_tracking_available =
+        VideoCore::Gaze::g_available.load(std::memory_order_relaxed);
+    const int foveation_asked = VideoCore::Foveation::EffectiveLevel(
+        Settings::values.vr_foveated_rendering.GetValue(), eye_tracking_available);
+    const bool foveation_ready =
+        foveation_asked > 0 ||
+        (eye_tracking_available && !VideoCore::Foveation::EnvOverride().has_value());
     bool has_fsr = false;
-    if (foveation_asked > 0) {
+    if (foveation_ready) {
         const bool has_rp2 = add_extension(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
         has_fsr = has_rp2 && add_extension(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
     }
@@ -747,15 +755,16 @@ bool Instance::CreateDevice() {
     }
     if (fragment_shading_rate) {
         foveation_level = foveation_asked;
-        LOG_INFO(Render_Vulkan, "foveation: on, level {}, shading rate attachment texel {}x{}",
-                 foveation_level, FragmentShadingRateTexelSize(), FragmentShadingRateTexelSize());
+        LOG_INFO(Render_Vulkan, "foveation: {}, level {}, shading rate attachment texel {}x{}",
+                 foveation_level > 0 ? "on" : "ready", foveation_level,
+                 FragmentShadingRateTexelSize(), FragmentShadingRateTexelSize());
     } else if (foveation_asked > 0) {
         LOG_INFO(Render_Vulkan,
                  "foveation: level {} asked, but the device has no fragment shading rate "
                  "attachment; foveation off",
                  foveation_asked);
     } else {
-        LOG_INFO(Render_Vulkan, "foveation: off (AZAHARFRAME_XR_FOVEATION not set)");
+        LOG_INFO(Render_Vulkan, "foveation: off");
     }
 
 #undef PROP_GET

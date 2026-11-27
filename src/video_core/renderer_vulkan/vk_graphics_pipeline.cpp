@@ -312,7 +312,7 @@ bool GraphicsPipeline::Build(bool fail_on_compile_required) {
                                                          info.state.attachments.depth),
     };
 
-    if (instance.FoveationLevel() > 0) { // AzaharVR foveation
+    if (instance.IsFragmentShadingRateSupported()) { // AzaharVR foveation
         pipeline_info.pNext = &shading_rate_state;
     }
 
