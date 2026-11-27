@@ -671,7 +671,13 @@ void RenderManager::RecordRateUpload(const RateImage& r, std::vector<u8> data, b
                   : (vk::PipelineStageFlagBits::eFragmentShadingRateAttachmentKHR |
                      vk::PipelineStageFlagBits::eTransfer),
             vk::PipelineStageFlagBits::eTransfer, {}, transfer_barrier, {}, to_copy);
-        cmdbuf.updateBuffer(staging, 0, data.size(), data.data());
+        // Vulkan caps vkCmdUpdateBuffer at 65536 bytes per call (at 6x with 8x8 texels the rate
+        // image is 192x384 = 73728 bytes), so chunk into <= 64 KiB slices.
+        constexpr std::size_t kMaxUpdateBytes = 65536;
+        for (std::size_t off = 0; off < data.size(); off += kMaxUpdateBytes) {
+            const std::size_t chunk = std::min(kMaxUpdateBytes, data.size() - off);
+            cmdbuf.updateBuffer(staging, off, chunk, data.data() + off);
+        }
         cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
                                vk::PipelineStageFlagBits::eTransfer, {}, transfer_barrier, {}, {});
         const vk::BufferImageCopy region{

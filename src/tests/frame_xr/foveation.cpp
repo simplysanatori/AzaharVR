@@ -111,9 +111,9 @@ TEST_CASE("foveation: the gaze lands in the picture", "[frame_xr]") {
     G::TanToPicture(0.0f, G::kHalfTanY + G::kMiddleTanY, u, v); // the top edge
     REQUIRE(v == Catch::Approx(0.0f).margin(1e-4));
     float cx, cy;
-    G::PictureToImage(0.8f, 0.3f, 240, 400, 0, cx, cy); // the PICA's rotated surface
+    G::PictureToImage(0.8f, 0.3f, 240, 400, 0, cx, cy); // the PICA's rotated surface (+X up, +Y left)
     REQUIRE(cx == Catch::Approx(0.7f));
-    REQUIRE(cy == Catch::Approx(0.8f));
+    REQUIRE(cy == Catch::Approx(0.2f));
     G::PictureToImage(0.8f, 0.3f, 400, 240, 0, cx, cy);
     REQUIRE(cx == Catch::Approx(0.8f));
     REQUIRE(cy == Catch::Approx(0.3f));

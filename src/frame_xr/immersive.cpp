@@ -43,6 +43,7 @@
 #include "frame_xr/test_switches.h" // AzaharFrame integ9
 #include "frame_xr/vis/wrist_screen.h" // AzaharFrame kiu1s: the off hand
 #include "video_core/kiu_hud.h" // AzaharFrame kiu140
+#include "video_core/vr_gaze.h" // AzaharVR foveation
 #include "video_core/kiu_hud_fade.h" // AzaharFrame kiuhs3a
 #include "video_core/kiu_view_tap.h" // AzaharFrame kiu140
 #include "video_core/vr_immersive.h"
@@ -1702,6 +1703,10 @@ void OnFrame(const FrameInfo& info) {
 
     // AzaharFrame kiu140: HUD: In View (video_core/kiu_hud.h).
     VideoCore::KiuHud::Place hud_place;
+    if (g.engaged && IsViewMode(mode)) {
+        VideoCore::Gaze::SetScreen(g.solved.tan_half_y * g.solved.aspect, g.solved.tan_half_y,
+                                   g.solved.pitch_rad);
+    }
     if (g.engaged && IsViewMode(mode) && KiuFirstPerson() && Kiu::FirstPerson::HudInView()) {
         auto& v = Settings::values;
         VideoCore::KiuHud::Wanted wanted;

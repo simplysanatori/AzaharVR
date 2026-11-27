@@ -25,10 +25,28 @@ inline constexpr float kMiddleTanY = -0.0892f; // tan(-5.1 degrees)
 inline constexpr float kForwardU = 0.5f;
 inline constexpr float kForwardV = 0.5f + kMiddleTanY / (2.0f * kHalfTanY); // 0.47
 
+inline std::atomic<float> g_half_tan_x{kHalfTanX};
+inline std::atomic<float> g_half_tan_y{kHalfTanY};
+inline std::atomic<float> g_middle_tan_y{kMiddleTanY};
+
+/// Updates the active immersive top screen's half-angle tangents and vertical centre tangent so
+/// eye gaze lands accurately for any screen size or game.
+inline void SetScreen(float half_tan_x, float half_tan_y, float pitch_rad) {
+    if (std::isfinite(half_tan_x) && half_tan_x > 0.1f && std::isfinite(half_tan_y) &&
+        half_tan_y > 0.1f && std::isfinite(pitch_rad)) {
+        g_half_tan_x.store(half_tan_x, std::memory_order_relaxed);
+        g_half_tan_y.store(half_tan_y, std::memory_order_relaxed);
+        g_middle_tan_y.store(std::tan(pitch_rad), std::memory_order_relaxed);
+    }
+}
+
 /// A view direction as its tangents (x / -z, y / -z) to the picture's (u, v), v down.
 inline void TanToPicture(float tx, float ty, float& u, float& v) {
-    u = 0.5f + tx / (2.0f * kHalfTanX);
-    v = 0.5f - (ty - kMiddleTanY) / (2.0f * kHalfTanY);
+    const float hx = g_half_tan_x.load(std::memory_order_relaxed);
+    const float hy = g_half_tan_y.load(std::memory_order_relaxed);
+    const float my = g_middle_tan_y.load(std::memory_order_relaxed);
+    u = 0.5f + tx / (2.0f * hx);
+    v = 0.5f - (ty - my) / (2.0f * hy);
 }
 
 inline std::atomic<bool> g_valid{false};
@@ -76,14 +94,14 @@ inline void Centre(float& u, float& v) {
 }
 
 /// A picture point (u, v; v down) in the rate image of a w x h framebuffer, as 0..1 along its
-/// columns and rows. The surface is the PICA's: 240 x 400, the column going up the screen and the
-/// row along it, left to right; a 400 x 240 one is taken as it is. flip: 1 = reverse the rows,
-/// 2 = reverse the columns (a test switch, if the picture's side is mistaken).
+/// columns and rows. On the PICA's 90-degree rotated surface (240 x 400), +X goes up the screen
+/// (bottom -> top) and +Y goes right-to-left (right -> left, see kiu_hud_fade.h). A 400 x 240
+/// landscape surface is taken as it is. flip: 1 = reverse the rows, 2 = reverse the columns.
 inline void PictureToImage(float u, float v, std::uint32_t w, std::uint32_t h, int flip, float& cx,
                            float& cy) {
     if (w < h) {
         cx = 1.0f - v;
-        cy = u;
+        cy = 1.0f - u;
     } else {
         cx = u;
         cy = v;
