@@ -18,6 +18,7 @@ Eye-tracked **Foveated Rendering**, and fixes for Vive XR Elite, Touch and Index
 ## Fixes
 
 - Angel's Aim: a possible crash around **Reticle Size** in the per-game settings is fixed.
+- The first start after updating deletes the Vulkan shader cache once, since a cache from an earlier version could crash a game at start or when it resumed. Shaders build again as you play.
 
 ## Known
 

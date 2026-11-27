@@ -3,6 +3,7 @@
 // Refer to the LICENSE.txt file included.
 
 #include <chrono>
+#include <mutex>
 
 #include <boost/container/static_vector.hpp>
 
@@ -785,6 +786,22 @@ bool PipelineCache::EnsureDirectories() const {
 
         return true;
     };
+
+    // AzaharVR 1.4.1: Foveated Rendering changed the render passes, and a Vulkan cache from an
+    // earlier build could crash a game at start or when it resumed. Each cache epoch deletes the
+    // Vulkan caches once (shaders/vulkan), then leaves its marker; raise it when that happens again.
+    static std::once_flag cache_epoch_once;
+    std::call_once(cache_epoch_once, [this] {
+        const std::string marker = GetVulkanDir() + "azaharvr-cache-epoch-1";
+        if (FileUtil::Exists(GetVulkanDir()) && !FileUtil::Exists(marker)) {
+            LOG_INFO(Render_Vulkan, "Deleting the Vulkan caches from an earlier build: {}",
+                     GetVulkanDir());
+            FileUtil::DeleteDirRecursively(GetVulkanDir());
+        }
+        if (FileUtil::CreateFullPath(GetVulkanDir())) {
+            FileUtil::CreateEmptyFile(marker);
+        }
+    });
 
     return create_dir(FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir)) &&
            create_dir(GetVulkanDir()) && create_dir(GetPipelineCacheDir()) &&
