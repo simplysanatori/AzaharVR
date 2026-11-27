@@ -27,6 +27,7 @@
 #include "frame_xr/session.h"
 #include "frame_xr/xr_loader.h"
 #include "video_core/renderer_vulkan/vk_common.h" // projb: the queue idle before a swapchain goes
+#include "video_core/vr_gaze.h"                   // AzaharVR foveation
 
 namespace {
 // AzaharVR foveation: AZAHARFRAME_XR_FOVEATION_GAZE=0 keeps the fixed centre (default: gaze on).
@@ -325,6 +326,12 @@ bool Runtime::CreateXrInstance(bool renew) {
                                XR_VERSION_MAJOR(props.runtimeVersion),
                                XR_VERSION_MINOR(props.runtimeVersion),
                                XR_VERSION_PATCH(props.runtimeVersion)); // AzaharFrame imglag
+    // AzaharVR foveation: advertise eye-tracking availability before the shared Vulkan device is
+    // created so VK_KHR_create_renderpass2 and VK_KHR_fragment_shading_rate are enabled up front.
+    VideoCore::Gaze::g_available.store(
+        GazeWanted() && (HasExtension("XR_EXT_eye_gaze_interaction") ||
+                         HasExtension("XR_META_foveation_eye_tracked")),
+        std::memory_order_relaxed);
 
     XrSystemGetInfo sgi{XR_TYPE_SYSTEM_GET_INFO};
     sgi.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;

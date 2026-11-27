@@ -808,6 +808,13 @@ bool Instance::CreateDevice() {
 
     VULKAN_HPP_DEFAULT_DISPATCHER.init(*device);
 
+    if (fragment_shading_rate && !VULKAN_HPP_DEFAULT_DISPATCHER.vkCreateRenderPass2KHR) {
+        LOG_WARNING(Render_Vulkan,
+                    "foveation: Vulkan device lacks vkCreateRenderPass2KHR; disabling foveation");
+        fragment_shading_rate = false;
+        foveation_level = 0;
+    }
+
     graphics_queue = device->getQueue(queue_family_index, 0);
     present_queue = device->getQueue(queue_family_index, 0);
 
