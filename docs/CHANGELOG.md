@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.4.1 (November 2026)
+
+**Foveated Rendering** (Experimental): eye-tracked foveated rendering for 3DS games in **Full**, **Full with Follow** and **Angel's Aim** Immersive Modes. The game is drawn at full resolution where you look and lower further out. On the Steam Frame it is on **Low** by default.
+
+### Foveated Rendering (New)
+
+- **Off**, **Low**, **Medium** or **High**, per game: in the in-game menu under **Settings** > **Immersive**, and for Kid Icarus: Uprising under **Mods** > **Angel's Aim** > **View**.
+- Fine-tune it with **Inner Ring Size**, **Middle Ring Size**, **Middle Ring Resolution** and **Outer Ring Resolution**.
+- Kid Icarus: Uprising at 5x **Internal Resolution** on the Steam Frame: 42 FPS with it off, 58 FPS on **High**.
+- Needs a headset with eye tracking; otherwise it shows **Unavailable**. On PC it is off by default (untested).
+
+### Fixes
+
+- Angel's Aim: a possible crash around **Reticle Size** in the per-game settings is fixed.
+
 ## 1.4.0 (November 2026)
 
 DS, GBA and GB/GBC games now play in Azahar VR, in both the Steam Frame and PC VR builds, with 3D depth from **Layer Depth** (Experimental). Angel's Aim gets a slew of updates: a **Power Menu** in the HUD, a redesigned and fixed HUD, **Character Portraits**, and more ways to customize how you play, the biggest being **60 FPS** mode.
