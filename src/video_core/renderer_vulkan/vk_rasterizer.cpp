@@ -777,14 +777,57 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
     const bool write_color_fb = shadow_rendering || pipeline_info.GetFinalColorWriteMask(instance);
     const bool write_depth_fb = pipeline_info.IsDepthWriteEnabled();
-    const bool using_color_fb =
-        regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress() != 0 && write_color_fb;
-    const bool using_depth_fb =
-        !shadow_rendering && regs.framebuffer.framebuffer.GetDepthBufferPhysicalAddress() != 0 &&
+    const auto& fb_cfg = regs.framebuffer.framebuffer;
+    const PAddr fb_color_addr = fb_cfg.GetColorBufferPhysicalAddress();
+    const PAddr fb_depth_addr = fb_cfg.GetDepthBufferPhysicalAddress();
+    const bool using_color_fb = fb_color_addr != 0 && write_color_fb;
+    bool using_depth_fb =
+        !shadow_rendering && fb_depth_addr != 0 &&
         (write_depth_fb || regs.framebuffer.output_merger.depth_test_enable != 0 ||
          (has_stencil && pipeline_info.state.depth_stencil.stencil_test_enable));
+    bool invalidate_depth = using_depth_fb;
 
-    const auto fb_helper = res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb);
+    // Keep the active pass's depth attachment bound across depthless draws on the same target so
+    // tilers (Adreno) do not flush and reload the framebuffer on every 2D/effect draw.
+    if (using_color_fb && !using_depth_fb && !shadow_rendering && fb_depth_addr != 0 &&
+        !(hud_fades && !kiu_hud_fade.Active()) && renderpass_cache.HasActiveDepth() &&
+        !pipeline_info.state.depth_stencil.depth_write_enable &&
+        !pipeline_info.state.depth_stencil.stencil_test_enable &&
+        active_pass.color_addr == fb_color_addr && active_pass.depth_addr == fb_depth_addr &&
+        active_pass.width == fb_cfg.GetWidth() && active_pass.height == fb_cfg.GetHeight() &&
+        active_pass.color_format == fb_cfg.color_format &&
+        active_pass.depth_format == fb_cfg.depth_format) {
+        const u32 depth_bpp = fb_cfg.depth_format == Pica::FramebufferRegs::DepthFormat::D16
+                                  ? 2u
+                                  : (fb_cfg.depth_format == Pica::FramebufferRegs::DepthFormat::D24
+                                         ? 3u
+                                         : 4u);
+        const u64 depth_size =
+            static_cast<u64>(fb_cfg.GetWidth()) * fb_cfg.GetHeight() * depth_bpp;
+        const u64 depth_end = static_cast<u64>(fb_depth_addr) + depth_size;
+        bool depth_sampled = false;
+        for (const auto& texture : regs.texturing.GetTextures()) {
+            if (!texture.enabled) {
+                continue;
+            }
+            const PAddr tex_addr = texture.config.GetPhysicalAddress();
+            const u64 tex_max_end =
+                static_cast<u64>(tex_addr) +
+                static_cast<u64>(texture.config.width) * texture.config.height * 4u;
+            if (static_cast<u64>(tex_addr) < depth_end &&
+                tex_max_end > static_cast<u64>(fb_depth_addr)) {
+                depth_sampled = true;
+                break;
+            }
+        }
+        if (!depth_sampled) {
+            using_depth_fb = true;
+            invalidate_depth = false;
+        }
+    }
+
+    const auto fb_helper =
+        res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb, invalidate_depth);
     const Framebuffer* framebuffer = fb_helper.Framebuffer();
     if (!framebuffer->Handle()) {
         return true;
@@ -874,6 +917,14 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
     // Begin rendering
     renderpass_cache.BeginRendering(framebuffer, draw_rect);
+    active_pass = {
+        .color_addr = using_color_fb ? fb_color_addr : 0u,
+        .depth_addr = using_depth_fb ? fb_depth_addr : 0u,
+        .width = fb_cfg.GetWidth(),
+        .height = fb_cfg.GetHeight(),
+        .color_format = fb_cfg.color_format,
+        .depth_format = fb_cfg.depth_format,
+    };
     if (renderpass_cache.Timing()) { // AzaharFrame gpupasses: the world's or 2D (as kiuhs3 tells)
         renderpass_cache.NoteDraw(
             (accelerate && vr_world_uniforms) ||

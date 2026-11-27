@@ -770,7 +770,8 @@ typename T::Surface& RasterizerCache<T>::GetTextureCube(const TextureCubeConfig&
 
 template <class T>
 FramebufferHelper<T> RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb,
-                                                                bool using_depth_fb) {
+                                                                bool using_depth_fb,
+                                                                bool invalidate_depth) {
     const auto& config = regs.framebuffer.framebuffer;
 
     const s32 framebuffer_width = config.GetWidth();
@@ -863,7 +864,8 @@ FramebufferHelper<T> RasterizerCache<T>::GetFramebufferSurfaces(bool using_color
     }
 
     return FramebufferHelper<T>{this, &slot_framebuffers[it->second],
-                                regs.framebuffer.framebuffer.IsFlipped(), regs.rasterizer, fb_rect};
+                                regs.framebuffer.framebuffer.IsFlipped(), regs.rasterizer, fb_rect,
+                                invalidate_depth};
 }
 
 template <class T>

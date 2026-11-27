@@ -66,8 +66,9 @@ class FramebufferHelper {
 public:
     explicit FramebufferHelper(RasterizerCache<T>* res_cache_, typename T::Framebuffer* fb_,
                                bool flip_rect, const Pica::RasterizerRegs& regs,
-                               Common::Rectangle<u32> surfaces_rect)
-        : res_cache{res_cache_}, fb{fb_} {
+                               Common::Rectangle<u32> surfaces_rect,
+                               bool invalidate_depth_ = true)
+        : res_cache{res_cache_}, fb{fb_}, invalidate_depth{invalidate_depth_} {
         const u32 res_scale = fb->Scale();
         const u32 height = surfaces_rect.GetHeight() / res_scale;
 
@@ -126,7 +127,7 @@ public:
         if (fb->color_id) {
             invalidate(fb->color_id, fb->color_level);
         }
-        if (fb->depth_id) {
+        if (fb->depth_id && invalidate_depth) {
             invalidate(fb->depth_id, fb->depth_level);
         }
     }
@@ -153,6 +154,7 @@ private:
     Common::Rectangle<s32> scissor_rect;
     Common::Rectangle<u32> draw_rect;
     ViewportInfo viewport;
+    bool invalidate_depth = true;
 };
 
 } // namespace VideoCore

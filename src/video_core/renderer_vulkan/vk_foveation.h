@@ -57,28 +57,67 @@ inline std::uint8_t RateAt(int level, std::uint32_t x, std::uint32_t y, std::uin
 }
 
 /// The rate image for a picture of width x height pixels with square texels of `texel` pixels.
+/// When the active eye picture occupies a sub-rectangle `(rect_x, rect_y, rect_w, rect_h)` inside
+/// a padded surface (e.g. 240 x 400 inside 256 x 512), the foveal ellipses are centred and scaled
+/// to that sub-rectangle instead of the full padded surface.
 inline std::vector<std::uint8_t> MakeRateImage(int level, std::uint32_t width,
                                                std::uint32_t height, std::uint32_t texel,
-                                               float centre_y = 0.5f, float centre_x = 0.5f) {
+                                               float centre_y = 0.5f, float centre_x = 0.5f,
+                                               std::uint32_t rect_x = 0, std::uint32_t rect_y = 0,
+                                               std::uint32_t rect_w = 0,
+                                               std::uint32_t rect_h = 0) {
     const std::uint32_t w = (width + texel - 1) / texel;
     const std::uint32_t h = (height + texel - 1) / texel;
     std::vector<std::uint8_t> out(static_cast<std::size_t>(w) * h);
+    const bool subrect = rect_w > 0 && rect_h > 0 &&
+                         (rect_x != 0 || rect_y != 0 || rect_w != width || rect_h != height);
+    if (!subrect) {
+        for (std::uint32_t y = 0; y < h; ++y) {
+            for (std::uint32_t x = 0; x < w; ++x) {
+                out[static_cast<std::size_t>(y) * w + x] =
+                    RateAt(level, x, y, w, h, centre_y, centre_x);
+            }
+        }
+        return out;
+    }
+    const float rw = static_cast<float>(rect_w);
+    const float rh = static_cast<float>(rect_h);
+    const float rx = static_cast<float>(rect_x);
+    const float ry = static_cast<float>(rect_y);
+    const float t = static_cast<float>(texel);
     for (std::uint32_t y = 0; y < h; ++y) {
+        const float py = (static_cast<float>(y) + 0.5f) * t;
+        const float dy = ((py - ry) / rh - centre_y) * 2.0f;
         for (std::uint32_t x = 0; x < w; ++x) {
-            out[static_cast<std::size_t>(y) * w + x] = RateAt(level, x, y, w, h, centre_y, centre_x);
+            if (level <= 0) {
+                out[static_cast<std::size_t>(y) * w + x] = kRate1x1;
+                continue;
+            }
+            const float px = (static_cast<float>(x) + 0.5f) * t;
+            const float dx = ((px - rx) / rw - centre_x) * 2.0f;
+            const float d = std::sqrt(dx * dx + dy * dy);
+            out[static_cast<std::size_t>(y) * w + x] =
+                level == 1 ? (d <= 0.6f ? kRate1x1 : kRate2x2)
+                           : (d <= 0.5f ? kRate1x1 : (d <= 0.85f ? kRate2x2 : kRate4x4));
         }
     }
     return out;
 }
 
-/// Is a framebuffer of this size the eye picture (the top screen: 400 x 240, as it is stored, 240
-/// x 400, at the resolution scale)? Scale 2 and up only (immersive mode renders higher).
+/// Is a framebuffer of this size the eye picture (the top screen: 400 x 240, or as stored 240 x
+/// 400, or power-of-two padded 256 x 512 / 512 x 256, at the resolution scale)? Scale 2 and up
+/// only (immersive mode renders higher).
 inline bool IsEyePicture(std::uint32_t width, std::uint32_t height, std::uint32_t res_scale) {
     if (res_scale < 2) {
         return false;
     }
-    return (width == 400 * res_scale && height == 240 * res_scale) ||
-           (width == 240 * res_scale && height == 400 * res_scale);
+    if (width % res_scale != 0 || height % res_scale != 0) {
+        return false;
+    }
+    const std::uint32_t w = width / res_scale;
+    const std::uint32_t h = height / res_scale;
+    return (w == 400 && h == 240) || (w == 240 && h == 400) || (w == 512 && h == 256) ||
+           (w == 256 && h == 512);
 }
 
 } // namespace VideoCore::Foveation

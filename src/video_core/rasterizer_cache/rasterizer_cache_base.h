@@ -122,7 +122,8 @@ public:
     Surface& GetTextureCube(const TextureCubeConfig& config);
 
     /// Get the color and depth surfaces based on the framebuffer configuration
-    FramebufferHelper<T> GetFramebufferSurfaces(bool using_color_fb, bool using_depth_fb);
+    FramebufferHelper<T> GetFramebufferSurfaces(bool using_color_fb, bool using_depth_fb,
+                                                bool invalidate_depth = true);
 
     /// Get a surface that matches a "texture copy" display transfer config
     SurfaceRect_Tuple GetTexCopySurface(const SurfaceParams& params);

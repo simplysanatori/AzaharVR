@@ -57,6 +57,11 @@ public:
     /// it); it is only bookkeeping for AZAHARFRAME_GPU_PASSES=1 and changes nothing else.
     void EndRendering(VideoCore::GpuPasses::Why why = VideoCore::GpuPasses::Why::None);
 
+    /// True when a non-shadow render pass with a depth attachment is currently open.
+    [[nodiscard]] bool HasActiveDepth() const noexcept {
+        return pass.render_pass && images[1] && !shadow_rendering;
+    }
+
     /// AzaharFrame gpupasses: whether the passes are timed (AZAHARFRAME_GPU_PASSES=1).
     [[nodiscard]] bool Timing() const noexcept {
         return timing;
@@ -105,8 +110,9 @@ public:
     vk::ImageView GetFullRateView();
 
     /// AzaharVR foveation: moves the full rate area to the gaze (or straight ahead) when it moved
-    /// by a texel or more. Ends the pass in progress when it does; call before beginning one.
-    void RefreshShadingRate(u32 width, u32 height);
+    /// by a texel or more, or when the active picture sub-rectangle within a padded surface
+    /// changes. Ends the pass in progress when it does; call before beginning one.
+    void RefreshShadingRate(u32 width, u32 height, Common::Rectangle<u32> draw_rect);
 
 private:
     // AzaharFrame gpupasses
@@ -136,6 +142,10 @@ private:
         vk::Buffer staging;
         VmaAllocation staging_allocation{};
         u32 centre_key{~0u}; ///< the centre (in texels) of the rates it holds
+        u32 rect_x{};        ///< active eye picture sub-rectangle within width x height
+        u32 rect_y{};
+        u32 rect_w{};
+        u32 rect_h{};
     };
     /// Records the upload of a rate image's rates (first: its layout is undefined).
     void RecordRateUpload(const RateImage& r, std::vector<u8> data, bool first);

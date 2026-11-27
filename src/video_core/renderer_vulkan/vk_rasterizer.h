@@ -201,6 +201,14 @@ private:
     VideoCore::KiuClear::Pictures kiu_pictures; ///< AzaharFrame kiuhs3
     KiuTalkDraws kiu_talk; ///< AzaharFrame kiutalk
     KiuHudFade kiu_hud_fade; ///< AzaharFrame kiuhs3a
+    struct ActivePass {
+        PAddr color_addr{};
+        PAddr depth_addr{};
+        u32 width{};
+        u32 height{};
+        Pica::FramebufferRegs::ColorFormat color_format{};
+        Pica::FramebufferRegs::DepthFormat depth_format{};
+    } active_pass;
 };
 
 } // namespace Vulkan

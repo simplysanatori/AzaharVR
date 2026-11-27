@@ -40,8 +40,26 @@ TEST_CASE("foveation: the rate image has a full rate centre", "[frame_xr]") {
 TEST_CASE("foveation: only the eye picture is found", "[frame_xr]") {
     REQUIRE(F::IsEyePicture(2400, 1440, 6));
     REQUIRE(F::IsEyePicture(1440, 2400, 6));
+    // Power-of-two padded top-screen surfaces (256 x 512, e.g. Kid Icarus: Uprising)
+    REQUIRE(F::IsEyePicture(1536, 3072, 6));
+    REQUIRE(F::IsEyePicture(1280, 2560, 5));
+    REQUIRE(F::IsEyePicture(1024, 2048, 4));
+    REQUIRE(F::IsEyePicture(3072, 1536, 6));
     REQUIRE_FALSE(F::IsEyePicture(1920, 1440, 6)); // the bottom screen (320 x 240)
+    REQUIRE_FALSE(F::IsEyePicture(1536, 1536, 6)); // square offscreen target (256 x 256)
     REQUIRE_FALSE(F::IsEyePicture(400, 240, 1));
+    REQUIRE_FALSE(F::IsEyePicture(256, 512, 1));
+}
+
+TEST_CASE("foveation: padded surface centres on active draw rect", "[frame_xr]") {
+    // 256 x 512 at 6x = 1536 x 3072, with active 240 x 400 eye picture (1440 x 2400) at y = 0..2400
+    const auto img = F::MakeRateImage(2, 1536, 3072, 16, 0.5f, 0.5f, 0, 0, 1440, 2400);
+    const std::uint32_t w = 96, h = 192;
+    REQUIRE(img.size() == w * h);
+    // Centre of active 1440 x 2400 rect is (720, 1200) -> texel (45, 75): must be 1x1
+    REQUIRE(img[75 * w + 45] == F::kRate1x1);
+    // Far bottom padding region (y = 2900 -> texel 181): must be 4x4, not 1x1
+    REQUIRE(img[181 * w + 45] == F::kRate4x4);
 }
 
 #include "video_core/vr_gaze.h"
