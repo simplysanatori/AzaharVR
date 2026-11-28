@@ -74,6 +74,7 @@ add_executable(tests
     frame_xr/input_motion.cpp # AzaharFrame
     ../frame_xr/vis/beam.cpp # AzaharFrame vrvis
     ../frame_xr/vis/controller_diagram.cpp # AzaharFrame ctrldiag
+    ../frame_xr/vis/scheme_models.cpp # AzaharVR pcdiag
     ../frame_xr/vis/help_content.cpp # AzaharFrame vrvis
     ../frame_xr/vis/help_layout.cpp # AzaharFrame screenswap
     ../frame_xr/vis/model_file.cpp # AzaharFrame vrvis
@@ -91,6 +92,7 @@ add_executable(tests
     frame_xr/kiu_sheets.cpp # AzaharFrame kiu140
     frame_xr/kiu_panel.cpp # AzaharFrame kiupanel
     frame_xr/vis.cpp # AzaharFrame vrvis
+    frame_xr/pc_diagram.cpp # AzaharVR pcdiag
     frame_xr/xr_handoff.cpp # AzaharFrame handoff
     frame_xr/flat_fit.cpp # AzaharFrame flatdialog
     frame_xr/mem_guard.cpp # AzaharFrame modfix

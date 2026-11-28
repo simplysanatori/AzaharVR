@@ -36,6 +36,9 @@
 #include "frame_xr/vis/weapon_fit.h" // AzaharFrame kiuguns
 #include "frame_xr/kiu_first_person.h" // AzaharFrame kiu130: Third Person
 #include "core/frame_weapon_models.h" // AzaharFrame kiuguns
+#include "core/frame_controller_models.h" // AzaharVR pcdiag: SteamVrRoots
+#include "frame_xr/input/default_bindings.h" // AzaharVR pcdiag
+#include "frame_xr/vis/controller_diagram.h" // AzaharVR pcdiag
 #include "frame_xr/xr_loader.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
 
@@ -207,6 +210,24 @@ bool ReadControllerModels(std::array<ModelFile, 2>& files, std::string& error) {
         }
     }
     return true;
+}
+
+// AzaharVR pcdiag: controller_diagram.h. A PC controller's models from the player's SteamVR,
+// converted into the cache once (not on the Frame build: only the Frame's controllers there).
+bool ReadSchemeModels(ControllerScheme scheme, std::array<ModelFile, 2>& files,
+                      std::string& error) {
+    if (scheme == ControllerScheme::Frame) {
+        return ReadControllerModels(files, error);
+    }
+#ifdef AZAHARVR_PC
+    return ReadSchemeModelsFrom(scheme, FrameControllerModels::SteamVrRoots(),
+                                FileUtil::GetUserPath(FileUtil::UserPath::CacheDir) +
+                                    "controller-models",
+                                files, error);
+#else
+    error = "only the Steam Frame's controllers are drawn on the Frame";
+    return false;
+#endif
 }
 
 // AzaharFrame kiu140: the hand file the player has (pit_model.h): read once a run by the loader's

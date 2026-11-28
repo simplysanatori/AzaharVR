@@ -46,6 +46,7 @@ int MotionInput(const std::string& path) {
         {"/input/menu/click", kInMenu},         {"/input/view/click", kInView},
         {"/input/system/click", kInSystem},     {"/input/bumper/click", kInBumper},
         {"/input/dpad_up/click", kInDpadUp},
+        {"/input/joystick", kInStickX}, // AzaharVR: the Quest's and the Focus 3's sticks
     };
     for (const auto& e : table) {
         if (path == e.path) {
