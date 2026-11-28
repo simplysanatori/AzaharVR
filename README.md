@@ -167,7 +167,7 @@ On a PC, with Meta Quest, Valve Index or Vive XR Elite controllers:
 | 3DS L, R / ZL, ZR | Grips / triggers | Grips / triggers |
 | Circle Pad / C-Stick | Left stick / right stick | Left stick / right stick |
 | D-pad | Left stick, after a left stick click | Left trackpad press |
-| Hide or Show Secondary Screen | | Left stick click |
+| Hide or Show Secondary Screen | **Hide Secondary Screen** on the **Position** tab | Left stick click |
 | Select / Start | Right stick click / **Menu** | Right stick click / right trackpad press |
 | In-game menu | Hold **Menu** for 1 second (or both stick clicks) | Hold the right trackpad for 1 second |
 | Quick Save / Quick Load | Hold **Menu**, then right grip / left grip | Hold the right trackpad, then right / left grip |
