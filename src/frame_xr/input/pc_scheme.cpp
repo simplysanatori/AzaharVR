@@ -304,4 +304,79 @@ InputFrame PcScheme::ListenFrame(ControllerScheme scheme, const InputFrame& in,
     return f;
 }
 
+void MoveScreensInput::Reset() {
+    grip_down_ = {};
+    grip_swallowed_ = {true, true};
+    first_ = -1;
+    b_down_ = menu_down_ = true;
+    dpad_hand_ = -1;
+    stick_dir_ = -1;
+}
+
+bool MoveScreensInput::Filter(InputFrame& in, int holder) {
+    // B or Menu: a new press finishes (one held as the mode started waits until let go).
+    const bool finish = (in.b && !b_down_) || (in.menu && !menu_down_);
+    b_down_ = in.b;
+    menu_down_ = in.menu;
+    for (std::size_t h = 0; h < kNumHands; h++) {
+        HandInput& hand = in.hand[h];
+        if (grip_swallowed_[h] && hand.grip <= config_.grip_release) {
+            grip_swallowed_[h] = false;
+        }
+        if (grip_swallowed_[h]) {
+            hand.grip = 0.0f;
+        }
+        grip_down_[h] = Hysteresis(grip_down_[h], hand.grip, config_.grip_press,
+                                   config_.grip_release);
+        // Nothing but the pose, the grip and the stick.
+        hand.trigger = 0.0f;
+        hand.bumper = false;
+        hand.stick_click = false;
+        hand.trackpad = {};
+        hand.trackpad_force = 0.0f;
+        hand.mouse = false;
+        hand.reticle = false;
+    }
+    if (first_ >= 0 && !grip_down_[static_cast<std::size_t>(first_)]) {
+        first_ = -1;
+    }
+    for (int h = 0; h < kNumHands && first_ < 0; h++) {
+        if (grip_down_[static_cast<std::size_t>(h)]) {
+            first_ = h;
+        }
+    }
+    const int holding = holder >= 0 && holder < kNumHands ? holder : first_;
+    dpad_hand_ = holding >= 0 ? holding ^ 1 : -1;
+    if (dpad_hand_ >= 0) {
+        HandInput& other = in.hand[static_cast<std::size_t>(dpad_hand_)];
+        // As the left stick's D-pad mode (Game): past the press, until back within the release.
+        const float m = Magnitude(other.stick);
+        const bool pushed =
+            stick_dir_ < 0 ? m >= config_.stick_dpad_press : m > config_.stick_dpad_release;
+        stick_dir_ = pushed ? FourWay(other.stick) : -1;
+        PressDpad(in, stick_dir_);
+        other.stick = {};
+    } else {
+        stick_dir_ = -1;
+    }
+    in.a = in.b = in.x = in.y = false;
+    in.menu = in.view = false;
+    return finish;
+}
+
+MapperOutput ScreensOnly(const MapperOutput& out) {
+    MapperOutput only;
+    only.cursor = out.cursor;
+    const PanelCommands& c = out.commands;
+    PanelCommands& d = only.commands;
+    d.top_drag_active = c.top_drag_active;
+    d.top_drag_target = c.top_drag_target;
+    d.drag_panel = c.drag_panel;
+    d.drag_hand = c.drag_hand;
+    d.top_depth_delta_z = c.top_depth_delta_z;
+    d.top_scale_stick = c.top_scale_stick;
+    d.top_scale_dt = c.top_scale_dt;
+    return only;
+}
+
 } // namespace FrameXr::Input

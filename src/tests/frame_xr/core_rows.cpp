@@ -35,7 +35,7 @@ const std::set<Id> kCommon{
     Id::ControllersInFront, Id::FastForwardSpeed, Id::FastForwardAudio,
     Id::MoreSettings,     Id::SwitchToFlat,       Id::HelpHeader,    Id::ReportProblem,
     Id::AboutApp,         Id::ExperimentalHeader, Id::GamesHeader,
-    Id::DownloadGameCovers, Id::DownloadThumbnails};
+    Id::DownloadGameCovers, Id::DownloadThumbnails, Id::MoveScreensMode};
 
 std::set<Id> With(std::set<Id> ids, const std::set<Id>& more) {
     ids.insert(more.begin(), more.end());

@@ -1082,6 +1082,7 @@ void MenuPanel::BuildModel(const Host& host) {
     m.screen_layout = static_cast<int>(std::min<u32>(position.screen_layout.GetValue(), 1));
     m.screen_gap = static_cast<int>(std::min<u32>(position.screen_gap.GetValue(), 20));
     m.second_free = host.second_free;
+    m.pc_scheme = scheme != Input::ControllerScheme::Frame; // AzaharVR: Move Screens
     m.move_screens = static_cast<int>(std::min<u32>(v.vr_move_screens.GetValue(), 2)); // menu
     m.touchpad_touch = v.vr_touchpad_touch.GetValue() == 2 ? 1 : 0; // AzaharFrame menuux
     m.bottom_screen_reticle = // AzaharFrame mouse
@@ -3028,6 +3029,11 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::FillView: // AzaharFrame fovaxis
         if (host.fill_view) {
             host.fill_view();
+        }
+        break;
+    case Id::MoveScreensMode: // AzaharVR
+        if (host.move_screens) {
+            host.move_screens();
         }
         break;
     case Id::SwapScreens:

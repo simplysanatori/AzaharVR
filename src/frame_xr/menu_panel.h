@@ -56,6 +56,8 @@ public:
         std::function<void()> reset_position;
         std::function<void()> swap_screens;
         std::function<void()> fill_view; ///< AzaharFrame fovaxis: Fill View (Immersive::FillView)
+        /// AzaharVR: Position's Move Screens (PC schemes): the menu goes, the grips grab.
+        std::function<void()> move_screens;
         /// AzaharFrame kiufix: Calibrate Aim (Direct Aim; kiuaim2: Check Aim): start it (the menu
         /// then closes), and its Reset (the game's map goes); whether the game has one, whether
         /// it can.

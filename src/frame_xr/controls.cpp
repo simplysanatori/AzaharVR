@@ -956,6 +956,7 @@ void VrUi::EnterMenu() {
 void VrUi::LeaveMenu(const Input::InputFrame& in) {
     CancelMenuKeyboard(); // AzaharFrame ui2: a keyboard over the menu (a cheat's) goes with it
     tab_menu.Close(); // AzaharFrame tabmenu
+    EndMoveScreens(false); // AzaharVR: the game goes on
     mirror.Hide();
     keyboard.Hide(); // AzaharFrame keyboard
     mirror.SetPlacement(home_place);
@@ -976,6 +977,7 @@ void VrUi::LeaveMenu(const Input::InputFrame& in) {
 // AzaharFrame kbd: the game's keyboard shows in front of the head as the in-game menu does, with
 // the screens out of immersive mode (Immersive::SetMenuOpen) until it closes.
 void VrUi::EnterSwkbd() {
+    EndMoveScreens(true); // AzaharVR: the keyboard first, then the menu again
     if (bridge_live) {
         bridge.Release(); // the game sees nothing held while it waits
         bridge_live = false;
@@ -1237,6 +1239,7 @@ void VrUi::TabMenuFrame(Runtime& rt, const FrameInfo& info, const Input::InputFr
         SaveAimMap(aim_map_title, aim_map);
         ShowToastText(Input::kAimCheckResetToast);
     };
+    host.move_screens = [this] { move_screens_pending = true; }; // AzaharVR
     host.swap_screens = [this] {
         const bool managed = Immersive::CanToggleBottom();
         const Input::ScreenView::Effect effect = screen_view.Swap(managed);
@@ -1252,6 +1255,10 @@ void VrUi::TabMenuFrame(Runtime& rt, const FrameInfo& info, const Input::InputFr
     }
     std::optional<XrPosef> cursor;
     tab_menu.Frame(info, in, have_input, host, layers, cursor);
+    if (move_screens_pending) { // AzaharVR: from the next frame on
+        StartMoveScreens();
+        return;
+    }
     if (cursor) {
         AddCursor(*cursor, 0.02f * tab_menu.Width() / 1.6f, layers);
     }
@@ -1747,7 +1754,9 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
     const std::size_t layers_before = layers.size();
     stats_screens.clear(); // AzaharFrame statspos: GameFrame fills it
     Immersive::SetPlacePreview(false); // AzaharFrame kiuaim: TabMenuFrame says when
-    if (menu_shown && !(swkbd_shown && swkbd_first)) {
+    if (menu_shown && move_screens_mode && !swkbd_shown) {
+        MoveScreensFrame(rt, info, window_in, have_input, layers); // AzaharVR
+    } else if (menu_shown && !(swkbd_shown && swkbd_first)) {
         MenuFrame(rt, info, window_in, have_input, layers);
     } else if (swkbd_shown) {
         SwkbdFrame(rt, info, window_in, have_input, layers); // AzaharFrame kbd
@@ -2559,7 +2568,8 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
         game_in.head = ToInput(view.head);
     }
     // AzaharVR: a PC scheme: its grips back (L and R), and this game's left-stick D-pad mode.
-    if (bridge.pc().active()) {
+    // Not in Move Screens: the grips are the gestures' there, as on the Frame.
+    if (bridge.pc().active() && !move_screens_mode) {
         for (int h = 0; h < Input::kNumHands; h++) {
             game_in.hand[static_cast<std::size_t>(h)].grip = pc_grips[static_cast<std::size_t>(h)];
         }
@@ -3103,6 +3113,66 @@ void VrUi::GameFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame
                            {out.cursor.position.x, out.cursor.position.y, out.cursor.position.z}};
         AddCursor(pose, out.cursor.scale_m, layers);
     }
+}
+
+// AzaharVR: Move Screens (Position's button, PC schemes; docs/PCVR_PLAN.md section 3.4). The
+// menu goes and the game stays paused (the Qt side's menu is still open); the controllers do
+// what the Frame's grips do in a game, through the Frame's own code (GameFrame: the Mapper's
+// drag, Detach Screens, grip + D-pad, both grips, the immersive screen's grab, the placement
+// saved on release), on MoveScreensInput's frame and with the bridge screens-only, so the game
+// gets nothing. B or Menu: the menu again, on the Position tab.
+void VrUi::StartMoveScreens() {
+    move_screens_pending = false;
+    tab_menu.Close();
+    bridge.Release();
+    bridge_live = false;
+    nudger.Reset();
+    was_holding = false;
+    move_input.Reset(); // the trigger that pressed the button, a grip, B or Menu held: let go first
+    Immersive::SetMenuOpen(false); // the immersive screen on view, to be grabbed as in a game
+    move_screens_mode = true;
+    ShowToastText(Input::kMoveScreensHint, ToastTime::Long);
+    LOG_INFO(Frontend, "xr: Move Screens: the grips grab the screens (B or Menu to finish)");
+}
+
+void VrUi::EndMoveScreens(bool to_menu) {
+    if (!move_screens_mode) {
+        move_screens_pending = false;
+        return;
+    }
+    move_screens_mode = false;
+    move_screens_pending = false;
+    if (normal_dragging) { // let go mid-move: saved as at a release
+        normal_dragging = false;
+        SavePlacement("moved");
+    }
+    bridge.Release();
+    bridge_live = false;
+    nudger.Reset();
+    was_holding = false;
+    move_input.Reset();
+    HideToastText(Input::kMoveScreensHint);
+    if (to_menu) {
+        Immersive::SetMenuOpen(true);
+        menu_hold = {}; // Menu (or B) is held: the menu shows, a new hold closes it
+        view_hold = {};
+    }
+    LOG_INFO(Frontend, "xr: Move Screens: finished ({})", to_menu ? "the menu again" : "menu closed");
+}
+
+void VrUi::MoveScreensFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame& in,
+                            bool have_input, std::vector<Quad>& layers) {
+    Input::InputFrame move_in = in;
+    const bool finish = have_input && move_input.Filter(move_in, bridge.drag_hand());
+    if (finish || !bridge.pc().active()) {
+        EndMoveScreens(true);
+        return;
+    }
+    mirror.Hide();
+    keyboard.Hide();
+    bridge.SetScreensOnly(true);
+    GameFrame(rt, info, move_in, have_input, layers);
+    bridge.SetScreensOnly(false);
 }
 
 void VrUi::PickerFrame(Runtime& rt, const FrameInfo& info, const Input::InputFrame& in,
