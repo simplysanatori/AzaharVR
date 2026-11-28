@@ -1255,6 +1255,14 @@ void VrUi::TabMenuFrame(Runtime& rt, const FrameInfo& info, const Input::InputFr
     }
     std::optional<XrPosef> cursor;
     tab_menu.Frame(info, in, have_input, host, layers, cursor);
+    // AzaharVR test switch: AZAHARFRAME_TEST_MOVE_SCREENS=1 presses Move Screens the first time
+    // the in-game menu shows with a PC scheme (mock runs script the grips from there).
+    static const bool test_move_screens = std::getenv("AZAHARFRAME_TEST_MOVE_SCREENS") != nullptr;
+    static bool test_move_screens_done = false;
+    if (test_move_screens && !test_move_screens_done && bridge.pc().active()) {
+        test_move_screens_done = true;
+        move_screens_pending = true;
+    }
     if (move_screens_pending) { // AzaharVR: from the next frame on
         StartMoveScreens();
         return;
