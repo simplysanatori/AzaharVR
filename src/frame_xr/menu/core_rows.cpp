@@ -57,6 +57,7 @@ constexpr Rule kRules[] = {
     {Id::MoveScreens, Need::Bottom},
     {Id::SwapScreens, Need::Bottom},
     {Id::ScreenCurve, Need::Any},
+    {Id::MoveScreensMode, Need::Any}, // AzaharVR (PC schemes: MenuModel::pc_scheme)
     {Id::DsScreenRotation, Need::Rotation},
     // Settings, Console
     {Id::CoreHeader, Need::ConsoleGroup},

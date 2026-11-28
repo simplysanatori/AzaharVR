@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "frame_xr/frame_xr.h"
+#include "frame_xr/input/default_bindings.h" // AzaharVR: ControllerScheme
 #include "frame_xr/input/input_frame.h"
 #include "frame_xr/menu/remap.h"
 #include "frame_xr/menu/tab_menu.h"
@@ -55,6 +56,8 @@ public:
         std::function<void()> reset_position;
         std::function<void()> swap_screens;
         std::function<void()> fill_view; ///< AzaharFrame fovaxis: Fill View (Immersive::FillView)
+        /// AzaharVR: Position's Move Screens (PC schemes): the menu goes, the grips grab.
+        std::function<void()> move_screens;
         /// AzaharFrame kiufix: Calibrate Aim (Direct Aim; kiuaim2: Check Aim): start it (the menu
         /// then closes), and its Reset (the game's map goes); whether the game has one, whether
         /// it can.
@@ -115,6 +118,7 @@ public:
     bool AimBottomPageOpen() const {
         return open && Menu::AimBottomPageOpen(model, view);
     }
+    Input::ControllerScheme scheme = Input::ControllerScheme::Frame;
 
 private:
     struct Shared;

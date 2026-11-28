@@ -126,4 +126,45 @@ private:
     int stick_dir_ = -1; ///< the left stick's D-pad direction: 0 up, 1 down, 2 left, 3 right
 };
 
+/// AzaharVR: Move Screens (Position's button, PC schemes; docs/PCVR_PLAN.md section 3.4): the
+/// menu goes, the game stays paused, and the controllers do what the Frame's grips do in a game:
+/// a grip on a screen moves it, that hand's stick sizes it, grip + D-pad turns or shapes it,
+/// both grips the scales. This is the frame those gestures read (GameFrame, the Frame's code):
+/// the poses, the grips, the sticks and the D-pad only. Touch and Focus 3 have no D-pad: while
+/// a grip is held the other hand's stick is the D-pad (four-way, as the left stick's D-pad
+/// mode), and gives no stick. A real D-pad (Index's trackpad, after Normalize) works as well.
+/// A new press of B or Menu finishes; a grip, B or Menu held as the mode starts waits until it
+/// is let go.
+/// The hint as the mode starts (approved text).
+inline constexpr const char* kMoveScreensHint = "Grip a Screen to Move It \xC2\xB7 B to Finish";
+class MoveScreensInput {
+public:
+    explicit MoveScreensInput(const PcSchemeConfig& config = {}) : config_(config) {}
+
+    /// One frame: `in` becomes the gestures' frame. `holder` is the hand whose grip holds a
+    /// screen (the Mapper's drag hand), or -1: then the first grip down. Returns true when B or
+    /// Menu was pressed (the mode ends).
+    bool Filter(InputFrame& in, int holder);
+    /// The mode starts (or ends): what is held waits until let go.
+    void Reset();
+    /// The hand whose stick is the D-pad this frame (-1 none), after Filter.
+    int dpad_hand() const {
+        return dpad_hand_;
+    }
+
+private:
+    PcSchemeConfig config_;
+    std::array<bool, kNumHands> grip_down_{};
+    std::array<bool, kNumHands> grip_swallowed_{true, true};
+    int first_ = -1; ///< the first grip down, while it stays down
+    bool b_down_ = true;
+    bool menu_down_ = true;
+    int dpad_hand_ = -1;
+    int stick_dir_ = -1; ///< the other stick's D-pad direction: 0 up, 1 down, 2 left, 3 right
+};
+
+/// AzaharVR: Move Screens: the Mapper's output with only the screens' part (the drag, the
+/// stick's depth and size, the cursor): no controls, touches or other commands reach the game.
+MapperOutput ScreensOnly(const MapperOutput& out);
+
 } // namespace FrameXr::Input

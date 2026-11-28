@@ -278,6 +278,16 @@ private:
     void TabMenuFrame(Runtime& runtime, const FrameInfo& info, const Input::InputFrame& in,
                       bool have_input, std::vector<Quad>& layers);
     bool menu_shown = false;
+    /// AzaharVR: Move Screens (Position's button, PC schemes; docs/PCVR_PLAN.md 3.4): the menu is
+    /// away and the game stays paused; GameFrame runs on MoveScreensInput's frame with the bridge
+    /// screens-only, so the grips do what the Frame's do in a game. B or Menu: the menu again.
+    bool move_screens_mode = false;
+    bool move_screens_pending = false; ///< the button was pressed (acted on after the menu's frame)
+    Input::MoveScreensInput move_input;
+    void StartMoveScreens();
+    void EndMoveScreens(bool to_menu);
+    void MoveScreensFrame(Runtime& runtime, const FrameInfo& info, const Input::InputFrame& in,
+                          bool have_input, std::vector<Quad>& layers);
     // AzaharFrame kbd: the game's keyboard (swkbd_panel.h) over the waiting game, as the menu.
     SwkbdPanel swkbd;
     bool swkbd_shown = false;

@@ -64,6 +64,16 @@ public:
     PcScheme& pc() {
         return pc_;
     }
+    /// AzaharVR: Move Screens (pc_scheme.h MoveScreensInput): while on, Process gives the frame
+    /// to the mapper as the Frame's scheme does (the grips grab) and the game gets nothing: no
+    /// controls, touches, motion or other commands (ScreensOnly). Off again by the caller.
+    void SetScreensOnly(bool on) {
+        screens_only_ = on;
+    }
+    /// AzaharVR: the hand whose grip held a screen in the last Process, or -1.
+    int drag_hand() const {
+        return last_.commands.top_drag_active ? last_.commands.drag_hand : -1;
+    }
     /// AzaharVR: the scheme's own part of the last Process (empty with the Frame's scheme).
     const PcSchemeOut& pc_out() const {
         return pc_out_;
@@ -94,6 +104,7 @@ private:
     Mapper mapper_;
     PcScheme pc_;        ///< AzaharVR
     PcSchemeOut pc_out_; ///< AzaharVR
+    bool screens_only_ = false; ///< AzaharVR: SetScreensOnly
     MotionTracker motion_;
     GyroAimTracker gyro_aim_; ///< AzaharFrame kiugyro
     bool light_gun_on_ = false;

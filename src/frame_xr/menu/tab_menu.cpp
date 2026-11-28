@@ -452,6 +452,9 @@ std::vector<Row> AllRowsFor(Tab tab, const MenuModel& m, SettingsSection section
     };
     std::vector<Row> rows;
     if (tab == Tab::Position) {
+        if (m.pc_scheme) { // AzaharVR: the grips are L and R in a game; here they grab the screens
+            rows.push_back(row(Id::MoveScreensMode, RowKind::Button));
+        }
         rows.push_back(row(Id::ScreenLayout, RowKind::Segmented, m.screen_layout));
         rows.push_back(row(Id::DsScreenRotation, RowKind::Segmented,
                            std::clamp(m.ds_screen_rotation, 0, 2)));
@@ -1561,6 +1564,8 @@ std::string LabelFor(Id id) {
         return "Close Game";
     case Id::ResetPosition:
         return "Reset Position";
+    case Id::MoveScreensMode: // AzaharVR
+        return "Move Screens";
     case Id::SwapScreens:
         return "Swap Screens";
     case Id::HideBottomScreen:
@@ -4018,6 +4023,7 @@ float TabMenu::DrawRowItems(Kit& kit, const MenuModel& model, const MenuView& vi
             kit.Button(b, ButtonStyle::Tonal,
                        r.id == Id::DsMicBlow           ? char32_t{0}
                        : r.id == Id::FillView          ? Sym::kFitScreen
+                       : r.id == Id::MoveScreensMode   ? Sym::kOpenWith // AzaharVR
                        : r.id == Id::DownloadThumbnails ? Sym::kDownload // AzaharVR
                        : r.id == Id::KiuBottomReset    ? Sym::kRecenter // AzaharFrame kiu131
                                                        : Sym::kTv,

@@ -395,6 +395,9 @@ enum class Id : int {
     InvertDepth,      ///< a switch (invert_depth), shown while Layer Depth is on
     DepthOn,          ///< DS games: index: both screens, top, bottom (ds_depth_on), as that one
     DepthFollows,     ///< index: the DS's screens, the slots (ds_depth_by_slot), as that one
+    /// AzaharVR: Position's Move Screens (PC schemes only): the menu goes, the grips grab the
+    /// screens until B (docs/PCVR_PLAN.md 3.4)
+    MoveScreensMode,
     Count
 };
 constexpr int kIdCount = static_cast<int>(Id::Count);
@@ -517,6 +520,7 @@ struct MenuModel {
     int screen_gap = 4;    ///< degrees (vr_screen_gap)
     bool second_free = false; ///< the Secondary Screen has a place of its own (Detach Screens)
     int move_screens = 0;  ///< 0 Off, 1 Secondary, 2 Both (AzaharFrame menu)
+    bool pc_scheme = false; ///< AzaharVR: a PC controller scheme: the Move Screens button shows
     int screen_curve = 0;  ///< index of Off, 15, 30, 45, 60, 75, 90 degrees
     std::string immersive_offset = "None";
     bool immersive_offset_set = false;

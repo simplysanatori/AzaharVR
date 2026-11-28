@@ -24,6 +24,17 @@ const MapperOutput& InputBridge::Process(const InputFrame& frame, const PanelGeo
                                          const ReticleSample* reticle,
                                          const GyroAimFrame* gyro_aim) {
     const bool by_position = Settings::values.vr_face_buttons.GetValue() == 0;
+    if (screens_only_) {
+        // AzaharVR: Move Screens: the mapper as with the Frame's scheme, only for the screens;
+        // the paused game gets nothing held.
+        pc_out_ = {};
+        last_ = ScreensOnly(mapper_.Update(frame, panels));
+        touchpad_cursor_ = {};
+        edge_stick_ = {};
+        gyro_fire_ = false;
+        InputCommon::FrameXr::GetPad().ReleaseAll();
+        return last_;
+    }
     if (pc_.active()) {
         // AzaharVR: a PC controller scheme: its buttons by label; grips, Menu and the stick
         // clicks its own way (pc_scheme.h), the rest through the mapper as on the Frame.
