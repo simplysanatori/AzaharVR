@@ -1480,8 +1480,14 @@ void VrUi::ShowGripHint(bool immersive, const Input::ScreenQuads& quads, bool sw
     const Input::Posef pose{Input::FaceViewer(at, head, {0, 1, 0}), at};
     const char* immersive_hint =
         Immersive::GripUpDownSteps3dDepth() ? kHintImmersiveDepth : kHintImmersive;
-    ShowHint(immersive ? immersive_hint : curve ? kHintNormal : kHintSecond, ToXr(pose),
-             0.32f * distance);
+    std::string hint = immersive ? immersive_hint : curve ? kHintNormal : kHintSecond;
+    // AzaharVR: Move Screens with Touch or Focus 3: the other hand's stick is the D-pad.
+    if (move_screens_mode && bridge.pc().active() &&
+        Input::SchemeTable(bridge.pc().scheme()).dpad == Input::DpadSource::LeftStickToggle &&
+        hint.rfind("D-Pad", 0) == 0) {
+        hint.replace(0, 5, "Other Stick");
+    }
+    ShowHint(hint, ToXr(pose), 0.32f * distance);
     LOG_INFO(Frontend, "xr: grip hint shown ({})", immersive ? "immersive" : "screens");
 }
 

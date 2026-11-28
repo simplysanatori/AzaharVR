@@ -4,6 +4,7 @@
 
 #include "frame_xr/menu/edit_devices.h"
 
+#include "frame_xr/input/controller_choice.h"
 #include "frame_xr/input/controls.h"
 #include "frame_xr/input/key_names.h"
 
@@ -14,6 +15,23 @@ namespace {
 using Input::Control;
 
 std::string FrameName(Control c, bool by_position) {
+    // AzaharVR: a PC controller (pc_scheme.h): its buttons by label, the grips are L and R, Select
+    // is the right stick click and Start the Menu role (Menu, or Index's right trackpad).
+    const Input::ControllerScheme scheme = Input::g_active_scheme.load(std::memory_order_relaxed);
+    if (scheme != Input::ControllerScheme::Frame) {
+        switch (c) {
+        case Control::BumperL:
+            return "Left Grip";
+        case Control::BumperR:
+            return "Right Grip";
+        case Control::View:
+            return "Right Stick Click";
+        case Control::Menu:
+            return Input::MenuRoleName(scheme);
+        default:
+            return Input::ControlName(c);
+        }
+    }
     // By position the Frame's A drives the virtual pad's B (mapper.cpp), and so on.
     if (by_position) {
         switch (c) {

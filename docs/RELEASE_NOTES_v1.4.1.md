@@ -14,15 +14,14 @@ Eye-tracked **Foveated Rendering**, and fixes for Vive XR Elite, Touch and Index
 
 - **Edit Controls**: when you choose a 3DS button and press the control you want for it, a grip or a push of the left stick now counts. Before, only the face buttons and Menu did, so L, R and the D-pad could not be moved.
 - **Move Screens**, on the in-game menu's **Position** tab: the menu closes and the game waits while you grip a screen to move it. That hand's stick moves it nearer or farther and makes it bigger or smaller. The other hand's stick does what the D-pad does on the Steam Frame. Press **B** to finish. In a game the grips stay **L** and **R**.
+- The controls help and the in-game menu's **Controls** tab show your controllers, with drawings of Meta Quest, Valve Index and Vive XR Elite controllers made from SteamVR's own models, and what each button does on them.
+- **Controllers**, on the **Controls** tab: **Automatic** uses the controllers SteamVR reports. Choose **Meta Quest**, **Valve Index**, **Vive XR Elite / Focus 3** or **Steam Frame** if it picks the wrong ones.
+- **Edit Controls** names your controllers instead of calling them Frame Controllers.
 
 ## Fixes
 
 - Angel's Aim: a possible crash around **Reticle Size** in the per-game settings is fixed.
 - The first start after updating deletes the Vulkan shader cache once, since a cache from an earlier version could crash a game at start or when it resumed. Shaders build again as you play.
-
-## Known
-
-- **Edit Controls** still calls your controllers **Frame Controllers**, and the menu's controller pictures are the Steam Frame's.
 
 ## Download
 

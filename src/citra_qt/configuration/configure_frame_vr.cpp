@@ -126,10 +126,17 @@ ConfigureFrameVr::ConfigureFrameVr(QWidget* parent, u64 title_id) : QGroupBox(pa
 
     hide_bottom_check = new QCheckBox(tr("Hide Secondary Screen"), this);
     hide_bottom_check->setObjectName(QStringLiteral("frame_vr_hide_bottom_check"));
+#ifdef AZAHARVR_PC
+    // AzaharVR: PC controllers have no chord for it (their stick clicks and grips are the game's).
+    hide_bottom_check->setToolTip(
+        tr("Shows only the Primary Screen in VR. Show or hide the Secondary Screen from the in-game "
+           "menu's Position tab. Takes effect when the game starts."));
+#else
     hide_bottom_check->setToolTip(
         tr("Shows only the Primary Screen in VR. Press Left Bumper + Right Bumper + View to show "
            "or hide the Secondary Screen. A tap of Left Stick Click shows or hides it too. "
            "Takes effect when the game starts."));
+#endif
     layout->addWidget(hide_bottom_check);
 
     // Global only. Values 0..1 are Settings::values.vr_face_buttons (frame_xr/input/mapper.h).
@@ -138,8 +145,14 @@ ConfigureFrameVr::ConfigureFrameVr(QWidget* parent, u64 title_id) : QGroupBox(pa
     face_combo->addItem(tr("By Label (Xbox)"));
     face_row = MakeRow(
         this, QStringLiteral("frame_vr_face_row"), tr("Face Buttons"),
+#ifdef AZAHARVR_PC
+        // AzaharVR: PC VR controllers always go by their labels (default_bindings.h).
+        tr("How a gamepad's A, B, X and Y buttons map to the 3DS. By Position matches the 3DS "
+           "layout. VR controllers always use their labels."),
+#else
         tr("How the Frame's A, B, X and Y buttons map to the 3DS. By Position matches the 3DS "
            "layout."),
+#endif
         {face_combo});
     layout->addWidget(face_row);
 
