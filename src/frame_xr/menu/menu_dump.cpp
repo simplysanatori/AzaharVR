@@ -28,6 +28,7 @@
 #include <lodepng.h>
 
 #include "common/cover_strings.h" // AzaharVR
+#include "core/frame_controller_models.h" // AzaharVR: --scheme
 #include "frame_xr/input/controls.h"
 #include "frame_xr/input/key_names.h" // AzaharFrame keys
 #include "frame_xr/input/mouse.h"   // AzaharFrame mouse: its one-time toast
@@ -429,6 +430,10 @@ int main(int argc, char** argv) {
     std::string texparts; // AzaharFrame texparts
     std::string autosave_thumbs; // AzaharFrame autosave: real top screens for the card
     std::string only; // AzaharFrame useglobal: --only PREFIX: only the shots named so
+    // AzaharVR: --scheme touch|index|focus3 [--steamvr DIR]: that PC controller's diagram, from
+    // the SteamVR at DIR (default: the one found as at run time), for the README.
+    Input::ControllerScheme scheme = Input::ControllerScheme::Frame;
+    std::string steamvr;
     for (int i = 2; i < argc; i++) {
         const std::string a = argv[i];
         if (a == "--diagram-only") {
@@ -443,6 +448,14 @@ int main(int argc, char** argv) {
             texparts = argv[i + 1];
         } else if (a == "--autosave-thumbs") {
             autosave_thumbs = argv[i + 1];
+        } else if (a == "--scheme") {
+            const std::string s = argv[i + 1];
+            scheme = s == "touch"    ? Input::ControllerScheme::Touch
+                     : s == "index"  ? Input::ControllerScheme::Index
+                     : s == "focus3" ? Input::ControllerScheme::Focus3
+                                     : Input::ControllerScheme::Frame;
+        } else if (a == "--steamvr") {
+            steamvr = argv[i + 1];
         } else if (a == "--only") {
             only = argv[i + 1];
         }
@@ -458,8 +471,21 @@ int main(int argc, char** argv) {
     // The Controls tab: the default profile's diagram, from the installed model files.
     Vis::MenuDiagramArt art;
     const Vis::HelpDiagram diagram = Vis::BuildHelpDiagram(
-        Vis::DefaultHelpBindings(), {.face_by_position = true, .in_menu = true, .game_running = true});
-    if (!models.empty()) {
+        Vis::DefaultHelpBindings(),
+        {.face_by_position = true, .in_menu = true, .game_running = true, .scheme = scheme});
+    if (scheme != Input::ControllerScheme::Frame) {
+        // AzaharVR: converted into OUT_DIR/models-cache (scratch; never committed).
+        std::vector<std::string> roots =
+            steamvr.empty() ? FrameControllerModels::SteamVrRoots() : std::vector{steamvr};
+        std::array<Vis::ModelFile, 2> files;
+        std::string why;
+        if (Vis::ReadSchemeModelsFrom(scheme, roots, out + "/models-cache", files, why)) {
+            art = Vis::MakeMenuDiagramArt(files[0], files[1], px_per_dp * 0.6f, scheme);
+        } else {
+            std::fprintf(stderr, "models: %s\n", why.c_str());
+            return 1;
+        }
+    } else if (!models.empty()) {
         Vis::ModelFile left, right;
         std::string why;
         if (Vis::LoadModelFile(models + "/frame_controller_left.model", left, why) &&
@@ -485,7 +511,12 @@ int main(int argc, char** argv) {
         kit.Fill({0, 0, dw, dh}, 24.0f, Tok::kSurface);
         Vis::DrawMenuDiagram(kit, {kPadDp, kPadDp, dw - kPadDp, dh - kPadDp}, diagram,
                              Vis::DiagramPageId::Game, art);
-        return WritePng(out + "/controls.png", cv, true) ? 0 : 1;
+        // AzaharVR: controls-touch.png and so on for a PC controller
+        const char* name = scheme == Input::ControllerScheme::Touch    ? "/controls-quest.png"
+                           : scheme == Input::ControllerScheme::Index  ? "/controls-index.png"
+                           : scheme == Input::ControllerScheme::Focus3 ? "/controls-xr-elite.png"
+                                                                       : "/controls.png";
+        return WritePng(out + name, cv, true) ? 0 : 1;
     }
 
     const int w = static_cast<int>((kPanelW + kMargin * 2.0f) * px_per_dp + 0.5f);

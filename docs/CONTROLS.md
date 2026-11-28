@@ -35,6 +35,87 @@ The Frame's buttons are labelled like an Xbox controller, and the 3DS's are not:
 
 A tap of **Menu** is Start and a tap of **View** is Select, sent when you let go. A stick click pushed more than half way is ignored, so the free camera cannot swap or reset by accident. The exact timings are in [TECHNICAL.md](TECHNICAL.md#controls).
 
+## PC VR controllers
+
+On a PC, Azahar VR plays with Meta Quest (Touch and Touch Plus), Valve Index and Vive XR Elite / Focus 3 controllers. It picks the layout from the controllers SteamVR reports. If it picks the wrong one, choose yours in **Controllers** on the in-game menu's **Controls** tab: **Automatic**, **Steam Frame**, **Meta Quest**, **Valve Index** or **Vive XR Elite / Focus 3**. The controls help and the **Controls** tab draw your controllers, made from SteamVR's own models, with a line from each button to what it does.
+
+The face buttons always go by their labels. The grips are L and R, so screens move with **Move Screens** instead (below). The Meta, Index System and Vive buttons belong to SteamVR and are never bound.
+
+### Meta Quest and Vive XR Elite
+
+![What each Meta Quest controller button does in a game](images/controls-quest.png)
+
+![What each Vive XR Elite controller button does in a game](images/controls-xr-elite.png)
+
+| Controller | 3DS or action | Notes |
+|---|---|---|
+| **A**, **B** (right), **X**, **Y** (left) | A, B, X, Y | By label |
+| Left grip | L | |
+| Right grip | R | |
+| Left trigger | ZL | Aimed at the Secondary Screen it is a touch instead |
+| Right trigger | ZR | The same |
+| Left stick | Circle Pad | |
+| Left stick click | Switch Circle Pad / D-pad | In D-pad mode the left stick is the D-pad |
+| Right stick | C-Stick | |
+| Right stick click | Select | |
+| **Menu** (left controller), tap | Start | |
+| **Menu**, held for 1 second | In-game menu | |
+| Both stick clicks together | Same as **Menu** | For when SteamVR keeps the **Menu** button |
+| Hold **Menu**, then the right grip | Quick Save | |
+| Hold **Menu**, then hold the left grip for half a second | Quick Load | |
+| Hold **Menu**, then the right trigger | Fast Forward on or off | |
+
+### Valve Index
+
+![What each Valve Index controller button does in a game](images/controls-index.png)
+
+| Controller | 3DS or action | Notes |
+|---|---|---|
+| Right **A**, right **B** | A, B | |
+| Left **A** (lower), left **B** (upper) | X, Y | As the 3DS's X and Y on the left |
+| Left grip | L | Squeeze |
+| Right grip | R | Squeeze |
+| Left trigger | ZL | Aimed at the Secondary Screen it is a touch instead |
+| Right trigger | ZR | The same |
+| Left stick | Circle Pad | |
+| Left trackpad press | D-pad | Press up, down, left or right of the middle |
+| Right stick | C-Stick | |
+| Right stick click | Select | |
+| Right trackpad press, tap | Start | |
+| Right trackpad press, held for 1 second | In-game menu | |
+| Hold the right trackpad, then the right grip | Quick Save | |
+| Hold the right trackpad, then hold the left grip for half a second | Quick Load | |
+| Hold the right trackpad, then the right trigger | Fast Forward on or off | |
+
+### Move Screens
+
+**Move Screens**, on the in-game menu's **Position** tab, closes the menu and pauses the game while you place the screens. On the Index, **B** is the right **B** and **Menu** the right trackpad press.
+
+| Controller | What it does |
+|---|---|
+| Grip on a screen | Move it |
+| Hold the grip, its stick up or down | Nearer or farther (World Scale on the immersive screen) |
+| Hold the grip, its stick sideways | Screen size |
+| Hold the grip, the other stick sideways | Nudge the screen (Offset on the immersive screen) |
+| Hold the grip, the other stick up or down | Screen curve (3D Depth in Field of View, Render Margin in Stretch) |
+| Both grips, the other stick sideways / up or down | Horizontal Scale / Vertical Scale |
+| **B** or **Menu** | Finish and go back to the menu |
+
+### Azahar's window
+
+| Controller | What it does |
+|---|---|
+| Trigger or **A** (Index: right **A**) | Click |
+| Left stick up or down (Index: or the left trackpad) | Choose a game |
+| **A** twice | Start the game |
+| Right stick click | Right click |
+| Right stick click, held for 1 second | Bring the window back |
+| **B** | Back |
+| Grip | Move the window |
+| Right stick up or down | Scroll |
+| **Y** (Index: left **B**) | Keyboard |
+| **Menu** held for 1 second, or **B** with nothing open | Back to the game, from the in-game menu |
+
 ## Quick Save and Quick Load
 
 Hold **View**, then press the right bumper to Quick Save, or hold the left bumper for half a second to Quick Load. The half second is there so a brush of the bumper never throws away your progress. It is the same slot as **Emulation > Quick Save** and **Quick Load** in Azahar's window, and the in-game menu has both buttons too. A short message in front of you says "Quick Saved" or "Quick Loaded", or "No Quick Save" when there is nothing to load. Press **View** first: bumpers first, then **View**, is the Secondary Screen button. It works in VR and in Flat.

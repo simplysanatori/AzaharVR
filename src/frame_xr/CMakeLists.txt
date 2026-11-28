@@ -264,9 +264,11 @@ add_executable(frame_xr_menu_dump EXCLUDE_FROM_ALL
     vis/help_layout.cpp
     vis/menu_diagram.cpp
     vis/model_file.cpp
+    vis/scheme_models.cpp # AzaharVR: --scheme, the PC controllers' README pictures
+    ../core/frame_controller_models.cpp
 )
 target_include_directories(frame_xr_menu_dump PRIVATE ${PROJECT_SOURCE_DIR}/src)
-target_link_libraries(frame_xr_menu_dump PRIVATE frame_xr_menu lodepng citra_common)
+target_link_libraries(frame_xr_menu_dump PRIVATE frame_xr_menu lodepng citra_common json-headers fmt)
 
 # AzaharFrame kbd: renders the game's keyboard to PNG files without a headset (ninja
 # frame_xr_swkbd_dump), never part of a release.

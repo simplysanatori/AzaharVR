@@ -159,6 +159,35 @@ Keys and texture packs: [user guide](docs/USER_GUIDE.md#games).
 | Both bumpers + **View** + **Menu** | Switch between VR and Flat |
 | Trigger on the Secondary Screen | Touch |
 
+On a PC, with Meta Quest, Valve Index or Vive XR Elite controllers:
+
+| | Meta Quest, Vive XR Elite | Valve Index |
+|---|---|---|
+| 3DS A, B, X, Y | **A**, **B**, **X**, **Y** | Right **A**, **B**; left **A** is X, left **B** is Y |
+| 3DS L, R / ZL, ZR | Grips / triggers | Grips / triggers |
+| Circle Pad / C-Stick | Left stick / right stick | Left stick / right stick |
+| D-pad | Left stick, after a left stick click | Left trackpad press |
+| Select / Start | Right stick click / **Menu** | Right stick click / right trackpad press |
+| In-game menu | Hold **Menu** for 1 second (or both stick clicks) | Hold the right trackpad for 1 second |
+| Quick Save / Quick Load | Hold **Menu**, then right grip / left grip | Hold the right trackpad, then right / left grip |
+| Fast Forward | Hold **Menu**, then right trigger | Hold the right trackpad, then right trigger |
+| Touch | Trigger on the Secondary Screen | Trigger on the Secondary Screen |
+
+Move the screens with **Move Screens** on the in-game menu's **Position** tab. **Controllers**, on the **Controls** tab, picks the controllers if Azahar VR guesses wrong.
+
+<details><summary>Meta Quest</summary>
+
+![What each Meta Quest controller button does in a game](docs/images/controls-quest.png)
+</details>
+<details><summary>Valve Index</summary>
+
+![What each Valve Index controller button does in a game](docs/images/controls-index.png)
+</details>
+<details><summary>Vive XR Elite</summary>
+
+![What each Vive XR Elite controller button does in a game](docs/images/controls-xr-elite.png)
+</details>
+
 To change them, use **Edit Controls** on the in-game menu's **Controls** tab, in its **Buttons**, **Pointing** and **Motion** sections. GBA and GB/GBC games show a Game Boy Advance there. Full list: [docs/CONTROLS.md](docs/CONTROLS.md).
 
 ## Troubleshooting
