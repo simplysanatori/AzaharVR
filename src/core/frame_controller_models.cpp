@@ -16,7 +16,9 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <map>
+#include <mutex>
 #include <sstream>
 #include <fmt/format.h>
 #include <json.hpp>
@@ -333,9 +335,13 @@ void PutFloat(std::string& s, float f) {
 
 bool Convert(const std::string& hand, const std::string& rendermodels, int texture,
              const ImageLoader& load, Model* result, std::string* error) {
+    const std::string name = "frame_controller_" + hand;
+    return ConvertFolder(rendermodels + "/" + name, name, texture, load, result, error);
+}
+
+bool ConvertFolder(const std::string& directory, const std::string& name, int texture,
+                   const ImageLoader& load, Model* result, std::string* error) {
     try {
-        const std::string name = "frame_controller_" + hand;
-        const std::string directory = rendermodels + "/" + name;
         std::ifstream jf(directory + "/" + name + ".json");
         if (!jf) {
             throw ConvertError{directory + "/" + name + ".json: cannot be read"};
@@ -423,6 +429,11 @@ bool Convert(const std::string& hand, const std::string& rendermodels, int textu
             comp.motion[kMotionPressed] = std::nanf("");
             const json& m = components[key].contains("motion") ? components[key]["motion"] : json();
             static const std::map<std::string, u32> kTypes{{"translate", 1}, {"rotate", 2}, {"joystick", 3}, {"dpad", 4}};
+            // AzaharVR: a trackpad (the Index's) does not move, but its path says what it is.
+            if (m.is_object() && m.value("type", std::string()) == "trackpad" &&
+                m.contains("component_path") && m["component_path"].is_string()) {
+                comp.path = m["component_path"].get<std::string>();
+            }
             if (m.is_object() && m.contains("type") && m["type"].is_string() && kTypes.count(m["type"].get<std::string>())) {
                 const std::string kind = m["type"].get<std::string>();
                 comp.type = kTypes.at(kind);
@@ -454,7 +465,8 @@ bool Convert(const std::string& hand, const std::string& rendermodels, int textu
                     }
                 }
                 if (kind == "rotate") {
-                    const Vec p = to_grip(ToVec(m["pivot"]));
+                    // AzaharVR: the Focus 3's grips have no pivot: SteamVR's default, the origin
+                    const Vec p = to_grip(m.contains("pivot") ? ToVec(m["pivot"]) : Vec{0, 0, 0});
                     for (int c = 0; c < 3; ++c) {
                         f[kMotionOrigin + c] = p[c];
                     }
@@ -510,7 +522,11 @@ bool Convert(const std::string& hand, const std::string& rendermodels, int textu
 
         // Textures
         Image colour;
-        if (!load(directory + "/" + name + "_color.png", &colour)) {
+        if (texture < 0) { // AzaharVR: kNoTextures: one white texel, a flat surface
+            colour.width = colour.height = 1;
+            colour.rgb = {255, 255, 255};
+        } else if (!load(directory + "/" + name + "_color.png", &colour) &&
+                   !load(directory + "/" + name + "_diff.png", &colour)) { // AzaharVR: the Index's
             throw ConvertError{directory + "/" + name + "_color.png: cannot be read"};
         }
         if (texture > 0) {
@@ -520,7 +536,7 @@ bool Convert(const std::string& hand, const std::string& rendermodels, int textu
         const std::size_t texels = static_cast<std::size_t>(w) * h;
         const auto optional = [&](const char* kind, std::array<u8, 3> flat) {
             Image img;
-            if (load(directory + "/" + name + "_" + kind + ".png", &img)) {
+            if (texture >= 0 && load(directory + "/" + name + "_" + kind + ".png", &img)) {
                 img = Scale(img, w, h);
                 return img.rgb;
             }
@@ -572,8 +588,7 @@ bool Convert(const std::string& hand, const std::string& rendermodels, int textu
         result->components = static_cast<int>(comps.size());
         result->tex_w = w;
         result->tex_h = h;
-        std::printf("%s: %zu triangles of %zu, %zu vertices, %zu components, textures %dx%d\n", hand.c_str(),
-                    indices.size() / 3, full, verts.size(), comps.size(), w, h);
+        result->full_triangles = static_cast<int>(full); // AzaharVR: printed by Run
         return true;
     } catch (const ConvertError& e) {
         *error = e.text;
@@ -583,6 +598,146 @@ bool Convert(const std::string& hand, const std::string& rendermodels, int textu
         *error = "out of memory";
     }
     return false;
+}
+
+std::vector<std::string> SteamVrRoots() {
+    std::vector<std::string> candidates;
+    const auto env = [](const char* name) {
+        const char* v = std::getenv(name);
+        return v != nullptr ? std::string(v) : std::string();
+    };
+#ifdef _WIN32
+    const std::string config = env("LOCALAPPDATA");
+#else
+    std::string config = env("XDG_CONFIG_HOME");
+    if (config.empty() && !env("HOME").empty()) {
+        config = env("HOME") + "/.config";
+    }
+#endif
+    if (!config.empty()) {
+        std::ifstream f(fs::path(config) / "openvr" / "openvrpaths.vrpath");
+        const json doc = f ? json::parse(f, nullptr, false) : json();
+        if (doc.is_object() && doc.contains("runtime") && doc["runtime"].is_array()) {
+            for (const json& r : doc["runtime"]) {
+                if (r.is_string()) {
+                    candidates.push_back(r.get<std::string>());
+                }
+            }
+        }
+    }
+#ifdef _WIN32
+    for (const char* var : {"ProgramFiles(x86)", "ProgramFiles"}) {
+        if (const std::string base = env(var); !base.empty()) {
+            candidates.push_back(base + "\\Steam\\steamapps\\common\\SteamVR");
+        }
+    }
+    candidates.push_back("C:\\Program Files (x86)\\Steam\\steamapps\\common\\SteamVR");
+#else
+    if (const std::string home = env("HOME"); !home.empty()) {
+        for (const char* steam : {"/.steam/steam", "/.local/share/Steam",
+                                  "/.var/app/com.valvesoftware.Steam/.local/share/Steam"}) {
+            candidates.push_back(home + steam + "/steamapps/common/SteamVR");
+        }
+    }
+#endif
+    std::vector<std::string> roots;
+    std::vector<fs::path> seen;
+    for (const std::string& c : candidates) {
+        std::error_code ec;
+        if (c.empty() || !fs::is_directory(c, ec)) {
+            continue;
+        }
+        const fs::path canon = fs::weakly_canonical(c, ec);
+        if (std::find(seen.begin(), seen.end(), canon) == seen.end()) {
+            seen.push_back(canon);
+            roots.push_back(c);
+        }
+    }
+    return roots;
+}
+
+namespace {
+
+/// What a converted model came from: the folder's files, their sizes and times.
+std::string SourceStamp(const fs::path& dir) {
+    std::vector<std::string> lines;
+    std::error_code ec;
+    for (const auto& e : fs::directory_iterator(dir, ec)) {
+        std::error_code e2;
+        if (!e.is_regular_file(e2)) {
+            continue;
+        }
+        const auto size = e.file_size(e2);
+        const auto time = e.last_write_time(e2).time_since_epoch().count();
+        lines.push_back(fmt::format("{} {} {}", e.path().filename().string(), size,
+                                    static_cast<long long>(time)));
+    }
+    std::sort(lines.begin(), lines.end());
+    std::string out = fmt::format("v{} {}\n", kVersion, dir.string());
+    for (const std::string& l : lines) {
+        out += l + "\n";
+    }
+    return out;
+}
+
+std::string ReadAll(const fs::path& path) {
+    std::ifstream f(path, std::ios::binary);
+    return f ? std::string(std::istreambuf_iterator<char>(f), {}) : std::string();
+}
+
+bool WriteAll(const fs::path& path, const std::string& bytes) {
+    const fs::path tmp = path.string() + ".tmp";
+    {
+        std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
+        f.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        if (!f) {
+            return false;
+        }
+    }
+    std::error_code ec;
+    fs::rename(tmp, path, ec);
+    return !ec;
+}
+
+} // namespace
+
+bool EnsureCachedModel(const std::vector<std::string>& roots, const std::string& subdir,
+                       const std::string& folder, const std::string& cache_dir, std::string* path,
+                       std::string* error) {
+    static std::mutex mutex;
+    std::scoped_lock lock{mutex};
+    fs::path source;
+    std::error_code ec;
+    for (const std::string& root : roots) {
+        const fs::path dir = fs::path(root) / subdir / folder;
+        if (fs::is_regular_file(dir / (folder + ".json"), ec)) {
+            source = dir;
+            break;
+        }
+    }
+    if (source.empty()) {
+        *error = folder + ": not in any SteamVR install found";
+        return false;
+    }
+    const fs::path model = fs::path(cache_dir) / (folder + ".model");
+    const fs::path stamp_file = fs::path(cache_dir) / (folder + ".stamp");
+    const std::string stamp = SourceStamp(source);
+    *path = model.string();
+    if (fs::is_regular_file(model, ec) && ReadAll(stamp_file) == stamp) {
+        return true;
+    }
+    Model converted;
+    const ImageLoader none = [](const std::string&, Image*) { return false; };
+    if (!ConvertFolder(source.string(), folder, kNoTextures, none, &converted, error)) {
+        return false;
+    }
+    fs::create_directories(cache_dir, ec);
+    fs::remove(stamp_file, ec); // a model without its stamp is made again
+    if (!WriteAll(model, converted.bytes) || !WriteAll(stamp_file, stamp)) {
+        *error = model.string() + ": cannot be written";
+        return false;
+    }
+    return true;
 }
 
 int Run(const std::vector<std::string>& args, const ImageLoader& load) {
@@ -610,6 +765,9 @@ int Run(const std::vector<std::string>& args, const ImageLoader& load) {
                          src.c_str(), error.c_str());
             return 1;
         }
+        std::printf("%s: %d triangles of %d, %d vertices, %d components, textures %dx%d\n", hands[i],
+                    models[i].triangles, models[i].full_triangles, models[i].vertices,
+                    models[i].components, models[i].tex_w, models[i].tex_h);
     }
     fs::create_directories(out, ec); // both hands or neither
     for (int i = 0; i < 2; ++i) {

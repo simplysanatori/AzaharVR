@@ -11,6 +11,8 @@
 #pragma once
 
 #include <array>
+#include <optional>
+#include <string>
 
 #include "frame_xr/menu/md3.h"
 #include "frame_xr/menu/tab_menu.h"
@@ -26,8 +28,26 @@ struct MenuDiagramArt {
     std::array<DiagramImage, 2> front; ///< left, right: from the front, cut under the trigger
 };
 
-/// The drawings (a few hundred milliseconds of work: off the XR thread).
-MenuDiagramArt MakeMenuDiagramArt(const ModelFile& left, const ModelFile& right, float k);
+/// The drawings (a few hundred milliseconds of work: off the XR thread). AzaharVR: of `scheme`'s
+/// controllers (controller_diagram.h ReadSchemeModels: `left` and `right` its models).
+MenuDiagramArt MakeMenuDiagramArt(const ModelFile& left, const ModelFile& right, float k,
+                                  ControllerScheme scheme = ControllerScheme{});
+/// AzaharVR pcdiag: ReadSchemeModels, then MakeMenuDiagramArt; nullopt (the reason in `error`)
+/// when the scheme has no models here. Off the XR thread (it may convert them first). Not in the
+/// menu dump (frame_xr_menu_dump), which has no core library: inline, so only its callers link
+/// ReadSchemeModels.
+inline std::optional<MenuDiagramArt> MakeSchemeMenuDiagramArt(ControllerScheme scheme, float k,
+                                                              std::string* error = nullptr) {
+    std::array<ModelFile, 2> files;
+    std::string why;
+    if (!ReadSchemeModels(scheme, files, why)) {
+        if (error != nullptr) {
+            *error = why;
+        }
+        return std::nullopt;
+    }
+    return MakeMenuDiagramArt(files[0], files[1], k, scheme);
+}
 
 /// Draws `page` of `diagram` into `area` (dp).
 void DrawMenuDiagram(Menu::Kit& kit, const Menu::Rect& area, const HelpDiagram& diagram,

@@ -155,6 +155,7 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     vis/beam.h
     vis/controller_diagram.cpp
     vis/controller_diagram.h
+    vis/scheme_models.cpp # AzaharVR pcdiag
     vis/controller_models.cpp
     vis/controller_models.h
     vis/help_content.cpp

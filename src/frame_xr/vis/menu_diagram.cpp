@@ -18,10 +18,7 @@ namespace {
 using Menu::Rect;
 namespace Tok = Menu::Tok;
 
-// As panels.cpp MakeHelpArt (tabmenu phase 2: one copy of these).
-constexpr DiagramAngle kTopAngle{0.0f, 90.0f};
-constexpr DiagramAngle kFrontAngle{180.0f, 165.0f};
-constexpr float kFrontScale = 0.9f;
+// As panels.cpp MakeHelpArt (AzaharVR: the angles are DiagramView's).
 constexpr int kFrontH = 440;
 
 // Straight alpha from the drawings' premultiplied pixels.
@@ -43,7 +40,8 @@ uint32_t Argb(uint32_t rgb) {
 
 } // namespace
 
-MenuDiagramArt MakeMenuDiagramArt(const ModelFile& left, const ModelFile& right, float k) {
+MenuDiagramArt MakeMenuDiagramArt(const ModelFile& left, const ModelFile& right, float k,
+                                  ControllerScheme scheme) {
     MenuDiagramArt art;
     art.k = k;
     DiagramStyle style;
@@ -51,38 +49,17 @@ MenuDiagramArt MakeMenuDiagramArt(const ModelFile& left, const ModelFile& right,
     style.body = Argb(Tok::kSurfaceContainer);
     style.part = Argb(Tok::kSurfaceContainerHighest);
     style.line_width = 2.2f * k;
-    const int top_w = static_cast<int>(std::lround(kDiagramTopW * k));
-    const int top_h = static_cast<int>(std::lround(kDiagramTopH * k));
-    const int front_w = static_cast<int>(std::lround(kDiagramFrontW * k));
-    const int front_h = static_cast<int>(std::lround(kFrontH * k));
-    const float top = DiagramScale({&left, &right}, kTopAngle, top_w, top_h);
-    const float front = top * kFrontScale;
-    const std::array<const ModelFile*, 2> models{&left, &right};
+    SchemeHandSizes sizes;
+    sizes.top_w = static_cast<int>(std::lround(kDiagramTopW * k));
+    sizes.top_h = static_cast<int>(std::lround(kDiagramTopH * k));
+    sizes.front_w = static_cast<int>(std::lround(kDiagramFrontW * k));
+    sizes.front_h = static_cast<int>(std::lround(kFrontH * k));
+    sizes.crop_extra = static_cast<int>(std::lround(40 * k));
+    sizes.crop_fade = static_cast<int>(std::lround(36 * k));
+    SchemeHands hands = DrawSchemeHands(left, right, scheme, sizes, style);
     for (int h = 0; h < 2; h++) {
-        const DiagramAngle ta{h == 0 ? kTopAngle.roll : -kTopAngle.roll, kTopAngle.pitch};
-        const DiagramAngle fa{h == 0 ? kFrontAngle.roll : -kFrontAngle.roll, kFrontAngle.pitch};
-        art.top[h] = DrawDiagram(*models[h], ta, top, top_w, top_h, style);
-        const DiagramImage full = DrawDiagram(*models[h], fa, front, front_w, front_h, style);
-        int y0 = 0, y1 = 0;
-        while (y0 < full.height) {
-            bool any = false;
-            for (int x = 0; x < full.width && !any; x++) {
-                any = full.rgba[(static_cast<std::size_t>(y0) * full.width + x) * 4 + 3] > 0;
-            }
-            if (any) {
-                break;
-            }
-            y0++;
-        }
-        for (const CtrlPart p : {CtrlPart::Bumper, CtrlPart::Trigger}) {
-            if (full.anchor[static_cast<std::size_t>(p)]) {
-                y1 = std::max(y1, static_cast<int>(full.bounds[static_cast<std::size_t>(p)][3]));
-            }
-        }
-        const int extra = static_cast<int>(std::lround(40 * k));
-        const int fade = static_cast<int>(std::lround(36 * k));
-        art.front[h] = y1 > y0 ? CropDiagram(full, std::max(0, y0 - 2), y1 + extra, fade)
-                               : CropDiagram(full, 0, full.height / 2, fade);
+        art.top[h] = std::move(hands.top[h]);
+        art.front[h] = std::move(hands.front[h]);
         Unpremultiply(art.top[h]);
         Unpremultiply(art.front[h]);
     }
