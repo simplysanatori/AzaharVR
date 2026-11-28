@@ -504,3 +504,113 @@ TEST_CASE("AzaharVR schemes: Edit Controls on the Frame listens as before",
     CHECK_FALSE(f.hand[0].bumper); // the Frame's grips grab the screens
     CHECK_FALSE(f.dpad_up);
 }
+
+// AzaharVR: Move Screens (PC schemes): the gestures' frame (MoveScreensInput) and what the paused
+// game gets (ScreensOnly).
+TEST_CASE("AzaharVR Move Screens: what is held at the start waits; a new B or Menu ends it",
+          "[frame_xr][pcvr][pcgrab]") {
+    MoveScreensInput mode;
+    mode.Reset();
+    InputFrame in{};
+    in.b = true;               // the press that ended the menu, still held
+    in.hand[1].grip = 1.0f;    // and a grip held
+    InputFrame f = in;
+    CHECK_FALSE(mode.Filter(f, -1));
+    CHECK(f.hand[1].grip == 0.0f); // swallowed until let go
+    in = {};
+    f = in;
+    CHECK_FALSE(mode.Filter(f, -1)); // let go
+    in.hand[1].grip = 1.0f;
+    f = in;
+    CHECK_FALSE(mode.Filter(f, -1));
+    CHECK(f.hand[1].grip == 1.0f); // a new grip grabs
+    in.b = true;
+    f = in;
+    CHECK(mode.Filter(f, -1)); // a new B finishes
+    mode.Reset();
+    InputFrame menu{};
+    menu.menu = true;
+    f = menu;
+    CHECK_FALSE(mode.Filter(f, -1)); // Menu held from the start
+    f = {};
+    mode.Filter(f, -1);
+    f = menu;
+    CHECK(mode.Filter(f, -1)); // a new Menu finishes
+}
+
+TEST_CASE("AzaharVR Move Screens: only poses, grips and sticks; the other stick is the D-pad",
+          "[frame_xr][pcvr][pcgrab]") {
+    MoveScreensInput mode;
+    mode.Reset();
+    InputFrame none{};
+    mode.Filter(none, -1); // nothing held now
+    InputFrame in{};
+    in.a = in.x = in.y = true;
+    in.hand[0].trigger = 1.0f;
+    in.hand[0].stick_click = true;
+    in.hand[1].grip = 1.0f;           // the right grip holds
+    in.hand[1].stick = {0.9f, 0.0f};  // its stick: bigger (the Mapper's)
+    in.hand[0].stick = {0.0f, 0.8f};  // the other stick: D-pad up
+    InputFrame f = in;
+    CHECK_FALSE(mode.Filter(f, 1));
+    CHECK_FALSE(f.a);
+    CHECK_FALSE(f.x);
+    CHECK_FALSE(f.y);
+    CHECK(f.hand[0].trigger == 0.0f);
+    CHECK_FALSE(f.hand[0].stick_click);
+    CHECK(f.hand[1].grip == 1.0f);
+    CHECK(f.hand[1].stick.x == 0.9f); // the holding hand keeps its stick
+    CHECK(mode.dpad_hand() == 0);
+    CHECK(f.dpad_up);
+    CHECK(f.hand[0].stick.x == 0.0f); // the D-pad stick reaches nothing else
+    CHECK(f.hand[0].stick.y == 0.0f);
+    // held between press and release: still up at 0.4, gone at 0.3
+    in.hand[0].stick = {0.0f, 0.4f};
+    f = in;
+    mode.Filter(f, 1);
+    CHECK(f.dpad_up);
+    in.hand[0].stick = {0.0f, 0.3f};
+    f = in;
+    mode.Filter(f, 1);
+    CHECK_FALSE(f.dpad_up);
+    // both grips down, the left holding: the right stick is the D-pad (Horizontal Scale: right)
+    in.hand[0].grip = 1.0f;
+    in.hand[1].stick = {0.8f, 0.0f};
+    f = in;
+    mode.Filter(f, 0);
+    CHECK(mode.dpad_hand() == 1);
+    CHECK(f.dpad_right);
+    CHECK(f.hand[0].grip == 1.0f);
+    CHECK(f.hand[1].grip == 1.0f);
+    // no grip: no D-pad from a stick, a real D-pad (Index's trackpad) still is one
+    InputFrame free{};
+    free.hand[0].stick = {0.0f, 0.9f};
+    free.dpad_left = true;
+    f = free;
+    mode.Filter(f, -1);
+    CHECK(mode.dpad_hand() == -1);
+    CHECK_FALSE(f.dpad_up);
+    CHECK(f.dpad_left);
+}
+
+TEST_CASE("AzaharVR Move Screens: the paused game gets the screens' moves only",
+          "[frame_xr][pcvr][pcgrab]") {
+    MapperOutput out;
+    out.controls.Set(Control::A, true);
+    out.commands.top_drag_active = true;
+    out.commands.drag_hand = 1;
+    out.commands.top_depth_delta_z = 0.25f;
+    out.commands.top_scale_stick = 0.5f;
+    out.commands.quick_save = true;
+    out.commands.menu_toggle = true;
+    out.touch_event_count = 1;
+    const MapperOutput only = ScreensOnly(out);
+    CHECK_FALSE(only.controls.Get(Control::A));
+    CHECK(only.touch_event_count == 0);
+    CHECK(only.commands.top_drag_active);
+    CHECK(only.commands.drag_hand == 1);
+    CHECK(only.commands.top_depth_delta_z == 0.25f);
+    CHECK(only.commands.top_scale_stick == 0.5f);
+    CHECK_FALSE(only.commands.quick_save);
+    CHECK_FALSE(only.commands.menu_toggle);
+}

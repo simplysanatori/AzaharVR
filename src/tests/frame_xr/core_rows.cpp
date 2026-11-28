@@ -230,6 +230,22 @@ TEST_CASE("The Position tab's rows", "[frame_xr][tabmenu]") {
     CHECK(RowIds(Tab::Position, Game(CoreCaps::ForGB())) == std::vector<Id>{Id::ScreenCurve});
 }
 
+// AzaharVR: Move Screens is a PC controller's, never the Frame's.
+TEST_CASE("The Position tab: Move Screens only with a PC controller", "[frame_xr][tabmenu][pcgrab]") {
+    MenuModel m = Game(CoreCaps::ForN3DS());
+    const auto has = [](const std::vector<Id>& ids) {
+        return std::find(ids.begin(), ids.end(), Id::MoveScreensMode) != ids.end();
+    };
+    CHECK_FALSE(has(RowIds(Tab::Position, m)));
+    m.pc_scheme = true;
+    const std::vector<Id> ids = RowIds(Tab::Position, m);
+    REQUIRE(!ids.empty());
+    CHECK(ids.front() == Id::MoveScreensMode);
+    m = Game(CoreCaps::ForNDS());
+    m.pc_scheme = true;
+    CHECK(has(RowIds(Tab::Position, m)));
+}
+
 TEST_CASE("Core rows: the table for each other console", "[frame_xr][tabmenu]") {
     CHECK(Table(CoreCaps::ForGB()) == Expected(kPicture));
     CHECK(Table(CoreCaps::ForGBA()) == Expected(With(kPicture, {Id::GbaSolarLevel})));
