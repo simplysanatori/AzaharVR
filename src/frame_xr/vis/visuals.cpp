@@ -19,6 +19,7 @@
 #include "common/logging/log.h"
 #include "common/settings.h"
 #include "frame_xr/frame_xr.h"
+#include "frame_xr/input/controller_choice.h" // AzaharVR pchelp
 #include "frame_xr/input/geometry.h"
 #include "frame_xr/session.h"
 #include "frame_xr/vis/async_overlay.h"
@@ -281,6 +282,7 @@ struct Visuals::Impl {
         Common::AltCore::CoreKind console = Common::AltCore::CoreKind::N3DS;
         bool diagram = false; ///< the diagram, else the list
         DiagramPageId page = DiagramPageId::Game;
+        Input::ControllerScheme scheme = Input::ControllerScheme::Frame; ///< AzaharVR pchelp
         bool operator==(const HelpKey&) const = default;
     };
     HelpKey help_key{};
@@ -761,10 +763,15 @@ void Visuals::Frame(Runtime& rt, const FrameInfo& info, Where where, const Windo
             ctx.in_menu = key.in_menu;
             ctx.game_running = key.game;
             ctx.console = key.console = GetCoreCapabilities().kind;
+            // AzaharVR pchelp: the controllers in use (or the Controllers setting's).
+            ctx.scheme = key.scheme = Input::g_active_scheme.load(std::memory_order_relaxed);
             // AzaharFrame ctrldiag: the diagram once its drawings are made (a fraction of a
             // second after VR starts; until then the panel waits, at most 3 s), else the list.
-            const HelpArt* art = m.HelpArtReady();
-            const bool waiting = m.help_art_state == 1 &&
+            // AzaharVR pchelp adapter (help_content.h SchemeHasDrawings): the drawings of the
+            // scheme's controllers; none (the list) until lane/pc-diagrams makes the PC ones.
+            const bool has_drawings = SchemeHasDrawings(ctx.scheme);
+            const HelpArt* art = has_drawings ? m.HelpArtReady() : nullptr;
+            const bool waiting = has_drawings && m.help_art_state == 1 &&
                                  std::chrono::steady_clock::now() - m.help_art_started <
                                      std::chrono::seconds(3);
             key.diagram = art != nullptr;

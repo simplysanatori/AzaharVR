@@ -334,6 +334,7 @@ enum class MenuSetting {
     FaceButtons,
     MotionControls,
     ShowControllers,
+    ControllerType, ///< AzaharVR pchelp: `value` vr_controller_type (0 Automatic to 4)
     ControllersInFront, ///< AzaharFrame ctrlfront: `value` 0 Off, 1 Primary, 2 Secondary, 3 Both
     WindowScale, ///< `value`: percent
     ImmersiveMode,

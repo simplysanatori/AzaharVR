@@ -3412,6 +3412,55 @@ TEST_CASE("Tab menu: Controls, Buttons has the picture on top, the rows under it
     }
 }
 
+// AzaharVR pchelp: Controllers, a menu button over Face Buttons in PC builds only; and the
+// picture as the help's rows (as tall as they need) for controllers with no drawings.
+TEST_CASE("Tab menu: Controls, the Controllers row and the text picture", "[tabmenu][pchelp]") {
+    Drawn d;
+    Rect picture{};
+    d.menu.SetDiagram([&picture](Kit&, const Rect& area, int) { picture = area; });
+    MenuView v;
+    v.tab = Tab::Controls;
+    MenuModel m = Sample();
+    m.controller_type_row = false; // the Frame's build
+    d.Draw(m, v);
+    CHECK(!HasHit(d, Id::ControllerType, -1));
+    const float frame_h = picture.H();
+    m.controller_type_row = true;
+    m.controller_type = 2;
+    v.scroll[static_cast<int>(Tab::Controls)] = 10000.0f;
+    d.Draw(m, v);
+    const auto* row = FindHit(d, Id::ControllerType, -1);
+    const auto* face = FindHit(d, Id::FaceButtons, 0);
+    REQUIRE(row != nullptr);
+    REQUIRE(face != nullptr);
+    CHECK(row->r.y1 <= face->r.y0 + 8.0f); // over Face Buttons
+    CHECK(row->r.H() >= 48.0f);
+    CHECK(OptionsFor(Id::ControllerType) ==
+          std::vector<std::string>{"Automatic", "Steam Frame", "Meta Quest", "Valve Index",
+                                   "Vive XR Elite / Focus 3"});
+    CHECK(LabelFor(Id::ControllerType) == "Controllers");
+    CHECK(ExplainFor(Id::ControllerType) ==
+          "Which controllers the controls, pictures and buttons are for. Automatic uses the "
+          "ones SteamVR reports.");
+    // Its menu, open: the five choices.
+    v.open_menu = Id::ControllerType;
+    d.Draw(m, v);
+    for (int i = 0; i < 5; i++) {
+        CHECK(HasHit(d, Id::ControllerType, i));
+    }
+    // The text picture: as tall as its rows need.
+    v.open_menu = Id::None;
+    v.scroll[static_cast<int>(Tab::Controls)] = 0.0f;
+    m.controls_text_rows = {32, 13};
+    d.Draw(m, v);
+    CHECK(picture.H() >= TabMenu::ControlsTextHeight(32) - 0.01f);
+    CHECK(TabMenu::ControlsTextHeight(32) > frame_h);
+    m.controls_page = 1;
+    d.Draw(m, v);
+    CHECK(picture.H() >= TabMenu::ControlsTextHeight(13) - 0.01f);
+    CHECK(picture.H() < TabMenu::ControlsTextHeight(32));
+}
+
 // AzaharFrame reticle: Reticle Speed, a slider under Bottom Screen Reticle while it is on, its
 // value as "2.0x"; greyed in Global while the game has its own value.
 TEST_CASE("Tab menu: Reticle Speed under Bottom Screen Reticle", "[frame_xr][tabmenu][reticle]") {

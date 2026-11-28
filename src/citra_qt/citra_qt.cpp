@@ -6137,6 +6137,9 @@ void GMainWindow::FrameMenuRequest(const FrameXr::MenuRequest& r) {
     case S::FaceButtons:
         set(v.vr_face_buttons, u);
         break;
+    case S::ControllerType: // AzaharVR pchelp
+        set(v.vr_controller_type, std::min<u32>(u, 4));
+        break;
     case S::MotionControls:
         set(v.vr_motion_controls, u);
         break;

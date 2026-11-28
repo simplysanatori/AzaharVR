@@ -11,6 +11,7 @@
 #include "common/cover_strings.h"
 #include "common/layer_depth.h"
 #include "frame_xr/immersive_names.h" // AzaharFrame kiu
+#include "frame_xr/input/controller_names.h" // AzaharVR pchelp
 #include "frame_xr/menu/ds_drawing.h"
 #include "frame_xr/menu/md3_fonts.h"
 #include "frame_xr/immersive_layout.h" // AzaharFrame natural: World Scale's stops
@@ -1347,6 +1348,11 @@ const std::vector<std::string>& OptionsFor(Id id) {
         return kControllersInFront;
     case Id::FaceButtons:
         return kFace;
+    case Id::ControllerType: { // AzaharVR pchelp
+        static const std::vector<std::string> kControllers(Input::kControllerTypeNames.begin(),
+                                                           Input::kControllerTypeNames.end());
+        return kControllers;
+    }
     case Id::MotionControls:
         return kMotion;
     case Id::GyroAim: // AzaharFrame kiugyro
@@ -1622,6 +1628,8 @@ std::string LabelFor(Id id) {
         return "Background";
     case Id::FaceButtons:
         return "Face Buttons";
+    case Id::ControllerType: // AzaharVR pchelp
+        return Input::kControllerTypeLabel;
     case Id::MotionControls:
         return "Motion Controls";
     case Id::GyroAim: // AzaharFrame kiugyro
@@ -2106,6 +2114,8 @@ std::string ExplainFor(Id id) {
         return "What shows behind the screens.";
     case Id::FaceButtons:
         return "How A, B, X and Y map to the 3DS.";
+    case Id::ControllerType: // AzaharVR pchelp
+        return Input::kControllerTypeTip;
     case Id::MotionControls:
         return "The controller or headset that acts as the 3DS gyroscope.";
     case Id::GyroAim: // AzaharFrame kiugyro
@@ -3563,9 +3573,16 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
     // it is the only section), the picture under it as wide as the pane, then the rows; one shows
     // under the picture without scrolling.
     const float pages_h = buttons && !one_section ? kChoiceH : 0.0f;
-    const float picture_h = buttons ? 320.0f : 0.0f;
+    // AzaharVR pchelp: no drawings of these controllers: the help's rows as text, as tall as
+    // they need.
+    const int text_rows =
+        model.controls_text_rows[static_cast<std::size_t>(std::clamp(model.controls_page, 0, 1))];
+    const float picture_h =
+        buttons ? (text_rows > 0 ? ControlsTextHeight(text_rows) : 320.0f) : 0.0f;
     const float button_rows_h =
-        buttons ? kChoiceH * (model.show_controllers ? 3.0f : 2.0f) : 0.0f;
+        buttons ? kChoiceH * ((model.show_controllers ? 3.0f : 2.0f) +
+                              (model.controller_type_row ? 1.0f : 0.0f))
+                : 0.0f;
     // Aiming's rows: Aiming and Gyro Sensitivity always; Recoil (with its own rows) while it is on;
     // Laser Sight, Keep Reticle on Screen and Grip Frees Aim (AzaharFrame kiuaim3) with Direct Aim
     // (stored 2). Kid Icarus: Uprising's own are on the Angel's Aim page (AzaharFrame kiuaim).
@@ -3714,6 +3731,35 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
             anchors.push_back({id, label_x, half.y0 + 6.0f, lock});
         }
     };
+    // AzaharVR pchelp: Controllers, a menu button (its menu over everything, last).
+    Rect open_anchor{};
+    int open_selected = 0;
+    const auto menu_row = [&](Id id, float y0, int value) {
+        const Rect row{c.x0 - 12.0f, y0, c.x1 + 12.0f, y0 + kControlH + 8.0f};
+        const Lock lock = model.locked[static_cast<std::size_t>(id)];
+        const bool enabled = lock == Lock::None;
+        AddHit(row, {id, kLabelIndex}, list);
+        if (visible(row)) {
+            anchors.push_back({id, c.x0, row.y0 + 6.0f, lock});
+        }
+        kit.TextMid(c.x0, row.Cy(), Type::Body, Tok::kOnSurface, LabelFor(id), 0,
+                    enabled ? 1.0f : kDisabledContent);
+        const auto& opts = OptionsFor(id);
+        const float label_x1 = c.x0 + kit.TextWidth(Type::Body, LabelFor(id)) + 16.0f;
+        const Rect mb{std::max(label_x1, c.x1 - 420.0f), row.Cy() - kControlH * 0.5f, c.x1,
+                      row.Cy() + kControlH * 0.5f};
+        const int sel = std::clamp(value, 0, static_cast<int>(opts.size()) - 1);
+        kit.MenuButton(mb, opts[static_cast<std::size_t>(sel)], view.open_menu == id,
+                       StateOf(view, {id}, enabled), false);
+        if (enabled) {
+            AddHit(mb, {id}, list);
+        }
+        if (view.open_menu == id) {
+            open_anchor = mb;
+            open_selected = sel;
+        }
+        return row;
+    };
     const float rows_y0 = top + pages_h + picture_h + 4.0f;
     const Rect area{pane.x0 + 8.0f, top + pages_h, one_section ? edit.x0 - 12.0f : pane.x1 - 8.0f,
                     rows_y0 - 4.0f};
@@ -3721,7 +3767,11 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
         diagram(kit, area, model.controls_page);
     }
     if (buttons) { // AzaharVR: moved from Settings, General
-        const Rect face = choice_row(Id::FaceButtons, rows_y0, model.face_buttons);
+        float face_y = rows_y0;
+        if (model.controller_type_row) { // AzaharVR pchelp: PC builds
+            face_y = menu_row(Id::ControllerType, rows_y0, model.controller_type).y1;
+        }
+        const Rect face = choice_row(Id::FaceButtons, face_y, model.face_buttons);
         const Rect show{face.x0, face.y1, face.x1, face.y1 + kChoiceH};
         switch_half(Id::ShowControllers, show, model.show_controllers);
         if (model.show_controllers) { // AzaharFrame ctrlfront
@@ -3793,6 +3843,7 @@ void TabMenu::DrawControls(Kit& kit, const MenuModel& model, const MenuView& vie
     }
     kit.ClearClip();
     DrawScrollbar(kit, view, list, pane.x1, content_h, max_scroll, scroll); // AzaharFrame scroll
+    DrawOpenMenu(kit, model, view, pane, open_anchor, open_selected); // AzaharVR pchelp
     DrawScopeMenu(kit, model, view, pane);
 }
 

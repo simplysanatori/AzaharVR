@@ -998,6 +998,10 @@ struct Values {
     // (Frame A, at the bottom, is the 3DS B, ...), 1 = by label (A is A). Read every frame
     // (frame_xr/input/mapper.h).
     SwitchableSetting<u32, true> vr_face_buttons{0, 0, 1, "vr_face_buttons"};
+    // AzaharVR pchelp: which controllers the VR controls are for (global only, PC builds):
+    // 0 = Automatic (the interaction profile SteamVR reports), 1 = Steam Frame, 2 = Meta Quest,
+    // 3 = Valve Index, 4 = Vive XR Elite / Focus 3 (frame_xr/input/controller_choice.h).
+    SwitchableSetting<u32, true> vr_controller_type{0, 0, 4, "vr_controller_type"};
     // AzaharFrame: which controller drives the 3DS gyroscope and accelerometer: 0 = off,
     // 1 = right controller, 2 = left controller, 3 = headset. Read every frame
     // (frame_xr/input/motion.h). AzaharFrame kiu: per game too (was global only).

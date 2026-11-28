@@ -19,6 +19,7 @@ add_executable(tests
     ../frame_xr/input/mapper.cpp # AzaharFrame
     ../frame_xr/input/pc_scheme.cpp # AzaharVR
     frame_xr/pc_scheme.cpp # AzaharVR
+    frame_xr/pc_help.cpp # AzaharVR pchelp
     ../frame_xr/input/screen_rig.cpp # AzaharFrame vrsize
     ../frame_xr/input/screen_view.cpp # AzaharFrame screenswap
     ../frame_xr/input/touchpad_touch.cpp # AzaharFrame touchpad

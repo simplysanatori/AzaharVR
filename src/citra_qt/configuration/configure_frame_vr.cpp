@@ -23,11 +23,13 @@
 #include <QVBoxLayout>
 #include "citra_qt/configuration/configuration_shared.h"
 #include "citra_qt/configuration/configure_frame_vr.h"
+#include "common/frame_product.h" // AzaharVR pchelp
 #include "common/settings.h"
 #include "common/stall_telemetry.h"    // AzaharFrame bfidr: the display's rate
 #include "frame_xr/bfi_helpers.h"      // AzaharFrame bfidr
 #include "frame_xr/immersive_layout.h" // AzaharFrame fov100: the scales' range
 #include "frame_xr/immersive_names.h"  // AzaharFrame kiu
+#include "frame_xr/input/controller_choice.h" // AzaharVR pchelp
 #include "frame_xr/motion_clarity.h"   // AzaharFrame bfidr: UnevenHz
 #include "frame_xr/kiu_scan.h"         // AzaharFrame kiurec: IsKidIcarus
 #include "frame_xr/menu/name_chip.h"   // AzaharFrame kiurec: kRecommendedChip
@@ -140,6 +142,20 @@ ConfigureFrameVr::ConfigureFrameVr(QWidget* parent, u64 title_id) : QGroupBox(pa
            "layout."),
         {face_combo});
     layout->addWidget(face_row);
+
+    // AzaharVR pchelp: global only, PC builds only. Values 0..4 are
+    // Settings::values.vr_controller_type (frame_xr/input/controller_choice.h).
+    if (Common::FrameProduct::kPc) {
+        controller_type_combo = new QComboBox(this);
+        for (const char* name : FrameXr::Input::kControllerTypeNames) {
+            controller_type_combo->addItem(tr(name));
+        }
+        controller_type_row = MakeRow(this, QStringLiteral("frame_vr_controller_type_row"),
+                                      tr(FrameXr::Input::kControllerTypeLabel),
+                                      tr(FrameXr::Input::kControllerTypeTip),
+                                      {controller_type_combo});
+        layout->addWidget(controller_type_row);
+    }
 
     // Global only. Values 0..1 are Settings::values.vr_background (frame_xr/hud.h).
     background_combo = new QComboBox(this);
@@ -535,6 +551,9 @@ ConfigureFrameVr::~ConfigureFrameVr() = default;
 void ConfigureFrameVr::SetupPerGameUI() {
     // Face Buttons is not per game (AzaharFrame kiu: Motion Controls is).
     face_row->setVisible(Settings::IsConfiguringGlobal());
+    if (controller_type_row) { // AzaharVR pchelp
+        controller_type_row->setVisible(Settings::IsConfiguringGlobal());
+    }
     window_scale_row->setVisible(Settings::IsConfiguringGlobal());
     background_row->setVisible(Settings::IsConfiguringGlobal());
     offset_row->setVisible(Settings::IsConfiguringGlobal()); // AzaharFrame vrsize
@@ -731,6 +750,10 @@ void ConfigureFrameVr::SetConfiguration() {
         match_camera_combo->setCurrentIndex(static_cast<int>(
             std::min<u32>(Settings::values.vr_immersive_match_camera_mode.GetValue(true), 2)));
         face_combo->setCurrentIndex(static_cast<int>(Settings::values.vr_face_buttons.GetValue()));
+        if (controller_type_combo) { // AzaharVR pchelp
+            controller_type_combo->setCurrentIndex(static_cast<int>(
+                std::min<u32>(Settings::values.vr_controller_type.GetValue(), 4)));
+        }
         motion_combo->setCurrentIndex( // AzaharFrame kiu: the global value, not a game's
             static_cast<int>(Settings::values.vr_motion_controls.GetValue(true)));
         background_combo->setCurrentIndex(
@@ -935,6 +958,10 @@ void ConfigureFrameVr::ApplyConfiguration() {
             Settings::values.vr_immersive_offset_y.SetValue(0.0f);
         }
         Settings::values.vr_face_buttons.SetValue(static_cast<u32>(face_combo->currentIndex()));
+        if (controller_type_combo) { // AzaharVR pchelp
+            Settings::values.vr_controller_type.SetValue(
+                static_cast<u32>(std::max(controller_type_combo->currentIndex(), 0)));
+        }
         Settings::values.vr_background.SetValue(
             static_cast<u32>(background_combo->currentIndex()));
         Settings::values.vr_show_controllers.SetValue(show_controllers_check->isChecked());

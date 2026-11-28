@@ -36,6 +36,7 @@
 #include "frame_xr/vis/see_through.h" // AzaharFrame kiuopacity
 #include "frame_xr/immersive.h"
 #include "frame_xr/immersive_layout.h" // AzaharFrame immersive2: kGripPress
+#include "frame_xr/input/controller_choice.h" // AzaharVR pchelp
 #include "frame_xr/input/devices.h"    // AzaharFrame padsui
 #include "frame_xr/input/geometry.h"
 #include "frame_xr/picker/library.h"
@@ -564,7 +565,8 @@ void VrUi::RequestFastForward(const Input::PanelCommands& cmd, const char* where
     }
     std::scoped_lock lock{hooks_mutex};
     if (hooks.toggle_fast_forward) {
-        LOG_INFO(Frontend, "xr: {}: View, then Right Trigger: fast forward on / off", where);
+        LOG_INFO(Frontend, "xr: {}: {}: fast forward on / off", where, // AzaharVR pchelp
+                 Input::ChordLogName(bridge.pc().scheme(), 1, true));
         hooks.toggle_fast_forward();
     }
 }
@@ -576,8 +578,9 @@ void VrUi::RequestQuick(const Input::PanelCommands& cmd, const char* where) {
     std::scoped_lock lock{hooks_mutex};
     auto& hook = cmd.quick_save ? hooks.quick_save : hooks.quick_load;
     if (hook) {
-        LOG_INFO(Frontend, "xr: {}: View, then {} Bumper: Quick {}", where,
-                 cmd.quick_save ? "Right" : "Left", cmd.quick_save ? "Save" : "Load");
+        LOG_INFO(Frontend, "xr: {}: {}: Quick {}", where, // AzaharVR pchelp
+                 Input::ChordLogName(bridge.pc().scheme(), cmd.quick_save ? 1 : 0, false),
+                 cmd.quick_save ? "Save" : "Load");
         hook();
     }
 }
@@ -1687,13 +1690,26 @@ void VrUi::Frame(Runtime& rt, const FrameInfo& info, std::vector<Quad>& layers) 
     if (rt.profile_changes != profile_changes_seen) {
         profile_changes_seen = rt.profile_changes;
         const std::string profile = actions_ok ? actions.CurrentProfile(info.session) : std::string{};
-        const Input::ControllerScheme scheme = Common::FrameProduct::kPc
-                                                   ? Input::SchemeForProfile(profile)
-                                                   : Input::ControllerScheme::Frame;
+        detected_scheme = Common::FrameProduct::kPc ? Input::SchemeForProfile(profile)
+                                                    : Input::ControllerScheme::Frame;
         LOG_INFO(Frontend, "xr: controllers: {} -> the {} scheme",
                  profile.empty() ? std::string{"none"} : profile,
-                 Input::SchemeTable(scheme).name);
+                 Input::SchemeTable(detected_scheme).name);
+        controller_type_seen = ~0u; // choose again (below)
+    }
+    // AzaharVR pchelp: the Controllers setting (PC builds) over the profile's scheme, for the
+    // input, the controls help and Edit Controls.
+    if (const uint32_t type = Settings::values.vr_controller_type.GetValue();
+        type != controller_type_seen) {
+        controller_type_seen = type;
+        const Input::ControllerScheme scheme =
+            Input::ChosenScheme(type, detected_scheme, Common::FrameProduct::kPc);
+        if (Common::FrameProduct::kPc) {
+            LOG_INFO(Frontend, "xr: controllers: Controllers {}: the {} scheme",
+                     Input::ControllerTypeName(type), Input::SchemeTable(scheme).name);
+        }
         controller_scheme = scheme;
+        Input::g_active_scheme.store(scheme, std::memory_order_relaxed);
         // AzaharVR: no Steam Frame controller models in other controllers' place
         Vis::g_frame_controller_models.store(scheme == Input::ControllerScheme::Frame,
                                              std::memory_order_relaxed);

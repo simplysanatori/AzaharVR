@@ -3,12 +3,15 @@
 // Refer to the license.txt file included.
 
 #include <algorithm>
+#include <functional>
 
 #include "common/alt_core_types.h"
 #include "common/param_package.h"
 #include "frame_xr/immersive_names.h" // AzaharFrame kiu
 #include "frame_xr/input/controls.h"
+#include "frame_xr/input/controller_choice.h" // AzaharVR pchelp
 #include "frame_xr/input/default_bindings.h"
+#include "frame_xr/input/pc_scheme.h" // AzaharVR pchelp
 #include "frame_xr/vis/help_content.h"
 
 namespace FrameXr::Vis {
@@ -232,6 +235,18 @@ std::string Footer(const HelpBindings& given, bool by_position) {
     return footer;
 }
 
+// AzaharVR pchelp: a PC scheme's footer: the controllers (as Edit Controls names them) and the
+// profile; Face Buttons does not apply to them.
+std::string PcFooter(const HelpBindings& given, Input::ControllerScheme scheme) {
+    std::string footer = Input::ControllersDeviceName(scheme, true);
+    if (!given.valid) {
+        footer += "  \xC2\xB7  Default Controls";
+    } else if (!given.profile_name.empty()) {
+        footer += "  \xC2\xB7  Profile: " + given.profile_name;
+    }
+    return footer;
+}
+
 // ---- The diagram's labels ----
 
 constexpr int kLeft = 0;
@@ -263,6 +278,286 @@ std::vector<DiagramLine> TriggerLines(const char* name, const std::string& bound
     return {Title(name, bound), Line("", "Touch on Secondary Screen")};
 }
 
+// ---- AzaharVR pchelp: the PC controllers (Touch, Index, Focus 3) ----
+// What pc_scheme.cpp does with each scheme, read from its table (kControllerSchemes) and its
+// thresholds (PcSchemeConfig): the grips are L and R (BumperL, BumperR), the Menu role's tap is
+// Start (Control::Menu), the right stick click Select (Control::View), the D-pad from the left
+// stick's D-pad mode or the left trackpad; the Menu role's hold and chords; Move Screens
+// (MoveScreensInput). The 3DS side comes from the profile, as on the Frame.
+
+using Input::ControllerScheme;
+using Input::ControllerSchemeTable;
+using Input::DpadSource;
+using Input::MenuSource;
+
+/// "1 s", "0.5 s".
+std::string Secs(int64_t ns) {
+    const int64_t tenths = (ns + 50'000'000) / 100'000'000;
+    return tenths % 10 == 0 ? std::to_string(tenths / 10) + " s"
+                            : std::to_string(tenths / 10) + "." + std::to_string(tenths % 10) + " s";
+}
+
+struct PcNames {
+    const ControllerSchemeTable& t;
+    Input::PcSchemeConfig config{};
+
+    /// The physical button behind the InputFrame's a, b, x, y ("A", or on Index the left
+    /// hand's A and B, which are X and Y).
+    std::string Face(const char* frame) const {
+        if (t.scheme != ControllerScheme::Index) {
+            return frame;
+        }
+        const std::string f{frame};
+        return f == "A" ? "Right A" : f == "B" ? "Right B" : f == "X" ? "Left A" : "Left B";
+    }
+    bool Trackpads() const {
+        return t.menu == MenuSource::RightTrackpadPress;
+    }
+    /// The Menu role: "Menu" (Touch, Focus 3), "Right Trackpad" (Index).
+    std::string Menu() const {
+        return Input::MenuRoleName(t.scheme);
+    }
+    /// Its tap.
+    std::string MenuPress() const {
+        return Trackpads() ? "Right Trackpad Press" : "Menu";
+    }
+    std::string MenuHold() const {
+        return "Hold " + Menu() + " (" + Secs(config.menu_hold_ns) + ")";
+    }
+    std::string QuickLoadHold() const {
+        return "Left Grip (" + Secs(config.quick_load_hold_ns) + ")";
+    }
+};
+
+// The D-pad rows: one when it is the 3DS's D-pad, else one per direction. `name` is what drives
+// it ("Left Trackpad Press"), `dir` how one direction of it is named.
+void PcDpadRows(std::vector<HelpRow>& g, const Bindings& b, const std::string& name,
+                const std::function<std::string(const char*)>& dir) {
+    if (DpadPlain(b)) {
+        Row(g, name, b.Console() + "D-Pad");
+        return;
+    }
+    Row(g, dir("Up"), OrNothing(ThreeDs(b, Control::DpadUp)));
+    Row(g, dir("Down"), OrNothing(ThreeDs(b, Control::DpadDown)));
+    Row(g, dir("Left"), OrNothing(ThreeDs(b, Control::DpadLeft)));
+    Row(g, dir("Right"), OrNothing(ThreeDs(b, Control::DpadRight)));
+}
+
+HelpPage BuildPcHelp(const HelpBindings& given, const HelpContext& ctx) {
+    const Bindings b{given.valid ? given : DefaultHelpBindings(), ctx.console};
+    const PcNames n{Input::SchemeTable(ctx.scheme)};
+    const ControllerSchemeTable& t = n.t;
+    HelpPage page;
+
+    // ---- In Game (PcScheme::Game) ----
+    auto& g = page.game;
+    Heading(g, "In Game", ctx.game_running && !ctx.in_menu);
+    for (const Face& f : Faces(!t.face_buttons_by_label)) {
+        Row(g, n.Face(f.frame), OrNothing(ThreeDs(b, f.pad)));
+    }
+    Row(g, "Left Stick", OrNothing(StickTo(b, AnalogControl::StickL)));
+    if (t.dpad == DpadSource::LeftStickToggle) {
+        if (t.stick_clicks_for_game) {
+            Row(g, "Left Stick Click", "Switch Circle Pad / D-Pad");
+        }
+        PcDpadRows(g, b, "Left Stick in D-Pad Mode", [](const char* d) {
+            return std::string("Left Stick ") + d + " (D-Pad Mode)";
+        });
+    } else if (t.dpad == DpadSource::LeftTrackpadPress) {
+        PcDpadRows(g, b, "Left Trackpad Press",
+                   [](const char* d) { return std::string("Left Trackpad ") + d; });
+    }
+    Row(g, "Right Stick", OrNothing(StickTo(b, AnalogControl::StickR)));
+    if (t.stick_clicks_for_game) {
+        Row(g, "Right Stick Click", OrNothing(ThreeDs(b, Control::View))); // Select
+    }
+    if (t.grips_are_lr) {
+        Row(g, "Left Grip", OrNothing(ThreeDs(b, Control::BumperL)));
+        Row(g, "Right Grip", OrNothing(ThreeDs(b, Control::BumperR)));
+    }
+    Row(g, "Left Trigger", With("Touch on Secondary Screen", ThreeDs(b, Control::TriggerL)));
+    Row(g, "Right Trigger", With("Touch on Secondary Screen", ThreeDs(b, Control::TriggerR)));
+    Row(g, n.MenuPress(), OrNothing(ThreeDs(b, Control::Menu))); // Start
+    if (t.both_clicks_menu) {
+        Row(g, "Both Stick Clicks", "Same as Menu");
+    }
+    Row(g, n.MenuHold(), "In-Game Menu");
+    Row(g, "Hold " + n.Menu() + " + Right Grip", "Quick Save");
+    Row(g, "Hold " + n.Menu() + " + " + n.QuickLoadHold(), "Quick Load");
+    Row(g, "Hold " + n.Menu() + " + Right Trigger", "Fast Forward On / Off");
+
+    // ---- Move Screens (the Position tab's button; MoveScreensInput) ----
+    Heading(g, "Move Screens", false);
+    Row(g, "Grip on a Screen", "Move Screen");
+    Row(g, "Hold Grip + Stick Up or Down", std::string("Distance or ") + ImNames::kWorldScale);
+    Row(g, "Hold Grip + Stick Sideways", "Screen Size");
+    Row(g, "Hold Grip + Other Stick Sideways", "Nudge Screen or Offset");
+    Row(g, "Hold Grip + Other Stick Up or Down", "Screen Curve");
+    Row(g, "Same in Field of View", ImNames::kDepth3d);
+    Row(g, "Same in Stretch", ImNames::kRenderMargin);
+    Row(g, "Both Grips + Other Stick Sideways", ImNames::kHorizontalScale);
+    Row(g, "Both Grips + Other Stick Up or Down", ImNames::kVerticalScale);
+    Row(g, n.Face("B") + " or " + n.MenuPress(), "Finish");
+
+    // ---- Azahar's window (the home panel), the in-game menu ----
+    auto& w = page.window;
+    Heading(w, "Azahar's Window", !ctx.game_running || ctx.in_menu);
+    Row(w, "Trigger or " + n.Face("A"), "Click");
+    Row(w, n.Trackpads() ? "Left Trackpad or Left Stick Up / Down" : "Left Stick Up / Down",
+        "Choose Game");
+    Row(w, n.Face("A") + " Twice", "Start Game");
+    Row(w, "Right Stick Click", "Right Click");
+    Row(w, "Hold Right Stick Click (1 s)", "Bring Window Back");
+    Row(w, n.Face("B"), "Back");
+    Row(w, "Grip", "Move Window");
+    Row(w, "Right Stick Up or Down", "Scroll");
+    Row(w, n.Face("Y"), "Keyboard");
+    Heading(w, "In-Game Menu", ctx.in_menu);
+    Row(w, n.MenuHold(), "Back to Game");
+    Row(w, n.Face("B") + " (Nothing Open)", "Back to Game");
+
+    page.footer = PcFooter(given, ctx.scheme);
+    return page;
+}
+
+HelpDiagram BuildPcHelpDiagram(const HelpBindings& given, const HelpContext& ctx) {
+    const Bindings b{given.valid ? given : DefaultHelpBindings(), ctx.console};
+    const PcNames n{Input::SchemeTable(ctx.scheme)};
+    const ControllerSchemeTable& t = n.t;
+    HelpDiagram d;
+    d.now = HelpDiagramPageFor(ctx);
+    d.footer = PcFooter(given, ctx.scheme);
+    // The face buttons: the right hand's A and B; the left hand's X and Y (Touch, Focus 3) or
+    // its A and B (Index), which are the pad's X and Y.
+    const bool index = n.Trackpads();
+    const std::vector<CtrlPart> left_faces =
+        index ? std::vector<CtrlPart>{CtrlPart::A, CtrlPart::B}
+              : std::vector<CtrlPart>{CtrlPart::X, CtrlPart::Y};
+    const auto face_key = [&](const char* frame) {
+        // On the drawing the hand is known: the button's own letter.
+        const std::string name = n.Face(frame);
+        return name.rfind("Left ", 0) == 0 ? name.substr(5)
+               : name.rfind("Right ", 0) == 0 ? name.substr(6)
+                                              : name;
+    };
+    // The Menu role's part: the left Menu button, or the right trackpad.
+    const int menu_hand = index ? kRight : kLeft;
+    const CtrlPart menu_part = index ? DiagramTrackpadPart(kRight) : CtrlPart::Menu;
+    const std::string menu_title = index ? "Right Trackpad Press" : "Menu";
+
+    // ---- In Game ----
+    DiagramPage& g = d.pages[static_cast<std::size_t>(DiagramPageId::Game)];
+    g.name = "In Game";
+    Label(g, kLeft, {CtrlPart::Trigger}, TriggerLines("Left Trigger", ThreeDs(b, Control::TriggerL)));
+    Label(g, kRight, {CtrlPart::Trigger}, TriggerLines("Right Trigger", ThreeDs(b, Control::TriggerR)));
+    if (t.grips_are_lr) {
+        Label(g, kLeft, {CtrlPart::Grip}, {Title("Left Grip", OrNothing(ThreeDs(b, Control::BumperL)))});
+        Label(g, kRight, {CtrlPart::Grip}, {Title("Right Grip", OrNothing(ThreeDs(b, Control::BumperR)))});
+    }
+    // The D-pad's lines: the 3DS's D-pad, and a line for each direction the profile changed.
+    const auto dpad_lines = [&](std::vector<DiagramLine>& lines, const std::string& key,
+                                bool title) {
+        const struct {
+            const char* name;
+            Control control;
+            int button;
+        } dirs[] = {{"Up", Control::DpadUp, NB::Up},
+                    {"Down", Control::DpadDown, NB::Down},
+                    {"Left", Control::DpadLeft, NB::Left},
+                    {"Right", Control::DpadRight, NB::Right}};
+        std::vector<DiagramLine> subs;
+        bool any_plain = false;
+        for (const auto& dir : dirs) {
+            if (BoundTo(b, dir.control) == std::vector<int>{dir.button}) {
+                any_plain = true;
+            } else {
+                subs.push_back(Sub(dir.name, OrNothing(ThreeDs(b, dir.control))));
+            }
+        }
+        if (any_plain) {
+            lines.push_back(title ? Title(key, b.Console() + "D-Pad")
+                                  : Line(key, b.Console() + "D-Pad"));
+        } else {
+            lines.push_back(SubHeading(key));
+        }
+        lines.insert(lines.end(), subs.begin(), subs.end());
+    };
+    {
+        std::vector<DiagramLine> stick{
+            Title("Left Stick", OrNothing(StickTo(b, AnalogControl::StickL)))};
+        if (t.dpad == DpadSource::LeftStickToggle) {
+            if (t.stick_clicks_for_game) {
+                stick.push_back(Line("Click", "Switch Circle Pad / D-Pad"));
+            }
+            dpad_lines(stick, "D-Pad Mode", false);
+        }
+        Label(g, kLeft, {CtrlPart::Stick}, std::move(stick));
+    }
+    if (t.dpad == DpadSource::LeftTrackpadPress) {
+        std::vector<DiagramLine> pad;
+        dpad_lines(pad, "Left Trackpad Press", true);
+        Label(g, kLeft, {DiagramTrackpadPart(kLeft)}, std::move(pad));
+    }
+    {
+        std::vector<DiagramLine> right;
+        std::vector<DiagramLine> left;
+        for (const Face& f : Faces(!t.face_buttons_by_label)) {
+            const std::string frame{f.frame};
+            auto& to = frame == "A" || frame == "B" ? right : left;
+            to.push_back(Title(face_key(f.frame), OrNothing(ThreeDs(b, f.pad))));
+        }
+        Label(g, kRight, {CtrlPart::A, CtrlPart::B}, std::move(right));
+        Label(g, kLeft, left_faces, std::move(left));
+    }
+    {
+        std::vector<DiagramLine> stick{
+            Title("Right Stick", OrNothing(StickTo(b, AnalogControl::StickR)))};
+        if (t.stick_clicks_for_game) {
+            stick.push_back(Line("Click", OrNothing(ThreeDs(b, Control::View))));
+        }
+        Label(g, kRight, {CtrlPart::Stick}, std::move(stick));
+    }
+    {
+        std::vector<DiagramLine> menu{Title(menu_title, OrNothing(ThreeDs(b, Control::Menu))),
+                                      Line("Hold (" + Secs(n.config.menu_hold_ns) + ")",
+                                           "In-Game Menu"),
+                                      SubHeading("Hold " + n.Menu() + " +"),
+                                      Sub("Right Grip", "Quick Save"),
+                                      Sub(n.QuickLoadHold(), "Quick Load"),
+                                      Sub("Right Trigger", "Fast Forward On / Off")};
+        if (t.both_clicks_menu) {
+            menu.push_back(Line("Both Stick Clicks", "Same as Menu"));
+        }
+        Label(g, menu_hand, {menu_part}, std::move(menu));
+    }
+
+    // ---- Azahar's window (the home panel), the in-game menu, Move Screens ----
+    DiagramPage& w = d.pages[static_cast<std::size_t>(DiagramPageId::Window)];
+    w.name = "Azahar's Window";
+    Label(w, kLeft, {CtrlPart::Trigger}, {Title("Left Trigger", "Click")});
+    Label(w, kRight, {CtrlPart::Trigger}, {Title("Right Trigger", "Click")});
+    Label(w, kLeft, {CtrlPart::Stick}, {Title("Left Stick", "Choose Game")});
+    if (index) {
+        Label(w, kLeft, {DiagramTrackpadPart(kLeft)}, {Title("Left Trackpad Up or Down", "Choose Game")});
+    }
+    Label(w, kRight, {CtrlPart::A, CtrlPart::B},
+          {Title("A", "Click"), Line("Twice", "Start Game"), Title("B", "Back")});
+    Label(w, kLeft, left_faces, {Title(face_key("Y"), "Keyboard")});
+    Label(w, menu_hand, {menu_part},
+          {SubHeading("In-Game Menu"), Sub(n.MenuHold(), "Back to Game"),
+           Sub("B (Nothing Open)", "Back to Game")});
+    Label(w, kRight, {CtrlPart::Stick},
+          {Title("Right Stick", "Scroll"), Line("Click", "Right Click"),
+           Line("Hold Click (1 s)", "Bring Window Back")});
+    Label(w, kBoth, {CtrlPart::Grip},
+          {Title("Grip", "Move Window"), SubHeading("Move Screens"),
+           Sub("Grip on a Screen", "Move Screen"),
+           Sub("Stick Up or Down", std::string("Nearer / ") + ImNames::kWorldScale),
+           Sub("Stick Sideways", "Screen Size"), Sub("Other Stick Sideways", "Nudge / Offset"),
+           Sub("Other Stick Up or Down", "Curve"), Sub("B", "Finish")});
+    return d;
+}
+
 } // namespace
 
 HelpBindings DefaultHelpBindings() {
@@ -280,6 +575,9 @@ HelpBindings DefaultHelpBindings() {
 }
 
 HelpPage BuildHelp(const HelpBindings& given, const HelpContext& ctx) {
+    if (ctx.scheme != Input::ControllerScheme::Frame) { // AzaharVR pchelp
+        return BuildPcHelp(given, ctx);
+    }
     const Bindings b{given.valid ? given : DefaultHelpBindings(), ctx.console};
     HelpPage page;
 
@@ -360,6 +658,9 @@ HelpPage BuildHelp(const HelpBindings& given, const HelpContext& ctx) {
 }
 
 HelpDiagram BuildHelpDiagram(const HelpBindings& given, const HelpContext& ctx) {
+    if (ctx.scheme != Input::ControllerScheme::Frame) { // AzaharVR pchelp
+        return BuildPcHelpDiagram(given, ctx);
+    }
     const Bindings b{given.valid ? given : DefaultHelpBindings(), ctx.console};
     const bool pos = ctx.face_by_position;
     HelpDiagram d;

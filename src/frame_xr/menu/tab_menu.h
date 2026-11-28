@@ -130,6 +130,9 @@ enum class Id : int {
     ProjectileSize,  ///< a slider, 50 to 200 (percent), with Projectiles on
     ProjectileSpeed, ///< a slider, 50 to 200 (percent), with Projectiles on
     ShowControllers,
+    /// AzaharVR pchelp: Controllers, a menu button (index: vr_controller_type, 0 Automatic to 4
+    /// Vive XR Elite / Focus 3), global, PC builds only (MenuModel::controller_type_row)
+    ControllerType,
     ControllersInFront, ///< AzaharFrame ctrlfront: Controllers in Front of Screen, index: 0 Off,
                         ///< 1 Primary, 2 Secondary, 3 Both (vr_controllers_in_front), global
     WindowScale,
@@ -531,6 +534,14 @@ struct MenuModel {
     std::string version;
     // Controls
     int controls_page = 0; ///< 0 In Game, 1 Azahar's Window
+    /// AzaharVR pchelp: the Controllers row (PC builds only) and its value (vr_controller_type).
+    bool controller_type_row = false;
+    int controller_type = 0;
+    /// AzaharVR pchelp: no drawings of these controllers (help_content.h SchemeHasDrawings):
+    /// the picture is the help's rows as text, this many on each page (In Game, Azahar's
+    /// Window); {0, 0} with drawings.
+    std::array<int, 2> controls_text_rows{};
+    uint8_t controls_scheme = 0; ///< AzaharVR pchelp: the Input::ControllerScheme they are for
     int touchpad_touch = 0; ///< AzaharFrame menuux: 0 Tap for Input, 1 Click for Input
     int bottom_screen_reticle = 0; ///< AzaharFrame mouse: 0 Off, 1 Left, 2 Right, 3 Headset
     int reticle_at_edge = 0;       ///< AzaharFrame mouse: 0 Follow, 1 Snap to Middle
@@ -892,6 +903,13 @@ public:
     /// Draws the controller diagram of `page` into `area` (dp) on the Controls tab (Edit
     /// Controls draws the 3DS itself, ds_drawing.h).
     using DiagramDraw = std::function<void(Kit& kit, const Rect& area, int page)>;
+
+    /// AzaharVR pchelp: the Controls tab's picture as text (MenuModel::controls_text_rows): two
+    /// columns of rows this tall, the area as tall as the longer column needs.
+    static constexpr float kControlsTextRowH = 24.0f;
+    static float ControlsTextHeight(int rows) {
+        return static_cast<float>((rows + 1) / 2 + 2) * kControlsTextRowH + 8.0f;
+    }
 
     void SetDiagram(DiagramDraw draw) {
         diagram = std::move(draw);

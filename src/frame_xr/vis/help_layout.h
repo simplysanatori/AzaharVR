@@ -46,6 +46,11 @@ HelpTextLayout LayoutHelpText(const HelpPage& page, const HelpColumnSpan& game_s
                               const HelpColumnSpan& window_span, float max_size,
                               const TextMeasure& measure);
 
+/// AzaharVR pchelp: where the second of two columns of `rows` starts (the in-game menu's text
+/// picture): about half way, at a heading if one is within two rows of it, so a heading never
+/// ends a column.
+std::size_t HelpColumnBreak(const std::vector<HelpRow>& rows);
+
 // ---- AzaharFrame ctrldiag: the diagram's layout ----
 // Panel pixels (the help panel, kHelpRect in panels.h). The drawings: each hand from above in a
 // kDiagramTopW x kDiagramTopH box, the two side by side in the middle like the halves of a

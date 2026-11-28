@@ -12,6 +12,7 @@
 #include <utility>
 
 #include <fmt/format.h>
+#include "common/frame_product.h" // AzaharVR pchelp
 #include "common/layer_depth.h"
 #include "common/logging/log.h"
 #include "common/param_package.h"
@@ -42,6 +43,7 @@
 #include "frame_xr/ui_sound.h" // AzaharFrame menuux: Edit Controls' click
 #include "frame_xr/vis/controller_models.h"
 #include "frame_xr/vis/help_content.h"
+#include "frame_xr/vis/help_layout.h" // AzaharVR pchelp
 #include "frame_xr/vis/menu_diagram.h"
 #include "frame_xr/vis/visuals.h"
 #include "frame_xr/kiu_first_person.h" // AzaharFrame kiu131: Bottom Screen
@@ -590,6 +592,43 @@ namespace {
 void SetGamesSearch(const std::string& text) {
     std::scoped_lock lock{g_mods_mutex};
     g_games.search = text;
+}
+
+// AzaharVR pchelp: the Controls tab's picture as text, while the controllers in use have no
+// drawings (help_content.h SchemeHasDrawings): the page's rows in two columns, each heading in
+// the accent colour, each action after its column's widest control.
+void DrawMenuHelpRows(Menu::Kit& k, const Menu::Rect& area, const std::vector<Vis::HelpRow>& rows) {
+    using Menu::Type;
+    namespace Tok = Menu::Tok;
+    constexpr float kGap = 32.0f;
+    constexpr float kRowH = Menu::TabMenu::kControlsTextRowH;
+    const std::size_t split = Vis::HelpColumnBreak(rows);
+    const float col_w = (area.W() - kGap) * 0.5f;
+    for (int col = 0; col < 2; col++) {
+        const std::size_t begin = col == 0 ? 0 : split;
+        const std::size_t end = col == 0 ? split : rows.size();
+        const float x0 = area.x0 + static_cast<float>(col) * (col_w + kGap);
+        float label_w = 0.0f;
+        for (std::size_t i = begin; i < end; i++) {
+            if (rows[i].kind == Vis::HelpRow::Kind::Row) {
+                label_w = std::max(label_w, k.TextWidth(Type::RailLabel, rows[i].control));
+            }
+        }
+        label_w = std::min(label_w, col_w * 0.62f);
+        const float action_x = x0 + label_w + 16.0f;
+        float cy = area.y0 + kRowH * 0.5f + 4.0f;
+        for (std::size_t i = begin; i < end; i++, cy += kRowH) {
+            const Vis::HelpRow& r = rows[i];
+            if (r.kind == Vis::HelpRow::Kind::Heading) {
+                k.TextMid(x0, cy, Type::Label, Tok::kPrimary, k.Fit(Type::Label, r.control, col_w));
+                continue;
+            }
+            k.TextMid(x0, cy, Type::RailLabel, Tok::kOnSurface,
+                      k.Fit(Type::RailLabel, r.control, label_w));
+            k.TextMid(action_x, cy, Type::Tooltip, Tok::kOnSurfaceVariant,
+                      k.Fit(Type::Tooltip, r.action, x0 + col_w - action_x));
+        }
+    }
 }
 } // namespace
 
@@ -1203,6 +1242,32 @@ void MenuPanel::BuildModel(const Host& host) {
     m.scope = scope;
     m.background = static_cast<int>(std::min<u32>(v.vr_background.GetValue(), 1));
     m.face_buttons = static_cast<int>(std::min<u32>(v.vr_face_buttons.GetValue(), 1));
+    // AzaharVR pchelp: Controllers (PC builds only), and on the Controls tab the picture as the
+    // help's rows while these controllers have no drawings (counted again when what they say
+    // changes).
+    m.controller_type_row = Common::FrameProduct::kPc;
+    m.controller_type = static_cast<int>(std::min<u32>(v.vr_controller_type.GetValue(), 4));
+    m.controls_scheme = static_cast<uint8_t>(scheme);
+    if (view.tab == Menu::Tab::Controls && !Vis::SchemeHasDrawings(scheme)) {
+        const Vis::HelpBindings bindings = Vis::CurrentHelpBindings();
+        const Vis::HelpContext ctx{.face_by_position = m.face_buttons == 0,
+                                   .in_menu = true,
+                                   .game_running = true,
+                                   .console = m.core.kind,
+                                   .scheme = scheme};
+        if (!text_rows_counted || ctx.scheme != text_rows_ctx.scheme ||
+            ctx.console != text_rows_ctx.console ||
+            bindings.buttons != text_rows_bindings.buttons ||
+            bindings.analogs != text_rows_bindings.analogs ||
+            bindings.valid != text_rows_bindings.valid) {
+            const Vis::HelpPage page = Vis::BuildHelp(bindings, ctx);
+            text_rows = {static_cast<int>(page.game.size()), static_cast<int>(page.window.size())};
+            text_rows_bindings = bindings;
+            text_rows_ctx = ctx;
+            text_rows_counted = true;
+        }
+        m.controls_text_rows = text_rows;
+    }
     m.motion_controls = static_cast<int>(std::min<u32>(v.vr_motion_controls.GetValue(), 3));
     m.gyro_aim = static_cast<int>(std::min<u32>(v.vr_gyro_aim.GetValue(), 2)); // AzaharFrame kiugyro
     m.gyro_sensitivity = static_cast<int>(
@@ -1756,6 +1821,10 @@ void MenuPanel::SetSetting(Id id, int value, Host& host) {
     case Id::FaceButtons:
         Apply(v.vr_face_buttons, u, false);
         r.setting = MenuSetting::FaceButtons;
+        break;
+    case Id::ControllerType: // AzaharVR pchelp: global; the XR thread logs the scheme it picks
+        Apply(v.vr_controller_type, std::min<u32>(u, 4), false);
+        r.setting = MenuSetting::ControllerType;
         break;
     case Id::MotionControls: // AzaharFrame kiu: per game in Per-Game
         Apply(v.vr_motion_controls, std::min<u32>(u, 3), per_game);
@@ -3134,6 +3203,7 @@ void MenuPanel::Click(Target t, Host& host) {
     case Id::ImmersiveMode:
     case Id::InternalResolution: // AzaharFrame menuux
     case Id::FastForwardAudio:   // AzaharFrame kiu2
+    case Id::ControllerType:     // AzaharVR pchelp
         view.open_menu = t.id; // a menu button: its menu
         break;
     case Id::ControlsPage:
@@ -3856,8 +3926,15 @@ void MenuPanel::Worker() {
     auto console_drawn = Common::AltCore::CoreKind::N3DS;
     Vis::HelpDiagram diagram;
     bool have_diagram = false;
+    // AzaharVR pchelp: the controllers drawn for, and the help's rows for those that have no
+    // drawings (MenuModel::controls_text_rows).
+    auto scheme_drawn = Input::ControllerScheme::Frame;
+    Vis::HelpPage text_page;
+    bool text_drawn = false;
     menu.SetDiagram([&](Menu::Kit& k, const Menu::Rect& area, int page) {
-        if (have_diagram) {
+        if (text_drawn) {
+            DrawMenuHelpRows(k, area, page == 0 ? text_page.game : text_page.window);
+        } else if (have_diagram) {
             Vis::DrawMenuDiagram(k, area, diagram, static_cast<Vis::DiagramPageId>(page), art);
         }
     });
@@ -3881,19 +3958,26 @@ void MenuPanel::Worker() {
             // The diagram's labels follow the controls profile and Face Buttons.
             const Vis::HelpBindings bindings = Vis::CurrentHelpBindings();
             const bool face = m.face_buttons == 0;
+            const auto scheme = static_cast<Input::ControllerScheme>(m.controls_scheme);
             const bool same = bindings.buttons == bindings_drawn.buttons &&
                               bindings.analogs == bindings_drawn.analogs &&
                               bindings.valid == bindings_drawn.valid;
             if (!have_diagram || !same || face != face_drawn ||
-                m.core.kind != console_drawn) {
-                diagram = Vis::BuildHelpDiagram(
-                    bindings, {.face_by_position = face,
-                               .in_menu = true,
-                               .game_running = true,
-                               .console = m.core.kind});
+                m.core.kind != console_drawn || scheme != scheme_drawn) {
+                const Vis::HelpContext ctx{.face_by_position = face,
+                                           .in_menu = true,
+                                           .game_running = true,
+                                           .console = m.core.kind,
+                                           .scheme = scheme};
+                diagram = Vis::BuildHelpDiagram(bindings, ctx);
+                // AzaharVR pchelp adapter (help_content.h SchemeHasDrawings): no drawings of
+                // these controllers yet: the rows as text.
+                text_drawn = !Vis::SchemeHasDrawings(scheme);
+                text_page = text_drawn ? Vis::BuildHelp(bindings, ctx) : Vis::HelpPage{};
                 console_drawn = m.core.kind;
                 bindings_drawn = bindings;
                 face_drawn = face;
+                scheme_drawn = scheme;
                 have_diagram = true;
             }
         }

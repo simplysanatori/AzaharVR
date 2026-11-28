@@ -16,6 +16,7 @@
 
 #include "common/alt_core_types.h"
 #include "common/settings.h"
+#include "frame_xr/input/default_bindings.h" // AzaharVR pchelp
 #include "frame_xr/vis/controller_diagram.h"
 
 namespace FrameXr::Vis {
@@ -35,6 +36,11 @@ struct HelpContext {
     bool in_menu = false;         ///< the in-game menu is open
     bool game_running = false;
     Common::AltCore::CoreKind console = Common::AltCore::CoreKind::N3DS; ///< the game's
+    /// AzaharVR pchelp: the controllers the help is for (controller_choice.h ChosenScheme). The
+    /// Frame's is the Frame's help as before; Touch, Index and Focus 3 have their own rows, made
+    /// from kControllerSchemes and PcSchemeConfig (pc_scheme.h). Face Buttons is ignored there
+    /// (by label, as the input does).
+    Input::ControllerScheme scheme = Input::ControllerScheme::Frame;
 };
 
 struct HelpRow {
@@ -95,5 +101,21 @@ DiagramPageId HelpDiagramPageFor(const HelpContext& context);
 
 /// The label of `part` of `hand` on `page`, or null (unit tests).
 const DiagramLabel* FindDiagramLabel(const DiagramPage& page, int hand, CtrlPart part);
+
+// ---- AzaharVR pchelp: MERGE POINT with lane/pc-diagrams ----------------------------------
+// lane/pc-diagrams draws the PC controllers (keyed by Input::ControllerScheme) and adds
+// CtrlPart::Trackpad. Until that is merged:
+//  - DiagramTrackpadPart: the part an Index trackpad's label points at. Replace the body with
+//    `return CtrlPart::Trackpad;` (both hands).
+//  - SchemeHasDrawings: whether drawings exist for a scheme. Replace the body with that lane's
+//    "diagram images for a scheme, or none" check. Where it is false the help shows its rows
+//    as text (the VR panel's list, the in-game menu's Controls tab), and the help panel and
+//    the menu ask for the drawings through it (visuals.cpp, menu_panel.cpp: "pchelp adapter").
+constexpr CtrlPart DiagramTrackpadPart(int hand) {
+    return hand == 0 ? CtrlPart::Dpad : CtrlPart::Menu;
+}
+constexpr bool SchemeHasDrawings(Input::ControllerScheme scheme) {
+    return scheme == Input::ControllerScheme::Frame;
+}
 
 } // namespace FrameXr::Vis

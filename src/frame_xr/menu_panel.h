@@ -40,6 +40,7 @@
 #include "frame_xr/menu/remap.h"
 #include "frame_xr/menu/tab_menu.h"
 #include "frame_xr/vis/async_overlay.h"
+#include "frame_xr/vis/help_content.h" // AzaharVR pchelp
 
 namespace FrameXr {
 
@@ -153,6 +154,12 @@ private:
     std::vector<std::pair<std::string, std::string>> stats;
     int scope = 0;
     int controls_page = 0;
+    /// AzaharVR pchelp: the Controls tab's text rows (MenuModel::controls_text_rows), and the
+    /// controllers, console and bindings they were counted for.
+    std::array<int, 2> text_rows{};
+    Vis::HelpBindings text_rows_bindings;
+    Vis::HelpContext text_rows_ctx;
+    bool text_rows_counted = false;
     std::array<bool, 2> trigger_down{};
     bool a_down = false, b_down = false;
     int active_hand = 1;

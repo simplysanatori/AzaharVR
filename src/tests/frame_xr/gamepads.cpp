@@ -7,6 +7,8 @@
 #include <vector>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include "common/frame_product.h" // AzaharVR pchelp
+#include "frame_xr/input/controller_choice.h" // AzaharVR pchelp
 #include "frame_xr/input/gamepads.h"
 
 // AzaharFrame pads
@@ -324,7 +326,8 @@ TEST_CASE("Gamepads: the device registry and hot-plug", "[frame_xr]") {
     REQUIRE(list.size() == 1);
     REQUIRE(list[0].kind == DeviceKind::Frame);
     REQUIRE(list[0].id == kFrameDeviceId);
-    REQUIRE(list[0].name == "Frame Controllers");
+    // AzaharVR pchelp: on PC named after the scheme in use (Steam Frame's until one is known).
+    REQUIRE(list[0].name == ControllersDeviceName(ControllerScheme::Frame, Common::FrameProduct::kPc));
 
     const uint32_t rev0 = rig.hub.Revision();
     rig.source.Add(1, kDs4Guid, "Wireless Controller", PadType::PS4, 0x054c, 0x09cc, true);

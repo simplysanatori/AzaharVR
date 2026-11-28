@@ -325,6 +325,7 @@ void RestoreGlobalState(bool is_powered_on) {
     values.vr_immersive_hud_spacing_x.SetGlobal(true); // AzaharFrame hudmove
     values.vr_immersive_hud_spacing_y.SetGlobal(true);
     values.vr_face_buttons.SetGlobal(true); // AzaharFrame
+    values.vr_controller_type.SetGlobal(true); // AzaharVR pchelp
     values.vr_motion_controls.SetGlobal(true); // AzaharFrame
     values.vr_background.SetGlobal(true);      // AzaharFrame
     values.vr_show_controllers.SetGlobal(true); // AzaharFrame vrvis

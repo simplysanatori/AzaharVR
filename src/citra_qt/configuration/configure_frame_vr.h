@@ -51,6 +51,8 @@ private:
     QComboBox* match_camera_combo;
     /// Global settings only (hidden in a game's properties).
     QWidget* face_row;
+    QComboBox* controller_type_combo = nullptr; ///< AzaharVR pchelp: Controllers (PC builds)
+    QWidget* controller_type_row = nullptr;
     QComboBox* face_combo;
     QWidget* background_row;
     QComboBox* background_combo;

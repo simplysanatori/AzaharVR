@@ -83,6 +83,8 @@ add_library(frame_xr STATIC EXCLUDE_FROM_ALL
     input/mapper.cpp
     input/pc_scheme.cpp # AzaharVR
     input/pc_scheme.h # AzaharVR
+    input/controller_choice.h # AzaharVR pchelp
+    input/controller_names.h # AzaharVR pchelp
     input/mapper.h
     input/motion.cpp
     input/motion.h

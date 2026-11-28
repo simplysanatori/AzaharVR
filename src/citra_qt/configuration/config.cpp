@@ -765,6 +765,7 @@ void QtConfig::ReadVrValues() {
     // AzaharFrame: global only, so a per-application file never carries or overrides them.
     if (global) {
         ReadGlobalSetting(Settings::values.vr_face_buttons);
+        ReadGlobalSetting(Settings::values.vr_controller_type); // AzaharVR pchelp
         ReadGlobalSetting(Settings::values.vr_background);
         ReadGlobalSetting(Settings::values.vr_show_stats);       // AzaharFrame vrvis
         ReadGlobalSetting(Settings::values.vr_stats_position);   // AzaharFrame statspos
@@ -1570,6 +1571,7 @@ void QtConfig::SaveVrValues() {
     // AzaharFrame: global only (see ReadVrValues).
     if (global) {
         WriteGlobalSetting(Settings::values.vr_face_buttons);
+        WriteGlobalSetting(Settings::values.vr_controller_type); // AzaharVR pchelp
         WriteGlobalSetting(Settings::values.vr_background);
         WriteGlobalSetting(Settings::values.vr_show_stats);       // AzaharFrame vrvis
         WriteGlobalSetting(Settings::values.vr_stats_position);   // AzaharFrame statspos

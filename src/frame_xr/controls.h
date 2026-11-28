@@ -253,6 +253,10 @@ private:
     /// out of the game's frame until the bridge reads them (they are L and R, never a grab).
     Input::ControllerScheme controller_scheme = Input::ControllerScheme::Frame;
     uint32_t profile_changes_seen = 0;
+    /// AzaharVR pchelp: the profile's own scheme, and the Controllers setting last applied over
+    /// it (controller_choice.h); controller_scheme is the one chosen.
+    Input::ControllerScheme detected_scheme = Input::ControllerScheme::Frame;
+    uint32_t controller_type_seen = ~0u;
     uint64_t dpad_mode_title = 0;
     std::array<float, Input::kNumHands> pc_grips{};
     bool bridge_live = false;

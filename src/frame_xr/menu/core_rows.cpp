@@ -103,6 +103,7 @@ constexpr Rule kRules[] = {
     {Id::MatchBottomNormal, Need::Bfi},
     // Controls
     {Id::FaceButtons, Need::Any},
+    {Id::ControllerType, Need::Any}, // AzaharVR pchelp (PC builds: MenuModel::controller_type_row)
     {Id::ShowControllers, Need::Any},
     {Id::ControllersInFront, Need::Any},
     {Id::MotionControls, Need::Gyro},

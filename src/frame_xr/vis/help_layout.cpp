@@ -307,5 +307,26 @@ std::vector<DiagramPlaced> LayoutHelpDiagram(const DiagramPage& page, const Diag
     return out;
 }
 
+// AzaharVR pchelp
+std::size_t HelpColumnBreak(const std::vector<HelpRow>& rows) {
+    const std::size_t n = rows.size();
+    const std::size_t half = (n + 1) / 2;
+    if (n < 2) {
+        return n;
+    }
+    const auto heading = [&](std::size_t i) {
+        return i > 0 && i < n && rows[i].kind == HelpRow::Kind::Heading;
+    };
+    for (std::size_t d = 0; d <= 2; d++) {
+        if (heading(half - std::min(d, half))) {
+            return half - d;
+        }
+        if (heading(half + d)) {
+            return half + d;
+        }
+    }
+    return half;
+}
+
 } // namespace FrameXr::Vis
 

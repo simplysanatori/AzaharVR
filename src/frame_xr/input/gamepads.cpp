@@ -8,6 +8,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <sstream>
+#include "common/frame_product.h" // AzaharVR pchelp
+#include "frame_xr/input/controller_choice.h" // AzaharVR pchelp
 #include "frame_xr/input/gamepads.h"
 
 // AzaharFrame pads
@@ -1275,7 +1277,10 @@ std::vector<DeviceInfo> GamepadHub::Devices(int64_t now_ns) {
         DeviceInfo frame;
         frame.kind = DeviceKind::Frame;
         frame.id = kFrameDeviceId;
-        frame.name = "Frame Controllers";
+        // AzaharVR pchelp: on PC named after the controllers in use ("Meta Quest Controllers");
+        // the id stays kFrameDeviceId.
+        frame.name = ControllersDeviceName(g_active_scheme.load(std::memory_order_relaxed),
+                                           Common::FrameProduct::kPc);
         out.push_back(frame);
     }
     std::vector<const Pad*> listed;
