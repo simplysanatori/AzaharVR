@@ -1156,7 +1156,10 @@ void MenuPanel::BuildModel(const Host& host) {
             e.connected = d.connected; // AzaharFrame padsui: the row's status dot
             if (d.kind == Input::DeviceKind::Frame) {
                 e.kind = Menu::DeviceKind::Frame;
-                e.names = Menu::ButtonNames::Frame;
+                // AzaharVR: a PC controller's names (grips, Right Stick Click, Menu role)
+                e.names = scheme == Input::ControllerScheme::Frame   ? Menu::ButtonNames::Frame
+                          : scheme == Input::ControllerScheme::Index ? Menu::ButtonNames::PcVrIndex
+                                                                     : Menu::ButtonNames::PcVr;
                 e.mapping = TableOf(profile_buttons);
                 e.sticks = profile_sticks;
             } else if (d.kind == Input::DeviceKind::Mouse) {

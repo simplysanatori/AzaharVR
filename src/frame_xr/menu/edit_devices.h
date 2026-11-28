@@ -35,6 +35,8 @@ enum class ButtonNames : uint8_t {
     Steam,       ///< Steam Controller, Steam Deck: A B X Y, LB RB LT RT, View, Menu, grips
     Mouse,       ///< AzaharFrame padsui: Left Click... Wheel Down (Input::MouseInput)
     Keyboard,    ///< AzaharFrame keys: the keys' names (Input::KeyName)
+    PcVr,        ///< AzaharVR: Touch or Focus 3 as the VR controllers: grips L/R, Menu, by label
+    PcVrIndex,   ///< AzaharVR: Index as the VR controllers: Start is Right Trackpad
 };
 
 /// The names of lane pads' PadType (its SDL_GameControllerType numbers, Steam = 100).

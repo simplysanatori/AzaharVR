@@ -308,6 +308,13 @@ TEST_CASE("Edit Controls: each device's buttons by its own names", "[frame_xr]")
     CHECK(SourceName(ButtonNames::Frame, C(Control::A), false) == "A");
     CHECK(SourceName(ButtonNames::Frame, C(Control::BumperL)) == "Left Bumper");
     CHECK(SourceName(ButtonNames::Frame, -1).empty());
+    // AzaharVR: PC controllers name their grips, Select's and Start's buttons, by label
+    CHECK(SourceName(ButtonNames::PcVr, C(Control::BumperL)) == "Left Grip");
+    CHECK(SourceName(ButtonNames::PcVr, C(Control::BumperR)) == "Right Grip");
+    CHECK(SourceName(ButtonNames::PcVr, C(Control::View)) == "Right Stick Click");
+    CHECK(SourceName(ButtonNames::PcVr, C(Control::Menu)) == "Menu");
+    CHECK(SourceName(ButtonNames::PcVrIndex, C(Control::Menu)) == "Right Trackpad");
+    CHECK(SourceName(ButtonNames::PcVr, C(Control::A), true) == "A");
     const ButtonNames ds4 = NamesFor(4, false);
     CHECK(ds4 == ButtonNames::DualShock);
     CHECK(SourceName(ds4, C(Control::A)) == "Cross");
