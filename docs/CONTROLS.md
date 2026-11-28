@@ -79,6 +79,7 @@ The face buttons always go by their labels. The grips are L and R, so screens mo
 | Right trigger | ZR | The same |
 | Left stick | Circle Pad | |
 | Left trackpad press | D-pad | Press up, down, left or right of the middle |
+| Left stick click, tap | Hide or Show Secondary Screen | As on the Steam Frame |
 | Right stick | C-Stick | |
 | Right stick click | Select | |
 | Right trackpad press, tap | Start | |

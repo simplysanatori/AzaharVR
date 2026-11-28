@@ -252,6 +252,8 @@ InputFrame PcScheme::Game(const InputFrame& in, PcSchemeOut& out) {
             dpad_mode_ = !dpad_mode_;
             stick_dir_ = -1;
             out.dpad_mode_changed = true;
+        } else if (tap_[0]) {
+            out.toggle_other_screen = true; // AzaharVR: Index: Hide or Show Secondary Screen
         }
     }
     out.select = select_until_ns_ >= 0 && now < select_until_ns_;
@@ -279,6 +281,7 @@ void PcScheme::Merge(const PcSchemeOut& pc, MapperOutput& out) {
     cmd.quick_save = cmd.quick_save || pc.quick_save;
     cmd.quick_load = cmd.quick_load || pc.quick_load;
     cmd.toggle_fast_forward = cmd.toggle_fast_forward || pc.toggle_fast_forward;
+    cmd.toggle_other_screen = cmd.toggle_other_screen || pc.toggle_other_screen;
 }
 
 // AzaharVR: Edit Controls' listening with a PC scheme (pc_scheme.h).

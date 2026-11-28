@@ -352,7 +352,7 @@ TEST_CASE("AzaharVR Touch: stick clicks, the D-pad mode and the both-clicks Menu
     InputFrame click_l = IdleFrame();
     click_l.hand[0].stick_click = true;
     r.Hold(click_l, 3, Control::View);
-    r.Step(IdleFrame());
+    CHECK_FALSE(r.Step(IdleFrame()).commands.toggle_other_screen);
     CHECK(r.last_pc.dpad_mode_changed);
     CHECK(r.pc.dpad_mode());
     InputFrame up = IdleFrame();
@@ -452,6 +452,25 @@ TEST_CASE("AzaharVR Index: trackpads are the D-pad and the Menu role; grips from
     both.hand[0].stick_click = both.hand[1].stick_click = true;
     r.Hold(both, 5, Control::Menu);
     CHECK(r.Hold(IdleFrame(), 5, Control::View));
+    CHECK_FALSE(r.pc.dpad_mode());
+    r.Hold(IdleFrame(), 20, Control::View);
+    // The left click alone: Hide or Show Secondary Screen, as the Frame's left tap; no Select.
+    InputFrame click_l = IdleFrame();
+    click_l.hand[0].stick_click = true;
+    bool other = false;
+    bool select = false;
+    for (int i = 0; i < 3; i++) {
+        const MapperOutput o = r.Step(click_l);
+        other = other || o.commands.toggle_other_screen;
+    }
+    CHECK_FALSE(other); // sent when let go
+    for (int i = 0; i < 10; i++) {
+        const MapperOutput o = r.Step(IdleFrame());
+        other = other || o.commands.toggle_other_screen;
+        select = select || o.controls.Get(Control::View);
+    }
+    CHECK(other);
+    CHECK_FALSE(select);
     CHECK_FALSE(r.pc.dpad_mode());
 }
 

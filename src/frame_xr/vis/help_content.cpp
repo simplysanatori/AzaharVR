@@ -366,6 +366,9 @@ HelpPage BuildPcHelp(const HelpBindings& given, const HelpContext& ctx) {
     } else if (t.dpad == DpadSource::LeftTrackpadPress) {
         PcDpadRows(g, b, "Left Trackpad Press",
                    [](const char* d) { return std::string("Left Trackpad ") + d; });
+        if (t.stick_clicks_for_game) {
+            Row(g, "Left Stick Click", "Hide or Show Secondary Screen"); // PcSchemeOut
+        }
     }
     Row(g, "Right Stick", OrNothing(StickTo(b, AnalogControl::StickR)));
     if (t.stick_clicks_for_game) {
@@ -489,6 +492,8 @@ HelpDiagram BuildPcHelpDiagram(const HelpBindings& given, const HelpContext& ctx
                 stick.push_back(Line("Click", "Switch Circle Pad / D-Pad"));
             }
             dpad_lines(stick, "D-Pad Mode", false);
+        } else if (t.stick_clicks_for_game) {
+            stick.push_back(Line("Click", "Hide or Show Secondary Screen")); // AzaharVR: Index
         }
         Label(g, kLeft, {CtrlPart::Stick}, std::move(stick));
     }

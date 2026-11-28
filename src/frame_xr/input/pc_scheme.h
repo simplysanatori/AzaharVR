@@ -55,6 +55,9 @@ struct PcSchemeOut {
     bool toggle_fast_forward = false;
     /// The left stick click switched the left stick (dpad_mode() is the new mode).
     bool dpad_mode_changed = false;
+    /// Index: a tap of the left stick click hides or shows the screen not in focus, as on the
+    /// Frame (its D-pad is the trackpad, so the click is free).
+    bool toggle_other_screen = false;
 };
 
 class PcScheme {

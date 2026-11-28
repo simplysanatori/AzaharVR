@@ -17,6 +17,7 @@ Eye-tracked **Foveated Rendering**, and fixes for Vive XR Elite, Touch and Index
 - The controls help and the in-game menu's **Controls** tab show your controllers, with drawings of Meta Quest, Valve Index and Vive XR Elite controllers made from SteamVR's own models, and what each button does on them.
 - **Controllers**, on the **Controls** tab: **Automatic** uses the controllers SteamVR reports. Choose **Meta Quest**, **Valve Index**, **Vive XR Elite / Focus 3** or **Steam Frame** if it picks the wrong ones.
 - **Edit Controls** names your controllers instead of calling them Frame Controllers.
+- Valve Index: a tap of the left stick click hides or shows the Secondary Screen, as on the Steam Frame.
 
 ## Fixes
 
