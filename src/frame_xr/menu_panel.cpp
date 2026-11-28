@@ -595,8 +595,8 @@ void SetGamesSearch(const std::string& text) {
 }
 
 // AzaharVR pchelp: the Controls tab's picture as text, while the controllers in use have no
-// drawings (help_content.h SchemeHasDrawings): the page's rows in two columns, each heading in
-// the accent colour, each action after its column's widest control.
+// drawings (no models found, MakeSchemeMenuDiagramArt): the page's rows in two columns, each
+// heading in the accent colour, each action after its column's widest control.
 void DrawMenuHelpRows(Menu::Kit& k, const Menu::Rect& area, const std::vector<Vis::HelpRow>& rows) {
     using Menu::Type;
     namespace Tok = Menu::Tok;
@@ -651,6 +651,10 @@ struct MenuPanel::Shared {
     bool per_game = false;
     // The controller drawings of the Controls tab (made on the drawing thread once).
     std::atomic<bool> art_ready{false};
+    /// AzaharVR pchelp: the controllers the Controls tab's drawings were last made for (-1 none
+    /// yet, an Input::ControllerScheme), and whether there were any (else the help as text).
+    std::atomic<int> art_for{-1};
+    std::atomic<bool> art_ok{false};
 };
 
 MenuPanel::MenuPanel() : shared(std::make_unique<Shared>()) {
@@ -1248,7 +1252,11 @@ void MenuPanel::BuildModel(const Host& host) {
     m.controller_type_row = Common::FrameProduct::kPc;
     m.controller_type = static_cast<int>(std::min<u32>(v.vr_controller_type.GetValue(), 4));
     m.controls_scheme = static_cast<uint8_t>(scheme);
-    if (view.tab == Menu::Tab::Controls && !Vis::SchemeHasDrawings(scheme)) {
+    // The Frame's build keeps an empty picture without drawings, as before.
+    const bool art_none = Common::FrameProduct::kPc &&
+                          shared->art_for.load(std::memory_order_acquire) == static_cast<int>(scheme) &&
+                          !shared->art_ok.load(std::memory_order_relaxed);
+    if (view.tab == Menu::Tab::Controls && art_none) {
         const Vis::HelpBindings bindings = Vis::CurrentHelpBindings();
         const Vis::HelpContext ctx{.face_by_position = m.face_buttons == 0,
                                    .in_menu = true,
@@ -3926,16 +3934,21 @@ void MenuPanel::Worker() {
     auto console_drawn = Common::AltCore::CoreKind::N3DS;
     Vis::HelpDiagram diagram;
     bool have_diagram = false;
-    // AzaharVR pchelp: the controllers drawn for, and the help's rows for those that have no
-    // drawings (MenuModel::controls_text_rows).
+    // AzaharVR pchelp: the controllers drawn for and the drawings' (made again when the
+    // controllers change); without drawings the help's rows as text (PC builds,
+    // MenuModel::controls_text_rows).
     auto scheme_drawn = Input::ControllerScheme::Frame;
+    auto art_scheme = Input::ControllerScheme::Frame;
+    bool art_ok = false;
     Vis::HelpPage text_page;
-    bool text_drawn = false;
     menu.SetDiagram([&](Menu::Kit& k, const Menu::Rect& area, int page) {
-        if (text_drawn) {
-            DrawMenuHelpRows(k, area, page == 0 ? text_page.game : text_page.window);
-        } else if (have_diagram) {
+        if (!have_diagram || !art_tried || art_scheme != scheme_drawn) {
+            return; // the drawings of these controllers are still to come
+        }
+        if (art_ok) {
             Vis::DrawMenuDiagram(k, area, diagram, static_cast<Vis::DiagramPageId>(page), art);
+        } else if (Common::FrameProduct::kPc) {
+            DrawMenuHelpRows(k, area, page == 0 ? text_page.game : text_page.window);
         }
     });
     frame_xr::ui::Canvas canvas;
@@ -3970,10 +3983,8 @@ void MenuPanel::Worker() {
                                            .console = m.core.kind,
                                            .scheme = scheme};
                 diagram = Vis::BuildHelpDiagram(bindings, ctx);
-                // AzaharVR pchelp adapter (help_content.h SchemeHasDrawings): no drawings of
-                // these controllers yet: the rows as text.
-                text_drawn = !Vis::SchemeHasDrawings(scheme);
-                text_page = text_drawn ? Vis::BuildHelp(bindings, ctx) : Vis::HelpPage{};
+                text_page = Vis::BuildHelp(bindings, ctx); // for no drawings
+
                 console_drawn = m.core.kind;
                 bindings_drawn = bindings;
                 face_drawn = face;
@@ -3999,17 +4010,26 @@ void MenuPanel::Worker() {
             logged = true;
             LOG_INFO(Frontend, "xr: in-game menu: first drawing in {} ms", ms);
         }
-        if (!art_tried) {
-            // The Controls tab's drawings, once, after the first drawing (a few hundred ms).
+        // The Controls tab's drawings after the first drawing (a few hundred ms). AzaharVR
+        // pchelp: of the controllers in use (lane/pc-diagrams' MakeSchemeMenuDiagramArt), made
+        // again when they change.
+        if (const auto want = static_cast<Input::ControllerScheme>(m.controls_scheme);
+            !art_tried || want != art_scheme) {
             art_tried = true;
-            std::array<Vis::ModelFile, 2> files;
+            art_scheme = want;
             std::string error;
-            if (Vis::ReadControllerModels(files, error)) {
-                art = Vis::MakeMenuDiagramArt(files[0], files[1], kPxPerDp * 0.6f);
-                shared->art_ready = true;
+            if (auto made = Vis::MakeSchemeMenuDiagramArt(want, kPxPerDp * 0.6f, &error)) {
+                art = std::move(*made);
+                art_ok = true;
             } else {
-                LOG_WARNING(Frontend, "xr: in-game menu: no controller drawings: {}", error);
+                art = {};
+                art_ok = false;
+                LOG_WARNING(Frontend, "xr: in-game menu: no controller drawings ({}): {}",
+                            Input::SchemeTable(want).name, error);
             }
+            shared->art_ok.store(art_ok, std::memory_order_relaxed);
+            shared->art_for.store(static_cast<int>(want), std::memory_order_release);
+            shared->art_ready = true;
         }
     }
 }

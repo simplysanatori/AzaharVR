@@ -294,14 +294,16 @@ struct Visuals::Impl {
     std::atomic<int> help_art_state{0}; ///< 0 not started, 1 being made, 2 ready, 3 no models
     std::unique_ptr<HelpArt> help_art;
     std::chrono::steady_clock::time_point help_art_started{};
+    /// AzaharVR pchelp: the controllers the drawings are (being) made of; made again for others.
+    Input::ControllerScheme help_art_scheme = Input::ControllerScheme::Frame;
     DiagramPageId help_page = DiagramPageId::Game;
     bool help_page_chosen = false; ///< a tab was pressed since the help opened
     bool help_was_open = false;
     int tab_hot = -1, tab_hot_drawn = -1;
     HelpDiagram help_diagram; ///< what the atlas shows (its tab names)
-    void StartHelpArt();
-    /// The drawings, once made (XR thread).
-    const HelpArt* HelpArtReady();
+    void StartHelpArt(Input::ControllerScheme scheme);
+    /// The drawings of `scheme`'s controllers, once made (XR thread).
+    const HelpArt* HelpArtReady(Input::ControllerScheme scheme);
     ~Impl() {
         if (help_art_thread.joinable()) {
             help_art_thread.join();
@@ -405,22 +407,29 @@ void Visuals::Impl::LoadSeen() {
     LOG_INFO(Frontend, "xr: first VR start: the controls help is shown");
 }
 
-void Visuals::Impl::StartHelpArt() {
-    if (help_art_state != 0) {
+void Visuals::Impl::StartHelpArt(Input::ControllerScheme scheme) {
+    // AzaharVR pchelp: one scheme's drawings at a time; another scheme's once these are made.
+    if (help_art_state == 1 || (help_art_state != 0 && help_art_scheme == scheme)) {
         return;
     }
+    if (help_art_thread.joinable()) {
+        help_art_thread.join();
+    }
+    help_art.reset();
+    help_art_scheme = scheme;
     help_art_state = 1;
     help_art_started = std::chrono::steady_clock::now();
-    help_art_thread = std::thread([this] {
+    help_art_thread = std::thread([this, scheme] {
         std::array<ModelFile, 2> files;
         std::string error;
-        if (!ReadControllerModels(files, error)) {
+        // AzaharVR pchelp: lane/pc-diagrams' models of the scheme (the Frame's as before)
+        if (!ReadSchemeModels(scheme, files, error)) {
             LOG_WARNING(Frontend, "xr: controls help: {}: the list is shown", error);
             help_art_state = 3;
             return;
         }
         const auto t0 = std::chrono::steady_clock::now();
-        help_art = std::make_unique<HelpArt>(MakeHelpArt(files[0], files[1]));
+        help_art = std::make_unique<HelpArt>(MakeHelpArt(files[0], files[1], scheme));
         LOG_INFO(Frontend, "xr: controls help: controller drawings made in {} ms",
                  std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - t0)
@@ -429,8 +438,8 @@ void Visuals::Impl::StartHelpArt() {
     });
 }
 
-const HelpArt* Visuals::Impl::HelpArtReady() {
-    if (help_art_state != 2) {
+const HelpArt* Visuals::Impl::HelpArtReady(Input::ControllerScheme scheme) {
+    if (help_art_state != 2 || help_art_scheme != scheme) {
         return nullptr;
     }
     if (help_art_thread.joinable()) {
@@ -442,7 +451,7 @@ const HelpArt* Visuals::Impl::HelpArtReady() {
 void Visuals::Create(Runtime& rt) {
     Impl& m = *impl;
     m.rt = &rt;
-    m.StartHelpArt();
+    m.StartHelpArt(Input::g_active_scheme.load(std::memory_order_relaxed)); // AzaharVR pchelp
     const VkDevice device = rt.vulkan->Device();
     const VkPhysicalDevice physical = rt.vulkan->PhysicalDevice();
     const uint32_t family = rt.vulkan->QueueFamily();
@@ -767,11 +776,11 @@ void Visuals::Frame(Runtime& rt, const FrameInfo& info, Where where, const Windo
             ctx.scheme = key.scheme = Input::g_active_scheme.load(std::memory_order_relaxed);
             // AzaharFrame ctrldiag: the diagram once its drawings are made (a fraction of a
             // second after VR starts; until then the panel waits, at most 3 s), else the list.
-            // AzaharVR pchelp adapter (help_content.h SchemeHasDrawings): the drawings of the
-            // scheme's controllers; none (the list) until lane/pc-diagrams makes the PC ones.
-            const bool has_drawings = SchemeHasDrawings(ctx.scheme);
-            const HelpArt* art = has_drawings ? m.HelpArtReady() : nullptr;
-            const bool waiting = has_drawings && m.help_art_state == 1 &&
+            // AzaharVR pchelp: the drawings of the scheme's controllers (made again when the
+            // controllers change); none for them: the list.
+            m.StartHelpArt(ctx.scheme);
+            const HelpArt* art = m.HelpArtReady(ctx.scheme);
+            const bool waiting = m.help_art_scheme == ctx.scheme && m.help_art_state == 1 &&
                                  std::chrono::steady_clock::now() - m.help_art_started <
                                      std::chrono::seconds(3);
             key.diagram = art != nullptr;

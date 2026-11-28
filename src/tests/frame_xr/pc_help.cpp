@@ -3,6 +3,8 @@
 // Refer to the license.txt file included.
 
 #include <algorithm>
+#include <array>
+#include <cstdlib>
 #include <string>
 #include <vector>
 #include <catch2/catch_test_macros.hpp>
@@ -11,6 +13,7 @@
 #include "frame_xr/input/controller_choice.h"
 #include "frame_xr/input/controls.h"
 #include "frame_xr/input/pc_scheme.h"
+#include "frame_xr/vis/controller_diagram.h"
 #include "frame_xr/vis/help_content.h"
 #include "frame_xr/vis/help_layout.h"
 
@@ -169,8 +172,8 @@ TEST_CASE("PC help: the diagram's labels point at the right parts", "[vishelp][p
         CHECK(menu->lines.front().key == (index ? "Right Trackpad Press" : "Menu"));
         CHECK(menu->lines.front().action == "3DS Start");
         // The left hand's face buttons are the pad's X and Y.
-        const DiagramLabel* left_faces =
-            FindDiagramLabel(g, 0, index ? CtrlPart::A : CtrlPart::X);
+        // (Index's left a and b are anchored as X and Y; the label keeps their letters.)
+        const DiagramLabel* left_faces = FindDiagramLabel(g, 0, CtrlPart::X);
         REQUIRE(left_faces != nullptr);
         CHECK(left_faces->lines.front().key == (index ? "A" : "X"));
         CHECK(left_faces->lines.front().action == "3DS X");
@@ -291,9 +294,7 @@ TEST_CASE("PC help: names that follow the controllers", "[pchelp]") {
     CHECK(Input::ChordLogName(ControllerScheme::Focus3, 0, false) == "Menu, then Left Grip");
     CHECK(Input::ChordLogName(ControllerScheme::Index, 1, true) ==
           "Right Trackpad, then Right Trigger");
-    // Drawings: the Frame's only, until lane/pc-diagrams (help_content.h's merge point).
-    CHECK(SchemeHasDrawings(ControllerScheme::Frame));
-    CHECK_FALSE(SchemeHasDrawings(ControllerScheme::Touch));
+    CHECK(DiagramTrackpadPart(0) == CtrlPart::Trackpad);
 }
 
 TEST_CASE("PC help: the Frame's help is as it was", "[vishelp]") {
@@ -323,4 +324,66 @@ TEST_CASE("PC help: the Frame's help is as it was", "[vishelp]") {
     CHECK(FindDiagramLabel(g, 0, CtrlPart::Bumper)->lines.front().key == "Left Bumper");
     REQUIRE(FindDiagramLabel(g, 0, CtrlPart::View) != nullptr);
     CHECK(d.footer == a.footer);
+}
+
+// Hidden: the labels laid out on this PC's own SteamVR drawings (lane/pc-diagrams), as the help
+// panel places them: every label shown, inside the panel, none over another.
+// AZAHARVR_PCDIAG_STEAMVR=DIR picks the SteamVR install, AZAHARVR_PCHELP_CACHE the cache.
+TEST_CASE("PC help: the labels on this PC's drawings", "[.pchelplocal]") {
+    const char* steamvr = std::getenv("AZAHARVR_PCDIAG_STEAMVR");
+    const char* cache = std::getenv("AZAHARVR_PCHELP_CACHE");
+    if (steamvr == nullptr || cache == nullptr) {
+        WARN("AZAHARVR_PCDIAG_STEAMVR and AZAHARVR_PCHELP_CACHE not set: nothing checked");
+        return;
+    }
+    const TextMeasure measure = [](float size, bool bold, const std::string& text) {
+        return static_cast<float>(text.size()) * size * (bold ? 0.51f : 0.48f);
+    };
+    for (const ControllerScheme scheme : kPcSchemes) {
+        INFO("scheme " << static_cast<int>(scheme));
+        std::array<ModelFile, 2> files;
+        std::string error;
+        REQUIRE(ReadSchemeModelsFrom(scheme, {steamvr}, cache, files, error));
+        const SchemeHands hands = DrawSchemeHands(
+            files[0], files[1], scheme, {kDiagramTopW, kDiagramTopH, kDiagramFrontW, 440, 40, 36});
+        DiagramAnchors an; // as panels.cpp HelpArtAnchors
+        for (int h = 0; h < 2; h++) {
+            for (std::size_t p = 0; p < kCtrlParts; p++) {
+                const bool front = DiagramPartInFront(static_cast<CtrlPart>(p));
+                const DiagramImage& img = front ? hands.front[h] : hands.top[h];
+                const float ox = front ? DiagramFrontX(h) : DiagramTopX(h);
+                const float oy = front ? DiagramFrontY(img.height) : kDiagramTopY;
+                if (const auto& at = img.anchor[p]) {
+                    an.at[h][p] = DiagramPoint{at->x + ox, at->y + oy};
+                }
+                const auto& b = img.bounds[p];
+                an.bounds[h][p] = {b[0] + ox, b[1] + oy, b[2] + ox, b[3] + oy};
+            }
+        }
+        const HelpDiagram d = BuildHelpDiagram(DefaultHelpBindings(), Ctx(scheme));
+        for (const DiagramPage& page : d.pages) {
+            INFO(page.name);
+            const auto placed = LayoutHelpDiagram(page, an, measure);
+            for (const DiagramLabel& l : page.labels) {
+                const bool shown = std::any_of(placed.begin(), placed.end(),
+                                               [&](const DiagramPlaced& p) { return p.label == &l; });
+                INFO("label " << l.lines.front().key << " hand " << l.hand);
+                CHECK(shown);
+            }
+            for (std::size_t i = 0; i < placed.size(); i++) {
+                const DiagramPlaced& p = placed[i];
+                INFO("label " << p.label->lines.front().key << " at " << p.x0 << "," << p.y0
+                              << " " << p.x1 << "," << p.y1);
+                CHECK(p.x0 >= 30.0f);
+                CHECK(p.x1 <= kDiagramPanelW - 30.0f);
+                CHECK(p.y0 >= kDiagramTop - 0.01f);
+                CHECK(p.y1 <= kDiagramBottom + 0.01f);
+                for (std::size_t j = i + 1; j < placed.size(); j++) {
+                    const DiagramPlaced& q = placed[j];
+                    INFO("and " << q.label->lines.front().key);
+                    CHECK((p.x1 <= q.x0 || q.x1 <= p.x0 || p.y1 <= q.y0 || q.y1 <= p.y0));
+                }
+            }
+        }
+    }
 }

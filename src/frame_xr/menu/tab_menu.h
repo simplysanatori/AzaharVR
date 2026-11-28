@@ -537,7 +537,7 @@ struct MenuModel {
     /// AzaharVR pchelp: the Controllers row (PC builds only) and its value (vr_controller_type).
     bool controller_type_row = false;
     int controller_type = 0;
-    /// AzaharVR pchelp: no drawings of these controllers (help_content.h SchemeHasDrawings):
+    /// AzaharVR pchelp: no drawings of these controllers (no models found, PC builds):
     /// the picture is the help's rows as text, this many on each page (In Game, Azahar's
     /// Window); {0, 0} with drawings.
     std::array<int, 2> controls_text_rows{};

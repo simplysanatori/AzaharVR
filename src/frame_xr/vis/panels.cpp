@@ -234,8 +234,19 @@ void PutOver(PanelArt& a, float x, float y, const DiagramImage& img) {
 
 } // namespace
 
-HelpArt MakeHelpArt(const ModelFile& left, const ModelFile& right) {
+HelpArt MakeHelpArt(const ModelFile& left, const ModelFile& right, ControllerScheme scheme) {
     HelpArt art;
+    if (scheme != ControllerScheme{}) { // AzaharVR pchelp: a PC controller (DiagramView's angles)
+        SchemeHandSizes sizes;
+        sizes.top_w = kDiagramTopW;
+        sizes.top_h = kDiagramTopH;
+        sizes.front_w = kDiagramFrontW;
+        sizes.front_h = kFrontH;
+        SchemeHands hands = DrawSchemeHands(left, right, scheme, sizes);
+        art.top = std::move(hands.top);
+        art.front = std::move(hands.front);
+        return art;
+    }
     const float top = DiagramScale({&left, &right}, kTopAngle, kDiagramTopW, kDiagramTopH);
     const float front = top * kFrontScale;
     const std::array<const ModelFile*, 2> models{&left, &right};

@@ -102,20 +102,9 @@ DiagramPageId HelpDiagramPageFor(const HelpContext& context);
 /// The label of `part` of `hand` on `page`, or null (unit tests).
 const DiagramLabel* FindDiagramLabel(const DiagramPage& page, int hand, CtrlPart part);
 
-// ---- AzaharVR pchelp: MERGE POINT with lane/pc-diagrams ----------------------------------
-// lane/pc-diagrams draws the PC controllers (keyed by Input::ControllerScheme) and adds
-// CtrlPart::Trackpad. Until that is merged:
-//  - DiagramTrackpadPart: the part an Index trackpad's label points at. Replace the body with
-//    `return CtrlPart::Trackpad;` (both hands).
-//  - SchemeHasDrawings: whether drawings exist for a scheme. Replace the body with that lane's
-//    "diagram images for a scheme, or none" check. Where it is false the help shows its rows
-//    as text (the VR panel's list, the in-game menu's Controls tab), and the help panel and
-//    the menu ask for the drawings through it (visuals.cpp, menu_panel.cpp: "pchelp adapter").
-constexpr CtrlPart DiagramTrackpadPart(int hand) {
-    return hand == 0 ? CtrlPart::Dpad : CtrlPart::Menu;
-}
-constexpr bool SchemeHasDrawings(Input::ControllerScheme scheme) {
-    return scheme == Input::ControllerScheme::Frame;
+// AzaharVR pchelp: the part an Index trackpad's label points at (lane/pc-diagrams' anchors).
+constexpr CtrlPart DiagramTrackpadPart(int /*hand*/) {
+    return CtrlPart::Trackpad;
 }
 
 } // namespace FrameXr::Vis

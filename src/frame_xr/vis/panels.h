@@ -65,8 +65,11 @@ struct HelpArt {
     std::array<DiagramImage, 2> top;   ///< left, right: from above, the front at the top
     std::array<DiagramImage, 2> front; ///< left, right: from the front, cut below the trigger
 };
-/// The drawings, a few hundred milliseconds of work: off the XR thread.
-HelpArt MakeHelpArt(const ModelFile& left, const ModelFile& right);
+/// The drawings, a few hundred milliseconds of work: off the XR thread. AzaharVR pchelp: of
+/// `scheme`'s controllers (controller_diagram.h ReadSchemeModels gives `left` and `right`); the
+/// Frame's as before.
+HelpArt MakeHelpArt(const ModelFile& left, const ModelFile& right,
+                    ControllerScheme scheme = ControllerScheme{});
 /// Where the drawings show each part, in help panel pixels.
 DiagramAnchors HelpArtAnchors(const HelpArt& art);
 void DrawHelpDiagram(PanelArt& atlas, const HelpDiagram& diagram, DiagramPageId page,

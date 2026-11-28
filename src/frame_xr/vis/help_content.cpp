@@ -428,11 +428,10 @@ HelpDiagram BuildPcHelpDiagram(const HelpBindings& given, const HelpContext& ctx
     d.now = HelpDiagramPageFor(ctx);
     d.footer = PcFooter(given, ctx.scheme);
     // The face buttons: the right hand's A and B; the left hand's X and Y (Touch, Focus 3) or
-    // its A and B (Index), which are the pad's X and Y.
+    // its A and B (Index), which are the pad's X and Y; on the drawing their own letters.
+    // (lane/pc-diagrams anchors the Index's left a and b as X and Y, as the input reads them.)
     const bool index = n.Trackpads();
-    const std::vector<CtrlPart> left_faces =
-        index ? std::vector<CtrlPart>{CtrlPart::A, CtrlPart::B}
-              : std::vector<CtrlPart>{CtrlPart::X, CtrlPart::Y};
+    const std::vector<CtrlPart> left_faces{CtrlPart::X, CtrlPart::Y};
     const auto face_key = [&](const char* frame) {
         // On the drawing the hand is known: the button's own letter.
         const std::string name = n.Face(frame);
@@ -541,7 +540,8 @@ HelpDiagram BuildPcHelpDiagram(const HelpBindings& given, const HelpContext& ctx
         Label(w, kLeft, {DiagramTrackpadPart(kLeft)}, {Title("Left Trackpad Up or Down", "Choose Game")});
     }
     Label(w, kRight, {CtrlPart::A, CtrlPart::B},
-          {Title("A", "Click"), Line("Twice", "Start Game"), Title("B", "Back")});
+          {Title("A", "Click"), Line("Twice", "Start Game"), Title("B", "Back"),
+           Line("Move Screens", "Finish")});
     Label(w, kLeft, left_faces, {Title(face_key("Y"), "Keyboard")});
     Label(w, menu_hand, {menu_part},
           {SubHeading("In-Game Menu"), Sub(n.MenuHold(), "Back to Game"),
@@ -553,8 +553,8 @@ HelpDiagram BuildPcHelpDiagram(const HelpBindings& given, const HelpContext& ctx
           {Title("Grip", "Move Window"), SubHeading("Move Screens"),
            Sub("Grip on a Screen", "Move Screen"),
            Sub("Stick Up or Down", std::string("Nearer / ") + ImNames::kWorldScale),
-           Sub("Stick Sideways", "Screen Size"), Sub("Other Stick Sideways", "Nudge / Offset"),
-           Sub("Other Stick Up or Down", "Curve"), Sub("B", "Finish")});
+           // Six lines, as the Frame's: more do not fit under the drawings.
+           Sub("Stick Sideways", "Screen Size"), Sub("Other Stick", "Nudge / Curve")});
     return d;
 }
 
